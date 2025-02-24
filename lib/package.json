@@ -1,0 +1,25 @@
+{
+  "name": "baustein",
+  "version": "0.0.1",
+  "license": "MIT",
+  "description": "a web component base render function",
+  "keywords": [
+    "web-components"
+  ],
+  "type": "module",
+  "types": "dist/baustein.d.ts",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/baustein.umd.cjs",
+  "module": "./dist/baustein.js",
+  "exports": {
+    ".": {
+      "import": "./dist/baustein.js",
+      "require": "./dist/baustein.umd.cjs"
+    }
+  },
+  "scripts": {
+    "build": "vite build && tsc --noCheck"
+  }
+}

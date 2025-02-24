@@ -1,0 +1,19 @@
+{
+    "name": "baustein-repo",
+    "version": "0.0.1",
+    "license": "MIT",
+    "description": "a web component base render function",
+    "keywords": [
+      "web-components"
+    ],
+    "scripts": {
+      "build": "cd website && astro build",
+      "preview": "cd website && astro build && astro preview"
+    },
+    "workspaces": ["/lib", "/website"],
+    "devDependencies": {
+      "prettier": "^3.5.2",
+      "typescript": "^5.7.3",
+      "vite": "^6.1.1"
+    }
+  }
