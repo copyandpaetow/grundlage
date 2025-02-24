@@ -4,8 +4,8 @@ export default defineConfig({
   build: {
     lib: {
       entry: "src/index.ts",
-      name: "baustein",
-      fileName: "baustein",
+      name: "grundlage",
+      fileName: "grundlage",
     },
     target: "es2022",
   },

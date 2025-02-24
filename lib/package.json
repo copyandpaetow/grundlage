@@ -1,5 +1,5 @@
 {
-  "name": "baustein",
+  "name": "grundlage",
   "version": "0.0.1",
   "license": "MIT",
   "description": "a web component base render function",
@@ -7,16 +7,16 @@
     "web-components"
   ],
   "type": "module",
-  "types": "dist/baustein.d.ts",
+  "types": "dist/grundlage.d.ts",
   "files": [
     "dist"
   ],
-  "main": "./dist/baustein.umd.cjs",
-  "module": "./dist/baustein.js",
+  "main": "./dist/grundlage.umd.cjs",
+  "module": "./dist/grundlage.js",
   "exports": {
     ".": {
-      "import": "./dist/baustein.js",
-      "require": "./dist/baustein.umd.cjs"
+      "import": "./dist/grundlage.js",
+      "require": "./dist/grundlage.umd.cjs"
     }
   },
   "scripts": {

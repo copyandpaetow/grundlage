@@ -2,7 +2,7 @@ import { defineConfig } from "astro/config";
 import { searchForWorkspaceRoot } from "vite";
 
 export default defineConfig({
-	base: "/bewegung/",
+	base: "/grundlage/",
 	server: { port: 8001, host: true },
 	vite: {
 		server: {

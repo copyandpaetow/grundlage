@@ -12,7 +12,7 @@
     "resolveJsonModule": true,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "outFile": "dist/baustein",
+    "outFile": "dist/grundlage",
 
     /* Linting */
     "strict": true,
