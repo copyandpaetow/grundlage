@@ -2,7 +2,7 @@ import { defineConfig } from "astro/config";
 import { searchForWorkspaceRoot } from "vite";
 
 export default defineConfig({
-	base: "/grundlage/",
+	base: "/grundlage",
 	server: { port: 8001, host: true },
 	vite: {
 		server: {
@@ -13,4 +13,7 @@ export default defineConfig({
 	},
 	site: "https://copyandpaetow.github.io",
 	scopedStyleStrategy: "where",
+	devToolbar: {
+		enabled: false
+	  }
 });

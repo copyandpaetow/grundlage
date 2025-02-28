@@ -23,7 +23,7 @@ const markElement = (result: ParsingResult) => {
   result.template = `${untilAttributesStart} data-update ${afterAttributesStart}`;
 };
 
-const expandAttributes = (value: unknown, result: ParsingResult) => {
+const expandAttributes = (value: unknown, result: ParsingResult): unknown => {
   if (isStatic(value)) {
     return value;
   }

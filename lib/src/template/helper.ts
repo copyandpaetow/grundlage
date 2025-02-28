@@ -18,7 +18,10 @@ export const isInsideOfTag = (template: string) => {
 
 const cases = ["string", "number", "bigint", "boolean", "symbol"];
 
-export const isStatic = (value: unknown) => cases.includes(typeof value);
+export const isStatic = (
+  value: unknown
+): value is string | number | boolean | bigint | symbol =>
+  cases.includes(typeof value);
 
 //TODO: maybe some of these can be condensed
 export const isNestedRender = (

@@ -7,6 +7,7 @@
       "web-components"
     ],
     "scripts": {
+      "dev": "cd website && astro dev",
       "build": "cd website && astro build",
       "preview": "cd website && astro build && astro preview"
     },

@@ -10,7 +10,7 @@ export const updateContent = (
 ) => {
   const { signal, values } = context;
 
-  const value = values.get(stubbedElement.getAttribute("data-replace")) as
+  const value = values.get(stubbedElement.getAttribute("data-replace")!) as
     | SignalGetter<string>
     | ((activeValue: unknown) => string);
   const [start, end] = createMountPoint(stubbedElement, "content");

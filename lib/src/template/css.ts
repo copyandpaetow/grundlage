@@ -55,7 +55,7 @@ const nestedRender = (value: unknown, result: CssParsingResult): string => {
 //TODO: it might be worth to check if we are a value or not
 //TODO: we could also try to determine if we are inside of a class or not
 //? we could also expose the name and let the user do whatever they want with this
-//TODO: I want the renders to be the same shape
+//TODO: The render objects should have the same shape
 export const css = (
   tokens: TemplateStringsArray,
   ...dynamicValues: Array<unknown>

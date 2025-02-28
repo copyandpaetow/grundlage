@@ -23,7 +23,7 @@ export const updateAttributes = (
 
   stubbedElement.removeAttribute("data-update");
   stubbedElement.getAttributeNames().forEach((attributeName) => {
-    const attributeSub = stubbedElement.getAttribute(attributeName);
+    const attributeSub = stubbedElement.getAttribute(attributeName)!;
     const attributeValue = values.get(attributeSub) as
       | SignalGetter<string>
       | ((activeValue: unknown) => string);
@@ -71,6 +71,7 @@ export const updateAttributes = (
         //@ts-expect-error this is for nested web-components
         stubbedElement.setProperty(attributeName, attributeValue);
       } else {
+        //@ts-expect-error
         stubbedElement[attributeName] = attributeValue;
       }
       return;

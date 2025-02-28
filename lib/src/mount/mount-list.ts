@@ -192,16 +192,16 @@ export const mountList = (
           break;
 
         case OPERATION_TYPES.DELETE:
-          const [start, end] = spacer.get(key);
+          const [start, end] = spacer.get(key)!;
           requestAnimationFrame(() => {
-            remove(start.previousSibling, end.nextSibling);
+            remove(start.previousSibling!, end.nextSibling!);
             spacer.delete(key);
           });
           break;
 
         case OPERATION_TYPES.MOVE:
-          const [fromStart, fromEnd] = spacer.get(relatedKey);
-          const [toStart, toEnd] = spacer.get(key);
+          const [fromStart, fromEnd] = spacer.get(relatedKey)!;
+          const [toStart, toEnd] = spacer.get(key)!;
 
           requestAnimationFrame(() => {
             const fromContent = remove(fromStart, fromEnd);

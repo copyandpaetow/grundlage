@@ -1,10 +1,10 @@
-import type { Reactivity, Signal } from "./signal";
+import type { Reactivity, SignalGetter } from "./signal";
 
 export const getSlotContent = (
   root: Element | ShadowRoot,
   signal: Reactivity
 ) => {
-  const slotSignals = new WeakMap<HTMLSlotElement, Signal<Node[]>[0]>();
+  const slotSignals = new WeakMap<HTMLSlotElement, SignalGetter<Node[]>>();
 
   const getSlotSignal = (slot: HTMLSlotElement) => {
     let active = false;
@@ -40,11 +40,11 @@ export const getSlotContent = (
     const slot = root.querySelector(selector) as HTMLSlotElement;
     if (!slot) {
       console.error("no slot with that name exists, returning empty signal");
-      return () => [] as Node[];
+      return (() => []) as SignalGetter<Node[]>;
     }
 
     if (slotSignals.has(slot)) {
-      return slotSignals.get(slot);
+      return slotSignals.get(slot) as SignalGetter<Node[]>;
     }
     const currentSlotSignal = getSlotSignal(slot);
     slotSignals.set(slot, currentSlotSignal);

@@ -26,7 +26,7 @@ export const defaultKeyFn = (
   element: unknown,
   index?: number,
   array?: Array<unknown>
-) => `key-${element.toString()}`;
+) => `key-${element?.toString()}`;
 
 export type MountData = {
   keyFn: (element: unknown, index?: number, array?: Array<unknown>) => string;
@@ -73,18 +73,19 @@ export const extractTemplateFunctionality = (
 ): MountData => {
   return {
     when:
-      (values.get(template.getAttribute("when")) as MountData["when"]) ??
+      (values.get(template.getAttribute("when")!) as MountData["when"]) ??
       defaultWhen,
     each:
-      (values.get(template.getAttribute("each")) as MountData["each"]) ?? noop,
-    //@ts-expect-error
+      (values.get(template.getAttribute("each")!) as MountData["each"]) ?? noop,
+
     suspense:
       (values.get(
-        template.getAttribute("suspense")
+        template.getAttribute("suspense")!
       ) as MountData["suspense"]) ?? noop,
-    ref: (values.get(template.getAttribute("ref")) as MountData["ref"]) ?? noop,
+    ref:
+      (values.get(template.getAttribute("ref")!) as MountData["ref"]) ?? noop,
     keyFn:
-      (values.get(template.getAttribute("keys")) as MountData["keyFn"]) ??
+      (values.get(template.getAttribute("keys")!) as MountData["keyFn"]) ??
       keyFn ??
       defaultKeyFn,
   };
@@ -119,8 +120,8 @@ export const shouldRerender = (
   const hasError = slots[RENDER_CASE.ERROR].childNodes.length;
   const hasLoading = slots[RENDER_CASE.LOADING].childNodes.length;
 
-  const [result, setResult] = context.signal.create(undefined);
-  let staticResult = undefined;
+  const [result, setResult] = context.signal.create<unknown>(undefined);
+  let staticResult: unknown = undefined;
 
   const status = context.signal.computed(() => {
     try {
@@ -177,13 +178,13 @@ export const extractTemplateCallbacks = (
     switch (attributeName.toLowerCase()) {
       case "beforerender":
         lifecyle.beforeRender = context.values.get(
-          templateElement.getAttribute(attributeName)
+          templateElement.getAttribute(attributeName)!
         ) as ComponentLifecylce["beforeRender"];
 
         break;
       case "afterrender":
         lifecyle.afterRender = context.values.get(
-          templateElement.getAttribute(attributeName)
+          templateElement.getAttribute(attributeName)!
         ) as ComponentLifecylce["beforeRender"];
 
         break;

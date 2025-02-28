@@ -22,7 +22,7 @@ export type UserContext = Pick<Context, "signal"> & {
   };
   elements: {
     shadowRoot: () => ShadowRoot;
-    slots: (name?: string) => SignalGetter<Node[]>;
+    slots: (name: string) => SignalGetter<Node[]>;
   };
 };
 

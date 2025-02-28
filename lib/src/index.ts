@@ -97,8 +97,8 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
       this.#observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
           this.setProperty(
-            mutation.attributeName,
-            this.getAttribute(mutation.attributeName)
+            mutation.attributeName!,
+            this.getAttribute(mutation.attributeName!)
           );
         });
       });
@@ -108,7 +108,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
     #render() {
       const { template, values } = renderFn(
         Object.fromEntries(this.#props),
-        createUserContext(this.shadowRoot, this.#context)
+        createUserContext(this.shadowRoot!, this.#context)
       );
 
       const parsedTemplate = new Range().createContextualFragment(template);
@@ -122,7 +122,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
         },
         this.#context
       );
-      this.shadowRoot.replaceChildren(result);
+      this.shadowRoot!.replaceChildren(result);
     }
   }
 

@@ -1,6 +1,7 @@
 export const isIterable = (
   value: unknown
 ): value is Array<unknown> | Set<unknown> | Map<unknown, unknown> => {
+  //@ts-expect-error
   return Boolean(value?.[Symbol.iterator]);
 };
 
