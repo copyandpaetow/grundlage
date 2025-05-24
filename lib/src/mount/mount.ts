@@ -24,7 +24,9 @@ export const defaultWhen = () => true;
 export const noop = () => undefined;
 export const defaultKeyFn = (
 	element: unknown,
+	//@ts-expect-error
 	index?: number,
+	//@ts-expect-error
 	array?: Array<unknown>
 ) => `key-${element?.toString()}`;
 

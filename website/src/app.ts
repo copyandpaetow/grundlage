@@ -207,7 +207,7 @@ export const main = render("main-component", () => {
             gap: 2rem;
             }
 
-						${otherStyle}
+		
         `}
      <main>
          ${conditionalComponent()}

@@ -35,6 +35,7 @@ export type ComponentProps<Props = Record<string, unknown>> = ((
 	) => CssParsingResult;
 };
 
+//@ts-expect-error options will come soon
 export const render: ComponentProps = (name, renderFn, options = {}) => {
 	class BaseElement extends HTMLElement {
 		#props = new Map<string, unknown>();

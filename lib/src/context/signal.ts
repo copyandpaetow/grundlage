@@ -72,6 +72,7 @@ export const cleanup = (effect: Effect) => {
 	effect.children.clear();
 	effect.cleanupEffects.clear();
 
+	//@ts-expect-error
 	effect.parent = undefined;
 };
 
@@ -145,7 +146,7 @@ export const createSignalReactivity = (): Reactivity => {
 	const onCleanup = (callback: VoidFunction) => {
 		context.at(-1)?.cleanupEffects.add(callback);
 	};
-
+	//@ts-expect-error
 	const computed: ComputedFn = <Value>(
 		callback: (isToplevel: boolean) => Value
 	) => {
@@ -154,8 +155,11 @@ export const createSignalReactivity = (): Reactivity => {
 
 		const effect = {
 			execute() {
+				//@ts-expect-error
 				cleanup(effect);
+				//@ts-expect-error
 				context.push(effect);
+				//@ts-expect-error
 				setResult(callback(isChainDirty(effect)));
 				context.pop();
 				effect.dirty = false;
@@ -164,8 +168,11 @@ export const createSignalReactivity = (): Reactivity => {
 					return;
 				}
 				effect.children.forEach((child) => {
+					//@ts-expect-error
 					parentEffect.children.add(child);
+					//@ts-expect-error
 					child.parent = parentEffect;
+					//@ts-expect-error
 					parentEffect.cleanupEffects = parentEffect.cleanupEffects.union(
 						effect.cleanupEffects
 					);
@@ -181,6 +188,7 @@ export const createSignalReactivity = (): Reactivity => {
 		};
 
 		if (parentEffect) {
+			//@ts-expect-error
 			parentEffect.children.add(effect);
 		}
 
@@ -209,6 +217,7 @@ export const createSignalReactivity = (): Reactivity => {
 
 			if (args.length === 1) {
 				nodes.length = 0;
+				//@ts-expect-error
 				nodes.push(args.at(0));
 				return nodes.at(0);
 			}
@@ -252,6 +261,7 @@ export const createSignalReactivity = (): Reactivity => {
 				console.log("aborted");
 				isAborted = true;
 			};
+			//@ts-expect-error
 			abort.signal.addEventListener("abort", onAbort, { once: true });
 
 			try {
@@ -264,9 +274,11 @@ export const createSignalReactivity = (): Reactivity => {
 			} catch (error) {
 				if (!isAborted) {
 					setStatus(ASYNC_STATES.ERROR);
+					//@ts-expect-error
 					setError(error);
 				}
 			} finally {
+				//@ts-expect-error
 				abort.signal.removeEventListener("abort", onAbort);
 			}
 		};

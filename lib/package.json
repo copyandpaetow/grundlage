@@ -1,29 +1,28 @@
 {
-  "name": "grundlage",
-  "version": "0.0.1",
-  "license": "MIT",
-  "description": "a web component base render function",
-  "keywords": [
-    "web-components"
-  ],
-  "type": "module",
-  "types": "dist/grundlage.d.ts",
-  "files": [
-    "dist"
-  ],
-  "main": "./dist/grundlage.umd.cjs",
-  "module": "./dist/grundlage.js",
-  "exports": {
-    ".": {
-      "import": "./dist/grundlage.js",
-      "require": "./dist/grundlage.umd.cjs"
-    }
-  },
-  "scripts": {
-    "build": "vite build && tsc --noCheck"
-  },
-  "dependencies": {
-      "typescript": "^5.7.3",
-      "vite": "^6.1.1"
-  }
+	"name": "grundlage",
+	"version": "0.0.2",
+	"license": "MIT",
+	"description": "a web component base render function",
+	"keywords": [
+		"web-components"
+	],
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "tsup"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"tsup": "^8.5.0"
+	}
 }
