@@ -108,23 +108,27 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		}
 
 		#render() {
-			const { template, values } = renderFn(
-				Object.fromEntries(this.#props),
-				createUserContext(this.shadowRoot!, this.#context)
-			);
+			try {
+				const { template, values } = renderFn(
+					Object.fromEntries(this.#props),
+					createUserContext(this.shadowRoot!, this.#context)
+				);
+				const parsedTemplate = new Range().createContextualFragment(template);
+				this.#context.values = values;
+				const result = updateDOM(
+					parsedTemplate,
+					{
+						activeValue: () => undefined,
+						keyFn: defaultKeyFn,
+					},
+					this.#context
+				);
 
-			const parsedTemplate = new Range().createContextualFragment(template);
-			this.#context.values = values;
-
-			const result = updateDOM(
-				parsedTemplate,
-				{
-					activeValue: () => undefined,
-					keyFn: defaultKeyFn,
-				},
-				this.#context
-			);
-			this.shadowRoot!.replaceChildren(result);
+				this.shadowRoot!.replaceChildren(result);
+			} catch (error) {
+				console.error(error);
+				this.shadowRoot!.innerHTML = `${error}`;
+			}
 		}
 	}
 

@@ -13,6 +13,11 @@ export const updateContent = (
 	const value = values.get(stubbedElement.getAttribute("data-replace")!) as
 		| SignalGetter<string>
 		| ((activeValue: unknown) => string);
+
+	if (!value) {
+		return;
+	}
+
 	const [start, end] = createMountPoint(stubbedElement, "content");
 
 	signal.computed((isToplevelEffect) => {
