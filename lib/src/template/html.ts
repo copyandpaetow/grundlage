@@ -1,110 +1,170 @@
 import {
-  isStatic,
-  mergeMaps,
-  createStub,
-  isNestedRender,
-  renderKey,
-  isInsideOfTag,
-  isNestedStyleRender,
+	createStub,
+	isNestedRender,
+	isNestedStyleRender,
+	isStatic,
+	mergeMaps,
+	ParsingState,
+	renderKey,
+	sliceLastAttributeName,
 } from "./helper";
+import { Binding, parseTemplate } from "./parser";
 
 const markElement = (result: ParsingResult) => {
-  const template = result.template;
-  const lastOpeningBracket = template.lastIndexOf("<");
+	const template = result.template;
+	const lastOpeningBracket = template.lastIndexOf("<");
 
-  if (template.indexOf(" data-update ", lastOpeningBracket) !== -1) {
-    return;
-  }
+	if (template.indexOf(" data-update ", lastOpeningBracket) !== -1) {
+		return;
+	}
 
-  const endOfElementTag = template.indexOf(" ", lastOpeningBracket);
-  const untilAttributesStart = template.slice(0, endOfElementTag);
-  const afterAttributesStart = template.slice(endOfElementTag + 1);
+	const endOfElementTag = template.indexOf(" ", lastOpeningBracket);
+	const untilAttributesStart = template.slice(0, endOfElementTag);
+	const afterAttributesStart = template.slice(endOfElementTag + 1);
 
-  result.template = `${untilAttributesStart} data-update ${afterAttributesStart}`;
+	result.template = `${untilAttributesStart} data-update ${afterAttributesStart}`;
 };
 
-const expandAttributes = (value: unknown, result: ParsingResult): unknown => {
-  if (isStatic(value)) {
-    return value;
-  }
+const expandAttributes = (
+	value: unknown,
+	result: ParsingResult,
+	parsingState: ParsingState
+): string => {
+	if (result.template[parsingState.lastAttributeStart] === ".") {
+		const name = sliceLastAttributeName(result, parsingState);
+		result.properties.set(name, value);
+		return "";
+	}
 
-  if (isNestedStyleRender(value)) {
-    mergeMaps(value.values, result.values);
-    result.values.set(value.name, value.template);
-    return value.name;
-  }
+	if (value === null || value === undefined) {
+		sliceLastAttributeName(result, parsingState);
+		return "";
+	}
 
-  if (Array.isArray(value) || value instanceof Set) {
-    return Array.from(value)
-      .map((value) => expandAttributes(value, result))
-      .join(" ");
-  }
+	if (isStatic(value)) {
+		return String(value);
+	}
 
-  if (value && typeof value === "object") {
-    const iterator =
-      value instanceof Map ? Array.from(value) : Object.entries(value);
-    return iterator
-      .map(
-        ([key, nestedValue]) =>
-          `${key}=${expandAttributes(nestedValue, result)} `
-      )
-      .join(" ");
-  }
+	if (isNestedStyleRender(value)) {
+		mergeMaps(value.values, result.values);
+		result.values.set(value.name, value.template);
+		return value.name;
+	}
 
-  markElement(result);
-  const stub = createStub();
-  result.values.set(stub, value);
-  return stub;
+	if (Array.isArray(value) || value instanceof Set) {
+		return `"${Array.from(value)
+			.map((value) => expandAttributes(value, result, parsingState))
+			.join(" ")}"`;
+	}
+
+	//TODO: nested objects are not handled right
+	if (value && typeof value === "object") {
+		const iterator =
+			value instanceof Map ? Array.from(value) : Object.entries(value);
+		return iterator
+			.map(([key, nestedValue]) => {
+				const expandedValue = expandAttributes(
+					nestedValue,
+					result,
+					parsingState
+				);
+				return expandedValue ? `${key}=${expandedValue}` : "";
+			})
+			.join(" ");
+	}
+
+	markElement(result);
+	const stub = createStub();
+	result.values.set(stub, value);
+	return stub;
 };
 
-const expandContent = (value: unknown, result: ParsingResult) => {
-  if (isStatic(value)) {
-    return value;
-  }
+const expandContent = (value: unknown, result: ParsingResult): string => {
+	if (isStatic(value)) {
+		return String(value);
+	}
 
-  if (isNestedRender(value)) {
-    mergeMaps(value.values, result.values);
-    return value.template;
-  }
+	if (isNestedRender(value)) {
+		mergeMaps(value.values, result.values);
+		return value.template;
+	}
 
-  if (isNestedStyleRender(value)) {
-    mergeMaps(value.values, result.values);
-    result.values.set(value.name, value.template);
-    return `<style ${Array.from(value.values.keys()).join(" ")}>${value.template}</style>`;
-  }
+	if (isNestedStyleRender(value)) {
+		mergeMaps(value.values, result.values);
+		result.values.set(value.name, value.template);
+		return `<style ${Array.from(value.values.keys()).join(" ")}>${
+			value.template
+		}</style>`;
+	}
 
-  const stub = createStub();
-  result.values.set(stub, value);
-  return `<span data-replace=${stub}></span>`;
+	const stub = createStub();
+	result.values.set(stub, value);
+	return `<span data-replace=${stub}></span>`;
 };
 
 export type ParsingResult = {
-  template: string;
-  values: Map<string, unknown>;
-  name: string;
-  key: typeof renderKey;
+	template: string;
+	fragment: DocumentFragment;
+	bindings: Array<FilledBinding>;
 };
+
+const FRAGMENT_TYPE = {
+	INIT: -1,
+	TAG: 0,
+	ATTRIBUTE_NAME: 2,
+	ATTRIBUTE_VALUE: 3,
+	CONTENT: 4,
+} as const;
+
+export type FilledBinding = {
+	template: Array<string>;
+	indices: Array<unknown>;
+	type: "ATTR" | "TAG" | "TEXT" | "END_TAG";
+	closingChar: string;
+};
+
+type ParsedTemplate = {
+	bindings: Binding[];
+	template: string;
+	fragment: DocumentFragment;
+};
+
+const htmlCache = new WeakMap<TemplateStringsArray, ParsedTemplate>();
 
 export const html = (
-  tokens: TemplateStringsArray,
-  ...dynamicValues: Array<unknown>
+	tokens: TemplateStringsArray,
+	...dynamicValues: Array<unknown>
 ): ParsingResult => {
-  const result: ParsingResult = {
-    template: tokens[0],
-    values: new Map<string, unknown>(),
-    key: renderKey,
-    name: "",
-  };
+	if (!htmlCache.has(tokens)) {
+		htmlCache.set(tokens, parseTemplate(tokens));
+	}
 
-  tokens.slice(1).forEach((currentToken, index) => {
-    const curerntValue = dynamicValues[index];
+	const { template, bindings, fragment } = htmlCache.get(tokens)!;
 
-    const stubbingresult = isInsideOfTag(result.template)
-      ? expandAttributes(curerntValue, result)
-      : expandContent(curerntValue, result);
+	const filledBindings: Array<FilledBinding> = bindings.map((binding) => ({
+		...binding,
+		indices: binding.indices.map((index) => dynamicValues[index]),
+	}));
 
-    result.template += `${stubbingresult}${currentToken}`;
-  });
+	console.log(filledBindings);
 
-  return result;
+	const result: ParsingResult = {
+		template,
+		fragment: fragment.cloneNode(true) as DocumentFragment,
+		bindings: filledBindings,
+	};
+
+	return result;
 };
+
+const test = 123;
+const tag = "custom";
+const tag2 = "section";
+const className = "hello";
+
+//html`<${tag}>headline?</${tag}>`;
+//html`<${tag} class="${className}">hallo</${tag}>`;
+//html`<${tag} class="test ${className}">${test}</${tag}>`;
+
+//html`<${tag}-${tag2} ${tag}-${tag2}="test ${className}"></${tag}-${tag2}>`;
+html`<div data-test="hello ${className}">hello</div>`;

@@ -6,24 +6,35 @@ import { listComponent } from "./components/list";
 import { propsComponent } from "./components/props";
 import { styledComponent } from "./components/styling";
 
-const createStores = createSignalReactivity();
-const clicks = createStores.create<number>(0);
+import "../../lib/src/template/html";
 
-export const main = render("main-component", (_, { signal }) => {
-	const stringSignal = signal.create("test");
+// conditionalComponent();
 
-	return render.html`
-      ${render.css`
-          main {
-            display: grid;
-            grid-auto-flow: row;
-            grid-auto-rows: minmax(100px, max-content);
-            gap: 2rem;
-            }
+// const createStores = createSignalReactivity();
+// const [clicks] = createStores.create<number>(0);
 
-		
-        `}
-     <main>
+// export const main = render("main-component", (_, { signal }) => {
+// 	const [stringSignal] = signal.create("test");
+
+// 	return render.html`
+//       ${render.css`
+//           main {
+//             display: grid;
+//             grid-auto-flow: row;
+//             grid-auto-rows: minmax(100px, max-content);
+//             gap: 2rem;
+//             }
+
+//         `}
+//      <main>
+// 			<conditional-component></conditional-component>
+
+//      </main>
+//   `;
+// });
+
+/*
+
          ${conditionalComponent()}
          ${asyncComponent()}
 				 ${listComponent()}
@@ -34,7 +45,4 @@ export const main = render("main-component", (_, { signal }) => {
 						nestedObj: { hello: "there" },
 					})}
 				 ${styledComponent()}
-
-     </main>
-  `;
-});
+*/

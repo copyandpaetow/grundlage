@@ -21,8 +21,7 @@ export const conditionalComponent = render(
   <button onclick="${removeOne}">remove one</button>
   <br />
 
-   <template when=${() => value() > 0} id=1 beforeRender=${(res: string) =>
-			console.log(res)}>
+   <template when=${() => value() > 0} id=1>
      <div>is visible: ${value}</div>
 
      <template slot="fallback" when=${() => value() > -1}>

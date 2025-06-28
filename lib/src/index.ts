@@ -4,6 +4,7 @@ import { defaultKeyFn } from "./mount/mount";
 import { updateDOM } from "./mount/update-dom";
 import { css, type CssParsingResult } from "./template/css";
 import { html, type ParsingResult } from "./template/html";
+import "./template/parser";
 
 const tryCallback = (callback: VoidFunction) => {
 	try {
@@ -109,10 +110,12 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 
 		#render() {
 			try {
+				console.time("parse");
 				const { template, values } = renderFn(
 					Object.fromEntries(this.#props),
 					createUserContext(this.shadowRoot!, this.#context)
 				);
+				console.timeEnd("parse");
 				const parsedTemplate = new Range().createContextualFragment(template);
 				this.#context.values = values;
 				const result = updateDOM(
@@ -136,8 +139,9 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		customElements.define(name, BaseElement);
 	}
 
-	return (currentProps = {}) =>
-		html`<${name} ${{ ...currentProps }}></${name}>`;
+	return (currentProps = {}) => {
+		return html`<${name} ${currentProps}></${name}>`;
+	};
 };
 
 render.html = html;
