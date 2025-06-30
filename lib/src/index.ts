@@ -1,48 +1,25 @@
-import { createContext, createUserContext, type UserContext } from "./context";
-import { requestIsomorphicAnimationFrame } from "./mount/helper";
 import { defaultKeyFn } from "./mount/mount";
 import { updateDOM } from "./mount/update-dom";
-import { css, type CssParsingResult } from "./template/css";
 import { html, type ParsingResult } from "./template/html";
-import "./template/parser";
+import "./template/signals";
 
-const tryCallback = (callback: VoidFunction) => {
-	try {
-		callback();
-	} catch (error) {
-		console.warn(error);
-	}
-};
-
-//TODO: rethink options
 export type ComponentOptions = {};
 
 export type Props = Record<string, unknown>;
 
-export type RenderFn = (props: Props, context: UserContext) => ParsingResult;
+export type RenderFn = (props: Props) => ParsingResult;
 
-export type ComponentProps<Props = Record<string, unknown>> = ((
+export type ComponentProps<Props = Record<string, unknown>> = (
 	name: string,
 	renderFn: RenderFn,
 	options?: ComponentOptions
-) => (props?: Props) => ParsingResult) & {
-	html: (
-		tokens: TemplateStringsArray,
-		...dynamicValues: Array<unknown>
-	) => ParsingResult;
-	css: (
-		tokens: TemplateStringsArray,
-		...dynamicValues: Array<unknown>
-	) => CssParsingResult;
-};
+) => (props?: Props) => ParsingResult;
 
 //@ts-expect-error options will come soon
 export const render: ComponentProps = (name, renderFn, options = {}) => {
 	class BaseElement extends HTMLElement {
 		#props = new Map<string, unknown>();
-		#context = createContext();
 		#observer: MutationObserver;
-		#nextRender: number | null;
 
 		constructor() {
 			super();
@@ -54,17 +31,12 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 
 		connectedCallback() {
 			this.#render();
-			this.#context.mountCallbacks.forEach(tryCallback);
 			this.#watchAttributes();
 		}
 
 		async disconnectedCallback() {
 			await Promise.resolve();
 			if (!this.isConnected) {
-				this.#observer?.disconnect();
-				this.#context.unMountCallbacks.forEach(tryCallback);
-				this.#props.clear();
-				this.#context.dispose();
 			}
 		}
 
@@ -81,18 +53,6 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			value === undefined || value === null
 				? this.#props.delete(name)
 				: this.#props.set(name, value);
-
-			this.#queueRender();
-		}
-
-		#queueRender() {
-			if (this.#nextRender) {
-				cancelAnimationFrame(this.#nextRender);
-			}
-			this.#nextRender = requestIsomorphicAnimationFrame(() => {
-				this.#render();
-				this.#nextRender = null;
-			});
 		}
 
 		#watchAttributes() {
@@ -111,23 +71,17 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#render() {
 			try {
 				console.time("parse");
-				const { template, values } = renderFn(
-					Object.fromEntries(this.#props),
-					createUserContext(this.shadowRoot!, this.#context)
+				const { bindings, fragment } = renderFn(
+					Object.fromEntries(this.#props)
 				);
 				console.timeEnd("parse");
-				const parsedTemplate = new Range().createContextualFragment(template);
-				this.#context.values = values;
-				const result = updateDOM(
-					parsedTemplate,
-					{
-						activeValue: () => undefined,
-						keyFn: defaultKeyFn,
-					},
-					this.#context
-				);
 
-				this.shadowRoot!.replaceChildren(result);
+				// const result = updateDOM(fragment, {
+				// 	activeValue: () => undefined,
+				// 	keyFn: defaultKeyFn,
+				// });
+
+				this.shadowRoot!.replaceChildren(fragment);
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;
@@ -139,10 +93,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		customElements.define(name, BaseElement);
 	}
 
-	return (currentProps = {}) => {
-		return html`<${name} ${currentProps}></${name}>`;
-	};
+	// return (currentProps = {}) => {
+	// 	return html`<${name} ${currentProps}></${name}>`;
+	// };
 };
-
-render.html = html;
-render.css = css;

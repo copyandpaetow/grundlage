@@ -8,98 +8,263 @@ import {
 	renderKey,
 	sliceLastAttributeName,
 } from "./helper";
-import { Binding, parseTemplate } from "./parser";
+/*
 
-const markElement = (result: ParsingResult) => {
-	const template = result.template;
-	const lastOpeningBracket = template.lastIndexOf("<");
+type CssResult = {
+  className: string,    // "css-abc123" 
+  styleSheet: string,   // ":host { padding: 10px; } .css-abc123 { color: red; }"
+  toString(): string    // returns className for template usage
+}
 
-	if (template.indexOf(" data-update ", lastOpeningBracket) !== -1) {
+
+*/
+
+const isWhitespace = (char: string) => {
+	return (
+		char === " " ||
+		char === "\t" ||
+		char === "\n" ||
+		char === "\r" ||
+		char === "\f"
+	);
+};
+
+const isInsideTag = (stringSegment: string, lastType?: Binding["type"]) => {
+	let index = stringSegment.length - 1;
+
+	while (index >= 0) {
+		const char = stringSegment[index];
+
+		if (char === ">") {
+			if (index >= 2 && stringSegment.slice(index - 2, index + 1) === "-->") {
+				index -= 3;
+				continue;
+			}
+			return false;
+		}
+		if (char === "<") {
+			if (
+				index + 3 < stringSegment.length &&
+				stringSegment.slice(index, index + 4) === "<!--"
+			) {
+				index -= 1;
+				continue;
+			}
+			return true;
+		}
+		index--;
+	}
+
+	if (!lastType || lastType === "TEXT") {
+		return false;
+	}
+
+	return true;
+};
+
+export type Binding = {
+	template: Array<string>;
+	indices: Array<number>;
+	type: "ATTR" | "TAG" | "TEXT" | "END_TAG";
+	closingChar: string;
+};
+
+type State = {
+	position: number;
+	bindings: Array<Binding>;
+	templates: Array<string>;
+};
+
+const determineContext = (state: State): Binding => {
+	const templatePartial = state.templates[state.position];
+
+	const binding: Binding = {
+		type: "TEXT",
+		template: [],
+		indices: [state.position],
+		closingChar: "",
+	};
+
+	if (!isInsideTag(templatePartial, state.bindings.at(-1)?.type)) {
+		state.templates[
+			state.position
+		] += `<span data-replace="${state.bindings.length}"></span>`;
+		binding.template.push("");
+		return binding;
+	}
+
+	let index = templatePartial.length;
+	let whitespaceStart = -1;
+	let foundLetters = false;
+
+	while (index > 0) {
+		index -= 1;
+		const char = templatePartial[index];
+
+		if (isWhitespace(char)) {
+			if (whitespaceStart === -1) {
+				whitespaceStart = index;
+			}
+			continue;
+		}
+
+		if (char === "<") {
+			if (whitespaceStart !== -1) {
+				//attribute
+				//* if letters where found this is a boolean attribute. Not sure if needed or not
+				binding.type = "ATTR";
+				binding.template.push(templatePartial.slice(whitespaceStart + 1));
+
+				state.templates[state.position] =
+					templatePartial.slice(0, whitespaceStart) +
+					` data-replace="${state.bindings.length}" `;
+			} else {
+				//tag
+				if (templatePartial[index + 1] === "/") {
+					binding.type = "END_TAG";
+					binding.template.push(templatePartial.slice(index + 2));
+					state.templates[state.position] =
+						templatePartial.slice(0, index + 2) + "div";
+				} else {
+					binding.type = "TAG";
+					binding.template.push(templatePartial.slice(index + 1));
+					state.templates[state.position] =
+						templatePartial.slice(0, index + 1) +
+						`div data-replace="${state.bindings.length}" `;
+				}
+			}
+			break;
+		}
+
+		if (char === "=" || char === '"' || char === "'") {
+			if (char === "=") {
+				if (
+					templatePartial[index + 1] === "'" ||
+					templatePartial[index + 1] === '"'
+				) {
+					binding.closingChar = templatePartial[index + 1];
+				}
+			} else {
+				binding.closingChar = char;
+			}
+
+			const nextWhitespace = templatePartial.lastIndexOf(" ", index);
+
+			binding.type = "ATTR";
+			if (whitespaceStart !== -1) {
+				//complex attr
+				binding.template.push(templatePartial.slice(nextWhitespace + 1));
+
+				state.templates[state.position] =
+					templatePartial.slice(0, nextWhitespace) +
+					` data-replace="${state.bindings.length}" `;
+			} else {
+				//attr
+				binding.template.push(templatePartial.slice(nextWhitespace + 1));
+				state.templates[state.position] =
+					templatePartial.slice(0, nextWhitespace) +
+					` data-replace="${state.bindings.length}" `;
+			}
+			break;
+		}
+
+		foundLetters = true;
+	}
+
+	//if the template is only white space, we cant really detect it above, this is the catch
+	if (binding.type === "TEXT") {
+		binding.type = "ATTR";
+		binding.template.push("");
+		state.templates[
+			state.position
+		] = ` data-replace="${state.bindings.length}" `;
+	}
+
+	return binding;
+};
+
+const completeBinding = (binding: Binding, state: State) => {
+	const templatePartial = state.templates[state.position + 1];
+	if (templatePartial === undefined) {
 		return;
 	}
 
-	const endOfElementTag = template.indexOf(" ", lastOpeningBracket);
-	const untilAttributesStart = template.slice(0, endOfElementTag);
-	const afterAttributesStart = template.slice(endOfElementTag + 1);
+	if (binding.type === "TEXT") {
+		binding.template.push("");
+		return;
+	}
 
-	result.template = `${untilAttributesStart} data-update ${afterAttributesStart}`;
+	let index = -1;
+	let firstWhiteSpace = -1;
+	let breakSign = binding.closingChar || ">";
+	let breakIndex = -1;
+
+	while (index < templatePartial.length - 1) {
+		index += 1;
+		const char = templatePartial[index];
+		if (isWhitespace(char)) {
+			if (firstWhiteSpace === -1) {
+				firstWhiteSpace = index;
+			}
+			continue;
+		}
+
+		if (char === breakSign) {
+			breakIndex = index;
+			break;
+		}
+
+		if (char === "=") {
+			const nextChar = templatePartial[index + 1];
+			if (nextChar === "'" || nextChar === '"') {
+				breakSign = nextChar;
+				index += 1;
+				continue;
+			}
+		}
+	}
+
+	if (breakIndex === -1 && firstWhiteSpace !== -1 && breakSign === ">") {
+		breakIndex = firstWhiteSpace;
+	}
+
+	if (breakIndex === -1) {
+		binding.template.push(templatePartial);
+		binding.indices.push(state.position + 1);
+		state.templates[state.position + 1] = "";
+		state.position += 1;
+		return completeBinding(binding, state);
+	}
+
+	state.templates[state.position + 1] = templatePartial.slice(breakIndex);
+	binding.template.push(templatePartial.slice(0, breakIndex));
 };
 
-const expandAttributes = (
-	value: unknown,
-	result: ParsingResult,
-	parsingState: ParsingState
-): string => {
-	if (result.template[parsingState.lastAttributeStart] === ".") {
-		const name = sliceLastAttributeName(result, parsingState);
-		result.properties.set(name, value);
-		return "";
+const range = new Range();
+
+export const parseTemplate = (strings: TemplateStringsArray) => {
+	const bindings: Array<Binding> = [];
+
+	const state: State = {
+		position: 0,
+		bindings: bindings,
+		templates: [...strings],
+	};
+
+	while (state.position < state.templates.length - 1) {
+		const binding = determineContext(state);
+		completeBinding(binding, state);
+		state.bindings.push(binding);
+		state.position += 1;
 	}
 
-	if (value === null || value === undefined) {
-		sliceLastAttributeName(result, parsingState);
-		return "";
-	}
+	const templateString = state.templates.join("");
 
-	if (isStatic(value)) {
-		return String(value);
-	}
-
-	if (isNestedStyleRender(value)) {
-		mergeMaps(value.values, result.values);
-		result.values.set(value.name, value.template);
-		return value.name;
-	}
-
-	if (Array.isArray(value) || value instanceof Set) {
-		return `"${Array.from(value)
-			.map((value) => expandAttributes(value, result, parsingState))
-			.join(" ")}"`;
-	}
-
-	//TODO: nested objects are not handled right
-	if (value && typeof value === "object") {
-		const iterator =
-			value instanceof Map ? Array.from(value) : Object.entries(value);
-		return iterator
-			.map(([key, nestedValue]) => {
-				const expandedValue = expandAttributes(
-					nestedValue,
-					result,
-					parsingState
-				);
-				return expandedValue ? `${key}=${expandedValue}` : "";
-			})
-			.join(" ");
-	}
-
-	markElement(result);
-	const stub = createStub();
-	result.values.set(stub, value);
-	return stub;
-};
-
-const expandContent = (value: unknown, result: ParsingResult): string => {
-	if (isStatic(value)) {
-		return String(value);
-	}
-
-	if (isNestedRender(value)) {
-		mergeMaps(value.values, result.values);
-		return value.template;
-	}
-
-	if (isNestedStyleRender(value)) {
-		mergeMaps(value.values, result.values);
-		result.values.set(value.name, value.template);
-		return `<style ${Array.from(value.values.keys()).join(" ")}>${
-			value.template
-		}</style>`;
-	}
-
-	const stub = createStub();
-	result.values.set(stub, value);
-	return `<span data-replace=${stub}></span>`;
+	return {
+		bindings,
+		template: templateString,
+		fragment: range.createContextualFragment(templateString),
+	};
 };
 
 export type ParsingResult = {
@@ -107,14 +272,6 @@ export type ParsingResult = {
 	fragment: DocumentFragment;
 	bindings: Array<FilledBinding>;
 };
-
-const FRAGMENT_TYPE = {
-	INIT: -1,
-	TAG: 0,
-	ATTRIBUTE_NAME: 2,
-	ATTRIBUTE_VALUE: 3,
-	CONTENT: 4,
-} as const;
 
 export type FilledBinding = {
 	template: Array<string>;
@@ -146,8 +303,6 @@ export const html = (
 		indices: binding.indices.map((index) => dynamicValues[index]),
 	}));
 
-	console.log(filledBindings);
-
 	const result: ParsingResult = {
 		template,
 		fragment: fragment.cloneNode(true) as DocumentFragment,
@@ -156,15 +311,3 @@ export const html = (
 
 	return result;
 };
-
-const test = 123;
-const tag = "custom";
-const tag2 = "section";
-const className = "hello";
-
-//html`<${tag}>headline?</${tag}>`;
-//html`<${tag} class="${className}">hallo</${tag}>`;
-//html`<${tag} class="test ${className}">${test}</${tag}>`;
-
-//html`<${tag}-${tag2} ${tag}-${tag2}="test ${className}"></${tag}-${tag2}>`;
-html`<div data-test="hello ${className}">hello</div>`;
