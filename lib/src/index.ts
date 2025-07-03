@@ -1,19 +1,18 @@
-import { defaultKeyFn } from "./mount/mount";
-import { updateDOM } from "./mount/update-dom";
-import { html, type ParsingResult } from "./template/html";
+import { type Result } from "./template/html";
+import { renderDom } from "./template/render";
 import "./template/signals";
 
 export type ComponentOptions = {};
 
 export type Props = Record<string, unknown>;
 
-export type RenderFn = (props: Props) => ParsingResult;
+export type RenderFn = (props: Props) => Result;
 
 export type ComponentProps<Props = Record<string, unknown>> = (
 	name: string,
 	renderFn: RenderFn,
 	options?: ComponentOptions
-) => (props?: Props) => ParsingResult;
+) => (props?: Props) => Result;
 
 //@ts-expect-error options will come soon
 export const render: ComponentProps = (name, renderFn, options = {}) => {
@@ -71,17 +70,13 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#render() {
 			try {
 				console.time("parse");
-				const { bindings, fragment } = renderFn(
-					Object.fromEntries(this.#props)
-				);
+
+				//*we cant further build the strings here as they need to be build inside of a signal context
+				const result = renderFn(Object.fromEntries(this.#props));
 				console.timeEnd("parse");
 
-				// const result = updateDOM(fragment, {
-				// 	activeValue: () => undefined,
-				// 	keyFn: defaultKeyFn,
-				// });
-
-				this.shadowRoot!.replaceChildren(fragment);
+				console.log(result);
+				this.shadowRoot!.replaceChildren(renderDom(result));
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;

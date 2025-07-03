@@ -1,23 +1,53 @@
-import {
-	createStub,
-	isNestedRender,
-	isNestedStyleRender,
-	isStatic,
-	mergeMaps,
-	ParsingState,
-	renderKey,
-	sliceLastAttributeName,
-} from "./helper";
 /*
-
 type CssResult = {
   className: string,    // "css-abc123" 
   styleSheet: string,   // ":host { padding: 10px; } .css-abc123 { color: red; }"
   toString(): string    // returns className for template usage
 }
-
-
 */
+
+export type Binding = {
+	template: Array<string>;
+	indices: Array<number>;
+	type: "ATTR" | "TAG" | "TEXT" | "END_TAG" | "BOOLEAN_ATTR";
+	closingChar: string;
+};
+
+type State = {
+	position: number;
+	bindings: Array<Binding>;
+	templates: Array<string>;
+};
+
+type UpdatedBindings = {
+	attributes: AttrBinding[];
+	texts: TextBinding[];
+	tags: TagBinding[];
+	template: string;
+	fragment: DocumentFragment;
+};
+
+export type Result = UpdatedBindings & { dynamicValues: Array<unknown> };
+
+type AttrBinding = {
+	value: MixedArray;
+	key: MixedArray;
+	id: number;
+};
+
+type TextBinding = {
+	value: number[];
+	id: number;
+};
+
+type TagBinding = {
+	value: MixedArray;
+	id: number;
+};
+
+type MixedArray = Array<string | number>;
+
+const filterEmpty = (item: unknown) => item === 0 || Boolean(item);
 
 const isWhitespace = (char: string) => {
 	return (
@@ -62,19 +92,6 @@ const isInsideTag = (stringSegment: string, lastType?: Binding["type"]) => {
 	return true;
 };
 
-export type Binding = {
-	template: Array<string>;
-	indices: Array<number>;
-	type: "ATTR" | "TAG" | "TEXT" | "END_TAG";
-	closingChar: string;
-};
-
-type State = {
-	position: number;
-	bindings: Array<Binding>;
-	templates: Array<string>;
-};
-
 const determineContext = (state: State): Binding => {
 	const templatePartial = state.templates[state.position];
 
@@ -112,7 +129,7 @@ const determineContext = (state: State): Binding => {
 			if (whitespaceStart !== -1) {
 				//attribute
 				//* if letters where found this is a boolean attribute. Not sure if needed or not
-				binding.type = "ATTR";
+				binding.type = foundLetters ? "BOOLEAN_ATTR" : "ATTR";
 				binding.template.push(templatePartial.slice(whitespaceStart + 1));
 
 				state.templates[state.position] =
@@ -260,54 +277,76 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 
 	const templateString = state.templates.join("");
 
-	return {
-		bindings,
+	const updatedBindings: UpdatedBindings = {
+		attributes: [],
+		texts: [],
+		tags: [],
 		template: templateString,
 		fragment: range.createContextualFragment(templateString),
 	};
+
+	//TODO: this could use a clean up... Maybe we dont even need to store this in one array and convert it into several afterwards but start with many
+	bindings.forEach(({ template, indices, type }, index) => {
+		switch (type) {
+			case "TAG":
+				updatedBindings.tags.push({
+					value: template
+						.flatMap((token, tokenIndex) => [token, indices[tokenIndex]])
+						.filter(filterEmpty),
+					id: index,
+				});
+				break;
+			case "TEXT":
+				updatedBindings.texts.push({ value: indices, id: index });
+				break;
+			case "BOOLEAN_ATTR":
+			case "ATTR":
+				const keys: MixedArray = [];
+				const values: MixedArray = [];
+
+				template.forEach((token, templateIndex) => {
+					if (token.includes("=")) {
+						const [currentKey, currentValue] = token.split("=");
+						keys.push(currentKey);
+						values.push(currentValue, indices[templateIndex]);
+						return;
+					}
+					(values.length ? values : keys).push(token, indices[templateIndex]);
+				});
+				updatedBindings.attributes.push({
+					value: values.filter(filterEmpty),
+					key: keys.filter(filterEmpty),
+					id: index,
+				});
+				break;
+
+			default:
+				break;
+		}
+	});
+
+	return updatedBindings;
 };
 
-export type ParsingResult = {
-	template: string;
-	fragment: DocumentFragment;
-	bindings: Array<FilledBinding>;
-};
-
-export type FilledBinding = {
-	template: Array<string>;
-	indices: Array<unknown>;
-	type: "ATTR" | "TAG" | "TEXT" | "END_TAG";
-	closingChar: string;
-};
-
-type ParsedTemplate = {
-	bindings: Binding[];
-	template: string;
-	fragment: DocumentFragment;
-};
-
-const htmlCache = new WeakMap<TemplateStringsArray, ParsedTemplate>();
+const htmlCache = new WeakMap<TemplateStringsArray, UpdatedBindings>();
 
 export const html = (
 	tokens: TemplateStringsArray,
 	...dynamicValues: Array<unknown>
-): ParsingResult => {
+): Result => {
 	if (!htmlCache.has(tokens)) {
 		htmlCache.set(tokens, parseTemplate(tokens));
 	}
 
-	const { template, bindings, fragment } = htmlCache.get(tokens)!;
+	const { template, fragment, tags, texts, attributes } =
+		htmlCache.get(tokens)!;
 
-	const filledBindings: Array<FilledBinding> = bindings.map((binding) => ({
-		...binding,
-		indices: binding.indices.map((index) => dynamicValues[index]),
-	}));
-
-	const result: ParsingResult = {
+	return {
 		template,
 		fragment: fragment.cloneNode(true) as DocumentFragment,
-		bindings: filledBindings,
+		tags,
+		texts,
+		attributes,
+		dynamicValues,
 	};
-
-	return result;
 };

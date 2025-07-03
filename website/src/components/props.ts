@@ -1,12 +1,9 @@
 import { render } from "../../../lib/src";
-import { Signal } from "../../../lib/src/context/signal";
 import { html } from "../../../lib/src/template/html";
 
 export interface TestProps {
-	stringSignal: Signal<string>;
-	externalSignal: Signal<number>;
-	array: Array<number>;
-	nestedObj: Record<string, string>;
+	prop1: unknown;
+	prop2: unknown;
 }
 
 export const propsComponent = render("props-component", (props: TestProps) => {
@@ -14,19 +11,12 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 
 	return html`
 		<section class="card">
-			<h2>attributes</h2>
-			<ul>
-				<li test=${null}>null</li>
-				<li .test=${2}>property</li>
-				<li>3</li>
-				<li>4</li>
-			</ul>
 			<h2>props</h2>
 			<ul>
-				<li>${props.stringSignal}</li>
-				<li>${props.externalSignal}</li>
-				<li>${props.array}</li>
-				<li>${props.nestedObj}</li>
+				<li data-${"test"}="${123}">${props.prop1}</li>
+				<li><${props.tag}>dynamic tag here</${props.tag}></li>
+				<li>${[1, 2, 3]}</li>
+				<li ${{ key1: 1, key2: 2 }}>spread attributes</li>
 			</ul>
 		</section>
 	`;
