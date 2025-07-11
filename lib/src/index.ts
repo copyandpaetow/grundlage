@@ -1,5 +1,10 @@
 import { type Result } from "./template/html";
-import { renderDom } from "./template/render";
+import {
+	attributeRender,
+	renderDom,
+	tagRender,
+	textRender,
+} from "./template/render";
 import "./template/signals";
 
 export type ComponentOptions = {};
@@ -75,8 +80,14 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 				const result = renderFn(Object.fromEntries(this.#props));
 				console.timeEnd("parse");
 
-				console.log(result);
-				this.shadowRoot!.replaceChildren(renderDom(result));
+				result.texts.forEach((binding) => textRender(binding, result));
+				result.tags.forEach((binding) => tagRender(binding, result));
+				result.attributes.forEach((binding) =>
+					attributeRender(binding, result)
+				);
+
+				this.shadowRoot!.replaceChildren(result.fragment);
+				result.fragment = this.shadowRoot;
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;

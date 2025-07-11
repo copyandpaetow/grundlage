@@ -29,23 +29,23 @@ type UpdatedBindings = {
 
 export type Result = UpdatedBindings & { dynamicValues: Array<unknown> };
 
-type AttrBinding = {
+export type AttrBinding = {
 	value: MixedArray;
 	key: MixedArray;
 	id: number;
 };
 
-type TextBinding = {
+export type TextBinding = {
 	value: number[];
 	id: number;
 };
 
-type TagBinding = {
+export type TagBinding = {
 	value: MixedArray;
 	id: number;
 };
 
-type MixedArray = Array<string | number>;
+export type MixedArray = Array<string | number>;
 
 const filterEmpty = (item: unknown) => item === 0 || Boolean(item);
 
