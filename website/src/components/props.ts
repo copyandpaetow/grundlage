@@ -12,6 +12,9 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 	return html`
 		<section class="card">
 			<h2>props</h2>
+			<for-each list=${[10, 20, 30, 40]}>
+					<div>${(num) => num}</div>
+			</for-each>
 			<ul>
 				<li data-${"test"}="${123}">${props.prop1}</li>
 				<li><${props.tag}>dynamic tag here</${props.tag}></li>

@@ -20,29 +20,45 @@ type State = {
 };
 
 type UpdatedBindings = {
-	attributes: AttrBinding[];
-	texts: TextBinding[];
-	tags: TagBinding[];
+	bindings: Array<AttrBinding | TextBinding | TagBinding>;
 	template: string;
 	fragment: DocumentFragment;
 };
 
-export type Result = UpdatedBindings & { dynamicValues: Array<unknown> };
+export type Result = {
+	bindings: Array<
+		| { value: Array<unknown>; key: Array<unknown>; id: number; type: "ATTR" }
+		| {
+				value: Array<unknown>;
+				id: number;
+				type: "TEXT";
+		  }
+		| {
+				value: Array<unknown>;
+				id: number;
+				type: "TAG";
+		  }
+	>;
+	fragment: DocumentFragment;
+};
 
 export type AttrBinding = {
 	value: MixedArray;
 	key: MixedArray;
 	id: number;
+	type: "ATTR";
 };
 
 export type TextBinding = {
 	value: number[];
 	id: number;
+	type: "TEXT";
 };
 
 export type TagBinding = {
 	value: MixedArray;
 	id: number;
+	type: "TAG";
 };
 
 export type MixedArray = Array<string | number>;
@@ -278,26 +294,25 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 	const templateString = state.templates.join("");
 
 	const updatedBindings: UpdatedBindings = {
-		attributes: [],
-		texts: [],
-		tags: [],
+		bindings: [],
 		template: templateString,
 		fragment: range.createContextualFragment(templateString),
 	};
 
-	//TODO: this could use a clean up... Maybe we dont even need to store this in one array and convert it into several afterwards but start with many
+	//TODO: this could use a clean up...
 	bindings.forEach(({ template, indices, type }, index) => {
 		switch (type) {
 			case "TAG":
-				updatedBindings.tags.push({
+				updatedBindings.bindings.push({
 					value: template
 						.flatMap((token, tokenIndex) => [token, indices[tokenIndex]])
 						.filter(filterEmpty),
 					id: index,
+					type,
 				});
 				break;
 			case "TEXT":
-				updatedBindings.texts.push({ value: indices, id: index });
+				updatedBindings.bindings.push({ value: indices, id: index, type });
 				break;
 			case "BOOLEAN_ATTR":
 			case "ATTR":
@@ -313,10 +328,11 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 					}
 					(values.length ? values : keys).push(token, indices[templateIndex]);
 				});
-				updatedBindings.attributes.push({
+				updatedBindings.bindings.push({
 					value: values.filter(filterEmpty),
 					key: keys.filter(filterEmpty),
 					id: index,
+					type: "ATTR",
 				});
 				break;
 
@@ -328,6 +344,12 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 	return updatedBindings;
 };
 
+const setDynamicValues = (
+	dynamicValues: Array<unknown>,
+	entry: Array<Number> | MixedArray
+): Array<unknown> =>
+	entry.map((item) => (typeof item === "number" ? dynamicValues[item] : item));
+
 const htmlCache = new WeakMap<TemplateStringsArray, UpdatedBindings>();
 
 export const html = (
@@ -338,15 +360,25 @@ export const html = (
 		htmlCache.set(tokens, parseTemplate(tokens));
 	}
 
-	const { template, fragment, tags, texts, attributes } =
-		htmlCache.get(tokens)!;
+	const { fragment, bindings } = htmlCache.get(tokens)!;
+
+	const withActualValues = bindings.map((entry) => {
+		if (entry.type === "ATTR") {
+			return {
+				...entry,
+				key: setDynamicValues(dynamicValues, entry.key),
+				value: setDynamicValues(dynamicValues, entry.value),
+			};
+		}
+
+		return {
+			...entry,
+			value: setDynamicValues(dynamicValues, entry.value),
+		};
+	});
 
 	return {
-		template,
+		bindings: withActualValues,
 		fragment: fragment.cloneNode(true) as DocumentFragment,
-		tags,
-		texts,
-		attributes,
-		dynamicValues,
 	};
 };

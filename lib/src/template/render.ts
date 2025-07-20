@@ -1,4 +1,5 @@
 import { remove } from "../mount/helper";
+import { ForEachComponent } from "./for-component";
 import {
 	AttrBinding,
 	MixedArray,
@@ -17,26 +18,57 @@ TODO: render differently depending on the result of the dynamic value
 
 */
 
-export const textRender = (
-	binding: TextBinding,
+export const updateDynamicParts = (
 	result: Result,
 	activeValue = () => undefined
 ) => {
-	const placeholder = result.fragment.querySelector(
-		`[data-replace="${binding.id}"]`
-	) as HTMLElement;
+	result.fragment.querySelectorAll("for-each").forEach((component) => {
+		(component as ForEachComponent).setBindings(result.bindings);
+	});
 
-	if (!placeholder) {
-		return;
-	}
+	const elementsToBeUpdated = result.fragment.querySelectorAll(
+		"[data-replace]:not(for-each *, for-each)"
+	);
 
+	elementsToBeUpdated.forEach((element) => {
+		const binding =
+			result.bindings[parseInt(element.getAttribute("data-replace") || "-1")];
+
+		if (!binding) {
+			return;
+		}
+
+		switch (binding.type) {
+			case "ATTR":
+				attributeRender(element, binding, activeValue);
+				break;
+			case "TEXT":
+				textRender(element, binding, activeValue);
+				break;
+			case "TAG":
+				tagRender(element, binding, activeValue);
+				break;
+
+			default:
+				break;
+		}
+	});
+
+	return result.fragment;
+};
+
+export const textRender = (
+	element: Element,
+	binding: TextBinding,
+	activeValue = () => undefined
+) => {
 	const start = new Comment("start");
 	const end = new Comment("end");
-	placeholder.replaceWith(start, end);
+	element.replaceWith(start, end);
 
 	createEffect(() => {
 		const replacement = document.createTextNode(
-			result.dynamicValues[binding.value[0]].toString() ?? ""
+			binding.value[0].toString() ?? ""
 		);
 		remove(start, end);
 		start.after(replacement);
@@ -44,58 +76,36 @@ export const textRender = (
 };
 
 export const tagRender = (
+	element: Element,
 	binding: TagBinding,
-	result: Result,
 	activeValue = () => undefined
 ) => {
-	const placeholder = result.fragment.querySelector(
-		`[data-replace="${binding.id}"]`
-	) as Element;
-
-	if (!placeholder) {
-		return;
-	}
-
 	createEffect(() => {
-		const newTag = binding.value
-			.map((tagPart) =>
-				typeof tagPart === "number"
-					? result.dynamicValues[tagPart].toString()
-					: tagPart
-			)
-			.join("");
+		const newTag = binding.value.join(""); //functions in here would need to get called
 
 		const newElement = document.createElement(newTag);
-		placeholder
+		element
 			.getAttributeNames()
 			.forEach((name) =>
-				newElement.setAttribute(name, placeholder.getAttribute(name)!)
+				newElement.setAttribute(name, element.getAttribute(name)!)
 			);
 
-		newElement.replaceChildren(...placeholder.childNodes);
-		placeholder.replaceWith(newElement);
+		newElement.replaceChildren(...element.childNodes);
+		element.replaceWith(newElement);
 	});
 };
 
 export const attributeRender = (
+	element: Element,
 	binding: AttrBinding,
-	result: Result,
 	activeValue = () => undefined
 ) => {
-	const placeholder = result.fragment.querySelector(
-		`[data-replace="${binding.id}"]`
-	) as Element;
-
 	const attrPointer = new Comment("attr start above");
-	placeholder.append(attrPointer);
+	element.append(attrPointer);
 
 	console.log(binding);
-	if (
-		binding.value.length === 0 &&
-		binding.key.length === 1 &&
-		typeof binding.key[0] === "number"
-	) {
-		const soleValue = result.dynamicValues[binding.key[0]];
+	if (binding.value.length === 0 && binding.key.length === 1) {
+		const soleValue = binding.key[0];
 		if (typeof soleValue === "object") {
 			if (Array.isArray(soleValue) || soleValue instanceof Set) {
 				soleValue.forEach((key) =>
@@ -117,21 +127,8 @@ export const attributeRender = (
 		}
 	} else {
 		createEffect(() => {
-			const key = binding.key
-				.map((keyPart) =>
-					typeof keyPart === "number"
-						? result.dynamicValues[keyPart].toString()
-						: keyPart
-				)
-				.join("");
-
-			const value = binding.value
-				.map((valuePart) =>
-					typeof valuePart === "number"
-						? result.dynamicValues[valuePart].toString()
-						: valuePart
-				)
-				.join("");
+			const key = binding.key.join("");
+			const value = binding.value.join("");
 
 			attrPointer.parentElement!.setAttribute(key, value);
 		});

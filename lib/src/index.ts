@@ -1,10 +1,6 @@
+import "./template/for-component";
 import { type Result } from "./template/html";
-import {
-	attributeRender,
-	renderDom,
-	tagRender,
-	textRender,
-} from "./template/render";
+import { updateDynamicParts } from "./template/render";
 import "./template/signals";
 
 export type ComponentOptions = {};
@@ -76,18 +72,10 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			try {
 				console.time("parse");
 
-				//*we cant further build the strings here as they need to be build inside of a signal context
 				const result = renderFn(Object.fromEntries(this.#props));
 				console.timeEnd("parse");
 
-				result.texts.forEach((binding) => textRender(binding, result));
-				result.tags.forEach((binding) => tagRender(binding, result));
-				result.attributes.forEach((binding) =>
-					attributeRender(binding, result)
-				);
-
-				this.shadowRoot!.replaceChildren(result.fragment);
-				result.fragment = this.shadowRoot;
+				this.shadowRoot!.replaceChildren(updateDynamicParts(result));
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;
