@@ -1,5 +1,5 @@
 import { render } from "../../../lib/src";
-import { html } from "../../../lib/src/template/html";
+import { html } from "../../../lib/src/html";
 
 export interface TestProps {
 	prop1: unknown;

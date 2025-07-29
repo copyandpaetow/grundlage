@@ -40,6 +40,7 @@ export type Result = {
 		  }
 	>;
 	fragment: DocumentFragment;
+	text: string;
 };
 
 export type AttrBinding = {
@@ -121,7 +122,7 @@ const determineContext = (state: State): Binding => {
 	if (!isInsideTag(templatePartial, state.bindings.at(-1)?.type)) {
 		state.templates[
 			state.position
-		] += `<span data-replace="${state.bindings.length}"></span>`;
+		] += `<span data-text-replace="${state.bindings.length}"></span>`;
 		binding.template.push("");
 		return binding;
 	}
@@ -150,12 +151,13 @@ const determineContext = (state: State): Binding => {
 
 				state.templates[state.position] =
 					templatePartial.slice(0, whitespaceStart) +
-					` data-replace="${state.bindings.length}" `;
+					` data-attr-replace data-attr-replace-${state.bindings.length}="${state.bindings.length}" `;
 			} else {
 				//tag
 				if (templatePartial[index + 1] === "/") {
-					binding.type = "END_TAG";
-					binding.template.push(templatePartial.slice(index + 2));
+					//! adding the end tag but not using it later, throws of the indices
+					// binding.type = "END_TAG";
+					// binding.template.push(templatePartial.slice(index + 2));
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 2) + "div";
 				} else {
@@ -163,7 +165,7 @@ const determineContext = (state: State): Binding => {
 					binding.template.push(templatePartial.slice(index + 1));
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 1) +
-						`div data-replace="${state.bindings.length}" `;
+						`div data-tag-replace="${state.bindings.length}" `;
 				}
 			}
 			break;
@@ -187,16 +189,16 @@ const determineContext = (state: State): Binding => {
 			if (whitespaceStart !== -1) {
 				//complex attr
 				binding.template.push(templatePartial.slice(nextWhitespace + 1));
-
 				state.templates[state.position] =
 					templatePartial.slice(0, nextWhitespace) +
-					` data-replace="${state.bindings.length}" `;
+					` data-attr-replace data-attr-replace-${state.bindings.length}="${state.bindings.length}" `;
 			} else {
 				//attr
+				//TODO: why are these identical?
 				binding.template.push(templatePartial.slice(nextWhitespace + 1));
 				state.templates[state.position] =
 					templatePartial.slice(0, nextWhitespace) +
-					` data-replace="${state.bindings.length}" `;
+					` data-attr-replace data-attr-replace-${state.bindings.length}="${state.bindings.length}" `;
 			}
 			break;
 		}
@@ -210,7 +212,7 @@ const determineContext = (state: State): Binding => {
 		binding.template.push("");
 		state.templates[
 			state.position
-		] = ` data-replace="${state.bindings.length}" `;
+		] = ` data-attr-replace data-attr-replace-${state.bindings.length}="${state.bindings.length}" `;
 	}
 
 	return binding;
@@ -300,6 +302,7 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 	};
 
 	//TODO: this could use a clean up...
+	//TODO: we are skipping the end tag and get incorrect indices for the entries afterwards
 	bindings.forEach(({ template, indices, type }, index) => {
 		switch (type) {
 			case "TAG":
@@ -360,7 +363,7 @@ export const html = (
 		htmlCache.set(tokens, parseTemplate(tokens));
 	}
 
-	const { fragment, bindings } = htmlCache.get(tokens)!;
+	const { fragment, bindings, template } = htmlCache.get(tokens)!;
 
 	const withActualValues = bindings.map((entry) => {
 		if (entry.type === "ATTR") {
@@ -380,5 +383,6 @@ export const html = (
 	return {
 		bindings: withActualValues,
 		fragment: fragment.cloneNode(true) as DocumentFragment,
+		text: template,
 	};
 };

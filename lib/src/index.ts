@@ -1,7 +1,7 @@
-import "./template/for-component";
-import { type Result } from "./template/html";
-import { updateDynamicParts } from "./template/render";
-import "./template/signals";
+import "./for-component";
+import { type Result } from "./html";
+import { updateDynamicParts } from "./render";
+import "./signals";
 
 export type ComponentOptions = {};
 
@@ -75,7 +75,10 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 				const result = renderFn(Object.fromEntries(this.#props));
 				console.timeEnd("parse");
 
-				this.shadowRoot!.replaceChildren(updateDynamicParts(result));
+				console.log("here too?");
+				this.shadowRoot!.replaceChildren(
+					updateDynamicParts(result.fragment, result.bindings)
+				);
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;

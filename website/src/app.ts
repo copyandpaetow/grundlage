@@ -1,13 +1,13 @@
-import { createSignalReactivity } from "../../lib/src/context/signal";
-import { render } from "../../lib/src/index";
-import { asyncComponent } from "./components/async";
-import { conditionalComponent } from "./components/conditional";
-import { listComponent } from "./components/list";
-import { propsComponent } from "./components/props";
-import { styledComponent } from "./components/styling";
+// import { createSignalReactivity } from "../../lib/src/context/signal";
+// import { render } from "../../lib/src/index";
+// import { asyncComponent } from "./components/async";
+// import { conditionalComponent } from "./components/conditional";
+// import { listComponent } from "./components/list";
+// import { propsComponent } from "./components/props";
+// import { styledComponent } from "./components/styling";
 
-import "../../lib/src/template/html";
-import "../../lib/src/template/signals";
+import "../../lib/src/html";
+import "../../lib/src/signals";
 
 // conditionalComponent();
 

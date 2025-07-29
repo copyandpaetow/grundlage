@@ -1,4 +1,3 @@
-import { remove } from "../mount/helper";
 import { ForEachComponent } from "./for-component";
 import {
 	AttrBinding,
@@ -11,50 +10,78 @@ import { createEffect } from "./signals";
 
 /*
 
-TODO: query for template elements and replace their content with the children and add the active value from the special properties
 
-TODO: render differently depending on the result of the dynamic value
-=> needs a recursive render strategy
 
 */
 
+export const remove = (start: Node, end: Node): DocumentFragment => {
+	const deletedContent = new DocumentFragment();
+
+	let current = start.nextSibling;
+	while (current && current !== end) {
+		const next = current.nextSibling;
+		deletedContent.append(current);
+		current = next;
+	}
+
+	return deletedContent;
+};
+
 export const updateDynamicParts = (
-	result: Result,
+	fragment: Result["fragment"],
+	bindings: Result["bindings"],
 	activeValue = () => undefined
 ) => {
-	result.fragment.querySelectorAll("for-each").forEach((component) => {
-		(component as ForEachComponent).setBindings(result.bindings);
+	fragment.querySelectorAll("for-each").forEach((component) => {
+		(component as ForEachComponent).setBindings(bindings);
 	});
 
-	const elementsToBeUpdated = result.fragment.querySelectorAll(
-		"[data-replace]:not(for-each *, for-each)"
-	);
+	fragment
+		.querySelectorAll("[data-text-replace]:not(for-each *, for-each)")
+		.forEach((replacementElement) => {
+			const binding =
+				bindings[
+					parseInt(replacementElement.getAttribute("data-text-replace") || "-1")
+				];
+			textRender(replacementElement, binding, activeValue);
+		});
 
-	elementsToBeUpdated.forEach((element) => {
-		const binding =
-			result.bindings[parseInt(element.getAttribute("data-replace") || "-1")];
+	fragment
+		.querySelectorAll("[data-tag-replace]:not(for-each *, for-each)")
+		.forEach((replacementElement) => {
+			const binding =
+				bindings[
+					parseInt(replacementElement.getAttribute("data-tag-replace") || "-1")
+				];
+			replacementElement.removeAttribute("data-tag-replace");
+			tagRender(replacementElement, binding, activeValue);
+		});
 
-		if (!binding) {
-			return;
-		}
+	fragment
+		.querySelectorAll("[data-attr-replace]:not(for-each *, for-each)")
+		.forEach((replacementElement) => {
+			replacementElement.getAttributeNames().forEach((attrName) => {
+				if (!attrName.includes("data-attr-replace-")) {
+					return;
+				}
 
-		switch (binding.type) {
-			case "ATTR":
-				attributeRender(element, binding, activeValue);
-				break;
-			case "TEXT":
-				textRender(element, binding, activeValue);
-				break;
-			case "TAG":
-				tagRender(element, binding, activeValue);
-				break;
+				const binding =
+					bindings[parseInt(replacementElement.getAttribute(attrName) || "-1")];
+				attributeRender(replacementElement, binding, activeValue);
+				replacementElement.removeAttribute(attrName);
+			});
+			replacementElement.removeAttribute("data-attr-replace");
+		});
 
-			default:
-				break;
-		}
-	});
+	return fragment;
+};
 
-	return result.fragment;
+const unpack = (value: unknown, activeValue: () => unknown) => {
+	if (typeof value === "function") {
+		return value(activeValue());
+	}
+
+	return value.toString();
 };
 
 export const textRender = (
@@ -68,7 +95,7 @@ export const textRender = (
 
 	createEffect(() => {
 		const replacement = document.createTextNode(
-			binding.value[0].toString() ?? ""
+			unpack(binding.value[0], activeValue)
 		);
 		remove(start, end);
 		start.after(replacement);
@@ -108,11 +135,11 @@ export const attributeRender = (
 		const soleValue = binding.key[0];
 		if (typeof soleValue === "object") {
 			if (Array.isArray(soleValue) || soleValue instanceof Set) {
-				soleValue.forEach((key) =>
+				soleValue.forEach((key) => {
 					createEffect(() => {
 						attrPointer.parentElement!.setAttribute(key, "");
-					})
-				);
+					});
+				});
 				return;
 			}
 
