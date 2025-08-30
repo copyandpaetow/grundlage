@@ -9,7 +9,11 @@
 	"scripts": {
 		"dev": "cd website && vite dev",
 		"build": "cd website && vite build",
-		"preview": "cd website && vite build && vite preview"
+		"preview": "cd website && vite build && vite preview",
+		"test": "vitest"
+	},
+	"devDependencies": {
+		"vitest": "^3.2.4"
 	},
 	"workspaces": [
 		"/lib",

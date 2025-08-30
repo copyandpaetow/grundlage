@@ -2,6 +2,7 @@ import "./for-component";
 import { type Result } from "./html";
 import { updateDynamicParts } from "./render";
 import "./signals";
+import "./css/css";
 
 export type ComponentOptions = {};
 

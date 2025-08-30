@@ -1,6 +1,5 @@
 import { render } from "../../../lib/src";
 import { html } from "../../../lib/src/html";
-import { css } from "../../../lib/src/css";
 
 export interface TestProps {
 	prop1: unknown;
@@ -25,12 +24,3 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 		</section>
 	`;
 });
-
-const rule = css`
-	position: ${"absolute"};
-`;
-
-console.log(css`
-	display: ${() => "none"};
-	${rule}
-`);
