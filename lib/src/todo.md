@@ -16,6 +16,7 @@ type CssResult = {
 
 - we need a better, recursive rendering strategy
 - depending on the attribute renderer, we might need to add another variant here, which could influence the html parser
+- css needs its own renderer
 
 ## html
 
@@ -23,6 +24,7 @@ type CssResult = {
 - we also handle attributes mostly the same, we could likely reduce some code here
 - there is the case that the html`` call will get used within another. Would we return the string or the fragment? Or just a "hole"?
 - there is some duplicated work done with the attributes, maybe we can abstract this a bit
+- for an dynamic hole inside of an element, it might be a good idea to readout the name of the element they are in as for style we would need to replace it with a css.stylesheet call
 
 ## signals
 

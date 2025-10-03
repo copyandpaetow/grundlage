@@ -5,6 +5,7 @@ import {
 	splitStylesIntoRules,
 } from "./split-rules";
 
+export const cssIdentifier = Symbol("css");
 const cssCache = new WeakMap<TemplateStringsArray, CssParsingResult[]>();
 
 export const parseCSSRule = (
@@ -25,8 +26,12 @@ export const parseCSSRule = (
 		result.type = "rule";
 	});
 
-	return parsedTokens;
-	//todo: add replacing of dynamic content
+	//todo: does it make sense, that this is an array with one entry inside of a small object?
+
+	return {
+		rules: parsedTokens,
+		type: cssIdentifier,
+	};
 };
 
 const parseStyleSheet = (
@@ -48,36 +53,13 @@ const parseStyleSheet = (
 		result.type = "sheet";
 	});
 
-	return parsedTokens;
+	return {
+		rules: parsedTokens,
+		type: cssIdentifier,
+	};
 };
 
 export const css = {
 	rule: parseCSSRule,
 	stylesheet: parseStyleSheet,
 };
-
-/*
-
-	if we are inside of a rule, we only care when it ends so
-	at depth > 1, we want to find the right closing rule and start the next search
-	=> we only care about more curly brackets, and skippables (quotes, comments)
-
-	between rules/ on the toplevel
-	- when we see only white space and a line break, we start a new rule
-	- when we see a semi colon before the line break, we also start a new rule
-	
-	*/
-
-/*
-
-learnings
-
-- separating rules and detecting position gets too complicated
-- it cant be done with detection for rule or sheet as the dynamic parts can alter the result
-=> split the rules from the sheet and save it as array, from there the rules and split sheets can be processed together
-
-- when starting from the beginning, we have a hard time knowing when something has ended as we dont look ahead
-- when starting from the holes, we cant know deep we are so he have to iterate everything before the hole
-- when starting from the end, we dont know if 
-
-*/
