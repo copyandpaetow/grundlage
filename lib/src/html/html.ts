@@ -1,3 +1,5 @@
+import { computeHash, stringHash } from "./hashing";
+
 export type Binding = {
 	template: Array<string>;
 	indices: Array<number>;
@@ -15,12 +17,14 @@ type UpdatedBindings = {
 	bindings: Array<BindingResult>;
 	template: string;
 	fragment: DocumentFragment;
+	hash: number;
 };
 
 export type BindingResult = {
 	value: Array<unknown>;
 	key: Array<unknown>;
 	type: "ATTR" | "TEXT" | "TAG";
+	hash: number;
 };
 
 export type Result = {
@@ -273,11 +277,17 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 						.flatMap((token, tokenIndex) => [token, indices[tokenIndex]])
 						.filter(filterEmpty),
 					type,
+					hash: -1,
 				});
 				break;
 
 			case "TEXT":
-				updatedBindings.push({ key: emptArray, value: indices, type });
+				updatedBindings.push({
+					key: emptArray,
+					value: indices,
+					type,
+					hash: -1,
+				});
 				break;
 
 			case "BOOLEAN_ATTR":
@@ -298,6 +308,7 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 					key: keys.filter(filterEmpty),
 					value: values.filter(filterEmpty),
 					type: "ATTR",
+					hash: -1,
 				});
 		}
 	}
@@ -306,10 +317,26 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 		bindings: updatedBindings,
 		template: templateString,
 		fragment: range.createContextualFragment(templateString),
+		hash: stringHash(templateString),
 	};
 
 	return result;
 };
+
+export class TemplateResult {
+	fragment: DocumentFragment;
+	bindings: BindingResult[];
+	hash: number;
+	constructor(
+		fragment: DocumentFragment,
+		bindings: Array<BindingResult>,
+		hash: number
+	) {
+		this.fragment = fragment;
+		this.bindings = bindings;
+		this.hash = hash;
+	}
+}
 
 const setDynamicValues = (
 	dynamicValues: Array<unknown>,
@@ -322,25 +349,34 @@ const htmlCache = new WeakMap<TemplateStringsArray, UpdatedBindings>();
 export const html = (
 	tokens: TemplateStringsArray,
 	...dynamicValues: Array<unknown>
-): Result => {
+): TemplateResult => {
 	if (!htmlCache.has(tokens)) {
 		htmlCache.set(tokens, parseTemplate(tokens));
 	}
 
-	const { fragment, bindings, template } = htmlCache.get(tokens)!;
+	const { fragment, bindings, hash } = htmlCache.get(tokens)!;
 
-	const withActualValues = bindings.map((entry) => ({
-		...entry,
-		value: setDynamicValues(dynamicValues, entry.value as MixedArray),
-		key: setDynamicValues(
+	const withActualValues = bindings.map((entry) => {
+		const updatedKeys = setDynamicValues(
 			dynamicValues,
 			(entry.type === "ATTR" ? entry.key : []) as MixedArray
-		),
-	}));
+		);
+		const updatedValues = setDynamicValues(
+			dynamicValues,
+			entry.value as MixedArray
+		);
 
-	return {
-		bindings: withActualValues,
-		fragment: fragment.cloneNode(true) as DocumentFragment,
-		text: template,
-	};
+		return {
+			...entry,
+			value: updatedValues,
+			key: updatedKeys,
+			hash: computeHash(hash, updatedKeys, updatedValues),
+		};
+	});
+
+	return new TemplateResult(
+		fragment.cloneNode(true) as DocumentFragment,
+		withActualValues,
+		hash
+	);
 };

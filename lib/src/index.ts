@@ -1,53 +1,10 @@
-import { BindingResult, type Result } from "./html/html";
+import { BindingResult, TemplateResult, type Result } from "./html/html";
 import "./css/css";
-
-interface BaseComponent extends HTMLElement {
-	setState<Value>(key: string, value: Value): Value;
-	getState<Value>(key: string): Value;
-	hasState(key: string): boolean;
-}
-
-let instance: BaseComponent | null = null;
-
-export const useState = <Value extends unknown>(
-	name: string,
-	initialValue: Value,
-	options?: {}
-) => {
-	if (!instance) {
-		throw new Error("instance is not defined");
-	}
-
-	const currentInstance = instance;
-	const camelCaseName = name[0].toUpperCase() + name.slice(1);
-	const lowerCaseName = name.toLowerCase();
-	const currentValue = currentInstance.hasState(name)
-		? currentInstance.getState(name)
-		: currentInstance.setState(name, initialValue);
-
-	return {
-		[lowerCaseName]: currentValue,
-		[`set${camelCaseName}`]: <Value>(newValue: Value) =>
-			currentInstance.setState(name, newValue),
-	};
-};
-
-export type DynamicPart = BindingResult & {
-	start: Comment;
-	end: Comment;
-};
-
-export type ComponentOptions = {};
-
-export type Props = Record<string, unknown>;
-
-export type RenderFn = (props: Props) => Result;
-
-export type ComponentProps<Props = Record<string, unknown>> = (
-	name: string,
-	renderFn: RenderFn,
-	options?: ComponentOptions
-) => (props?: Props) => Result;
+import { BaseComponent, ComponentProps, DynamicPart } from "./types";
+import { instance } from "./state/state";
+import { updateAttr } from "./update/attributes";
+import { updateTag } from "./update/tags";
+import { updateText } from "./update/texts";
 
 //@ts-expect-error options will come soon
 export const render: ComponentProps = (name, renderFn, options = {}) => {
@@ -136,7 +93,8 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		/*
 			*next steps
 
-			todo: we need to account for different kind of values (fn, null, object etc)
+			todo: we need to account for different kind of values (fn, null, object etc) 
+			=> maybe the updater functions need their own file and own unpack functions
 
 			todo: we need the lifecycle functions
 			todo: we need more of the watchers and state functions (root, emit, async)
@@ -151,9 +109,9 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#render() {
 			try {
 				console.time("parse");
-				instance = this;
+				instance.current = this;
 				const result = renderFn(Object.fromEntries(this.#props));
-				instance = null;
+				instance.current = null;
 				console.timeEnd("parse");
 
 				if (!this.#dynamicParts) {
@@ -181,7 +139,10 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			}
 		}
 
-		#renderDom(result: Result, shadowRoot: ShadowRoot): Array<DynamicPart> {
+		#renderDom(
+			result: TemplateResult,
+			target: ShadowRoot | HTMLElement
+		): Array<DynamicPart> {
 			const dynamicParts = result.bindings.map((currentBinding, index) => {
 				const updatedBindings = {
 					...currentBinding,
@@ -197,16 +158,16 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 				switch (updatedBindings.type) {
 					case "ATTR":
 						placeholder.append(updatedBindings.start, updatedBindings.end);
-						this.#updateAttr(updatedBindings);
+						updateAttr(updatedBindings);
 						return updatedBindings;
 					case "TAG":
 						placeholder.before(updatedBindings.start);
 						placeholder.after(updatedBindings.end);
-						this.#updateTag(updatedBindings);
+						updateTag(updatedBindings);
 						return updatedBindings;
 					case "TEXT":
 						placeholder.replaceWith(updatedBindings.start, updatedBindings.end);
-						this.#updateText(updatedBindings);
+						updateText(updatedBindings);
 						return updatedBindings;
 
 					default:
@@ -214,7 +175,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 				}
 			});
 
-			shadowRoot.replaceChildren(result.fragment);
+			target.replaceChildren(result.fragment);
 
 			return dynamicParts;
 		}
@@ -223,13 +184,13 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			dirtyBindings.forEach((binding) => {
 				switch (binding.type) {
 					case "ATTR":
-						this.#updateAttr(binding);
+						updateAttr(binding);
 						break;
 					case "TAG":
-						this.#updateTag(binding);
+						updateTag(binding);
 						break;
 					case "TEXT":
-						this.#updateText(binding);
+						updateText(binding);
 						break;
 
 					default:
@@ -239,70 +200,13 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		}
 
 		#hasDynamicPartChanged(currentPart: DynamicPart, newPart: BindingResult) {
-			const { value, key } = currentPart;
-
-			let hasChanged = false;
-
-			value.forEach((currentValue, index) => {
-				if (newPart.value[index] === currentValue) {
-					return;
-				}
-				value[index] = newPart.value[index];
-				hasChanged = true;
-			});
-
-			key.forEach((currentKey, index) => {
-				if (newPart.key[index] === currentKey) {
-					return;
-				}
-				key[index] = newPart.key[index];
-				hasChanged = true;
-			});
-
-			return hasChanged;
-		}
-
-		#updateTag(currentBinding: DynamicPart) {
-			const placeholder = currentBinding.start.nextElementSibling!;
-			const newTag = currentBinding.value.join(""); //functions in here would need to get called
-
-			const newElement = document.createElement(newTag);
-			placeholder
-				.getAttributeNames()
-				.forEach((name) =>
-					newElement.setAttribute(name, placeholder.getAttribute(name)!)
-				);
-
-			newElement.replaceChildren(...placeholder.childNodes);
-
-			let current = currentBinding.start.nextSibling;
-			while (current && current !== currentBinding.end) {
-				const next = current.nextSibling;
-				current.remove();
-				current = next;
+			if (currentPart.hash !== newPart.hash) {
+				currentPart.key = newPart.key;
+				currentPart.value = newPart.value;
+				return true;
 			}
 
-			currentBinding.start.after(newElement);
-		}
-
-		#updateAttr(currentBinding: DynamicPart) {
-			const key = currentBinding.key.join("");
-			const value = currentBinding.value.join("");
-
-			currentBinding.start.parentElement!.setAttribute(key, value);
-		}
-
-		#updateText(currentBinding: DynamicPart) {
-			const text = currentBinding.value.join("");
-			const textNode = document.createTextNode(text);
-
-			let current = currentBinding.start.nextSibling;
-			while (current && current !== currentBinding.end) {
-				const next = current.nextSibling;
-				current.remove();
-				current = next;
-			}
-			currentBinding.start.after(textNode);
+			return false;
 		}
 	}
 
