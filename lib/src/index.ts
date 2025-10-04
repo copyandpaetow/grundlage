@@ -35,7 +35,6 @@ export const useState = <Value extends unknown>(
 export type DynamicPart = BindingResult & {
 	start: Comment;
 	end: Comment;
-	update: VoidFunction;
 };
 
 export type ComponentOptions = {};
@@ -56,8 +55,9 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#props = new Map<string, unknown>();
 		#observer: MutationObserver;
 		#state = new Map<string, unknown>();
-		#inprogres = false;
 		#dynamicParts: Array<DynamicPart> | null = null;
+		#dirty: Set<DynamicPart> = new Set();
+		#update = -1;
 
 		constructor() {
 			super();
@@ -136,138 +136,82 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		/*
 			*next steps
 
-			todo: we need to extract the rendering function creation 
 			todo: we need to account for different kind of values (fn, null, object etc)
-			todo: the rendering needs to happen in a requestAnimationframe and the inprogress needs to reflect the promise of it
-			=> we need to update the data structure so at the end of the RAF the freshest values are there
 
 			todo: we need the lifecycle functions
 			todo: we need more of the watchers and state functions (root, emit, async)
 
 			? do we need something like useRef? 
+
+			todo: does the MO needs disconnecting? What else is required for cleanup?
+
+			todo: error handling
 		
 		*/
 		#render() {
 			try {
-				if (this.#inprogres) {
-					return;
-				}
-				this.#inprogres = true;
 				console.time("parse");
 				instance = this;
 				const result = renderFn(Object.fromEntries(this.#props));
-				console.log({ result });
 				instance = null;
 				console.timeEnd("parse");
 
 				if (!this.#dynamicParts) {
 					this.#dynamicParts = this.#renderDom(result, this.shadowRoot!);
+					return;
 				}
 
 				this.#dynamicParts.forEach((currentPart, index) => {
 					const newPart = result.bindings[index];
 
 					if (this.#hasDynamicPartChanged(currentPart, newPart)) {
-						console.log("changed");
-						this.#updateDom(this.#dynamicParts!, index, newPart);
-					} else {
-						console.log("same");
+						this.#dirty.add(currentPart);
 					}
 				});
+
+				if (this.#dirty.size > 0) {
+					cancelAnimationFrame(this.#update);
+					this.#update = requestAnimationFrame(() => {
+						this.#updateDom(this.#dirty);
+					});
+				}
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;
-			} finally {
-				this.#inprogres = false;
 			}
 		}
 
 		#renderDom(result: Result, shadowRoot: ShadowRoot): Array<DynamicPart> {
 			const dynamicParts = result.bindings.map((currentBinding, index) => {
-				const start = new Comment();
-				const end = new Comment();
+				const updatedBindings = {
+					...currentBinding,
+					start: new Comment(),
+					end: new Comment(),
+				};
+
 				const placeholder = result.fragment.querySelector(
 					`[data-replace-${index}]`
 				)!;
 				placeholder?.removeAttribute(`data-replace-${index}`);
 
-				if (currentBinding.type === "ATTR") {
-					placeholder.append(start, end);
-					function update(currentBinding: BindingResult) {
-						const key = currentBinding.key.join("");
-						const value = currentBinding.value.join("");
+				switch (updatedBindings.type) {
+					case "ATTR":
+						placeholder.append(updatedBindings.start, updatedBindings.end);
+						this.#updateAttr(updatedBindings);
+						return updatedBindings;
+					case "TAG":
+						placeholder.before(updatedBindings.start);
+						placeholder.after(updatedBindings.end);
+						this.#updateTag(updatedBindings);
+						return updatedBindings;
+					case "TEXT":
+						placeholder.replaceWith(updatedBindings.start, updatedBindings.end);
+						this.#updateText(updatedBindings);
+						return updatedBindings;
 
-						start.parentElement!.setAttribute(key, value);
-					}
-
-					update(currentBinding);
-
-					return {
-						...currentBinding,
-						start,
-						end,
-						update,
-					};
+					default:
+						return updatedBindings;
 				}
-
-				if (currentBinding.type === "TAG") {
-					placeholder.before(start);
-					placeholder.after(end);
-					function update(currentBinding: BindingResult) {
-						const newTag = currentBinding.value.join(""); //functions in here would need to get called
-
-						const newElement = document.createElement(newTag);
-						placeholder
-							.getAttributeNames()
-							.forEach((name) =>
-								newElement.setAttribute(name, placeholder.getAttribute(name)!)
-							);
-
-						newElement.replaceChildren(...placeholder.childNodes);
-
-						let current = start.nextSibling;
-						while (current && current !== end) {
-							const next = current.nextSibling;
-							current.remove();
-							current = next;
-						}
-
-						start.after(newElement);
-					}
-
-					update(currentBinding);
-
-					return {
-						...currentBinding,
-						start,
-						end,
-						update,
-					};
-				}
-
-				placeholder.replaceWith(start, end);
-
-				function update(currentBinding: BindingResult) {
-					const text = currentBinding.value.join("");
-					const textNode = document.createTextNode(text);
-
-					let current = start.nextSibling;
-					while (current && current !== end) {
-						const next = current.nextSibling;
-						current.remove();
-						current = next;
-					}
-					start.after(textNode);
-				}
-
-				update(currentBinding);
-
-				return {
-					...currentBinding,
-					start,
-					end,
-					update,
-				};
 			});
 
 			shadowRoot.replaceChildren(result.fragment);
@@ -275,33 +219,90 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			return dynamicParts;
 		}
 
-		#updateDom(
-			dynamicParts: DynamicPart[],
-			index: number,
-			newPart: BindingResult
-		) {
-			const { start, end, update } = dynamicParts[index];
+		#updateDom(dirtyBindings: Set<DynamicPart>) {
+			dirtyBindings.forEach((binding) => {
+				switch (binding.type) {
+					case "ATTR":
+						this.#updateAttr(binding);
+						break;
+					case "TAG":
+						this.#updateTag(binding);
+						break;
+					case "TEXT":
+						this.#updateText(binding);
+						break;
 
-			dynamicParts[index] = { ...newPart, start, end, update };
-			update(dynamicParts[index]);
+					default:
+						break;
+				}
+			});
 		}
 
 		#hasDynamicPartChanged(currentPart: DynamicPart, newPart: BindingResult) {
 			const { value, key } = currentPart;
 
-			if (
-				value.some(
-					(currentValue, index) => newPart.value[index] !== currentValue
-				)
-			) {
-				return true;
+			let hasChanged = false;
+
+			value.forEach((currentValue, index) => {
+				if (newPart.value[index] === currentValue) {
+					return;
+				}
+				value[index] = newPart.value[index];
+				hasChanged = true;
+			});
+
+			key.forEach((currentKey, index) => {
+				if (newPart.key[index] === currentKey) {
+					return;
+				}
+				key[index] = newPart.key[index];
+				hasChanged = true;
+			});
+
+			return hasChanged;
+		}
+
+		#updateTag(currentBinding: DynamicPart) {
+			const placeholder = currentBinding.start.nextElementSibling!;
+			const newTag = currentBinding.value.join(""); //functions in here would need to get called
+
+			const newElement = document.createElement(newTag);
+			placeholder
+				.getAttributeNames()
+				.forEach((name) =>
+					newElement.setAttribute(name, placeholder.getAttribute(name)!)
+				);
+
+			newElement.replaceChildren(...placeholder.childNodes);
+
+			let current = currentBinding.start.nextSibling;
+			while (current && current !== currentBinding.end) {
+				const next = current.nextSibling;
+				current.remove();
+				current = next;
 			}
 
-			if (key.some((currentKey, index) => newPart.key[index] !== currentKey)) {
-				return true;
-			}
+			currentBinding.start.after(newElement);
+		}
 
-			return false;
+		#updateAttr(currentBinding: DynamicPart) {
+			const key = currentBinding.key.join("");
+			const value = currentBinding.value.join("");
+
+			currentBinding.start.parentElement!.setAttribute(key, value);
+		}
+
+		#updateText(currentBinding: DynamicPart) {
+			const text = currentBinding.value.join("");
+			const textNode = document.createTextNode(text);
+
+			let current = currentBinding.start.nextSibling;
+			while (current && current !== currentBinding.end) {
+				const next = current.nextSibling;
+				current.remove();
+				current = next;
+			}
+			currentBinding.start.after(textNode);
 		}
 	}
 
