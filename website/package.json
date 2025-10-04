@@ -9,10 +9,10 @@
 		"preview": "vite preview"
 	},
 	"devDependencies": {
-		"typescript": "~5.8.3",
-		"vite": "^6.3.5"
+		"typescript": "5.9.3",
+		"vite": "7.1.9"
 	},
 	"dependencies": {
-		"happy-dom": "^17.4.6"
+		"happy-dom": "19.0.2"
 	}
 }

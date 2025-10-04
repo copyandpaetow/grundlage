@@ -1,11 +1,3 @@
-/*
-type CssResult = {
-  className: string,    // "css-abc123" 
-  styleSheet: string,   // ":host { padding: 10px; } .css-abc123 { color: red; }"
-  toString(): string    // returns className for template usage
-}
-*/
-
 export type Binding = {
 	template: Array<string>;
 	indices: Array<number>;
@@ -20,46 +12,21 @@ type State = {
 };
 
 type UpdatedBindings = {
-	bindings: Array<AttrBinding | TextBinding | TagBinding>;
+	bindings: Array<BindingResult>;
 	template: string;
 	fragment: DocumentFragment;
 };
 
+export type BindingResult = {
+	value: Array<unknown>;
+	key: Array<unknown>;
+	type: "ATTR" | "TEXT" | "TAG";
+};
+
 export type Result = {
-	bindings: Array<
-		| { value: Array<unknown>; key: Array<unknown>; id: number; type: "ATTR" }
-		| {
-				value: Array<unknown>;
-				id: number;
-				type: "TEXT";
-		  }
-		| {
-				value: Array<unknown>;
-				id: number;
-				type: "TAG";
-		  }
-	>;
+	bindings: Array<BindingResult>;
 	fragment: DocumentFragment;
 	text: string;
-};
-
-export type AttrBinding = {
-	value: MixedArray;
-	key: MixedArray;
-	id: number;
-	type: "ATTR";
-};
-
-export type TextBinding = {
-	value: number[];
-	id: number;
-	type: "TEXT";
-};
-
-export type TagBinding = {
-	value: MixedArray;
-	id: number;
-	type: "TAG";
 };
 
 export type MixedArray = Array<string | number>;
@@ -122,7 +89,7 @@ const determineContext = (state: State): Binding => {
 	if (!isInsideTag(templatePartial, state.bindings.at(-1)?.type)) {
 		state.templates[
 			state.position
-		] += `<span data-text-replace="${state.bindings.length}"></span>`;
+		] += `<span data-replace-${state.bindings.length}></span>`;
 		binding.template.push("");
 		return binding;
 	}
@@ -151,13 +118,13 @@ const determineContext = (state: State): Binding => {
 
 				state.templates[state.position] =
 					templatePartial.slice(0, whitespaceStart) +
-					` data-attr-replace data-attr-replace-${state.bindings.length}="${state.bindings.length}" `;
+					` data-replace-${state.bindings.length} `;
 			} else {
 				//tag
 				if (templatePartial[index + 1] === "/") {
-					//! adding the end tag but not using it later, throws of the indices
-					// binding.type = "END_TAG";
+					//! adding the end tag but not using it later, throws of the indices, so we are not using it here
 					// binding.template.push(templatePartial.slice(index + 2));
+					binding.type = "END_TAG";
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 2) + "div";
 				} else {
@@ -165,7 +132,7 @@ const determineContext = (state: State): Binding => {
 					binding.template.push(templatePartial.slice(index + 1));
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 1) +
-						`div data-tag-replace="${state.bindings.length}" `;
+						`div data-replace-${state.bindings.length} `;
 				}
 			}
 			break;
@@ -191,14 +158,14 @@ const determineContext = (state: State): Binding => {
 				binding.template.push(templatePartial.slice(nextWhitespace + 1));
 				state.templates[state.position] =
 					templatePartial.slice(0, nextWhitespace) +
-					` data-attr-replace data-attr-replace-${state.bindings.length}="${state.bindings.length}" `;
+					` data-replace-${state.bindings.length} `;
 			} else {
 				//attr
 				//TODO: why are these identical?
 				binding.template.push(templatePartial.slice(nextWhitespace + 1));
 				state.templates[state.position] =
 					templatePartial.slice(0, nextWhitespace) +
-					` data-attr-replace data-attr-replace-${state.bindings.length}="${state.bindings.length}" `;
+					` data-replace-${state.bindings.length} `;
 			}
 			break;
 		}
@@ -210,9 +177,7 @@ const determineContext = (state: State): Binding => {
 	if (binding.type === "TEXT") {
 		binding.type = "ATTR";
 		binding.template.push("");
-		state.templates[
-			state.position
-		] = ` data-attr-replace data-attr-replace-${state.bindings.length}="${state.bindings.length}" `;
+		state.templates[state.position] = ` data-replace-${state.bindings.length} `;
 	}
 
 	return binding;
@@ -276,6 +241,7 @@ const completeBinding = (binding: Binding, state: State) => {
 };
 
 const range = new Range();
+const emptArray: MixedArray = [];
 
 export const parseTemplate = (strings: TemplateStringsArray) => {
 	const bindings: Array<Binding> = [];
@@ -289,34 +255,31 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 	while (state.position < state.templates.length - 1) {
 		const binding = determineContext(state);
 		completeBinding(binding, state);
-		state.bindings.push(binding);
+		if (binding.type !== "END_TAG") {
+			state.bindings.push(binding);
+		}
 		state.position += 1;
 	}
 
 	const templateString = state.templates.join("");
+	const updatedBindings: Array<BindingResult> = [];
 
-	const updatedBindings: UpdatedBindings = {
-		bindings: [],
-		template: templateString,
-		fragment: range.createContextualFragment(templateString),
-	};
-
-	//TODO: this could use a clean up...
-	//TODO: we are skipping the end tag and get incorrect indices for the entries afterwards
-	bindings.forEach(({ template, indices, type }, index) => {
+	for (const { template, indices, type } of bindings) {
 		switch (type) {
 			case "TAG":
-				updatedBindings.bindings.push({
+				updatedBindings.push({
+					key: emptArray,
 					value: template
 						.flatMap((token, tokenIndex) => [token, indices[tokenIndex]])
 						.filter(filterEmpty),
-					id: index,
 					type,
 				});
 				break;
+
 			case "TEXT":
-				updatedBindings.bindings.push({ value: indices, id: index, type });
+				updatedBindings.push({ key: emptArray, value: indices, type });
 				break;
+
 			case "BOOLEAN_ATTR":
 			case "ATTR":
 				const keys: MixedArray = [];
@@ -331,20 +294,21 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 					}
 					(values.length ? values : keys).push(token, indices[templateIndex]);
 				});
-				updatedBindings.bindings.push({
-					value: values.filter(filterEmpty),
+				updatedBindings.push({
 					key: keys.filter(filterEmpty),
-					id: index,
+					value: values.filter(filterEmpty),
 					type: "ATTR",
 				});
-				break;
-
-			default:
-				break;
 		}
-	});
+	}
 
-	return updatedBindings;
+	const result: UpdatedBindings = {
+		bindings: updatedBindings,
+		template: templateString,
+		fragment: range.createContextualFragment(templateString),
+	};
+
+	return result;
 };
 
 const setDynamicValues = (
@@ -365,20 +329,14 @@ export const html = (
 
 	const { fragment, bindings, template } = htmlCache.get(tokens)!;
 
-	const withActualValues = bindings.map((entry) => {
-		if (entry.type === "ATTR") {
-			return {
-				...entry,
-				key: setDynamicValues(dynamicValues, entry.key),
-				value: setDynamicValues(dynamicValues, entry.value),
-			};
-		}
-
-		return {
-			...entry,
-			value: setDynamicValues(dynamicValues, entry.value),
-		};
-	});
+	const withActualValues = bindings.map((entry) => ({
+		...entry,
+		value: setDynamicValues(dynamicValues, entry.value as MixedArray),
+		key: setDynamicValues(
+			dynamicValues,
+			(entry.type === "ATTR" ? entry.key : []) as MixedArray
+		),
+	}));
 
 	return {
 		bindings: withActualValues,

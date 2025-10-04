@@ -6,7 +6,7 @@
 // import { propsComponent } from "./components/props";
 // import { styledComponent } from "./components/styling";
 
-import "../../lib/src/html";
+import "../../lib/src/html/html";
 import "../../lib/src/signals";
 
 // conditionalComponent();

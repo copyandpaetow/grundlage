@@ -1,6 +1,6 @@
-import { render } from "../../../lib/src";
+import { render, useState } from "../../../lib/src";
 import { css } from "../../../lib/src/css/css";
-import { html } from "../../../lib/src/html";
+import { html } from "../../../lib/src/html/html";
 
 export interface TestProps {
 	prop1: unknown;
@@ -29,19 +29,20 @@ const style = css.stylesheet`
 
 export const propsComponent = render("props-component", (props: TestProps) => {
 	console.log(props);
+	const { setCount, count } = useState("count", 0);
+
+	// setTimeout(() => {
+	// 	setCount(count + 1);
+	// }, 5000);
 
 	return html`
-		${style}
 		<section class="card">
 			<h2>props</h2>
-			<for-each list=${[10, 20, 30, 40]}
-					<div>${(num) => num}</div>
-			</for-each>
-			<ul class=${list}>
+			<ul>
 				<li data-${"test"}="${123}">${props.prop1}</li>
 				<li><${props.tag}>dynamic tag here</${props.tag}></li>
-				<li>${[1, 2, 3]}</li>
-				<li ${{ key1: 1, key2: 2 }}>spread attributes</li>
+				<li>${count}</li>
+				<li>spread attributes</li>
 			</ul>
 		</section>
 	`;
