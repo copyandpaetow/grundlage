@@ -1,6 +1,6 @@
-import { BindingResult, TemplateResult, type Result } from "./html/html";
 import "./css/css";
 import { BaseComponent, ComponentProps, DynamicPart } from "./types";
+import { BindingResult, TemplateResult, type Result } from "./html/html";
 import { instance } from "./state/state";
 import { updateAttr } from "./update/attributes";
 import { updateTag } from "./update/tags";
@@ -15,6 +15,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#dynamicParts: Array<DynamicPart> | null = null;
 		#dirty: Set<DynamicPart> = new Set();
 		#update = -1;
+		hash: number = -1;
 
 		constructor() {
 			super();
@@ -108,11 +109,15 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		*/
 		#render() {
 			try {
-				console.time("parse");
 				instance.current = this;
 				const result = renderFn(Object.fromEntries(this.#props));
 				instance.current = null;
-				console.timeEnd("parse");
+
+				if (this.hash === result.hash) {
+					return;
+				} else {
+					this.hash = result.hash;
+				}
 
 				if (!this.#dynamicParts) {
 					this.#dynamicParts = this.#renderDom(result, this.shadowRoot!);
@@ -121,7 +126,6 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 
 				this.#dynamicParts.forEach((currentPart, index) => {
 					const newPart = result.bindings[index];
-
 					if (this.#hasDynamicPartChanged(currentPart, newPart)) {
 						this.#dirty.add(currentPart);
 					}
@@ -143,6 +147,8 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			result: TemplateResult,
 			target: ShadowRoot | HTMLElement
 		): Array<DynamicPart> {
+			const fragment = result.fragment as DocumentFragment; //the fragment is being lazily cloned so we need to do that here once
+
 			const dynamicParts = result.bindings.map((currentBinding, index) => {
 				const updatedBindings = {
 					...currentBinding,
@@ -150,9 +156,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 					end: new Comment(),
 				};
 
-				const placeholder = result.fragment.querySelector(
-					`[data-replace-${index}]`
-				)!;
+				const placeholder = fragment.querySelector(`[data-replace-${index}]`)!;
 				placeholder?.removeAttribute(`data-replace-${index}`);
 
 				switch (updatedBindings.type) {
@@ -175,7 +179,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 				}
 			});
 
-			target.replaceChildren(result.fragment);
+			target.replaceChildren(fragment);
 
 			return dynamicParts;
 		}
@@ -197,8 +201,8 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 						break;
 				}
 			});
+			dirtyBindings.clear();
 		}
-
 		#hasDynamicPartChanged(currentPart: DynamicPart, newPart: BindingResult) {
 			if (currentPart.hash !== newPart.hash) {
 				currentPart.key = newPart.key;

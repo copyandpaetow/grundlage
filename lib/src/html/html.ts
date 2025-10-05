@@ -324,7 +324,7 @@ export const parseTemplate = (strings: TemplateStringsArray) => {
 };
 
 export class TemplateResult {
-	fragment: DocumentFragment;
+	#fragment: DocumentFragment;
 	bindings: BindingResult[];
 	hash: number;
 	constructor(
@@ -332,9 +332,13 @@ export class TemplateResult {
 		bindings: Array<BindingResult>,
 		hash: number
 	) {
-		this.fragment = fragment;
+		this.#fragment = fragment;
 		this.bindings = bindings;
 		this.hash = hash;
+	}
+
+	get fragment() {
+		return this.#fragment.cloneNode(true) as DocumentFragment;
 	}
 }
 
@@ -374,9 +378,10 @@ export const html = (
 		};
 	});
 
-	return new TemplateResult(
-		fragment.cloneNode(true) as DocumentFragment,
-		withActualValues,
+	const resultHash = withActualValues.reduce(
+		(accumulator, current) => accumulator + current.hash,
 		hash
 	);
+
+	return new TemplateResult(fragment, withActualValues, resultHash);
 };
