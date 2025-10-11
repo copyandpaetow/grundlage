@@ -1,4 +1,4 @@
-import { BindingResult, TemplateResult } from "./html/html";
+import { TemplateResult } from "./html/html";
 
 export interface BaseComponent extends HTMLElement {
 	setState<Value>(key: string, value: Value): Value;
@@ -6,9 +6,30 @@ export interface BaseComponent extends HTMLElement {
 	hasState(key: string): boolean;
 }
 
-export type DynamicPart = BindingResult & {
+export type AttrHole = {
+	values: Array<number | string>;
+	keys: Array<number | string>;
+	start: Comment;
+	dirty: boolean;
+};
+
+export type ContentHole = {
+	values: number;
 	start: Comment;
 	end: Comment;
+	dirty: boolean;
+};
+
+export type TagHole = {
+	values: Array<number | string>;
+	start: Comment;
+	dirty: boolean;
+};
+
+export type Holes = {
+	contentUpdates: Array<ContentHole>;
+	attributeUpdates: Array<AttrHole>;
+	tagUpdates: Array<TagHole>;
 };
 
 export type ComponentOptions = {};

@@ -1,8 +1,17 @@
-import { DynamicPart } from "../types";
+import { TagHole } from "../types";
 
-export const updateTag = (currentBinding: DynamicPart) => {
-	const placeholder = currentBinding.start.nextElementSibling!;
-	const newTag = currentBinding.value.join(""); //functions in here would need to get called
+export const updateTag = (
+	currentBinding: TagHole,
+	dynamicValues: Array<unknown>
+) => {
+	const placeholder = currentBinding.start.parentElement!;
+	const newTag = currentBinding.values
+		.map((relatedIndex) =>
+			typeof relatedIndex === "number"
+				? dynamicValues[relatedIndex]
+				: relatedIndex
+		)
+		.join(""); //functions in here would need to get called
 
 	const newElement = document.createElement(newTag);
 	placeholder
@@ -12,13 +21,6 @@ export const updateTag = (currentBinding: DynamicPart) => {
 		);
 
 	newElement.replaceChildren(...placeholder.childNodes);
-
-	let current = currentBinding.start.nextSibling;
-	while (current && current !== currentBinding.end) {
-		const next = current.nextSibling;
-		current.remove();
-		current = next;
-	}
-
-	currentBinding.start.after(newElement);
+	placeholder.replaceWith(newElement);
+	currentBinding.dirty = false;
 };

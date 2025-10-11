@@ -1,10 +1,10 @@
 import "./css/css";
-import { BaseComponent, ComponentProps, DynamicPart } from "./types";
-import { BindingResult, TemplateResult, type Result } from "./html/html";
+import { BaseComponent, ComponentProps, Holes } from "./types";
+import { TemplateResult } from "./html/html";
 import { instance } from "./state/state";
 import { updateAttr } from "./update/attributes";
 import { updateTag } from "./update/tags";
-import { updateText } from "./update/texts";
+import { updateText } from "./update/content";
 
 //@ts-expect-error options will come soon
 export const render: ComponentProps = (name, renderFn, options = {}) => {
@@ -12,10 +12,9 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#props = new Map<string, unknown>();
 		#observer: MutationObserver;
 		#state = new Map<string, unknown>();
-		#dynamicParts: Array<DynamicPart> | null = null;
-		#dirty: Set<DynamicPart> = new Set();
+		#holes: Holes | null = null;
+		#lastDynamicValues: Array<unknown> = [];
 		#update = -1;
-		hash: number = -1;
 
 		constructor() {
 			super();
@@ -92,6 +91,17 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		}
 
 		/*
+		  *baseline
+			- maybe the html function also needs to return a hash after all
+				=> we still need a key for lists and might not need the sets of the comparision function
+			- linked list needed for holes iteration?
+			- static and reactive updating are very similar, that is duplicated code
+			- comparing dynamic values creates sets that gets thrown away 
+			- types and names need to be replaced by enums
+			- reduce code
+				- template check could be a function
+
+
 			*next steps
 
 			todo: we need to account for different kind of values (fn, null, object etc) 
@@ -113,104 +123,185 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 				const result = renderFn(Object.fromEntries(this.#props));
 				instance.current = null;
 
-				if (this.hash === result.hash) {
-					return;
-				} else {
-					this.hash = result.hash;
-				}
+				if (!this.#holes) {
+					this.#holes = this.#renderDom(result, this.shadowRoot!);
 
-				if (!this.#dynamicParts) {
-					this.#dynamicParts = this.#renderDom(result, this.shadowRoot!);
+					this.#lastDynamicValues = result.dynamicValues;
 					return;
 				}
 
-				this.#dynamicParts.forEach((currentPart, index) => {
-					const newPart = result.bindings[index];
-					if (this.#hasDynamicPartChanged(currentPart, newPart)) {
-						this.#dirty.add(currentPart);
+				const changedValues = this.#compareDynamicValues(
+					result.dynamicValues,
+					this.#lastDynamicValues
+				);
+
+				attrLoop: for (const attr of this.#holes!.attributeUpdates) {
+					if (attr.dirty) {
+						continue;
 					}
-				});
-
-				if (this.#dirty.size > 0) {
-					cancelAnimationFrame(this.#update);
-					this.#update = requestAnimationFrame(() => {
-						this.#updateDom(this.#dirty);
-					});
+					for (const value of attr.values) {
+						if (changedValues.has(value)) {
+							attr.dirty = true;
+							continue attrLoop;
+						}
+					}
+					for (const value of attr.keys) {
+						if (changedValues.has(value)) {
+							attr.dirty = true;
+							continue attrLoop;
+						}
+					}
 				}
+
+				tagLoop: for (const tag of this.#holes!.tagUpdates) {
+					if (tag.dirty) {
+						continue;
+					}
+					for (const value of tag.values) {
+						if (changedValues.has(value)) {
+							tag.dirty = true;
+							continue tagLoop;
+						}
+					}
+				}
+
+				for (const content of this.#holes!.contentUpdates) {
+					if (content.dirty) {
+						continue;
+					}
+
+					if (changedValues.has(content.values)) {
+						content.dirty = true;
+						continue;
+					}
+				}
+
+				cancelAnimationFrame(this.#update);
+				this.#update = requestAnimationFrame(() => {
+					this.#updateDom(this.#holes!, result.dynamicValues);
+					this.#lastDynamicValues = result.dynamicValues;
+				});
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;
 			}
 		}
 
+		//TODO: that works but we are creating sets that are thrown away
+		#compareDynamicValues(current: Array<unknown>, previous: Array<unknown>) {
+			const changedValues = new Set();
+
+			for (let index = 0; index < current.length; index++) {
+				if (current[index] === previous[index]) {
+					continue;
+				}
+				if (
+					current[index]?.__type__ === "template" &&
+					current[index]?.__type__ === previous[index]?.__type__ &&
+					this.#compareDynamicValues(
+						current[index].dynamicValues,
+						previous[index].dynamicValues
+					).size === 0
+				) {
+					continue;
+				}
+
+				changedValues.add(index);
+			}
+
+			return changedValues;
+		}
+
 		#renderDom(
 			result: TemplateResult,
 			target: ShadowRoot | HTMLElement
-		): Array<DynamicPart> {
-			const fragment = result.fragment as DocumentFragment; //the fragment is being lazily cloned so we need to do that here once
+		): Holes {
+			const fragment = result.fragment.cloneNode(true) as DocumentFragment; //the fragment is being lazily cloned so we need to do that here once
 
-			const dynamicParts = result.bindings.map((currentBinding, index) => {
+			const contentUpdates = result.contentBinding.map(
+				(contentIndex, index) => {
+					const placeholder = fragment.querySelector(
+						`[data-content-replace-${index}]`
+					)!;
+
+					const updatedBindings = {
+						values: contentIndex,
+						start: new Comment("content"),
+						end: new Comment("content"),
+						dirty: false,
+					};
+
+					placeholder.replaceWith(updatedBindings.start, updatedBindings.end);
+					updateText(updatedBindings, result.dynamicValues);
+
+					return updatedBindings;
+				}
+			);
+
+			const tagUpdates = result.tagBinding.map((tagContent, index) => {
+				const placeholder = fragment.querySelector(
+					`[data-tag-replace-${index}]`
+				)!;
+				placeholder?.removeAttribute(`data-tag-replace-${index}`);
+
 				const updatedBindings = {
-					...currentBinding,
-					start: new Comment(),
-					end: new Comment(),
+					values: tagContent.values,
+					start: new Comment("tag"),
+					dirty: false,
 				};
 
-				const placeholder = fragment.querySelector(`[data-replace-${index}]`)!;
-				placeholder?.removeAttribute(`data-replace-${index}`);
+				placeholder.prepend(updatedBindings.start);
+				updateTag(updatedBindings, result.dynamicValues);
 
-				switch (updatedBindings.type) {
-					case "ATTR":
-						placeholder.append(updatedBindings.start, updatedBindings.end);
-						updateAttr(updatedBindings);
-						return updatedBindings;
-					case "TAG":
-						placeholder.before(updatedBindings.start);
-						placeholder.after(updatedBindings.end);
-						updateTag(updatedBindings);
-						return updatedBindings;
-					case "TEXT":
-						placeholder.replaceWith(updatedBindings.start, updatedBindings.end);
-						updateText(updatedBindings);
-						return updatedBindings;
+				return updatedBindings;
+			});
 
-					default:
-						return updatedBindings;
-				}
+			const attributeUpdates = result.attrBinding.map((tagContent, index) => {
+				const placeholder = fragment.querySelector(
+					`[data-attr-replace-${index}]`
+				)!;
+				placeholder?.removeAttribute(`data-attr-replace-${index}`);
+
+				const updatedBindings = {
+					values: tagContent.values,
+					keys: tagContent.keys,
+					start: new Comment("attr"),
+					dirty: false,
+				};
+
+				placeholder.prepend(updatedBindings.start);
+				updateAttr(updatedBindings, result.dynamicValues);
+
+				return updatedBindings;
 			});
 
 			target.replaceChildren(fragment);
 
-			return dynamicParts;
+			return {
+				contentUpdates,
+				attributeUpdates,
+				tagUpdates,
+			};
 		}
 
-		#updateDom(dirtyBindings: Set<DynamicPart>) {
-			dirtyBindings.forEach((binding) => {
-				switch (binding.type) {
-					case "ATTR":
-						updateAttr(binding);
-						break;
-					case "TAG":
-						updateTag(binding);
-						break;
-					case "TEXT":
-						updateText(binding);
-						break;
-
-					default:
-						break;
+		#updateDom(holes: Holes, dynamicValues: Array<unknown>) {
+			for (const attr of holes.attributeUpdates) {
+				if (attr.dirty) {
+					updateAttr(attr, dynamicValues);
 				}
-			});
-			dirtyBindings.clear();
-		}
-		#hasDynamicPartChanged(currentPart: DynamicPart, newPart: BindingResult) {
-			if (currentPart.hash !== newPart.hash) {
-				currentPart.key = newPart.key;
-				currentPart.value = newPart.value;
-				return true;
 			}
 
-			return false;
+			for (const content of holes.contentUpdates) {
+				if (content.dirty) {
+					updateText(content, dynamicValues);
+				}
+			}
+
+			for (const tag of holes.tagUpdates) {
+				if (tag.dirty) {
+					updateTag(tag, dynamicValues);
+				}
+			}
 		}
 	}
 

@@ -5,7 +5,7 @@ import { useState } from "../../../lib/src/state/state";
 
 export interface TestProps {
 	prop1: unknown;
-	prop2: unknown;
+	tag: unknown;
 }
 
 const list = css.rule`
@@ -30,10 +30,19 @@ const style = css.stylesheet`
 
 export const propsComponent = render("props-component", (props: TestProps) => {
 	const { setCount, count } = useState("count", 0);
+	const { direction, setDirection } = useState("direction", 1);
 
-	// setTimeout(() => {
-	// 	setCount(count + 1);
-	// }, 100);
+	requestAnimationFrame(() => {
+		requestAnimationFrame(() => {
+			setCount(count + direction);
+			if (count >= 75) {
+				setDirection(-1);
+			}
+			if (count <= 0) {
+				setDirection(1);
+			}
+		});
+	});
 
 	const nestedHtml = html`<li>${123}</li>`;
 
@@ -44,7 +53,10 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 				<li data-${"test"}="${123}">${props.prop1}</li>
 				<li><${props.tag}>dynamic tag here</${props.tag}></li>
 				<li>${count}</li>
-				<li>spread attributes</li>
+				<li style="width: ${Math.min(
+					count,
+					75
+				)}%; background-color: red">spread attributes</li>
 				${nestedHtml}
 			</ul>
 		</section>
