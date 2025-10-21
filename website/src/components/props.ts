@@ -32,17 +32,15 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 	const { setCount, count } = useState("count", 0);
 	const { direction, setDirection } = useState("direction", 1);
 
-	requestAnimationFrame(() => {
-		requestAnimationFrame(() => {
-			setCount(count + direction);
-			if (count >= 75) {
-				setDirection(-1);
-			}
-			if (count <= 0) {
-				setDirection(1);
-			}
-		});
-	});
+	// setTimeout(() => {
+	// 	setCount(count + direction);
+	// 	if (count >= 75) {
+	// 		setDirection(-1);
+	// 	}
+	// 	if (count <= 1) {
+	// 		setDirection(1);
+	// 	}
+	// }, 10);
 
 	const nestedHtml = html`<li>${123}</li>`;
 
@@ -51,12 +49,12 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 			<h2>props</h2>
 			<ul>
 				<li data-${"test"}="${123}">${props.prop1}</li>
-				<li><${props.tag}>dynamic tag here</${props.tag}></li>
+				<li><${props.tag}>dynamic ${props.tag} tag here</${props.tag}></li>
 				<li>${count}</li>
 				<li style="width: ${Math.min(
 					count,
 					75
-				)}%; background-color: red">spread attributes</li>
+				)}%; background-color: red; text-wrap-mode: nowrap;">spread attributes</li>
 				${nestedHtml}
 			</ul>
 		</section>

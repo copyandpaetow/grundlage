@@ -1,26 +1,37 @@
-import { TagHole } from "../types";
+import { TagBinding } from "../html/html";
 
-export const updateTag = (
-	currentBinding: TagHole,
-	dynamicValues: Array<unknown>
-) => {
-	const placeholder = currentBinding.start.parentElement!;
-	const newTag = currentBinding.values
-		.map((relatedIndex) =>
-			typeof relatedIndex === "number"
-				? dynamicValues[relatedIndex]
-				: relatedIndex
-		)
-		.join(""); //functions in here would need to get called
+export class TagHole {
+	binding: TagBinding;
+	anchor: Comment;
 
-	const newElement = document.createElement(newTag);
-	placeholder
-		.getAttributeNames()
-		.forEach((name) =>
-			newElement.setAttribute(name, placeholder.getAttribute(name)!)
-		);
+	constructor(
+		binding: TagBinding,
+		dynamicValues: Array<unknown>,
+		placeholder: HTMLElement
+	) {
+		this.binding = binding;
+		this.anchor = new Comment("tag");
 
-	newElement.replaceChildren(...placeholder.childNodes);
-	placeholder.replaceWith(newElement);
-	currentBinding.dirty = false;
-};
+		placeholder.prepend(this.anchor);
+		this.update(dynamicValues);
+	}
+
+	update(values: Array<unknown>) {
+		const placeholder = this.anchor.parentElement!;
+		const newTag = this.binding.values
+			.map((relatedIndex) =>
+				typeof relatedIndex === "number" ? values[relatedIndex] : relatedIndex
+			)
+			.join(""); //functions in here would need to get called
+
+		const newElement = document.createElement(newTag);
+		placeholder
+			.getAttributeNames()
+			.forEach((name) =>
+				newElement.setAttribute(name, placeholder.getAttribute(name)!)
+			);
+
+		newElement.replaceChildren(...placeholder.childNodes);
+		placeholder.replaceWith(newElement);
+	}
+}

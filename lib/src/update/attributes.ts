@@ -1,24 +1,38 @@
-import { AttrHole } from "../types";
+import { AttrBinding } from "../html/html";
 
-export const updateAttr = (
-	currentBinding: AttrHole,
-	dynamicValues: Array<unknown>
-) => {
-	const key = currentBinding.keys
-		.map((relatedIndex) =>
-			typeof relatedIndex === "number"
-				? dynamicValues[relatedIndex]
-				: relatedIndex
-		)
-		.join("");
-	const value = currentBinding.values
-		.map((relatedIndex) =>
-			typeof relatedIndex === "number"
-				? dynamicValues[relatedIndex]
-				: relatedIndex
-		)
-		.join("");
+export class AttributeHole {
+	binding: AttrBinding;
+	anchor: Comment;
 
-	currentBinding.start.parentElement!.setAttribute(key, value);
-	currentBinding.dirty = false;
-};
+	constructor(
+		binding: AttrBinding,
+		dynamicValues: Array<unknown>,
+		placeholder: HTMLElement
+	) {
+		this.binding = binding;
+		this.anchor = new Comment("attr");
+		placeholder.prepend(this.anchor);
+		this.update(dynamicValues);
+	}
+
+	/*
+- eventlistener
+- nested css classes
+
+*/
+
+	update(values: Array<unknown>) {
+		const key = this.binding.keys
+			.map((relatedIndex) =>
+				typeof relatedIndex === "number" ? values[relatedIndex] : relatedIndex
+			)
+			.join("");
+		const value = this.binding.values
+			.map((relatedIndex) =>
+				typeof relatedIndex === "number" ? values[relatedIndex] : relatedIndex
+			)
+			.join("");
+
+		this.anchor.parentElement!.setAttribute(key, value);
+	}
+}

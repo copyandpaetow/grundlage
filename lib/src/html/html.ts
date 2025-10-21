@@ -1,37 +1,38 @@
+import { stringHash } from "./hashing";
+
 type BindingTypes = "ATTR" | "TAG" | "TEXT" | "END_TAG" | "BOOLEAN_ATTR";
 
-type AttrBinding = {
+export type AttrBinding = {
 	values: Array<number | string>;
 	keys: Array<number | string>;
 };
 
-type ContentBinding = number;
+export type ContentBinding = number;
 
-type TagBinding = {
+export type TagBinding = {
 	values: Array<number | string>;
+	endValues: Array<number | string>;
 };
 
 type State = {
 	position: number;
 	closingChar: string;
-	attrBinding: Array<AttrBinding>;
-	tagBinding: Array<TagBinding>;
-	contentBinding: Array<ContentBinding>;
+	binding: Array<AttrBinding | TagBinding | ContentBinding>;
 	templates: Array<string>;
 	lastBindingType: BindingTypes;
 	foundLetters: boolean;
+	openTags: Array<number>;
 };
 
-type Bindings = {
-	attrBinding: Array<AttrBinding>;
-	tagBinding: Array<TagBinding>;
-	contentBinding: Array<ContentBinding>;
+export type Bindings = {
+	binding: Array<AttrBinding | TagBinding | ContentBinding>;
 	fragment: DocumentFragment;
+	templateHash: number;
 };
 
-export type TemplateResult = Bindings & {
-	__type__: "template";
+export type TemplateResult = {
 	dynamicValues: Array<unknown>;
+	templateResult: Bindings;
 };
 
 export type MixedArray = Array<string | number>;
@@ -95,8 +96,8 @@ const determineContext = (state: State) => {
 	if (!isInsideTag(templatePartial, state.lastBindingType)) {
 		state.templates[
 			state.position
-		] += `<span data-content-replace-${state.contentBinding.length}></span>`;
-		state.contentBinding.push(state.position);
+		] += `<span data-replace-${state.binding.length}></span>`;
+		state.binding.push(state.position);
 		state.lastBindingType = "TEXT";
 		return;
 	}
@@ -119,8 +120,8 @@ const determineContext = (state: State) => {
 				state.lastBindingType = "ATTR";
 				state.templates[state.position] =
 					templatePartial.slice(0, whitespaceStart) +
-					` data-attr-replace-${state.attrBinding.length} `;
-				state.attrBinding.push({
+					` data-replace-${state.binding.length} `;
+				state.binding.push({
 					values: [templatePartial.slice(whitespaceStart + 1), state.position],
 					keys: [],
 				});
@@ -131,13 +132,16 @@ const determineContext = (state: State) => {
 					state.lastBindingType = "END_TAG";
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 2) + "div";
+					state.binding[state.openTags.pop()].endValues.push(state.position);
 				} else {
 					state.lastBindingType = "TAG";
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 1) +
-						`div data-tag-replace-${state.tagBinding.length} `;
-					state.tagBinding.push({
+						`div data-replace-${state.binding.length} `;
+					state.openTags.push(state.binding.length);
+					state.binding.push({
 						values: [templatePartial.slice(index + 1), state.position],
+						endValues: [],
 					});
 				}
 			}
@@ -166,8 +170,8 @@ const determineContext = (state: State) => {
 			state.lastBindingType = "ATTR";
 			state.templates[state.position] =
 				templatePartial.slice(0, nextWhitespace) +
-				` data-attr-replace-${state.attrBinding.length} `;
-			state.attrBinding.push({
+				` data-replace-${state.binding.length} `;
+			state.binding.push({
 				values: [templatePartial.slice(nextWhitespace + 1), state.position],
 				keys: [],
 			});
@@ -180,16 +184,12 @@ const determineContext = (state: State) => {
 	//if the template is only white space, we cant really detect it above, this is the catch
 	if (!state.foundLetters && whitespaceStart > -1) {
 		state.lastBindingType = "ATTR";
-		state.templates[
-			state.position
-		] = ` data-attr-replace-${state.attrBinding.length} `;
-		state.attrBinding.push({
+		state.templates[state.position] = ` data-replace-${state.binding.length} `;
+		state.binding.push({
 			values: [state.position],
 			keys: [],
 		});
 	}
-
-	return;
 };
 
 const completeBinding = (state: State) => {
@@ -202,11 +202,7 @@ const completeBinding = (state: State) => {
 	let firstWhiteSpace = -1;
 	let breakSign = state.closingChar || ">";
 	let breakIndex = -1;
-	const currentBinding = (
-		state.lastBindingType === "TAG" || state.lastBindingType === "END_TAG"
-			? state.tagBinding
-			: state.attrBinding
-	).at(-1)!;
+	const currentBinding = state.binding.at(-1)! as AttrBinding | TagBinding;
 
 	while (index < templatePartial.length - 1) {
 		index += 1;
@@ -244,34 +240,19 @@ const completeBinding = (state: State) => {
 		return completeBinding(state);
 	}
 
+	const remainder = templatePartial.slice(0, breakIndex);
+	if (remainder) {
+		currentBinding.values.push(remainder);
+	}
 	state.templates[state.position + 1] = templatePartial.slice(breakIndex);
-	currentBinding.values.push(templatePartial.slice(0, breakIndex));
 };
 
-const range = new Range();
-
-export const parseTemplate = (strings: TemplateStringsArray): Bindings => {
-	const state: State = {
-		position: 0,
-		attrBinding: [],
-		tagBinding: [],
-		contentBinding: [],
-		templates: [...strings],
-		closingChar: "",
-		lastBindingType: "TEXT",
-		foundLetters: false,
-	};
-
-	while (state.position < state.templates.length - 1) {
-		determineContext(state);
-		completeBinding(state);
-		state.position += 1;
-	}
-
-	//[data-, 0, =', 1, ']
-
-	for (let index = 0; index < state.attrBinding.length; index++) {
-		const attribute = state.attrBinding[index]!;
+const splitAttributeByEqualSign = (state: State) => {
+	for (let index = 0; index < state.binding.length; index++) {
+		const attribute = state.binding[index]! as AttrBinding;
+		if (!attribute.hasOwnProperty("keys")) {
+			continue;
+		}
 
 		for (
 			let valueIndex = 0;
@@ -306,14 +287,35 @@ export const parseTemplate = (strings: TemplateStringsArray): Bindings => {
 			break;
 		}
 	}
+};
+
+const range = new Range();
+
+export const parseTemplate = (strings: TemplateStringsArray): Bindings => {
+	const state: State = {
+		position: 0,
+		binding: [],
+		templates: [...strings],
+		closingChar: "",
+		lastBindingType: "TEXT",
+		foundLetters: false,
+		openTags: [],
+	};
+
+	while (state.position < state.templates.length - 1) {
+		determineContext(state);
+		completeBinding(state);
+		state.position += 1;
+	}
+
+	splitAttributeByEqualSign(state);
 
 	const templateString = state.templates.join("");
 
 	const result: Bindings = {
-		contentBinding: state.contentBinding,
-		attrBinding: state.attrBinding,
-		tagBinding: state.tagBinding,
+		binding: state.binding,
 		fragment: range.createContextualFragment(templateString),
+		templateHash: stringHash(templateString),
 	};
 
 	return result;
@@ -328,15 +330,8 @@ export const html = (
 	if (!htmlCache.has(tokens)) {
 		htmlCache.set(tokens, parseTemplate(tokens));
 	}
-
-	const cachedResult = htmlCache.get(tokens)!;
-
 	return {
-		__type__: "template",
 		dynamicValues,
-		fragment: cachedResult.fragment,
-		contentBinding: cachedResult.contentBinding,
-		tagBinding: cachedResult.tagBinding,
-		attrBinding: cachedResult.attrBinding,
+		templateResult: htmlCache.get(tokens)!,
 	};
 };

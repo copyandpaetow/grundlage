@@ -1,25 +1,56 @@
-import { TemplateResult } from "../html/html";
-import { ContentHole } from "../types";
-import { renderStaticDom } from "./static";
+import { ContentBinding } from "../html/html";
+import { HTMLTemplate } from "../template";
 
-export const updateText = (
-	currentBinding: ContentHole,
-	dynamicValues: Array<unknown>
-) => {
-	const text = dynamicValues[currentBinding.values];
-	let textNode = document.createTextNode(text);
-	if (text?.__type__) {
-		textNode = renderStaticDom(text as TemplateResult);
-	} else {
-		textNode = document.createTextNode(text);
+export class ContentHole {
+	binding: ContentBinding;
+	dynamicValues: Array<unknown> = [];
+	anchorStart: Comment;
+	anchorEnd: Comment;
+
+	constructor(
+		binding: ContentBinding,
+		dynamicValues: Array<unknown>,
+		placeholder: HTMLElement
+	) {
+		this.binding = binding;
+		this.anchorStart = new Comment("content anchor start");
+		this.anchorEnd = new Comment("content anchor end");
+		placeholder.replaceWith(this.anchorStart, this.anchorEnd);
+
+		this.update(dynamicValues);
 	}
 
-	let current = currentBinding.start.nextSibling;
-	while (current && current !== currentBinding.end) {
-		const next = current.nextSibling;
-		current.remove();
-		current = next;
+	/*
+			- nested template vs the same nested template but different dynamic values
+					- nested template vs other content (vis versa) => can we recycle the comments?
+					- nested template A vs the nested template B
+					- array of nested contents
+			- nested css
+	
+	*/
+
+	update(values: Array<unknown>) {
+		const previous = this.dynamicValues[this.binding];
+		const currentValue = values[this.binding];
+
+		if (
+			previous instanceof HTMLTemplate &&
+			currentValue.hasOwnProperty("dynamicValues")
+		) {
+			//should the content be updated or re-rendered?
+
+			previous.update(currentValue.dynamicValues);
+			return;
+		}
+		const textNode = document.createTextNode(currentValue);
+
+		let current = this.anchorStart.nextSibling;
+		while (current && current !== this.anchorEnd) {
+			const next = current.nextSibling;
+			current.remove();
+			current = next;
+		}
+		this.anchorStart.after(textNode);
+		this.dynamicValues = values;
 	}
-	currentBinding.start.after(textNode);
-	currentBinding.dirty = false;
-};
+}
