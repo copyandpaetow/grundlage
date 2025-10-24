@@ -1,4 +1,4 @@
-import { TagBinding } from "../html/html";
+import { TagBinding } from "./html";
 
 export class TagHole {
 	binding: TagBinding;

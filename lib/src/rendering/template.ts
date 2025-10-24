@@ -1,8 +1,8 @@
-import { hashValue } from "./html/hashing";
-import { AttrBinding, Bindings, TagBinding } from "./html/html";
-import { AttributeHole } from "./update/attributes";
-import { ContentHole } from "./update/content";
-import { TagHole } from "./update/tags";
+import { hashValue } from "./hashing";
+import { AttrBinding, Bindings, TagBinding } from "./html";
+import { AttributeHole } from "./attributes";
+import { ContentHole } from "./content";
+import { TagHole } from "./tags";
 
 /*
 * it is still unclear if it is better to use one general array vs 3 specific arrays
@@ -18,7 +18,6 @@ export class HTMLTemplate {
 	constructor(templateResult: Bindings, dynamicValues: Array<unknown>) {
 		this.dynamicValues = dynamicValues;
 		this.templateResult = templateResult;
-		this.bindings = new Array(this.dynamicValues.length);
 	}
 
 	setup(): DocumentFragment {
@@ -26,7 +25,7 @@ export class HTMLTemplate {
 			true
 		) as DocumentFragment;
 
-		this.bindings.length = this.dynamicValues.length;
+		this.bindings = new Array(this.dynamicValues.length);
 
 		for (let index = 0; index < this.templateResult.binding.length; index++) {
 			const binding = this.templateResult.binding[index];

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseTemplate } from "../html";
+import { parseTemplate } from "../../rendering/html";
 
 const getTemplateStringArray = (
 	tokens: TemplateStringsArray,

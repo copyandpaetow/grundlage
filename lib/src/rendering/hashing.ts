@@ -1,4 +1,4 @@
-import { HTMLTemplate } from "../template";
+import { HTMLTemplate } from "./template";
 
 export const stringHash = (str: string): number => {
 	let hash = 0;

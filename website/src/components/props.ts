@@ -1,6 +1,6 @@
 import { render } from "../../../lib/src";
 import { css } from "../../../lib/src/css/css";
-import { html } from "../../../lib/src/html/html";
+import { html } from "../../../lib/src/rendering/html";
 import { useState } from "../../../lib/src/state/state";
 
 export interface TestProps {
@@ -31,6 +31,7 @@ const style = css.stylesheet`
 export const propsComponent = render("props-component", (props: TestProps) => {
 	const { setCount, count } = useState("count", 0);
 	const { direction, setDirection } = useState("direction", 1);
+	const { once, setOnce } = useState("once", false);
 
 	// setTimeout(() => {
 	// 	setCount(count + direction);
@@ -41,6 +42,13 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 	// 		setDirection(1);
 	// 	}
 	// }, 10);
+
+	// if (!once) {
+	// 	setTimeout(() => {
+	// 		setCount(count + 33);
+	// 		setOnce(true);
+	// 	}, 100);
+	// }
 
 	const nestedHtml = html`<li>${123}</li>`;
 

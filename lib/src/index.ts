@@ -1,6 +1,6 @@
 import "./css/css";
+import { ContentHole } from "./rendering/content";
 import { instance } from "./state/state";
-import { HTMLTemplate } from "./template";
 import { BaseComponent, ComponentProps } from "./types";
 
 //@ts-expect-error options will come soon
@@ -9,7 +9,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#props = new Map<string, unknown>();
 		#observer: MutationObserver;
 		#state = new Map<string, unknown>();
-		#renderTemplate: HTMLTemplate | null = null;
+		#renderTemplate: ContentHole | null = null;
 		#pendingUpdate = false;
 
 		constructor() {
@@ -97,11 +97,16 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		/*
 			*next steps
 
-			todo: the renderFn doesnt have to return a template, what if null is returned?
-
 			todo: hash functions needs to handle more cases (fn, obj, sets, maps, etc)
-			todo: we need to account for different kind of values (fn, null, object etc) 
-			=> maybe the updater functions need their own file and own unpack functions
+			todo: try hashes as stable keys for list items 
+
+			todo: Attributes need to handle event listeners, boolean values, null/undefined
+			todo: Tags need to handle different types, incl. null/undefined
+
+			todo: ContentHole etc have a different structure then the htmlTemplate. Is this an issue?
+
+			todo: css needs a similar treatment like the html template
+			=> dont combine the index with the dynamic values, just pass the two together
 
 			todo: we need the lifecycle functions
 			todo: we need more of the watchers and state functions (root, emit, async)
@@ -116,26 +121,20 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#render() {
 			try {
 				instance.current = this;
-				const { templateResult, dynamicValues } = renderFn(
-					Object.fromEntries(this.#props)
-				);
+				const template = renderFn(Object.fromEntries(this.#props));
 				instance.current = null;
 
-				if (
-					!this.#renderTemplate ||
-					this.#renderTemplate.templateResult.templateHash !==
-						templateResult.templateHash
-				) {
-					this.#renderTemplate = new HTMLTemplate(
-						templateResult,
-						dynamicValues
-					);
+				if (!this.#renderTemplate) {
+					const fragment = new DocumentFragment();
+					const placeholder = document.createElement("div");
+					fragment.append(placeholder);
+					this.#renderTemplate = new ContentHole(0, [template], placeholder);
+					this.shadowRoot?.replaceChildren(fragment);
 
-					this.shadowRoot?.replaceChildren(this.#renderTemplate.setup());
 					return;
 				}
 
-				this.#renderTemplate.update(dynamicValues);
+				this.#renderTemplate.update([template]);
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;

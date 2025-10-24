@@ -1,4 +1,4 @@
-import { TemplateResult } from "./html/html";
+import { HTMLTemplate } from "./rendering/template";
 
 export interface BaseComponent extends HTMLElement {
 	setState<Value>(key: string, value: Value): Value;
@@ -36,10 +36,10 @@ export type ComponentOptions = {};
 
 export type Props = Record<string, unknown>;
 
-export type RenderFn = (props: Props) => TemplateResult;
+export type RenderFn = (props: Props) => HTMLTemplate;
 
 export type ComponentProps<Props = Record<string, unknown>> = (
 	name: string,
 	renderFn: RenderFn,
 	options?: ComponentOptions
-) => (props?: Props) => TemplateResult;
+) => (props?: Props) => HTMLTemplate;

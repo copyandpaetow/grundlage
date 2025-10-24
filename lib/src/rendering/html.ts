@@ -1,4 +1,5 @@
 import { stringHash } from "./hashing";
+import { HTMLTemplate } from "./template";
 
 type BindingTypes = "ATTR" | "TAG" | "TEXT" | "END_TAG" | "BOOLEAN_ATTR";
 
@@ -133,6 +134,7 @@ const determineContext = (state: State) => {
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 2) + "div";
 					state.binding[state.openTags.pop()].endValues.push(state.position);
+					//TODO: this approach doesnt work for self closing tags
 				} else {
 					state.lastBindingType = "TAG";
 					state.templates[state.position] =
@@ -143,6 +145,7 @@ const determineContext = (state: State) => {
 						values: [templatePartial.slice(index + 1), state.position],
 						endValues: [],
 					});
+					state.closingChar = " ";
 				}
 			}
 			break;
@@ -211,11 +214,29 @@ const completeBinding = (state: State) => {
 			if (firstWhiteSpace === -1) {
 				firstWhiteSpace = index;
 			}
-			continue;
 		}
 
-		if (char === breakSign) {
+		if (char === breakSign || char === ">") {
 			breakIndex = index;
+
+			if (
+				char === ">" &&
+				templatePartial.slice(index - 2, index + 1) === " />"
+			) {
+				//if we find a self closable tag, we remove the index we put on the openTags stack
+				state.openTags.pop();
+			} else {
+				//if we break for another char, we still need to check if the tag closes in that snippet and if it does, check if it is a self-closing tag
+				const closingTagIndex = templatePartial.indexOf(">", index);
+				if (
+					closingTagIndex !== -1 &&
+					templatePartial.slice(closingTagIndex - 2, closingTagIndex + 1) ===
+						" />"
+				) {
+					state.openTags.pop();
+				}
+			}
+
 			break;
 		}
 
@@ -326,12 +347,9 @@ const htmlCache = new WeakMap<TemplateStringsArray, Bindings>();
 export const html = (
 	tokens: TemplateStringsArray,
 	...dynamicValues: Array<unknown>
-): TemplateResult => {
+): HTMLTemplate => {
 	if (!htmlCache.has(tokens)) {
 		htmlCache.set(tokens, parseTemplate(tokens));
 	}
-	return {
-		dynamicValues,
-		templateResult: htmlCache.get(tokens)!,
-	};
+	return new HTMLTemplate(htmlCache.get(tokens)!, dynamicValues);
 };

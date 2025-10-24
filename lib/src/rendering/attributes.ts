@@ -1,4 +1,4 @@
-import { AttrBinding } from "../html/html";
+import { AttrBinding } from "./html";
 
 export class AttributeHole {
 	binding: AttrBinding;
