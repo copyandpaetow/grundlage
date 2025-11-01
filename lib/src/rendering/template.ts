@@ -4,11 +4,6 @@ import { AttributeHole } from "./attributes";
 import { ContentHole } from "./content";
 import { TagHole } from "./tags";
 
-/*
-* it is still unclear if it is better to use one general array vs 3 specific arrays
-- the difference in code would be small, we would trade memory vs iteration purity
-*/
-
 export class HTMLTemplate {
 	dynamicValues: Array<unknown>;
 	templateResult: Bindings;
@@ -29,9 +24,12 @@ export class HTMLTemplate {
 
 		for (let index = 0; index < this.templateResult.binding.length; index++) {
 			const binding = this.templateResult.binding[index];
+			const selector = `data-replace-${index}`;
 			const placeholder = fragment.querySelector(
-				`[data-replace-${index}]`
+				`[${selector}]`
 			) as HTMLElement;
+
+			placeholder.removeAttribute(selector);
 
 			if (typeof binding === "number") {
 				this.bindings[binding] = new ContentHole(
@@ -99,7 +97,7 @@ export class HTMLTemplate {
 			const current = values[index];
 
 			if (previous !== current) {
-				this.bindings[index].update(values);
+				this.bindings[index].update(values, this.forceUpdates.bind(this));
 			}
 		}
 
@@ -107,5 +105,12 @@ export class HTMLTemplate {
 		this.dynamicValues = values;
 
 		return true;
+	}
+
+	forceUpdates(indicesToUpdate: Array<number>) {
+		//if we set the old value to null, either the values are different and will be updated to something new, or the new new value is also null, then nothing will happen anyway
+		for (const index of indicesToUpdate) {
+			this.dynamicValues[index] = null;
+		}
 	}
 }

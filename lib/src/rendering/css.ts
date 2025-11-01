@@ -1,9 +1,9 @@
-import { detectBindingPositions } from "./detect-bindings";
+import { detectBindingPositions } from "./css/detect-bindings";
 import {
 	createCssRuleBlock,
 	CssParsingResult,
 	splitStylesIntoRules,
-} from "./split-rules";
+} from "./css/split-rules";
 
 export const cssIdentifier = Symbol("css");
 const cssCache = new WeakMap<TemplateStringsArray, CssParsingResult[]>();

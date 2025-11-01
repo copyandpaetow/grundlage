@@ -1,7 +1,9 @@
+import { isWhitespace, isQuote } from "./html/dom-helper";
 import { stringHash } from "./hashing";
+import { addAttribute, ATTRIBUTE_CASES } from "./html/add-attribute";
 import { HTMLTemplate } from "./template";
 
-type BindingTypes = "ATTR" | "TAG" | "TEXT" | "END_TAG" | "BOOLEAN_ATTR";
+type BindingTypes = "ATTR" | "TAG" | "TEXT" | "END_TAG";
 
 export type AttrBinding = {
 	values: Array<number | string>;
@@ -15,14 +17,17 @@ export type TagBinding = {
 	endValues: Array<number | string>;
 };
 
-type State = {
+export type State = {
 	position: number;
-	closingChar: string;
 	binding: Array<AttrBinding | TagBinding | ContentBinding>;
 	templates: Array<string>;
 	lastBindingType: BindingTypes;
-	foundLetters: boolean;
 	openTags: Array<number>;
+	closingChar: string;
+	equalChar: number;
+	firstLetterChar: number;
+	whiteSpaceChar: number;
+	quoteChar: number;
 };
 
 export type Bindings = {
@@ -31,22 +36,7 @@ export type Bindings = {
 	templateHash: number;
 };
 
-export type TemplateResult = {
-	dynamicValues: Array<unknown>;
-	templateResult: Bindings;
-};
-
 export type MixedArray = Array<string | number>;
-
-const isWhitespace = (char: string) => {
-	return (
-		char === " " ||
-		char === "\t" ||
-		char === "\n" ||
-		char === "\r" ||
-		char === "\f"
-	);
-};
 
 const isInsideTag = (stringSegment: string, lastType: BindingTypes) => {
 	let index = stringSegment.length - 1;
@@ -89,10 +79,11 @@ const isInsideTag = (stringSegment: string, lastType: BindingTypes) => {
 const determineContext = (state: State) => {
 	let templatePartial = state.templates[state.position];
 	let index = templatePartial.length;
-	let whitespaceStart = -1;
 
 	state.closingChar = "";
-	state.foundLetters = false;
+	state.firstLetterChar = -1;
+	state.whiteSpaceChar = -1;
+	state.equalChar = -1;
 
 	if (!isInsideTag(templatePartial, state.lastBindingType)) {
 		state.templates[
@@ -108,95 +99,70 @@ const determineContext = (state: State) => {
 		const char = templatePartial[index];
 
 		if (isWhitespace(char)) {
-			if (whitespaceStart === -1) {
-				whitespaceStart = index;
+			if (state.whiteSpaceChar === -1) {
+				state.whiteSpaceChar = index;
 			}
 			continue;
 		}
 
 		if (char === "<") {
-			if (whitespaceStart !== -1) {
-				//attribute
-
-				state.lastBindingType = "ATTR";
-				state.templates[state.position] =
-					templatePartial.slice(0, whitespaceStart) +
-					` data-replace-${state.binding.length} `;
-				state.binding.push({
-					values: [templatePartial.slice(whitespaceStart + 1), state.position],
-					keys: [],
-				});
-			} else {
+			if (state.whiteSpaceChar === -1) {
 				//tag
 				if (templatePartial[index + 1] === "/") {
 					//! adding the end tag but not using it later, throws of the indices, so we are not using it here
 					state.lastBindingType = "END_TAG";
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 2) + "div";
-					state.binding[state.openTags.pop()].endValues.push(state.position);
-					//TODO: this approach doesnt work for self closing tags
+					(state.binding[state.openTags.pop()!] as TagBinding).endValues.push(
+						state.position
+					);
 				} else {
 					state.lastBindingType = "TAG";
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 1) +
 						`div data-replace-${state.binding.length} `;
 					state.openTags.push(state.binding.length);
+					const values = [];
+					if (templatePartial.slice(index + 1)) {
+						values.push(templatePartial.slice(index + 1));
+					}
+					values.push(state.position);
 					state.binding.push({
-						values: [templatePartial.slice(index + 1), state.position],
+						values,
 						endValues: [],
 					});
 					state.closingChar = " ";
 				}
-			}
-			break;
-		}
-
-		state.foundLetters = true;
-
-		if (char === "=" || char === '"' || char === "'") {
-			if (char === "=") {
-				if (
-					templatePartial[index + 1] === "'" ||
-					templatePartial[index + 1] === '"'
-				) {
-					state.closingChar = templatePartial[index + 1];
-				}
 			} else {
-				state.closingChar = char;
+				addAttribute(state, ATTRIBUTE_CASES.BRACKET);
 			}
-
-			const nextWhitespace = templatePartial.lastIndexOf(" ", index);
-			//we need to remove the quote at this point otherwise it will make the attribute creation difficult later on
-			templatePartial =
-				templatePartial.slice(0, index) + templatePartial.slice(index + 1);
-
-			state.lastBindingType = "ATTR";
-			state.templates[state.position] =
-				templatePartial.slice(0, nextWhitespace) +
-				` data-replace-${state.binding.length} `;
-			state.binding.push({
-				values: [templatePartial.slice(nextWhitespace + 1), state.position],
-				keys: [],
-			});
-
-			//if needed, if the attribute has no whitespaces, its a complex attribute with more than one hole
 			break;
 		}
+
+		if (isQuote(char)) {
+			state.closingChar = char;
+			state.quoteChar = index;
+			continue;
+		}
+
+		if (char === "=") {
+			state.closingChar ||= " ";
+			state.equalChar = index;
+			addAttribute(state, ATTRIBUTE_CASES.EQUAL);
+			break;
+		}
+
+		state.firstLetterChar = index;
 	}
 
 	//if the template is only white space, we cant really detect it above, this is the catch
-	if (!state.foundLetters && whitespaceStart > -1) {
-		state.lastBindingType = "ATTR";
-		state.templates[state.position] = ` data-replace-${state.binding.length} `;
-		state.binding.push({
-			values: [state.position],
-			keys: [],
-		});
+	if (state.firstLetterChar === -1 && state.whiteSpaceChar !== -1) {
+		addAttribute(state, ATTRIBUTE_CASES.FALLBACK);
 	}
 };
 
 const completeBinding = (state: State) => {
-	const templatePartial = state.templates[state.position + 1];
+	let templatePartial = state.templates[state.position + 1];
 	if (templatePartial === undefined || state.lastBindingType === "TEXT") {
 		return;
 	}
@@ -241,12 +207,16 @@ const completeBinding = (state: State) => {
 		}
 
 		if (char === "=") {
+			state.equalChar = index;
 			const nextChar = templatePartial[index + 1];
-			if (nextChar === "'" || nextChar === '"') {
+			if (isQuote(nextChar)) {
 				breakSign = nextChar;
 				index += 1;
-				continue;
+			} else {
+				breakSign = " ";
 			}
+
+			continue;
 		}
 	}
 
@@ -254,73 +224,65 @@ const completeBinding = (state: State) => {
 		breakIndex = firstWhiteSpace;
 	}
 
+	const bindingLocation =
+		state.lastBindingType === "ATTR" && state.equalChar === -1
+			? (currentBinding as AttrBinding).keys
+			: currentBinding.values;
+
 	if (breakIndex === -1) {
-		currentBinding.values.push(templatePartial, state.position + 1);
+		if (isQuote(templatePartial[templatePartial.length - 1])) {
+			templatePartial = templatePartial.slice(0, -1);
+		}
+		if (state.equalChar !== -1) {
+			if (templatePartial.length === 1) {
+				templatePartial = "";
+			} else {
+				templatePartial =
+					templatePartial.slice(0, state.equalChar) +
+					templatePartial.slice(state.equalChar + 1);
+			}
+		}
+
+		if (templatePartial) {
+			bindingLocation.push(templatePartial);
+		}
+
+		bindingLocation.push(state.position + 1);
 		state.templates[state.position + 1] = "";
 		state.position += 1;
 		return completeBinding(state);
 	}
 
 	const remainder = templatePartial.slice(0, breakIndex);
-	if (remainder) {
-		currentBinding.values.push(remainder);
+
+	if (remainder && !isQuote(remainder)) {
+		bindingLocation.push(remainder);
 	}
+
+	if (isQuote(templatePartial[breakIndex])) {
+		breakIndex += 1;
+	}
+
 	state.templates[state.position + 1] = templatePartial.slice(breakIndex);
 };
 
-const splitAttributeByEqualSign = (state: State) => {
-	for (let index = 0; index < state.binding.length; index++) {
-		const attribute = state.binding[index]! as AttrBinding;
-		if (!attribute.hasOwnProperty("keys")) {
-			continue;
-		}
-
-		for (
-			let valueIndex = 0;
-			valueIndex < attribute.values.length;
-			valueIndex++
-		) {
-			const value = attribute.values[valueIndex];
-
-			if (typeof value === "number") {
-				attribute.keys.push(attribute.values.splice(valueIndex, 1)[0]);
-				valueIndex--;
-				continue;
-			}
-
-			const includesEqualSign = value.indexOf("=");
-			if (includesEqualSign === -1) {
-				attribute.keys.push(attribute.values.splice(valueIndex, 1)[0]);
-				valueIndex--;
-				continue;
-			}
-			const start = value.slice(0, includesEqualSign);
-			const end = value.slice(includesEqualSign + 1);
-
-			if (start) {
-				attribute.keys.push(start);
-			}
-			if (end) {
-				attribute.values[valueIndex] = end;
-			} else {
-				attribute.values.splice(valueIndex, 1);
-			}
-			break;
-		}
-	}
-};
-
 const range = new Range();
+
+//TODO: we need a dedicated key for an equal sign index and a better way to add attributes
+//=> we should remove the splitAttributeByEqualSign function
 
 export const parseTemplate = (strings: TemplateStringsArray): Bindings => {
 	const state: State = {
 		position: 0,
 		binding: [],
 		templates: [...strings],
-		closingChar: "",
 		lastBindingType: "TEXT",
-		foundLetters: false,
 		openTags: [],
+		closingChar: "",
+		firstLetterChar: -1,
+		equalChar: -1,
+		whiteSpaceChar: -1,
+		quoteChar: -1,
 	};
 
 	while (state.position < state.templates.length - 1) {
@@ -328,8 +290,6 @@ export const parseTemplate = (strings: TemplateStringsArray): Bindings => {
 		completeBinding(state);
 		state.position += 1;
 	}
-
-	splitAttributeByEqualSign(state);
 
 	const templateString = state.templates.join("");
 

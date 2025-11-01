@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { css } from "../css";
+import { css } from "../../css";
 
 test("css rule parser", () => {
 	expect(css.rule`opacity: 1, margin: ${12}px`).toStrictEqual([

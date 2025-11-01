@@ -15,6 +15,7 @@ export class ContentHole {
 		this.binding = binding;
 		this.anchorStart = new Comment("content anchor start");
 		this.anchorEnd = new Comment("content anchor end");
+
 		placeholder.replaceWith(this.anchorStart, this.anchorEnd);
 
 		this.update(dynamicValues);

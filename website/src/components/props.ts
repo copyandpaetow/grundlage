@@ -1,5 +1,5 @@
 import { render } from "../../../lib/src";
-import { css } from "../../../lib/src/css/css";
+import { css } from "../../../lib/src/rendering/css";
 import { html } from "../../../lib/src/rendering/html";
 import { useState } from "../../../lib/src/state/state";
 
@@ -50,14 +50,33 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 	// 	}, 100);
 	// }
 
-	const nestedHtml = html`<li>${123}</li>`;
+	const onclick = () => console.log("click 1");
 
 	return html`
 		<section class="card">
 			<h2>props</h2>
 			<ul>
+				<li inert data-${"test"}="${123}">data attribute</li>
+				<li data-test=${"no quotes"} inert>quoteless</li>
+				<li class="class1 ${"dynamicClass"} class3">complex attribute</li>
+				<li class="${["a", "b", "c"]}">class array</li>
+				<li ${["disabled", "inert"]}>array</li>
+				<${"li"} ${{ value: "123" }}>object</${"li"}>
+				<li onclick=${onclick}>event listener</li>
+				<li on${"blur"}=${onclick}>dynamic event listener</li>
+			</ul>
+		</section>
+	`;
+});
+
+/*
+		<section class="card">
+			<h2>props</h2>
+			<ul>
 				<li data-${"test"}="${123}">${props.prop1}</li>
-				<li><${props.tag}>dynamic ${props.tag} tag here</${props.tag}></li>
+				<li><${props.tag} data-test="${123}" static-tag="class" disabled>dynamic ${
+		props.tag
+	} tag here</${props.tag}></li>
 				<li>${count}</li>
 				<li style="width: ${Math.min(
 					count,
@@ -66,5 +85,5 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 				${nestedHtml}
 			</ul>
 		</section>
-	`;
-});
+
+*/

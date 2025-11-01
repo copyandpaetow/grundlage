@@ -1,4 +1,4 @@
-import "./css/css";
+import "./rendering/css";
 import { ContentHole } from "./rendering/content";
 import { instance } from "./state/state";
 import { BaseComponent, ComponentProps } from "./types";
@@ -97,16 +97,19 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		/*
 			*next steps
 
+			todo: css needs a similar treatment like the html template
+			=> dont combine the index with the dynamic values, just pass the two together
+
+			todo: Make the holes also have a setup function
+
 			todo: hash functions needs to handle more cases (fn, obj, sets, maps, etc)
 			todo: try hashes as stable keys for list items 
 
-			todo: Attributes need to handle event listeners, boolean values, null/undefined
 			todo: Tags need to handle different types, incl. null/undefined
 
-			todo: ContentHole etc have a different structure then the htmlTemplate. Is this an issue?
+			todo: for boolean values we need to connect and store the value to the index so we can undo/change them
 
-			todo: css needs a similar treatment like the html template
-			=> dont combine the index with the dynamic values, just pass the two together
+		
 
 			todo: we need the lifecycle functions
 			todo: we need more of the watchers and state functions (root, emit, async)
