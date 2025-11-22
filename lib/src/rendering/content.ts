@@ -1,24 +1,14 @@
-import { ContentBinding } from "./html";
+import { ContentBinding } from "./parser-html";
 import { HTMLTemplate } from "./template";
 
 export class ContentHole {
 	binding: ContentBinding;
-	previous: unknown = null;
 	anchorStart: Comment;
 	anchorEnd: Comment;
+	updateId = -1;
 
-	constructor(
-		binding: ContentBinding,
-		dynamicValues: Array<unknown>,
-		placeholder: HTMLElement
-	) {
+	constructor(binding: ContentBinding) {
 		this.binding = binding;
-		this.anchorStart = new Comment("content anchor start");
-		this.anchorEnd = new Comment("content anchor end");
-
-		placeholder.replaceWith(this.anchorStart, this.anchorEnd);
-
-		this.update(dynamicValues);
 	}
 
 	/*
@@ -30,31 +20,43 @@ export class ContentHole {
 	
 	*/
 
-	update(values: Array<unknown>) {
-		const currentValue = values[this.binding];
+	setup(placeholder: HTMLElement, context: HTMLTemplate) {
+		this.anchorStart = new Comment("content anchor start");
+		this.anchorEnd = new Comment("content anchor end");
+
+		placeholder.replaceWith(this.anchorStart, this.anchorEnd);
+
+		this.update(context);
+	}
+
+	update(context: HTMLTemplate) {
+		if (this.updateId === context.updateId) {
+			return;
+		}
+		this.updateId = context.updateId;
+		const current = context.currentValues[this.binding];
+		const previous = context.previousValues[this.binding];
 
 		//if the new value is a renderTemplate, we need to check if the old one is also a renderTemplate and if they have the same templateHash
-		if (currentValue instanceof HTMLTemplate) {
+		if (current instanceof HTMLTemplate) {
 			if (
-				this.previous instanceof HTMLTemplate &&
-				this.previous.templateResult.templateHash ===
-					currentValue.templateResult.templateHash
+				previous instanceof HTMLTemplate &&
+				previous.templateResult.templateHash ===
+					current.templateResult.templateHash
 			) {
 				//if they do, we can update the old one just with new dynamic values
-				this.previous.update(currentValue.dynamicValues);
+				previous.update(current.currentValues);
 				return;
 			}
 			//otherwise we delete the old dom and render again
 			this.delete();
-			this.anchorStart.after(currentValue.setup());
-			this.previous = currentValue;
+			this.anchorStart.after(current.setup());
 			return;
 		}
 
 		this.delete();
 
-		const content = this.toString(currentValue);
-		this.previous = currentValue;
+		const content = this.toString(current);
 
 		if (!content) {
 			return;

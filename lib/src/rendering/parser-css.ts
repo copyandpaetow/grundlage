@@ -5,7 +5,29 @@ import {
 	splitStylesIntoRules,
 } from "./css/split-rules";
 
-export const cssIdentifier = Symbol("css");
+export class CssRuleTemplate {
+	dynamicValues: Array<unknown>;
+	template: CssParsingResult[];
+	constructor(template: CssParsingResult[], dynamicValues: Array<unknown>) {
+		this.dynamicValues = dynamicValues;
+		this.template = template;
+	}
+}
+
+export class CssStyleTemplate {
+	dynamicValues: Array<unknown>;
+	template: CssParsingResult[];
+	constructor(template: CssParsingResult[], dynamicValues: Array<unknown>) {
+		this.dynamicValues = dynamicValues;
+		this.template = template;
+		console.log({ dynamicValues, template });
+	}
+
+	setup() {}
+
+	update() {}
+}
+
 const cssCache = new WeakMap<TemplateStringsArray, CssParsingResult[]>();
 
 export const parseCSSRule = (
@@ -18,20 +40,7 @@ export const parseCSSRule = (
 		cssCache.set(tokens, [detectBindingPositions(result)]);
 	}
 
-	const parsedTokens = cssCache.get(tokens)!;
-	parsedTokens.forEach((result) => {
-		result.bindings.forEach((entry, index) => {
-			entry.value = dynamicValues[index];
-		});
-		result.type = "rule";
-	});
-
-	//todo: does it make sense, that this is an array with one entry inside of a small object?
-
-	return {
-		rules: parsedTokens,
-		type: cssIdentifier,
-	};
+	return new CssRuleTemplate(cssCache.get(tokens)!, dynamicValues);
 };
 
 const parseStyleSheet = (
@@ -45,18 +54,7 @@ const parseStyleSheet = (
 		);
 	}
 
-	const parsedTokens = cssCache.get(tokens)!;
-	parsedTokens.forEach((result) => {
-		result.bindings.forEach((entry, index) => {
-			entry.value = dynamicValues[index];
-		});
-		result.type = "sheet";
-	});
-
-	return {
-		rules: parsedTokens,
-		type: cssIdentifier,
-	};
+	return new CssStyleTemplate(cssCache.get(tokens)!, dynamicValues);
 };
 
 export const css = {

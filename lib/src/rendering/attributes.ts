@@ -1,21 +1,13 @@
-import { AttrBinding } from "./html";
+import { AttrBinding } from "./parser-html";
+import { HTMLTemplate } from "./template";
 
 export class AttributeHole {
 	binding: AttrBinding;
-	anchor: Comment;
-	event: EventListener | null = null;
-	key: keyof HTMLElementEventMap | null = null;
+	element: HTMLElement;
+	updateId = -1;
 
-	constructor(
-		binding: AttrBinding,
-		dynamicValues: Array<unknown>,
-		placeholder: HTMLElement
-	) {
+	constructor(binding: AttrBinding) {
 		this.binding = binding;
-		this.anchor = new Comment("attr");
-
-		placeholder.prepend(this.anchor);
-		this.update(dynamicValues);
 	}
 
 	/*
@@ -26,31 +18,46 @@ export class AttributeHole {
 
 */
 
-	update(values: Array<unknown>) {
+	setup(placeholder: HTMLElement, context: HTMLTemplate) {
+		this.element = placeholder;
+
+		this.update(context);
+	}
+
+	update(context: HTMLTemplate) {
+		if (this.updateId === context.updateId) {
+			return;
+		}
+		this.updateId = context.updateId;
+
 		if (this.binding.values.length === 0) {
-			this.handleBooleanAttribute(this.binding.keys, values);
+			this.handleBooleanAttribute(this.binding.keys, context.currentValues);
 			return;
 		}
 		const key = this.binding.keys
 			.map((relatedIndex) =>
-				typeof relatedIndex === "number" ? values[relatedIndex] : relatedIndex
+				typeof relatedIndex === "number"
+					? context.currentValues[relatedIndex]
+					: relatedIndex
 			)
 			.join("")
 			.trim();
 
 		if (
 			key.slice(0, 2) === "on" &&
-			typeof values[this.binding.values[0]] === "function"
+			typeof context.currentValues[this.binding.values[0]] === "function"
 		) {
 			this.setEventListener(
 				key.slice(2).toLowerCase() as keyof HTMLElementEventMap,
-				values[this.binding.values[0]] as EventListener
+				context.currentValues[this.binding.values[0]] as EventListener
 			);
 			return;
 		}
 		const value = this.binding.values
 			.map((relatedIndex) =>
-				typeof relatedIndex === "number" ? values[relatedIndex] : relatedIndex
+				typeof relatedIndex === "number"
+					? context.currentValues[relatedIndex]
+					: relatedIndex
 			)
 			.join("");
 		this.setAttribute(key, value);
@@ -96,6 +103,7 @@ export class AttributeHole {
 	}
 
 	setEventListener(key: keyof HTMLElementEventMap, callback: EventListener) {
+		//TODO: since we have the old function we should be able to just remove the event without storing it
 		if (this.event && this.key) {
 			this.anchor.parentElement!.removeEventListener(this.key, this.event);
 		}

@@ -1,5 +1,6 @@
-import "./rendering/css";
-import { ContentHole } from "./rendering/content";
+import "./rendering/parser-css";
+import { html } from "./rendering/parser-html";
+import { HTMLTemplate } from "./rendering/template";
 import { instance } from "./state/state";
 import { BaseComponent, ComponentProps } from "./types";
 
@@ -9,7 +10,7 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		#props = new Map<string, unknown>();
 		#observer: MutationObserver;
 		#state = new Map<string, unknown>();
-		#renderTemplate: ContentHole | null = null;
+		#renderTemplate: HTMLTemplate | null = null;
 		#pendingUpdate = false;
 
 		constructor() {
@@ -97,47 +98,64 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 		/*
 			*next steps
 
+			### structure ###
+
 			todo: css needs a similar treatment like the html template
 			=> dont combine the index with the dynamic values, just pass the two together
 
-			todo: Make the holes also have a setup function
+			todo: attribute boolean values need some kind of storage / cache / mapping
+			? we could think about storing the dynamic data (old and new) on the web component class and passing that around as context
+			=> that way we could also include abortControllers, setters etc
+
+			todo: holes need to be able to handle async values. If we see them, we should return undefined first but rerender when the value has resolved
 
 			todo: hash functions needs to handle more cases (fn, obj, sets, maps, etc)
 			todo: try hashes as stable keys for list items 
 
 			todo: Tags need to handle different types, incl. null/undefined
 
-			todo: for boolean values we need to connect and store the value to the index so we can undo/change them
+			todo: if templates have no dynamic holes, we can shortcut 
 
-		
+			### api design ###
 
-			todo: we need the lifecycle functions
-			todo: we need more of the watchers and state functions (root, emit, async)
+			todo: rework state to use the (key, callback, option) signature
+			=> we need state, set, watch, track
+			=> html templates likely need an array of tracked global keys
+
+			todo: add further helper
+			=> emit, on, host
 
 			? do we need something like useRef? 
+			=> no as it would be too close to state
 
-			todo: does the MO needs disconnecting? What else is required for cleanup?
+			todo: we need the lifecycle functions
 
-			todo: error handling
+
+			### future
+
+			? if the component gets pre-rendered, can we get to the updatable holes again without re-rendering everything again? 
+			=> we would need to encode the bindings in the comments somehow
+
 		
 		*/
 		#render() {
 			try {
 				instance.current = this;
-				const template = renderFn(Object.fromEntries(this.#props));
+				let template = renderFn(Object.fromEntries(this.#props));
+				if (!(template instanceof HTMLTemplate)) {
+					template = html`${template}`;
+				}
 				instance.current = null;
 
-				if (!this.#renderTemplate) {
-					const fragment = new DocumentFragment();
-					const placeholder = document.createElement("div");
-					fragment.append(placeholder);
-					this.#renderTemplate = new ContentHole(0, [template], placeholder);
-					this.shadowRoot?.replaceChildren(fragment);
-
+				if (
+					!this.#renderTemplate ||
+					this.#renderTemplate.templateResult.templateHash !==
+						template.templateResult.templateHash
+				) {
+					this.shadowRoot?.replaceChildren(template.setup());
 					return;
 				}
-
-				this.#renderTemplate.update([template]);
+				this.#renderTemplate.update(template.currentValues);
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;

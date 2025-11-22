@@ -1,18 +1,23 @@
 import { hashValue } from "./hashing";
-import { AttrBinding, Bindings, TagBinding } from "./html";
+import { AttrBinding, Bindings, TagBinding } from "./parser-html";
 import { AttributeHole } from "./attributes";
 import { ContentHole } from "./content";
 import { TagHole } from "./tags";
 
+const EMPTY_ARRAY: Array<unknown> = [];
+
 export class HTMLTemplate {
-	dynamicValues: Array<unknown>;
+	currentValues: Array<unknown>;
+	previousValues: Array<unknown>;
 	templateResult: Bindings;
 	bindings: Array<TagHole | AttributeHole | ContentHole>;
-	valueHash: number = 0;
+	valueHash = 0;
+	updateId = 0;
 
 	constructor(templateResult: Bindings, dynamicValues: Array<unknown>) {
-		this.dynamicValues = dynamicValues;
+		this.currentValues = dynamicValues;
 		this.templateResult = templateResult;
+		this.previousValues = EMPTY_ARRAY;
 	}
 
 	setup(): DocumentFragment {
@@ -20,7 +25,7 @@ export class HTMLTemplate {
 			true
 		) as DocumentFragment;
 
-		this.bindings = new Array(this.dynamicValues.length);
+		this.bindings = new Array(this.currentValues.length);
 
 		for (let index = 0; index < this.templateResult.binding.length; index++) {
 			const binding = this.templateResult.binding[index];
@@ -32,19 +37,14 @@ export class HTMLTemplate {
 			placeholder.removeAttribute(selector);
 
 			if (typeof binding === "number") {
-				this.bindings[binding] = new ContentHole(
-					binding,
-					this.dynamicValues,
-					placeholder
-				);
+				const contentBinding = new ContentHole(binding);
+				contentBinding.setup(placeholder, this);
+				this.bindings[binding] = contentBinding;
 				continue;
 			}
 			if (!binding.hasOwnProperty("keys")) {
-				const tagBinding = new TagHole(
-					binding as TagBinding,
-					this.dynamicValues,
-					placeholder
-				);
+				const tagBinding = new TagHole(binding as TagBinding);
+				tagBinding.setup(placeholder, this);
 
 				for (const value of binding.values) {
 					if (typeof value === "number") {
@@ -60,11 +60,8 @@ export class HTMLTemplate {
 				continue;
 			}
 
-			const attrBinding = new AttributeHole(
-				binding as AttrBinding,
-				this.dynamicValues,
-				placeholder
-			);
+			const attrBinding = new AttributeHole(binding as AttrBinding);
+			attrBinding.setup(placeholder, this);
 
 			for (const value of binding.values) {
 				if (typeof value === "number") {
@@ -83,8 +80,11 @@ export class HTMLTemplate {
 	}
 
 	update(values: Array<unknown>): boolean {
+		this.previousValues = this.currentValues;
+		this.currentValues = values;
+
 		if (!this.valueHash) {
-			this.valueHash = hashValue(this.dynamicValues);
+			this.valueHash = hashValue(this.currentValues);
 		}
 		const currentHash = hashValue(values);
 
@@ -92,25 +92,18 @@ export class HTMLTemplate {
 			return false;
 		}
 
-		for (let index = 0; index < this.dynamicValues.length; index++) {
-			const previous = this.dynamicValues[index];
+		this.updateId++;
+		for (let index = 0; index < this.currentValues.length; index++) {
+			const previous = this.currentValues[index];
 			const current = values[index];
 
 			if (previous !== current) {
-				this.bindings[index].update(values, this.forceUpdates.bind(this));
+				this.bindings[index].update(this);
 			}
 		}
 
 		this.valueHash = currentHash;
-		this.dynamicValues = values;
 
 		return true;
-	}
-
-	forceUpdates(indicesToUpdate: Array<number>) {
-		//if we set the old value to null, either the values are different and will be updated to something new, or the new new value is also null, then nothing will happen anyway
-		for (const index of indicesToUpdate) {
-			this.dynamicValues[index] = null;
-		}
 	}
 }

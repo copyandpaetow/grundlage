@@ -1,20 +1,19 @@
-import { TagBinding } from "./html";
+import { TagBinding } from "./parser-html";
+import { HTMLTemplate } from "./template";
 
 export class TagHole {
 	binding: TagBinding;
-	anchor: Comment;
-	relatedAttributes: Array<number>;
+	element: HTMLElement;
+	relatedAttributes: Array<number> = [];
+	updateId = -1;
 
-	constructor(
-		binding: TagBinding,
-		dynamicValues: Array<unknown>,
-		placeholder: HTMLElement
-	) {
+	constructor(binding: TagBinding) {
 		this.binding = binding;
-		this.anchor = new Comment("tag");
-		this.relatedAttributes = [];
-		//TODO: maybe we can skip the comment here and store the element itself
-		//? or are there cases where the element gets replaced and not rerendered?
+	}
+
+	setup(placeholder: HTMLElement, context: HTMLTemplate) {
+		this.relatedAttributes.length = 0;
+		this.element = placeholder;
 
 		for (const name of placeholder.getAttributeNames()) {
 			const attributeIndex = name.split("data-replace-")[1];
@@ -23,22 +22,16 @@ export class TagHole {
 			}
 		}
 
-		placeholder.prepend(this.anchor);
-		this.update(dynamicValues);
+		this.update(context);
 	}
 
-	update(
-		values: Array<unknown>,
-		forceUpdate?: (indices: Array<number>) => void
-	) {
-		const placeholder = this.anchor.parentElement!;
-		const newTag = this.binding.values
-			.map((relatedIndex) =>
-				typeof relatedIndex === "number"
-					? this.toString(values[relatedIndex])
-					: relatedIndex
-			)
-			.join("");
+	update(context: HTMLTemplate) {
+		if (this.updateId === context.updateId) {
+			return;
+		}
+		this.updateId = context.updateId;
+		const placeholder = this.element;
+		const newTag = this.getTag(context.currentValues);
 
 		const newElement = document.createElement(newTag);
 		placeholder
@@ -49,12 +42,23 @@ export class TagHole {
 
 		newElement.replaceChildren(...placeholder.childNodes);
 		placeholder.replaceWith(newElement);
+		this.element = newElement;
 
-		if (this.relatedAttributes.length) {
-			forceUpdate?.(this.relatedAttributes);
-		}
+		this.relatedAttributes.forEach((attrIndex) => {
+			context.bindings[attrIndex].setup(newElement, context);
+		});
 
 		return;
+	}
+
+	getTag(values: Array<unknown>) {
+		return this.binding.values
+			.map((relatedIndex) =>
+				typeof relatedIndex === "number"
+					? this.toString(values[relatedIndex])
+					: relatedIndex
+			)
+			.join("");
 	}
 
 	toString(value: unknown): string {

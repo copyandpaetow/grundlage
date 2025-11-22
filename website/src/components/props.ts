@@ -1,6 +1,6 @@
 import { render } from "../../../lib/src";
-import { css } from "../../../lib/src/rendering/css";
-import { html } from "../../../lib/src/rendering/html";
+import { css } from "../../../lib/src/rendering/parser-css";
+import { html } from "../../../lib/src/rendering/parser-html";
 import { useState } from "../../../lib/src/state/state";
 
 export interface TestProps {
@@ -20,6 +20,8 @@ const style = css.stylesheet`
 	* {
    margin: 0
  }
+
+ ${list}
 
  .card {
     display: grid;
@@ -50,20 +52,12 @@ export const propsComponent = render("props-component", (props: TestProps) => {
 	// 	}, 100);
 	// }
 
-	const onclick = () => console.log("click 1");
-
 	return html`
 		<section class="card">
 			<h2>props</h2>
 			<ul>
-				<li inert data-${"test"}="${123}">data attribute</li>
-				<li data-test=${"no quotes"} inert>quoteless</li>
-				<li class="class1 ${"dynamicClass"} class3">complex attribute</li>
-				<li class="${["a", "b", "c"]}">class array</li>
-				<li ${["disabled", "inert"]}>array</li>
-				<${"li"} ${{ value: "123" }}>object</${"li"}>
-				<li onclick=${onclick}>event listener</li>
-				<li on${"blur"}=${onclick}>dynamic event listener</li>
+				${style}
+				<li class="class1 ${list} class3">complex attribute</li>
 			</ul>
 		</section>
 	`;

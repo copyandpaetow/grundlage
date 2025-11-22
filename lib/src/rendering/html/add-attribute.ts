@@ -1,4 +1,4 @@
-import { State, AttrBinding } from "../html";
+import { State, AttrBinding } from "../parser-html";
 
 export const ATTRIBUTE_CASES = {
 	BRACKET: 1,
