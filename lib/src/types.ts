@@ -1,4 +1,4 @@
-import { HTMLTemplate } from "./rendering/template";
+import { HTMLTemplate } from "./rendering/template-html";
 
 export interface BaseComponent extends HTMLElement {
 	setState<Value>(key: string, value: Value): Value;

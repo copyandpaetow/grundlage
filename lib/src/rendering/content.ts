@@ -1,5 +1,5 @@
 import { ContentBinding } from "./parser-html";
-import { HTMLTemplate } from "./template";
+import { HTMLTemplate } from "./template-html";
 
 export class ContentHole {
 	binding: ContentBinding;
@@ -10,15 +10,6 @@ export class ContentHole {
 	constructor(binding: ContentBinding) {
 		this.binding = binding;
 	}
-
-	/*
-			- nested template vs the same nested template but different dynamic values
-					- nested template vs other content (vis versa) => can we recycle the comments?
-					- nested template A vs the nested template B
-					- array of nested contents
-			- nested css
-	
-	*/
 
 	setup(placeholder: HTMLElement, context: HTMLTemplate) {
 		this.anchorStart = new Comment("content anchor start");
@@ -46,6 +37,8 @@ export class ContentHole {
 			) {
 				//if they do, we can update the old one just with new dynamic values
 				previous.update(current.currentValues);
+				//to not lose the reference we need to keep it in the currentValeus
+				context.currentValues[this.binding] = previous;
 				return;
 			}
 			//otherwise we delete the old dom and render again

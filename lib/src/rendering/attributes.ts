@@ -1,5 +1,5 @@
 import { AttrBinding } from "./parser-html";
-import { HTMLTemplate } from "./template";
+import { HTMLTemplate } from "./template-html";
 
 export class AttributeHole {
 	binding: AttrBinding;
@@ -91,23 +91,23 @@ export class AttributeHole {
 	}
 
 	setBooleanAttribute(key: string) {
-		this.anchor.parentElement!.setAttribute(key, "");
+		this.element.setAttribute(key, "");
 	}
 
 	setAttribute(key: string, value: unknown) {
 		if (!value && typeof value !== "number") {
-			this.anchor.parentElement!.removeAttribute(key);
+			this.element.removeAttribute(key);
 			return;
 		}
-		this.anchor.parentElement!.setAttribute(key, value.toString());
+		this.element.setAttribute(key, value.toString());
 	}
 
 	setEventListener(key: keyof HTMLElementEventMap, callback: EventListener) {
 		//TODO: since we have the old function we should be able to just remove the event without storing it
 		if (this.event && this.key) {
-			this.anchor.parentElement!.removeEventListener(this.key, this.event);
+			this.element.removeEventListener(this.key, this.event);
 		}
-		this.anchor.parentElement!.addEventListener(key, callback);
+		this.element.addEventListener(key, callback);
 		this.event = callback;
 		this.key = key;
 	}

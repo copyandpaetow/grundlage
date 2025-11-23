@@ -1,7 +1,7 @@
 import { isWhitespace, isQuote } from "./html/dom-helper";
 import { stringHash } from "./hashing";
 import { addAttribute, ATTRIBUTE_CASES } from "./html/add-attribute";
-import { HTMLTemplate } from "./template";
+import { HTMLTemplate } from "./template-html";
 
 type BindingTypes = "ATTR" | "TAG" | "TEXT" | "END_TAG";
 
@@ -267,9 +267,6 @@ const completeBinding = (state: State) => {
 };
 
 const range = new Range();
-
-//TODO: we need a dedicated key for an equal sign index and a better way to add attributes
-//=> we should remove the splitAttributeByEqualSign function
 
 export const parseTemplate = (strings: TemplateStringsArray): Bindings => {
 	const state: State = {

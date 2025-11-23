@@ -1,5 +1,5 @@
 import { TagBinding } from "./parser-html";
-import { HTMLTemplate } from "./template";
+import { HTMLTemplate } from "./template-html";
 
 export class TagHole {
 	binding: TagBinding;
