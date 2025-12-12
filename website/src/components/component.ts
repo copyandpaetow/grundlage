@@ -31,6 +31,12 @@ export const propsComponent = render("props-component", () => {
 		<section class="card">
 			<h2>props</h2>
 			<ul>
+				<style media="(width < ${500}px)">
+					* {
+						margin: ${margin}px;
+						padding: ${padding}px;
+					}
+				</style>
 				<style>
 					* {
 						margin: ${margin}px;

@@ -3,7 +3,15 @@ import { stringHash } from "./hashing";
 import { addAttribute, ATTRIBUTE_CASES } from "./html/add-attribute";
 import { HTMLTemplate } from "./template-html";
 
-type BindingTypes = "ATTR" | "TAG" | "TEXT" | "END_TAG";
+const BINDING_TYPES = {
+	TAG: 1,
+	END_TAG: 2,
+	ATTR: 3,
+	TEXT: 4,
+	TEXT_CONTENT: 5,
+} as const;
+
+type ValueOf<T> = T[keyof T];
 
 export type AttrBinding = {
 	values: Array<number | string>;
@@ -21,7 +29,7 @@ export type State = {
 	position: number;
 	binding: Array<AttrBinding | TagBinding | ContentBinding>;
 	templates: Array<string>;
-	lastBindingType: BindingTypes;
+	lastBindingType: ValueOf<typeof BINDING_TYPES>;
 	openTags: Array<number>;
 	closingChar: string;
 	equalChar: number;
@@ -38,7 +46,10 @@ export type Bindings = {
 
 export type MixedArray = Array<string | number>;
 
-const isInsideTag = (stringSegment: string, lastType: BindingTypes) => {
+const isInsideTag = (
+	stringSegment: string,
+	lastType: ValueOf<typeof BINDING_TYPES>
+) => {
 	let index = stringSegment.length - 1;
 	let result;
 
@@ -63,6 +74,7 @@ const isInsideTag = (stringSegment: string, lastType: BindingTypes) => {
 				index -= 1;
 				continue;
 			}
+
 			result = true;
 			break;
 		}
@@ -73,8 +85,27 @@ const isInsideTag = (stringSegment: string, lastType: BindingTypes) => {
 		return result;
 	}
 
-	return lastType !== "TEXT";
+	return lastType !== BINDING_TYPES.TEXT;
 };
+
+//todo: maybe the determine context function calls different completion functions for each type instead of having one for many types
+
+/*
+	we start with the first template from the end
+	- we move towards the start of the template
+	- if we detect we are not inside of the tag, we need to find the parent element 
+		-	if it is a special tag we need to start looking left until we find the closing tag and extract everything in between. We also need to add an attribute inside of the tag
+	- if we detect we are inside of a tag, we have to find the start of the tag
+		- on the way we see if we are inside of an attribute, else we are in the tag itself
+		- if we are inside of an attribute, we remember the closing (quotes or whitespace)
+		- if we are inside of a tag, we remember the closing "/>"
+	in any case we need to determine the type here and close it in the next part
+
+	we then take the next template and move	to the right
+	- we keep looking until we find the closing chars
+
+
+*/
 
 const determineContext = (state: State) => {
 	let templatePartial = state.templates[state.position];
@@ -85,12 +116,23 @@ const determineContext = (state: State) => {
 	state.whiteSpaceChar = -1;
 	state.equalChar = -1;
 
+	console.log(templatePartial);
+
 	if (!isInsideTag(templatePartial, state.lastBindingType)) {
+		//TODO: find the next tag to the left
+		//TODO: if it is a style,script,title, textarea return early
+
+		/*
+		at this point the special tags can either be in the templatePartial or in the templates
+		
+		
+		*/
+
 		state.templates[
 			state.position
 		] += `<span data-replace-${state.binding.length}></span>`;
 		state.binding.push(state.position);
-		state.lastBindingType = "TEXT";
+		state.lastBindingType = BINDING_TYPES.TEXT;
 		return;
 	}
 
@@ -105,19 +147,21 @@ const determineContext = (state: State) => {
 			continue;
 		}
 
+		//todo: we currently dont handle the new range syntax like 	<style media="(width < 500px)" >
+
 		if (char === "<") {
 			if (state.whiteSpaceChar === -1) {
 				//tag
 				if (templatePartial[index + 1] === "/") {
 					//! adding the end tag but not using it later, throws of the indices, so we are not using it here
-					state.lastBindingType = "END_TAG";
+					state.lastBindingType = BINDING_TYPES.END_TAG;
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 2) + "div";
 					(state.binding[state.openTags.pop()!] as TagBinding).endValues.push(
 						state.position
 					);
 				} else {
-					state.lastBindingType = "TAG";
+					state.lastBindingType = BINDING_TYPES.TAG;
 					state.templates[state.position] =
 						templatePartial.slice(0, index + 1) +
 						`div data-replace-${state.binding.length} `;
@@ -163,9 +207,14 @@ const determineContext = (state: State) => {
 
 const completeBinding = (state: State) => {
 	let templatePartial = state.templates[state.position + 1];
-	if (templatePartial === undefined || state.lastBindingType === "TEXT") {
+	if (
+		templatePartial === undefined ||
+		state.lastBindingType === BINDING_TYPES.TEXT
+	) {
 		return;
 	}
+
+	//TODO: if this is special binding type, move forwards until we find the end
 
 	let index = -1;
 	let firstWhiteSpace = -1;
@@ -225,7 +274,7 @@ const completeBinding = (state: State) => {
 	}
 
 	const bindingLocation =
-		state.lastBindingType === "ATTR" && state.equalChar === -1
+		state.lastBindingType === BINDING_TYPES.ATTR && state.equalChar === -1
 			? (currentBinding as AttrBinding).keys
 			: currentBinding.values;
 
@@ -273,7 +322,7 @@ export const parseTemplate = (strings: TemplateStringsArray): Bindings => {
 		position: 0,
 		binding: [],
 		templates: [...strings],
-		lastBindingType: "TEXT",
+		lastBindingType: BINDING_TYPES.TEXT,
 		openTags: [],
 		closingChar: "",
 		firstLetterChar: -1,
@@ -289,6 +338,7 @@ export const parseTemplate = (strings: TemplateStringsArray): Bindings => {
 	}
 
 	const templateString = state.templates.join("");
+	console.log(templateString);
 
 	const result: Bindings = {
 		binding: state.binding,
