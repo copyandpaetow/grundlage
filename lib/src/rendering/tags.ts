@@ -3,26 +3,12 @@ import { HTMLTemplate } from "./template-html";
 
 export class TagHole {
 	binding: TagBinding;
-	element: HTMLElement;
-	relatedAttributes: Array<number> = [];
+	pointer: Comment;
 	updateId = -1;
 
-	constructor(binding: TagBinding) {
+	constructor(binding: TagBinding, pointer: Comment) {
 		this.binding = binding;
-	}
-
-	setup(placeholder: HTMLElement, context: HTMLTemplate) {
-		this.relatedAttributes.length = 0;
-		this.element = placeholder;
-
-		for (const name of placeholder.getAttributeNames()) {
-			const attributeIndex = name.split("data-replace-")[1];
-			if (attributeIndex) {
-				this.relatedAttributes.push(parseInt(attributeIndex));
-			}
-		}
-
-		this.update(context);
+		this.pointer = pointer;
 	}
 
 	update(context: HTMLTemplate) {
@@ -30,23 +16,19 @@ export class TagHole {
 			return;
 		}
 		this.updateId = context.updateId;
-		const placeholder = this.element;
+
+		const element = this.pointer.nextElementSibling!;
 		const newTag = this.getTag(context.currentValues);
 
 		const newElement = document.createElement(newTag);
-		placeholder
+		element
 			.getAttributeNames()
 			.forEach((name) =>
-				newElement.setAttribute(name, placeholder.getAttribute(name)!)
+				newElement.setAttribute(name, element.getAttribute(name)!)
 			);
 
-		newElement.replaceChildren(...placeholder.childNodes);
-		placeholder.replaceWith(newElement);
-		this.element = newElement;
-
-		this.relatedAttributes.forEach((attrIndex) => {
-			context.bindings[attrIndex].setup(newElement, context);
-		});
+		newElement.replaceChildren(...element.childNodes);
+		element.replaceWith(newElement);
 
 		return;
 	}

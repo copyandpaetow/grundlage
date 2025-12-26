@@ -1,7 +1,8 @@
-import { hashValue } from "./hashing";
-import { AttrBinding, Bindings, TagBinding } from "./parser-html";
 import { AttributeHole } from "./attributes";
 import { ContentHole } from "./content";
+import { hashValue } from "./hashing";
+import { BINDING_TYPES, Bindings } from "./parser-html";
+import { RawContentHole } from "./raw-content";
 import { TagHole } from "./tags";
 
 const EMPTY_ARRAY: Array<unknown> = [];
@@ -10,7 +11,7 @@ export class HTMLTemplate {
 	currentValues: Array<unknown>;
 	previousValues: Array<unknown>;
 	templateResult: Bindings;
-	bindings: Array<TagHole | AttributeHole | ContentHole>;
+	bindings: Array<AttributeHole | TagHole | ContentHole | RawContentHole> = [];
 	valueHash = 0;
 	updateId = 0;
 
@@ -25,57 +26,51 @@ export class HTMLTemplate {
 			true
 		) as DocumentFragment;
 
-		this.bindings = new Array(this.currentValues.length);
+		const treeWalker = document.createTreeWalker(
+			fragment,
+			NodeFilter.SHOW_COMMENT,
+			{ acceptNode: () => NodeFilter.FILTER_ACCEPT }
+		);
 
-		for (let index = 0; index < this.templateResult.binding.length; index++) {
+		let lastIndex = -1;
+		while (treeWalker.nextNode()) {
+			const node = treeWalker.currentNode as Comment;
+			const index = parseInt(node.substringData(3, 4));
+			const amount = parseInt(node.substringData(5, 6));
+
+			//content nodes are there twice with the same index, so we can filter them here
+			if (isNaN(index) || index === lastIndex) {
+				continue;
+			}
+
 			const binding = this.templateResult.binding[index];
-			const selector = `data-replace-${index}`;
-			const placeholder = fragment.querySelector(
-				`[${selector}]`
-			) as HTMLElement;
+			let result: AttributeHole | TagHole | ContentHole | RawContentHole;
 
-			placeholder.removeAttribute(selector);
+			switch (binding.type) {
+				case BINDING_TYPES.ATTR:
+					result = new AttributeHole(binding, node);
+					break;
+				case BINDING_TYPES.TAG:
+					result = new TagHole(binding, node);
+					break;
+				case BINDING_TYPES.CONTENT:
+					result = new ContentHole(binding, node);
+					break;
+				case BINDING_TYPES.RAW_CONTENT:
+					result = new RawContentHole(binding, node);
+					break;
 
-			if (typeof binding === "number") {
-				const contentBinding = new ContentHole(binding);
-				contentBinding.setup(placeholder, this);
-				this.bindings[binding] = contentBinding;
-				continue;
+				default:
+					throw new Error("unknown type");
 			}
-			if (!binding.hasOwnProperty("keys")) {
-				const tagBinding = new TagHole(binding as TagBinding);
-				tagBinding.setup(placeholder, this);
+			result.update(this);
 
-				for (const value of binding.values) {
-					if (typeof value === "number") {
-						this.bindings[value] = tagBinding;
-					}
-				}
-
-				for (const value of (binding as TagBinding).endValues) {
-					if (typeof value === "number") {
-						this.bindings[value] = tagBinding;
-					}
-				}
-				continue;
+			for (let amountIndex = 0; amountIndex < amount; amountIndex++) {
+				this.bindings.push(result);
 			}
 
-			const attrBinding = new AttributeHole(binding as AttrBinding);
-			attrBinding.setup(placeholder, this);
-
-			for (const value of binding.values) {
-				if (typeof value === "number") {
-					this.bindings[value] = attrBinding;
-				}
-			}
-
-			for (const value of (binding as AttrBinding).keys) {
-				if (typeof value === "number") {
-					this.bindings[value] = attrBinding;
-				}
-			}
+			lastIndex = index;
 		}
-
 		return fragment;
 	}
 
@@ -83,26 +78,22 @@ export class HTMLTemplate {
 		this.previousValues = this.currentValues;
 		this.currentValues = values;
 
-		if (!this.valueHash) {
-			this.valueHash = hashValue(this.currentValues);
-		}
-		const currentHash = hashValue(values);
-
-		if (this.valueHash === currentHash) {
-			return false;
-		}
-
-		this.updateId++;
+		const nextId = this.updateId + 1;
 		for (let index = 0; index < this.currentValues.length; index++) {
 			const previous = this.currentValues[index];
 			const current = values[index];
 
 			if (previous !== current) {
+				this.updateId = nextId;
 				this.bindings[index].update(this);
 			}
 		}
 
-		this.valueHash = currentHash;
+		if (this.updateId !== nextId) {
+			return false;
+		}
+
+		this.valueHash = hashValue(values);
 
 		return true;
 	}

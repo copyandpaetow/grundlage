@@ -3,25 +3,12 @@ import { HTMLTemplate } from "./template-html";
 
 export class AttributeHole {
 	binding: AttrBinding;
-	element: HTMLElement;
+	pointer: Comment;
 	updateId = -1;
 
-	constructor(binding: AttrBinding) {
+	constructor(binding: AttrBinding, pointer: Comment) {
 		this.binding = binding;
-	}
-
-	/*
-	? if we have a boolean attribute that changes from something to nothing => it needs to be removed, we dont have a way to target it as we dont have a name anymore
-	=> do we need to store them?
-	- nested css classes
-
-
-*/
-
-	setup(placeholder: HTMLElement, context: HTMLTemplate) {
-		this.element = placeholder;
-
-		this.update(context);
+		this.pointer = pointer;
 	}
 
 	update(context: HTMLTemplate) {
@@ -30,85 +17,74 @@ export class AttributeHole {
 		}
 		this.updateId = context.updateId;
 
-		if (this.binding.values.length === 0) {
-			this.handleBooleanAttribute(this.binding.keys, context.currentValues);
+		const key = this.buildAttribute(this.binding.keys, context.currentValues);
+		const previousKey = this.buildAttribute(
+			this.binding.keys,
+			context.previousValues
+		);
+
+		if (this.isEventListener(key, context.currentValues)) {
+			if (this.isEventListener(previousKey, context.previousValues)) {
+				const previousEvent = previousKey
+					.slice(2)
+					.toLowerCase() as keyof HTMLElementEventMap;
+
+				this.pointer.nextElementSibling?.removeEventListener(
+					previousEvent,
+					context.previousValues[
+						this.binding.values[0] as number
+					] as EventListener
+				);
+			}
+
+			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
+			this.pointer.nextElementSibling?.removeEventListener(
+				event,
+				context.currentValues[this.binding.values[0] as number] as EventListener
+			);
 			return;
 		}
-		const key = this.binding.keys
-			.map((relatedIndex) =>
-				typeof relatedIndex === "number"
-					? context.currentValues[relatedIndex]
-					: relatedIndex
-			)
-			.join("")
-			.trim();
 
 		if (
-			key.slice(0, 2) === "on" &&
-			typeof context.currentValues[this.binding.values[0]] === "function"
+			typeof this.binding.values[0] === "number" &&
+			!context.currentValues[this.binding.values[0]]
 		) {
-			this.setEventListener(
-				key.slice(2).toLowerCase() as keyof HTMLElementEventMap,
-				context.currentValues[this.binding.values[0]] as EventListener
-			);
-			return;
+			this.pointer.nextElementSibling?.removeAttribute(previousKey);
 		}
-		const value = this.binding.values
-			.map((relatedIndex) =>
-				typeof relatedIndex === "number"
-					? context.currentValues[relatedIndex]
-					: relatedIndex
-			)
-			.join("");
-		this.setAttribute(key, value);
+
+		const value = this.buildAttribute(
+			this.binding.values,
+			context.currentValues
+		);
+
+		this.pointer.nextElementSibling?.removeAttribute(previousKey);
+		this.pointer.nextElementSibling?.setAttribute(key, value);
 	}
 
-	handleBooleanAttribute(keys: Array<unknown>, values: Array<unknown>) {
-		if (keys.length > 1) {
-			const key = this.binding.keys
-				.map((relatedIndex) =>
-					typeof relatedIndex === "number" ? values[relatedIndex] : relatedIndex
-				)
-				.join("")
-				.trim();
+	buildAttribute(
+		fromBinding: Array<number | string>,
+		withValues: Array<unknown>
+	): string {
+		let attr = "";
 
-			this.setBooleanAttribute(key);
-			return;
+		for (let index = 0; index < fromBinding.length; index++) {
+			const entry = fromBinding[index];
+			attr += typeof entry === "number" ? withValues[index] : index;
 		}
 
-		const key = values[keys[0]];
-
-		if (Array.isArray(key)) {
-			key.forEach(this.setBooleanAttribute.bind(this));
-			return;
-		}
-		if (typeof key === "object") {
-			Object.entries(key).forEach(([attrKey, attrValue]) =>
-				this.setAttribute(attrKey, attrValue)
-			);
-			return;
-		}
+		return attr;
 	}
 
-	setBooleanAttribute(key: string) {
-		this.element.setAttribute(key, "");
-	}
+	isEventListener(key: string, dynamicValues: Array<unknown>) {
+		const firstValueIndex = this.binding.values[0];
 
-	setAttribute(key: string, value: unknown) {
-		if (!value && typeof value !== "number") {
-			this.element.removeAttribute(key);
-			return;
-		}
-		this.element.setAttribute(key, value.toString());
-	}
+		const doesKeyStartsWithOn =
+			typeof key === "string" && key.slice(0, 2) === "on";
 
-	setEventListener(key: keyof HTMLElementEventMap, callback: EventListener) {
-		//TODO: since we have the old function we should be able to just remove the event without storing it
-		if (this.event && this.key) {
-			this.element.removeEventListener(this.key, this.event);
-		}
-		this.element.addEventListener(key, callback);
-		this.event = callback;
-		this.key = key;
+		const isValueAFunction =
+			typeof firstValueIndex === "number" &&
+			typeof dynamicValues[firstValueIndex] === "function";
+
+		return doesKeyStartsWithOn && isValueAFunction;
 	}
 }

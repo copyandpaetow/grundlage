@@ -101,15 +101,17 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			### structure ###
 
 			todo: CSSTemplates need to be added as style and as class
+			=> for now lets make it simple and replace the whole block whenever a value changes
 
-			todo: attribute boolean values need to be calculated twice (old and new) to see if they changed
+			todo: attribute boolean values need special considerations as arrays and objects need to be expanded
 
 			todo: holes need to be able to handle async values. If we see them, we should return undefined first but rerender when the value has resolved
+			? how do we clean them up when the the template is unmounted?
 
 			todo: hash functions needs to handle more cases (fn, obj, sets, maps, etc)
 			todo: try hashes as stable keys for list items 
 
-			todo: cleanup of element anchors is required
+			todo: use constants for brackets and other chars we test for
 
 			### api design ###
 
@@ -133,9 +135,6 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 
 
 			### future
-
-			? if the component gets pre-rendered, can we get to the updatable holes again without re-rendering everything again? 
-			=> we would need to encode the bindings in the comments somehow
 
 			? delay rendering if component is not visible? could be checked if intersection observer
 

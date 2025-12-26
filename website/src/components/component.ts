@@ -2,26 +2,26 @@ import { render } from "../../../lib/src";
 import { css } from "../../../lib/src/rendering/parser-css";
 import { html } from "../../../lib/src/rendering/parser-html";
 
-const list = css`
-	border: 1px solid black;
+// const list = css`
+// 	border: 1px solid black;
 
-	li {
-		list-style: none;
-	}
-`;
+// 	li {
+// 		list-style: none;
+// 	}
+// `;
 
-const style = css`
-	* {
-		margin: 0;
-	}
+// const style = css`
+// 	* {
+// 		margin: 0;
+// 	}
 
-	${list}
+// 	${list}
 
-	.card {
-		display: grid;
-		gap: 1rem;
-	}
-`;
+// 	.card {
+// 		display: grid;
+// 		gap: 1rem;
+// 	}
+// `;
 
 export const propsComponent = render("props-component", () => {
 	const margin = 5;
@@ -29,7 +29,7 @@ export const propsComponent = render("props-component", () => {
 
 	return html`
 		<section class="card">
-			<h2>props</h2>
+			<h2>props: ${"style"}</h2>
 			<ul>
 				<style media="(width < ${500}px)">
 					* {
@@ -43,8 +43,8 @@ export const propsComponent = render("props-component", () => {
 						padding: ${padding}px;
 					}
 				</style>
-				${style}
-				<li class="class1 ${list} class3">complex attribute</li>
+
+				<li class="class1 ${123} class3 ${345} ${3452}">complex attribute</li>
 			</ul>
 		</section>
 	`;
