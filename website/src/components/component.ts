@@ -23,29 +23,21 @@ import { html } from "../../../lib/src/rendering/parser-html";
 // 	}
 // `;
 
-export const propsComponent = render("props-component", () => {
-	const margin = 5;
-	const padding = 10;
+export const Component = render(
+	"props-component",
+	function* (initialProps, ctx) {
+		let seconds = 0;
+		const interval = setInterval(() => {
+			seconds++;
+			ctx.update();
+		}, 1000);
 
-	return html`
-		<section class="card">
-			<h2>props: ${"style"}</h2>
-			<ul>
-				<style media="(width < ${500}px)">
-					* {
-						margin: ${margin}px;
-						padding: ${padding}px;
-					}
-				</style>
-				<style>
-					* {
-						margin: ${margin}px;
-						padding: ${padding}px;
-					}
-				</style>
+		console.log(initialProps, ctx);
 
-				<li class="class1 ${123} class3 ${345} ${3452}">complex attribute</li>
-			</ul>
-		</section>
-	`;
-});
+		yield () => html`<p>${seconds} seconds</p>`;
+
+		return () => {
+			clearInterval(interval);
+		};
+	}
+);

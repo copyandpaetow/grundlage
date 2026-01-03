@@ -80,8 +80,8 @@ export class HTMLTemplate {
 
 		const nextId = this.updateId + 1;
 		for (let index = 0; index < this.currentValues.length; index++) {
-			const previous = this.currentValues[index];
-			const current = values[index];
+			const previous = this.previousValues[index];
+			const current = this.currentValues[index];
 
 			if (previous !== current) {
 				this.updateId = nextId;

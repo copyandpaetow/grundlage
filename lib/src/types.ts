@@ -1,9 +1,7 @@
 import { HTMLTemplate } from "./rendering/template-html";
 
 export interface BaseComponent extends HTMLElement {
-	setState<Value>(key: string, value: Value): Value;
-	getState<Value>(key: string): Value;
-	hasState(key: string): boolean;
+	update(): Promise<void>;
 }
 
 export type AttrHole = {
@@ -36,10 +34,15 @@ export type ComponentOptions = {};
 
 export type Props = Record<string, unknown>;
 
+export type GeneratorFn = (
+	initialProps: Props,
+	context: BaseComponent
+) => Generator;
+
 export type RenderFn = (props: Props) => HTMLTemplate;
 
 export type ComponentProps<Props = Record<string, unknown>> = (
 	name: string,
-	renderFn: RenderFn,
+	generatorFn: GeneratorFn,
 	options?: ComponentOptions
 ) => (props?: Props) => HTMLTemplate;

@@ -1,17 +1,16 @@
 import "./rendering/parser-css";
 import { html } from "./rendering/parser-html";
 import { HTMLTemplate } from "./rendering/template-html";
-import { instance } from "./state/state";
-import { BaseComponent, ComponentProps } from "./types";
+import { BaseComponent, ComponentProps, RenderFn } from "./types";
 
 //@ts-expect-error options will come soon
-export const render: ComponentProps = (name, renderFn, options = {}) => {
+export const render: ComponentProps = (name, generatorFn, options = {}) => {
 	class BaseElement extends HTMLElement implements BaseComponent {
 		#props = new Map<string, unknown>();
 		#observer: MutationObserver;
-		#state = new Map<string, unknown>();
+		#renderFn: RenderFn | null = null;
 		#renderTemplate: HTMLTemplate | null = null;
-		#pendingUpdate = false;
+		#cleanupFn: ((props: Record<string, unknown>) => void) | null = null;
 
 		constructor() {
 			super();
@@ -21,14 +20,15 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			});
 		}
 
-		connectedCallback() {
-			this.#render();
+		async connectedCallback() {
+			await this.#setup();
 			this.#watchAttributes();
 		}
 
 		async disconnectedCallback() {
 			await Promise.resolve();
 			if (!this.isConnected) {
+				this.#cleanupFn?.(Object.fromEntries(this.#props));
 			}
 		}
 
@@ -41,45 +41,6 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 			value === undefined || value === null
 				? this.#props.delete(name)
 				: this.#props.set(name, value);
-			this.#render();
-		}
-
-		setState<Value>(key: string, value: Value) {
-			if (!this.hasState(key)) {
-				const currentValue = (
-					typeof value === "function" ? value() : value
-				) as Value;
-				this.#state.set(key, currentValue);
-				return currentValue;
-			}
-
-			const previousValue = this.getState(key) as Value;
-			const currentValue = (
-				typeof value === "function" ? value(previousValue) : value
-			) as Value;
-
-			if (currentValue === previousValue) {
-				return previousValue;
-			}
-			this.#state.set(key, currentValue);
-
-			if (!this.#pendingUpdate) {
-				this.#pendingUpdate = true;
-				requestAnimationFrame(() => {
-					this.#pendingUpdate = false;
-					this.#render();
-				});
-			}
-
-			return currentValue;
-		}
-
-		getState<Value>(key: string) {
-			return this.#state.get(key) as Value;
-		}
-
-		hasState(key: string) {
-			return this.#state.has(key);
 		}
 
 		#watchAttributes() {
@@ -102,33 +63,23 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 
 			todo: CSSTemplates need to be added as style and as class
 			=> for now lets make it simple and replace the whole block whenever a value changes
+			=> when do we need to add a dynamically generated class 
 
 			todo: attribute boolean values need special considerations as arrays and objects need to be expanded
-
-			todo: holes need to be able to handle async values. If we see them, we should return undefined first but rerender when the value has resolved
-			? how do we clean them up when the the template is unmounted?
+			todo: friendly primitives should be added as string attribute and as prop, where the prop wins when added to the internal object
+			* null/undefined remove the prop, functions/arrays/objects will get added only as props
 
 			todo: hash functions needs to handle more cases (fn, obj, sets, maps, etc)
 			todo: try hashes as stable keys for list items 
 
 			todo: use constants for brackets and other chars we test for
 
+			todo: shallow comparing 2 htmlTemplate classes will always be false, we would need to compare template hashes and then value hashes
+
 			### api design ###
 
-			todo: rework state to use the (key, callback, option) signature
-			=> we need state, set, watch, track
-			=> html templates likely need an array of tracked global keys
-			=> naming: watch("something")reads nice but the other reactionary hooks start with "on"
-
-			todo: add further helper
-			=> emit, on, host
-
-			? do we need something like useRef? 
-			=> no as it would be too close to state
-
-			todo: we need the lifecycle functions
-			=> onMount
-			=> onUnmount
+			todo: decide how to handle props. Always strings? Pass them into the component somehow?
+			? adding them as props wouldnt be difficult, but then there the attribute is still there. What would be its value? 
 
 			### code consistency
 			- use one type of loop 
@@ -142,24 +93,66 @@ export const render: ComponentProps = (name, renderFn, options = {}) => {
 
 		
 		*/
-		#render() {
-			try {
-				instance.current = this;
-				let template = renderFn(Object.fromEntries(this.#props));
-				if (!(template instanceof HTMLTemplate)) {
-					template = html`${template}`;
-				}
-				instance.current = null;
 
-				if (
-					!this.#renderTemplate ||
-					this.#renderTemplate.templateResult.templateHash !==
-						template.templateResult.templateHash
-				) {
-					this.shadowRoot?.replaceChildren(template.setup());
-					return;
+		async update() {
+			if (!this.#renderFn) {
+				return;
+			}
+
+			let template = this.#renderFn(Object.fromEntries(this.#props));
+
+			if (!(template instanceof HTMLTemplate)) {
+				template = html`${template}`;
+			}
+
+			if (
+				!this.#renderTemplate ||
+				this.#renderTemplate.templateResult.templateHash !==
+					template.templateResult.templateHash
+			) {
+				this.shadowRoot?.replaceChildren(template.setup());
+				return;
+			}
+			this.#renderTemplate.update(template.currentValues);
+		}
+
+		async #setup() {
+			try {
+				const generator = generatorFn(Object.fromEntries(this.#props), this);
+				let result;
+
+				while (true) {
+					const { done, value } = await generator.next(result);
+
+					if (done) {
+						if (typeof value === "function") {
+							this.#cleanupFn = value;
+						}
+						break;
+					}
+
+					if (value instanceof Promise) {
+						result = await value;
+						continue;
+					}
+
+					const template =
+						typeof value === "function"
+							? value(Object.fromEntries(this.#props))
+							: value;
+
+					if (template instanceof HTMLTemplate) {
+						this.shadowRoot?.replaceChildren(template.setup());
+						this.#renderTemplate = template;
+						this.#renderFn = (
+							typeof value === "function" ? value : () => value
+						) as RenderFn;
+						result = this.shadowRoot;
+						continue;
+					}
+
+					result = value;
 				}
-				this.#renderTemplate.update(template.currentValues);
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.innerHTML = `${error}`;
