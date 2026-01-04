@@ -1,3 +1,4 @@
+import { BaseComponent } from "../types";
 import { AttrBinding } from "./parser-html";
 import { HTMLTemplate } from "./template-html";
 
@@ -23,68 +24,89 @@ export class AttributeHole {
 			context.previousValues
 		);
 
-		if (this.isEventListener(key, context.currentValues)) {
-			if (this.isEventListener(previousKey, context.previousValues)) {
-				const previousEvent = previousKey
-					.slice(2)
-					.toLowerCase() as keyof HTMLElementEventMap;
-
-				this.pointer.nextElementSibling?.removeEventListener(
-					previousEvent,
-					context.previousValues[
-						this.binding.values[0] as number
-					] as EventListener
+		if (typeof previousKey === "object") {
+			if (Array.isArray(previousKey)) {
+				previousKey.forEach((name) => this.removeAttribute(name, undefined));
+			} else {
+				Object.entries(previousKey!).forEach(([name, value]) =>
+					this.removeAttribute(name, value)
 				);
 			}
-
-			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
-			this.pointer.nextElementSibling?.removeEventListener(
-				event,
-				context.currentValues[this.binding.values[0] as number] as EventListener
+		} else {
+			this.removeAttribute(
+				previousKey as string,
+				this.buildAttribute(this.binding.values, context.previousValues)
 			);
-			return;
 		}
 
-		if (
-			typeof this.binding.values[0] === "number" &&
-			!context.currentValues[this.binding.values[0]]
-		) {
-			this.pointer.nextElementSibling?.removeAttribute(previousKey);
+		// Add new
+		if (typeof key === "object") {
+			if (Array.isArray(key)) {
+				key.forEach((name) => this.addAttribute(name, ""));
+			} else {
+				Object.entries(key!).forEach(([name, value]) =>
+					this.addAttribute(name, value)
+				);
+			}
+		} else {
+			this.addAttribute(
+				key as string,
+				this.buildAttribute(this.binding.values, context.currentValues)
+			);
 		}
-
-		const value = this.buildAttribute(
-			this.binding.values,
-			context.currentValues
-		);
-
-		this.pointer.nextElementSibling?.removeAttribute(previousKey);
-		this.pointer.nextElementSibling?.setAttribute(key, value);
 	}
 
 	buildAttribute(
-		fromBinding: Array<number | string>,
-		withValues: Array<unknown>
-	): string {
+		keyOrValue: Array<number | string>,
+		currentValues: Array<unknown>
+	) {
+		if (keyOrValue.length === 1 && typeof keyOrValue[0] === "number") {
+			return currentValues[keyOrValue[0]];
+		}
+
 		let attr = "";
 
-		for (let index = 0; index < fromBinding.length; index++) {
-			const entry = fromBinding[index];
-			attr += typeof entry === "number" ? withValues[index] : index;
+		for (let index = 0; index < keyOrValue.length; index++) {
+			const entry = keyOrValue[index];
+			attr += typeof entry === "number" ? currentValues[index] : index;
 		}
 
 		return attr;
 	}
 
-	isEventListener(key: string, dynamicValues: Array<unknown>) {
-		const firstValueIndex = this.binding.values[0];
+	addAttribute(key: string, value: unknown) {
+		const element = this.pointer.nextElementSibling!;
+		if (typeof value === "function" && key.slice(0, 2) === "on") {
+			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
+			element.addEventListener(event, value as EventListener);
+			return;
+		}
 
-		const doesKeyStartsWithOn =
-			typeof key === "string" && key.slice(0, 2) === "on";
+		customElements.upgrade(element);
+		if ("setProperty" in element) {
+			(element as BaseComponent).setProperty(key, value);
+		}
 
-		const isValueAFunction =
-			typeof firstValueIndex === "number" &&
-			typeof dynamicValues[firstValueIndex] === "function";
+		if (value === null || value === undefined || value === false) {
+			return;
+		}
 
-		return doesKeyStartsWithOn && isValueAFunction;
+		element.setAttribute(key, String(value));
+	}
+
+	removeAttribute(key: string, value: unknown) {
+		const element = this.pointer.nextElementSibling!;
+		if (typeof value === "function" && key.slice(0, 2) === "on") {
+			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
+			element?.removeEventListener(event, value as EventListener);
+			return;
+		}
+
+		if ("setProperty" in element) {
+			(element as BaseComponent).setProperty(key, undefined);
+			return;
+		}
+
+		element.removeAttribute(key);
 	}
 }

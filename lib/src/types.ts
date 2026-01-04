@@ -2,6 +2,7 @@ import { HTMLTemplate } from "./rendering/template-html";
 
 export interface BaseComponent extends HTMLElement {
 	update(): Promise<void>;
+	setProperty(name: string, value: unknown): void;
 }
 
 export type AttrHole = {

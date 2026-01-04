@@ -38,9 +38,21 @@ export const render: ComponentProps = (name, generatorFn, options = {}) => {
 				return;
 			}
 
-			value === undefined || value === null
-				? this.#props.delete(name)
-				: this.#props.set(name, value);
+			if (
+				typeof value === "string" ||
+				typeof value === "number" ||
+				typeof value === "boolean"
+			) {
+				this.setAttribute(name, String(value));
+			}
+
+			if (value === undefined || value === null) {
+				this.#props.delete(name);
+				this.removeAttribute(name);
+				return;
+			}
+
+			this.#props.set(name, value);
 		}
 
 		#watchAttributes() {
@@ -65,25 +77,13 @@ export const render: ComponentProps = (name, generatorFn, options = {}) => {
 			=> for now lets make it simple and replace the whole block whenever a value changes
 			=> when do we need to add a dynamically generated class 
 
-			todo: attribute boolean values need special considerations as arrays and objects need to be expanded
-			todo: friendly primitives should be added as string attribute and as prop, where the prop wins when added to the internal object
-			* null/undefined remove the prop, functions/arrays/objects will get added only as props
-
 			todo: hash functions needs to handle more cases (fn, obj, sets, maps, etc)
 			todo: try hashes as stable keys for list items 
 
-			todo: use constants for brackets and other chars we test for
-
 			todo: shallow comparing 2 htmlTemplate classes will always be false, we would need to compare template hashes and then value hashes
-
-			### api design ###
-
-			todo: decide how to handle props. Always strings? Pass them into the component somehow?
-			? adding them as props wouldnt be difficult, but then there the attribute is still there. What would be its value? 
 
 			### code consistency
 			- use one type of loop 
-
 
 			### future
 
