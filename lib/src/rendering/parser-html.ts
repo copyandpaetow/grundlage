@@ -1,3 +1,4 @@
+import { stringHash } from "./hashing";
 import { HTMLTemplate } from "./template-html";
 type ValueOf<T> = T[keyof T];
 
@@ -497,12 +498,12 @@ const parse = (strings: TemplateStringsArray): Bindings => {
 		updateBinding();
 	}
 
-	console.log(resultBuffer.join(""));
+	const result = resultBuffer.join("");
 
 	return {
 		binding: bindings,
-		fragment: range.createContextualFragment(resultBuffer.join("")),
-		templateHash: 0,
+		fragment: range.createContextualFragment(result),
+		templateHash: stringHash(result),
 	};
 };
 

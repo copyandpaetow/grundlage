@@ -83,10 +83,22 @@ export class HTMLTemplate {
 			const previous = this.previousValues[index];
 			const current = this.currentValues[index];
 
-			if (previous !== current) {
-				this.updateId = nextId;
-				this.bindings[index].update(this);
+			if (previous === current) {
+				continue;
 			}
+
+			if (
+				previous instanceof HTMLTemplate &&
+				current instanceof HTMLTemplate &&
+				previous.templateResult.templateHash ===
+					current.templateResult.templateHash &&
+				previous.valueHash === current.valueHash
+			) {
+				continue;
+			}
+
+			this.updateId = nextId;
+			this.bindings[index].update(this);
 		}
 
 		if (this.updateId !== nextId) {

@@ -77,10 +77,7 @@ export const render: ComponentProps = (name, generatorFn, options = {}) => {
 			=> for now lets make it simple and replace the whole block whenever a value changes
 			=> when do we need to add a dynamically generated class 
 
-			todo: hash functions needs to handle more cases (fn, obj, sets, maps, etc)
 			todo: try hashes as stable keys for list items 
-
-			todo: shallow comparing 2 htmlTemplate classes will always be false, we would need to compare template hashes and then value hashes
 
 			### code consistency
 			- use one type of loop 
