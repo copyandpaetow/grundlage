@@ -1,7 +1,14 @@
 import { AttributeBinding } from "./attribute";
 import { ContentBinding } from "./content";
 import { hashValue } from "../utils/hashing";
-import { BINDING_TYPES, ParsedHTML } from "../parser/parser-html";
+import {
+	BINDING_TYPES,
+	MARKER_AMOUNT_END,
+	MARKER_AMOUNT_START,
+	MARKER_INDEX_END,
+	MARKER_INDEX_START,
+	ParsedHTML,
+} from "../parser/parser-html";
 import { RawContentBinding } from "./raw-content";
 import { TagBinding } from "./tag";
 
@@ -36,43 +43,48 @@ export class HTMLTemplate {
 
 		let lastIndex = -1;
 		while (treeWalker.nextNode()) {
-			const pointer = treeWalker.currentNode as Comment;
-			const index = parseInt(pointer.substringData(3, 4));
-			const amount = parseInt(pointer.substringData(5, 6));
+			const marker = treeWalker.currentNode as Comment;
+
+			const index = parseInt(
+				marker.substringData(MARKER_INDEX_START, MARKER_INDEX_END)
+			);
+			const amount = parseInt(
+				marker.substringData(MARKER_AMOUNT_START, MARKER_AMOUNT_END)
+			);
 
 			//content nodes are there twice with the same index, so we can filter them here
 			if (isNaN(index) || index === lastIndex) {
 				continue;
 			}
 
-			const binding = this.parsedHTML.descriptors[index];
-			let result:
+			const descriptor = this.parsedHTML.descriptors[index];
+			let binding:
 				| AttributeBinding
 				| TagBinding
 				| ContentBinding
 				| RawContentBinding;
 
-			switch (binding.type) {
+			switch (descriptor.type) {
 				case BINDING_TYPES.ATTR:
-					result = new AttributeBinding(binding, pointer);
+					binding = new AttributeBinding(descriptor, marker);
 					break;
 				case BINDING_TYPES.TAG:
-					result = new TagBinding(binding, pointer);
+					binding = new TagBinding(descriptor, marker);
 					break;
 				case BINDING_TYPES.CONTENT:
-					result = new ContentBinding(binding, pointer);
+					binding = new ContentBinding(descriptor, marker);
 					break;
 				case BINDING_TYPES.RAW_CONTENT:
-					result = new RawContentBinding(binding, pointer);
+					binding = new RawContentBinding(descriptor, marker);
 					break;
 
 				default:
 					throw new Error("unknown type");
 			}
-			result.update(this);
+			binding.update(this);
 
 			for (let amountIndex = 0; amountIndex < amount; amountIndex++) {
-				this.bindings.push(result);
+				this.bindings.push(binding);
 			}
 
 			lastIndex = index;

@@ -35,27 +35,9 @@ export class TagBinding {
 		return this.#descriptor.values
 			.map((relatedIndex) =>
 				typeof relatedIndex === "number"
-					? this.#toString(values[relatedIndex])
+					? toPrimitive(values[relatedIndex])
 					: relatedIndex
 			)
 			.join("");
-	}
-
-	#toString(value: unknown): string {
-		if (typeof value === "function") {
-			return this.#toString(value());
-		}
-		if (typeof value === "number") {
-			return value.toString();
-		}
-
-		if (Array.isArray(value)) {
-			return value.join("");
-		}
-		if (typeof value === "string") {
-			return value;
-		}
-
-		throw Error("value cant be made into a string");
 	}
 }

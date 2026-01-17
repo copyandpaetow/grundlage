@@ -46,25 +46,12 @@ export class ContentBinding {
 			return;
 		}
 
+		if (Array.isArray(current) && Array.isArray(previous)) {
+			//todo: handle lists
+		}
+
 		this.#delete();
-
-		const content = this.#toString(current);
-
-		if (!content) {
-			return;
-		}
-
-		this.#marker.after(document.createTextNode(content));
-	}
-
-	#toString(value: unknown): string {
-		if (!value && typeof value !== "number") {
-			return "";
-		}
-		if (typeof value === "function") {
-			return this.#toString(value());
-		}
-		return value.toString();
+		this.#marker.after(document.createTextNode(toPrimitive(current)));
 	}
 
 	#delete() {

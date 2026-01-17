@@ -23,18 +23,8 @@ export class RawContentBinding {
 			rawTextContent +=
 				typeof entry === "string"
 					? entry
-					: this.#toString(context.currentExpressions[entry]);
+					: toPrimitive(context.currentExpressions[entry]);
 		}
 		this.#marker.nextElementSibling!.textContent = rawTextContent;
-	}
-
-	#toString(value: unknown): string {
-		if (!value && typeof value !== "number") {
-			return "";
-		}
-		if (typeof value === "function") {
-			return this.#toString(value());
-		}
-		return value.toString();
 	}
 }

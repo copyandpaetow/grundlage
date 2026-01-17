@@ -5,32 +5,6 @@ export interface BaseComponent extends HTMLElement {
 	setProperty(name: string, value: unknown): void;
 }
 
-export type AttrHole = {
-	values: Array<number | string>;
-	keys: Array<number | string>;
-	start: Comment;
-	dirty: boolean;
-};
-
-export type ContentHole = {
-	values: number;
-	start: Comment;
-	end: Comment;
-	dirty: boolean;
-};
-
-export type TagHole = {
-	values: Array<number | string>;
-	start: Comment;
-	dirty: boolean;
-};
-
-export type Holes = {
-	contentUpdates: Array<ContentHole>;
-	attributeUpdates: Array<AttrHole>;
-	tagUpdates: Array<TagHole>;
-};
-
 export type ComponentOptions = {};
 
 export type Props = Record<string, unknown>;

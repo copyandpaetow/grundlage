@@ -33,8 +33,11 @@ export class AttributeBinding {
 					this.#removeAttribute(name, undefined);
 				}
 			} else {
-				for (const name in previousKey as object) {
-					this.#removeAttribute(name, previousKey[name]);
+				for (const name in previousKey) {
+					this.#removeAttribute(
+						name,
+						previousKey[name as keyof typeof previousKey]
+					);
 				}
 			}
 		} else {
@@ -47,15 +50,14 @@ export class AttributeBinding {
 			);
 		}
 
-		// Add new
 		if (typeof key === "object") {
 			if (Array.isArray(key)) {
 				for (const name of key) {
-					this.#removeAttribute(name, "");
+					this.#addAttribute(name, "");
 				}
 			} else {
 				for (const name in key) {
-					this.#addAttribute(name, key[name]);
+					this.#addAttribute(name, key[name as keyof typeof key]);
 				}
 			}
 		} else {
@@ -70,18 +72,27 @@ export class AttributeBinding {
 	}
 
 	#buildAttribute(
-		keyOrValue: Array<number | string>,
+		descriptorContent: Array<number | string>,
 		currentValues: Array<unknown>
 	) {
-		if (keyOrValue.length === 1 && typeof keyOrValue[0] === "number") {
-			return currentValues[keyOrValue[0]];
+		if (
+			descriptorContent.length === 1 &&
+			typeof descriptorContent[0] === "number"
+		) {
+			const entry = currentValues[descriptorContent[0]];
+			if (
+				Array.isArray(entry) ||
+				(entry !== null && typeof entry === "object")
+			) {
+				return entry;
+			}
+			throw new Error("can only use arrays or objects here");
 		}
 
 		let attr = "";
 
-		for (let index = 0; index < keyOrValue.length; index++) {
-			const entry = keyOrValue[index];
-			attr += typeof entry === "number" ? currentValues[entry] : entry;
+		for (const key of descriptorContent) {
+			attr += typeof key === "number" ? toPrimitive(currentValues[key]) : key;
 		}
 
 		return attr;

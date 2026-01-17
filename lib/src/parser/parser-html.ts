@@ -120,6 +120,11 @@ const setup = (strings: TemplateStringsArray) => {
 	currentTagName = "";
 };
 
+export const MARKER_AMOUNT_START = 5;
+export const MARKER_AMOUNT_END = 6;
+export const MARKER_INDEX_START = 3;
+export const MARKER_INDEX_END = 4;
+
 const createComment = () => `<!-- h:${bindings.length - 1}:${bindingIndex} -->`;
 
 const updateBinding = () => {

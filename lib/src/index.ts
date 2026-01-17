@@ -15,6 +15,7 @@ export const render: ComponentProps = (
 		#render: TemplateRenderer | null = null;
 		#view: HTMLTemplate | null = null;
 		#cleanup: ((props: Record<string, unknown>) => void) | null = null;
+		#isUpdating = false;
 
 		constructor() {
 			super();
@@ -57,6 +58,7 @@ export const render: ComponentProps = (
 			}
 
 			this.#props.set(name, value);
+			this.update();
 		}
 
 		#watchAttributes() {
@@ -68,7 +70,6 @@ export const render: ComponentProps = (
 						this.getAttribute(mutation.attributeName!)
 					);
 				}
-				this.update();
 			});
 			this.#observer.observe(this, { attributes: true });
 		}
@@ -83,23 +84,24 @@ export const render: ComponentProps = (
 
 			todo: try hashes as stable keys for list items 
 
-			todo: updating the props requires an update. How can we batch that?
+			### bugs ###
+			? if a tag is changed, will the eventListeners then also reapply? I currently think they wont
 
-			### future
+			### future ###
 
 			? we could store the bindings, the pointers etc as SoA
 
 			? delay rendering if component is not visible? could be checked if intersection observer
 
-			? convinience helpers like onVisibilityChange, onResize, etc
-
 		
 		*/
 
 		async update() {
-			if (!this.#render) {
+			if (!this.#render || this.#isUpdating) {
 				return;
 			}
+			this.#isUpdating = true;
+			await Promise.resolve().then();
 
 			let template = this.#render(Object.fromEntries(this.#props));
 
@@ -112,9 +114,11 @@ export const render: ComponentProps = (
 				this.#view.parsedHTML.templateHash !== template.parsedHTML.templateHash
 			) {
 				this.shadowRoot?.replaceChildren(template.setup());
+				this.#isUpdating = false;
 				return;
 			}
 			this.#view.update(template.currentExpressions);
+			this.#isUpdating = false;
 		}
 
 		async #setup() {
