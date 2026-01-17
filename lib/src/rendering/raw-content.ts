@@ -1,14 +1,14 @@
-import { RawContentBinding } from "./parser-html";
+import { RawContentDescriptor } from "./parser-html";
 import { HTMLTemplate } from "./template-html";
 
-export class RawContentHole {
-	binding: RawContentBinding;
-	pointer: Comment;
+export class RawContentBinding {
+	descriptor: RawContentDescriptor;
+	marker: Comment;
 	updateId = -1;
 
-	constructor(binding: RawContentBinding, pointer: Comment) {
-		this.binding = binding;
-		this.pointer = pointer;
+	constructor(descriptor: RawContentDescriptor, marker: Comment) {
+		this.descriptor = descriptor;
+		this.marker = marker;
 	}
 
 	update(context: HTMLTemplate) {
@@ -18,14 +18,14 @@ export class RawContentHole {
 		this.updateId = context.updateId;
 
 		let rawTextContent = "";
-		for (let index = 0; index < this.binding.values.length; index++) {
-			const entry = this.binding.values[index];
+		for (let index = 0; index < this.descriptor.values.length; index++) {
+			const entry = this.descriptor.values[index];
 			rawTextContent +=
 				typeof entry === "string"
 					? entry
-					: this.toString(context.currentValues[entry]);
+					: this.toString(context.currentExpressions[entry]);
 		}
-		this.pointer.nextElementSibling!.textContent = rawTextContent;
+		this.marker.nextElementSibling!.textContent = rawTextContent;
 	}
 
 	toString(value: unknown): string {

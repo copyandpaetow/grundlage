@@ -18,7 +18,7 @@ export const hashValue = (value: unknown): number => {
 	if (typeof value === "boolean") return value ? 1 : 0;
 	if (typeof value === "function") return stringHash(value.toString());
 	if (value instanceof HTMLTemplate)
-		return value.templateResult.templateHash ^ (value.valueHash * 31);
+		return value.parsedHTML.templateHash ^ (value.expressionsHash * 31);
 
 	if (references.has(value)) {
 		return references.get(value)!;

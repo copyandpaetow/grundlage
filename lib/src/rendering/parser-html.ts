@@ -9,36 +9,36 @@ export const BINDING_TYPES = {
 	RAW_CONTENT: 4,
 } as const;
 
-export type AttributeBinding = {
+export type AttributeDescriptor = {
 	type: typeof BINDING_TYPES.ATTR;
 	values: Array<number | string>;
 	keys: Array<number | string>;
 };
 
-export type ContentBinding = {
+export type ContentDescriptor = {
 	type: typeof BINDING_TYPES.CONTENT;
 	values: Array<number | string>;
 };
 
-export type RawContentBinding = {
+export type RawContentDescriptor = {
 	type: typeof BINDING_TYPES.RAW_CONTENT;
 	values: Array<number | string>;
 };
 
-export type TagBinding = {
+export type TagDescriptor = {
 	type: typeof BINDING_TYPES.TAG;
 	values: Array<number | string>;
 	endValues: Array<number | string>;
 };
 
-export type Binding =
-	| TagBinding
-	| AttributeBinding
-	| ContentBinding
-	| RawContentBinding;
+export type Descriptor =
+	| TagDescriptor
+	| AttributeDescriptor
+	| ContentDescriptor
+	| RawContentDescriptor;
 
-export type Bindings = {
-	binding: Array<Binding>;
+export type ParsedHTML = {
+	descriptors: Array<Descriptor>;
 	fragment: DocumentFragment;
 	templateHash: number;
 };
@@ -78,7 +78,7 @@ const STATE = {
 type StateValue = ValueOf<typeof STATE>;
 
 let state: StateValue = STATE.TEXT;
-let bindings: Array<Binding>;
+let bindings: Array<Descriptor>;
 let templates: TemplateStringsArray;
 
 let bindingIndex = 0;
@@ -92,8 +92,8 @@ let attrQuote = "";
 
 let currentTagName = "";
 
-let activeBinding: Binding | null = null;
-const openTagBindings: Array<TagBinding> = [];
+let activeBinding: Descriptor | null = null;
+const openTagBindings: Array<TagDescriptor> = [];
 
 const resultBuffer: Array<string | number> = [];
 const buffers = {
@@ -127,7 +127,7 @@ const updateBinding = () => {
 		case STATE.TEXT:
 			capture(buffers.content, splitIndex);
 			buffers.content.push(createComment() + createComment());
-			(activeBinding as ContentBinding).values.push(index);
+			(activeBinding as ContentDescriptor).values.push(index);
 			activeBinding = null;
 			break;
 
@@ -138,7 +138,7 @@ const updateBinding = () => {
 
 		case STATE.END_TAG:
 			capture(buffers.endTag, splitIndex);
-			(activeBinding as TagBinding).endValues.push(index);
+			(activeBinding as TagDescriptor).endValues.push(index);
 			break;
 
 		case STATE.ATTRIBUTE_KEY:
@@ -175,24 +175,24 @@ const setBinding = () => {
 				type: BINDING_TYPES.ATTR,
 				values: [],
 				keys: [],
-			} satisfies AttributeBinding;
+			} satisfies AttributeDescriptor;
 		case STATE.COMMENT:
 		case STATE.TEXT:
 			return {
 				type: BINDING_TYPES.CONTENT,
 				values: [],
-			} satisfies ContentBinding;
+			} satisfies ContentDescriptor;
 		case STATE.RAW_CONTENT:
 			return {
 				type: BINDING_TYPES.RAW_CONTENT,
 				values: [],
-			} satisfies RawContentBinding;
+			} satisfies RawContentDescriptor;
 		case STATE.TAG:
 			const binding = {
 				type: BINDING_TYPES.TAG,
 				values: [],
 				endValues: [],
-			} satisfies TagBinding;
+			} satisfies TagDescriptor;
 			openTagBindings.push(binding);
 
 			return binding;
@@ -223,7 +223,7 @@ const completeComment = () => {
 	if (activeBinding) {
 		moveArrayContents(
 			buffers.comment,
-			(activeBinding as ContentBinding).values
+			(activeBinding as ContentDescriptor).values
 		);
 		buffers.content.push(createComment() + createComment());
 	} else {
@@ -237,7 +237,7 @@ const completeSpecialContent = () => {
 		resultBuffer.push(createComment());
 		moveArrayContents(
 			buffers.rawContent,
-			(activeBinding as RawContentBinding).values
+			(activeBinding as RawContentDescriptor).values
 		);
 	} else {
 		moveArrayContents(buffers.rawContent, buffers.content);
@@ -248,7 +248,7 @@ const completeSpecialContent = () => {
 const completeTag = () => {
 	if (activeBinding) {
 		currentTagName = "div";
-		moveArrayContents(buffers.tag, (activeBinding as TagBinding).values);
+		moveArrayContents(buffers.tag, (activeBinding as TagDescriptor).values);
 		buffers.element.push("div");
 		resultBuffer.push(createComment());
 	} else {
@@ -274,11 +274,11 @@ const completeAttribute = () => {
 	if (activeBinding) {
 		moveArrayContents(
 			buffers.attributeKey,
-			(activeBinding as AttributeBinding).keys
+			(activeBinding as AttributeDescriptor).keys
 		);
 		moveArrayContents(
 			buffers.attributeValue,
-			(activeBinding as AttributeBinding).values
+			(activeBinding as AttributeDescriptor).values
 		);
 		resultBuffer.push(createComment());
 	} else {
@@ -309,7 +309,7 @@ const flushElement = () => {
 	currentTagName = "";
 };
 
-const parse = (strings: TemplateStringsArray): Bindings => {
+const parse = (strings: TemplateStringsArray): ParsedHTML => {
 	setup(strings);
 
 	for (index = 0; index < templates.length; index++) {
@@ -501,7 +501,7 @@ const parse = (strings: TemplateStringsArray): Bindings => {
 	const result = resultBuffer.join("");
 
 	return {
-		binding: bindings,
+		descriptors: bindings,
 		fragment: range.createContextualFragment(result),
 		templateHash: stringHash(result),
 	};
@@ -518,7 +518,7 @@ todo: how do we continue from here?
 
 */
 
-const htmlCache = new WeakMap<TemplateStringsArray, Bindings>();
+const htmlCache = new WeakMap<TemplateStringsArray, ParsedHTML>();
 
 export const html = (
 	tokens: TemplateStringsArray,

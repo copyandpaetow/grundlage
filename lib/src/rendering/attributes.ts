@@ -1,15 +1,15 @@
 import { BaseComponent } from "../types";
-import { AttributeBinding } from "./parser-html";
+import { AttributeDescriptor } from "./parser-html";
 import { HTMLTemplate } from "./template-html";
 
-export class AttributeHole {
-	binding: AttributeBinding;
-	pointer: Comment;
+export class AttributeBinding {
+	descriptor: AttributeDescriptor;
+	marker: Comment;
 	updateId = -1;
 
-	constructor(binding: AttributeBinding, pointer: Comment) {
-		this.binding = binding;
-		this.pointer = pointer;
+	constructor(descriptor: AttributeDescriptor, marker: Comment) {
+		this.descriptor = descriptor;
+		this.marker = marker;
 	}
 
 	update(context: HTMLTemplate) {
@@ -18,10 +18,13 @@ export class AttributeHole {
 		}
 		this.updateId = context.updateId;
 
-		const key = this.buildAttribute(this.binding.keys, context.currentValues);
+		const key = this.buildAttribute(
+			this.descriptor.keys,
+			context.currentExpressions
+		);
 		const previousKey = this.buildAttribute(
-			this.binding.keys,
-			context.previousValues
+			this.descriptor.keys,
+			context.previousExpressions
 		);
 
 		if (typeof previousKey === "object") {
@@ -37,7 +40,7 @@ export class AttributeHole {
 		} else {
 			this.removeAttribute(
 				previousKey as string,
-				this.buildAttribute(this.binding.values, context.previousValues)
+				this.buildAttribute(this.descriptor.values, context.previousExpressions)
 			);
 		}
 
@@ -55,7 +58,7 @@ export class AttributeHole {
 		} else {
 			this.addAttribute(
 				key as string,
-				this.buildAttribute(this.binding.values, context.currentValues)
+				this.buildAttribute(this.descriptor.values, context.currentExpressions)
 			);
 		}
 	}
@@ -79,7 +82,7 @@ export class AttributeHole {
 	}
 
 	addAttribute(key: string, value: unknown) {
-		const element = this.pointer.nextElementSibling!;
+		const element = this.marker.nextElementSibling!;
 		if (typeof value === "function" && key.slice(0, 2) === "on") {
 			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
 			element.addEventListener(event, value as EventListener);
@@ -99,7 +102,7 @@ export class AttributeHole {
 	}
 
 	removeAttribute(key: string, value: unknown) {
-		const element = this.pointer.nextElementSibling!;
+		const element = this.marker.nextElementSibling!;
 		if (typeof value === "function" && key.slice(0, 2) === "on") {
 			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
 			element?.removeEventListener(event, value as EventListener);

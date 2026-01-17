@@ -1,14 +1,14 @@
-import { TagBinding } from "./parser-html";
+import { TagDescriptor } from "./parser-html";
 import { HTMLTemplate } from "./template-html";
 
-export class TagHole {
-	binding: TagBinding;
-	pointer: Comment;
+export class TagBinding {
+	descriptor: TagDescriptor;
+	marker: Comment;
 	updateId = -1;
 
-	constructor(binding: TagBinding, pointer: Comment) {
-		this.binding = binding;
-		this.pointer = pointer;
+	constructor(descriptor: TagDescriptor, marker: Comment) {
+		this.descriptor = descriptor;
+		this.marker = marker;
 	}
 
 	update(context: HTMLTemplate) {
@@ -17,8 +17,8 @@ export class TagHole {
 		}
 		this.updateId = context.updateId;
 
-		const element = this.pointer.nextElementSibling!;
-		const newTag = this.getTag(context.currentValues);
+		const element = this.marker.nextElementSibling!;
+		const newTag = this.getTag(context.currentExpressions);
 
 		const newElement = document.createElement(newTag);
 		for (const attr of element.attributes) {
@@ -32,7 +32,7 @@ export class TagHole {
 	}
 
 	getTag(values: Array<unknown>) {
-		return this.binding.values
+		return this.descriptor.values
 			.map((relatedIndex) =>
 				typeof relatedIndex === "number"
 					? this.toString(values[relatedIndex])

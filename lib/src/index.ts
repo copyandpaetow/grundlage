@@ -1,20 +1,20 @@
 import "./rendering/parser-css";
 import { html } from "./rendering/parser-html";
 import { HTMLTemplate } from "./rendering/template-html";
-import { BaseComponent, ComponentProps, RenderFunction } from "./types";
+import { BaseComponent, ComponentProps, TemplateRenderer } from "./types";
 
 //@ts-expect-error options will come soon
 export const render: ComponentProps = (
 	name,
-	generatorFunction,
+	componentGenerator,
 	options = {}
 ) => {
 	class BaseElement extends HTMLElement implements BaseComponent {
 		#props = new Map<string, unknown>();
 		#observer: MutationObserver;
-		#renderFunction: RenderFunction | null = null;
-		#renderTemplate: HTMLTemplate | null = null;
-		#cleanupFn: ((props: Record<string, unknown>) => void) | null = null;
+		#render: TemplateRenderer | null = null;
+		#view: HTMLTemplate | null = null;
+		#cleanup: ((props: Record<string, unknown>) => void) | null = null;
 
 		constructor() {
 			super();
@@ -32,7 +32,7 @@ export const render: ComponentProps = (
 		async disconnectedCallback() {
 			await Promise.resolve();
 			if (!this.isConnected) {
-				this.#cleanupFn?.(Object.fromEntries(this.#props));
+				this.#cleanup?.(Object.fromEntries(this.#props));
 			}
 		}
 
@@ -68,6 +68,7 @@ export const render: ComponentProps = (
 						this.getAttribute(mutation.attributeName!)
 					);
 				}
+				this.update();
 			});
 			this.#observer.observe(this, { attributes: true });
 		}
@@ -82,6 +83,8 @@ export const render: ComponentProps = (
 
 			todo: try hashes as stable keys for list items 
 
+			todo: updating the props requires an update. How can we batch that?
+
 			### future
 
 			? we could store the bindings, the pointers etc as SoA
@@ -94,30 +97,29 @@ export const render: ComponentProps = (
 		*/
 
 		async update() {
-			if (!this.#renderFunction) {
+			if (!this.#render) {
 				return;
 			}
 
-			let template = this.#renderFunction(Object.fromEntries(this.#props));
+			let template = this.#render(Object.fromEntries(this.#props));
 
 			if (!(template instanceof HTMLTemplate)) {
 				template = html`${template}`;
 			}
 
 			if (
-				!this.#renderTemplate ||
-				this.#renderTemplate.templateResult.templateHash !==
-					template.templateResult.templateHash
+				!this.#view ||
+				this.#view.parsedHTML.templateHash !== template.parsedHTML.templateHash
 			) {
 				this.shadowRoot?.replaceChildren(template.setup());
 				return;
 			}
-			this.#renderTemplate.update(template.currentValues);
+			this.#view.update(template.currentExpressions);
 		}
 
 		async #setup() {
 			try {
-				const generator = generatorFunction(
+				const generator = componentGenerator(
 					Object.fromEntries(this.#props),
 					this
 				);
@@ -128,7 +130,7 @@ export const render: ComponentProps = (
 
 					if (done) {
 						if (typeof value === "function") {
-							this.#cleanupFn = value;
+							this.#cleanup = value;
 						}
 						break;
 					}
@@ -145,10 +147,10 @@ export const render: ComponentProps = (
 
 					if (template instanceof HTMLTemplate) {
 						this.shadowRoot?.replaceChildren(template.setup());
-						this.#renderTemplate = template;
-						this.#renderFunction = (
+						this.#view = template;
+						this.#render = (
 							typeof value === "function" ? value : () => value
-						) as RenderFunction;
+						) as TemplateRenderer;
 						result = this.shadowRoot;
 						continue;
 					}

@@ -1,28 +1,30 @@
-import { AttributeHole } from "./attributes";
+import { AttributeBinding } from "./attributes";
 import { ContentHole } from "./content";
 import { hashValue } from "./hashing";
-import { BINDING_TYPES, Bindings } from "./parser-html";
-import { RawContentHole } from "./raw-content";
-import { TagHole } from "./tags";
+import { BINDING_TYPES, ParsedHTML } from "./parser-html";
+import { RawContentBinding } from "./raw-content";
+import { TagBinding } from "./tags";
 
 const EMPTY_ARRAY: Array<unknown> = [];
 
 export class HTMLTemplate {
-	currentValues: Array<unknown>;
-	previousValues: Array<unknown>;
-	templateResult: Bindings;
-	bindings: Array<AttributeHole | TagHole | ContentHole | RawContentHole> = [];
-	valueHash = 0;
+	currentExpressions: Array<unknown>;
+	previousExpressions: Array<unknown>;
+	parsedHTML: ParsedHTML;
+	bindings: Array<
+		AttributeBinding | TagBinding | ContentHole | RawContentBinding
+	> = [];
+	expressionsHash = 0;
 	updateId = 0;
 
-	constructor(templateResult: Bindings, dynamicValues: Array<unknown>) {
-		this.currentValues = dynamicValues;
-		this.templateResult = templateResult;
-		this.previousValues = EMPTY_ARRAY;
+	constructor(parsedHTML: ParsedHTML, expressions: Array<unknown>) {
+		this.parsedHTML = parsedHTML;
+		this.currentExpressions = expressions;
+		this.previousExpressions = EMPTY_ARRAY;
 	}
 
 	setup(): DocumentFragment {
-		const fragment = this.templateResult.fragment.cloneNode(
+		const fragment = this.parsedHTML.fragment.cloneNode(
 			true
 		) as DocumentFragment;
 
@@ -43,21 +45,25 @@ export class HTMLTemplate {
 				continue;
 			}
 
-			const binding = this.templateResult.binding[index];
-			let result: AttributeHole | TagHole | ContentHole | RawContentHole;
+			const binding = this.parsedHTML.descriptors[index];
+			let result:
+				| AttributeBinding
+				| TagBinding
+				| ContentHole
+				| RawContentBinding;
 
 			switch (binding.type) {
 				case BINDING_TYPES.ATTR:
-					result = new AttributeHole(binding, pointer);
+					result = new AttributeBinding(binding, pointer);
 					break;
 				case BINDING_TYPES.TAG:
-					result = new TagHole(binding, pointer);
+					result = new TagBinding(binding, pointer);
 					break;
 				case BINDING_TYPES.CONTENT:
 					result = new ContentHole(binding, pointer);
 					break;
 				case BINDING_TYPES.RAW_CONTENT:
-					result = new RawContentHole(binding, pointer);
+					result = new RawContentBinding(binding, pointer);
 					break;
 
 				default:
@@ -74,14 +80,14 @@ export class HTMLTemplate {
 		return fragment;
 	}
 
-	update(values: Array<unknown>): boolean {
-		this.previousValues = this.currentValues;
-		this.currentValues = values;
+	update(expressions: Array<unknown>): boolean {
+		this.previousExpressions = this.currentExpressions;
+		this.currentExpressions = expressions;
 
 		const nextId = this.updateId + 1;
-		for (let index = 0; index < this.currentValues.length; index++) {
-			const previous = this.previousValues[index];
-			const current = this.currentValues[index];
+		for (let index = 0; index < this.currentExpressions.length; index++) {
+			const previous = this.previousExpressions[index];
+			const current = this.currentExpressions[index];
 
 			if (previous === current) {
 				continue;
@@ -90,9 +96,8 @@ export class HTMLTemplate {
 			if (
 				previous instanceof HTMLTemplate &&
 				current instanceof HTMLTemplate &&
-				previous.templateResult.templateHash ===
-					current.templateResult.templateHash &&
-				previous.valueHash === current.valueHash
+				previous.parsedHTML.templateHash === current.parsedHTML.templateHash &&
+				previous.expressionsHash === current.expressionsHash
 			) {
 				continue;
 			}
@@ -105,7 +110,7 @@ export class HTMLTemplate {
 			return false;
 		}
 
-		this.valueHash = hashValue(values);
+		this.expressionsHash = hashValue(this.currentExpressions);
 
 		return true;
 	}
