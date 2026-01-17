@@ -1,6 +1,6 @@
 import { detectBindingPositions } from "./css/detect-bindings";
 import { CssParsingResult, splitStylesIntoRules } from "./css/split-rules";
-import { CSSTemplate } from "./template-css";
+import { CSSTemplate } from "../rendering/template-css";
 
 const needsDynamicClassName = (tokens: TemplateStringsArray) => {
 	tokenLoop: for (let index = 0; index < tokens.length; index++) {

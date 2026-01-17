@@ -1,9 +1,9 @@
-import { AttributeBinding } from "./attributes";
-import { ContentHole } from "./content";
-import { hashValue } from "./hashing";
-import { BINDING_TYPES, ParsedHTML } from "./parser-html";
+import { AttributeBinding } from "./attribute";
+import { ContentBinding } from "./content";
+import { hashValue } from "../utils/hashing";
+import { BINDING_TYPES, ParsedHTML } from "../parser/parser-html";
 import { RawContentBinding } from "./raw-content";
-import { TagBinding } from "./tags";
+import { TagBinding } from "./tag";
 
 const EMPTY_ARRAY: Array<unknown> = [];
 
@@ -12,7 +12,7 @@ export class HTMLTemplate {
 	previousExpressions: Array<unknown>;
 	parsedHTML: ParsedHTML;
 	bindings: Array<
-		AttributeBinding | TagBinding | ContentHole | RawContentBinding
+		AttributeBinding | TagBinding | ContentBinding | RawContentBinding
 	> = [];
 	expressionsHash = 0;
 	updateId = 0;
@@ -49,7 +49,7 @@ export class HTMLTemplate {
 			let result:
 				| AttributeBinding
 				| TagBinding
-				| ContentHole
+				| ContentBinding
 				| RawContentBinding;
 
 			switch (binding.type) {
@@ -60,7 +60,7 @@ export class HTMLTemplate {
 					result = new TagBinding(binding, pointer);
 					break;
 				case BINDING_TYPES.CONTENT:
-					result = new ContentHole(binding, pointer);
+					result = new ContentBinding(binding, pointer);
 					break;
 				case BINDING_TYPES.RAW_CONTENT:
 					result = new RawContentBinding(binding, pointer);

@@ -1,46 +1,49 @@
 import { BaseComponent } from "../types";
-import { AttributeDescriptor } from "./parser-html";
+import { AttributeDescriptor } from "../parser/parser-html";
 import { HTMLTemplate } from "./template-html";
 
 export class AttributeBinding {
-	descriptor: AttributeDescriptor;
-	marker: Comment;
-	updateId = -1;
+	#descriptor: AttributeDescriptor;
+	#marker: Comment;
+	#updateId = -1;
 
 	constructor(descriptor: AttributeDescriptor, marker: Comment) {
-		this.descriptor = descriptor;
-		this.marker = marker;
+		this.#descriptor = descriptor;
+		this.#marker = marker;
 	}
 
 	update(context: HTMLTemplate) {
-		if (this.updateId === context.updateId) {
+		if (this.#updateId === context.updateId) {
 			return;
 		}
-		this.updateId = context.updateId;
+		this.#updateId = context.updateId;
 
-		const key = this.buildAttribute(
-			this.descriptor.keys,
+		const key = this.#buildAttribute(
+			this.#descriptor.keys,
 			context.currentExpressions
 		);
-		const previousKey = this.buildAttribute(
-			this.descriptor.keys,
+		const previousKey = this.#buildAttribute(
+			this.#descriptor.keys,
 			context.previousExpressions
 		);
 
 		if (typeof previousKey === "object") {
 			if (Array.isArray(previousKey)) {
 				for (const name of previousKey) {
-					this.removeAttribute(name, undefined);
+					this.#removeAttribute(name, undefined);
 				}
 			} else {
 				for (const name in previousKey as object) {
-					this.removeAttribute(name, previousKey[name]);
+					this.#removeAttribute(name, previousKey[name]);
 				}
 			}
 		} else {
-			this.removeAttribute(
+			this.#removeAttribute(
 				previousKey as string,
-				this.buildAttribute(this.descriptor.values, context.previousExpressions)
+				this.#buildAttribute(
+					this.#descriptor.values,
+					context.previousExpressions
+				)
 			);
 		}
 
@@ -48,22 +51,25 @@ export class AttributeBinding {
 		if (typeof key === "object") {
 			if (Array.isArray(key)) {
 				for (const name of key) {
-					this.removeAttribute(name, "");
+					this.#removeAttribute(name, "");
 				}
 			} else {
 				for (const name in key) {
-					this.addAttribute(name, key[name]);
+					this.#addAttribute(name, key[name]);
 				}
 			}
 		} else {
-			this.addAttribute(
+			this.#addAttribute(
 				key as string,
-				this.buildAttribute(this.descriptor.values, context.currentExpressions)
+				this.#buildAttribute(
+					this.#descriptor.values,
+					context.currentExpressions
+				)
 			);
 		}
 	}
 
-	buildAttribute(
+	#buildAttribute(
 		keyOrValue: Array<number | string>,
 		currentValues: Array<unknown>
 	) {
@@ -81,8 +87,8 @@ export class AttributeBinding {
 		return attr;
 	}
 
-	addAttribute(key: string, value: unknown) {
-		const element = this.marker.nextElementSibling!;
+	#addAttribute(key: string, value: unknown) {
+		const element = this.#marker.nextElementSibling!;
 		if (typeof value === "function" && key.slice(0, 2) === "on") {
 			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
 			element.addEventListener(event, value as EventListener);
@@ -101,8 +107,8 @@ export class AttributeBinding {
 		element.setAttribute(key, String(value));
 	}
 
-	removeAttribute(key: string, value: unknown) {
-		const element = this.marker.nextElementSibling!;
+	#removeAttribute(key: string, value: unknown) {
+		const element = this.#marker.nextElementSibling!;
 		if (typeof value === "function" && key.slice(0, 2) === "on") {
 			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
 			element?.removeEventListener(event, value as EventListener);

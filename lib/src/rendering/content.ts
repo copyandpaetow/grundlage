@@ -1,29 +1,29 @@
-import { ContentDescriptor } from "./parser-html";
+import { ContentDescriptor } from "../parser/parser-html";
 import { HTMLTemplate } from "./template-html";
 
-export class ContentHole {
-	descriptor: ContentDescriptor;
-	marker: Comment;
-	updateId = -1;
+export class ContentBinding {
+	#descriptor: ContentDescriptor;
+	#marker: Comment;
+	#updateId = -1;
 
 	constructor(descriptor: ContentDescriptor, marker: Comment) {
-		this.descriptor = descriptor;
-		this.marker = marker;
+		this.#descriptor = descriptor;
+		this.#marker = marker;
 	}
 
 	update(context: HTMLTemplate) {
-		if (this.updateId === context.updateId) {
+		if (this.#updateId === context.updateId) {
 			return;
 		}
-		this.updateId = context.updateId;
+		this.#updateId = context.updateId;
 
-		if (this.descriptor.values.length > 1) {
+		if (this.#descriptor.values.length > 1) {
 			//todo: handle comments. Maybe we need to strip the trailing and leading comment markers
 			//* we can create a new comment like `new Comment(content)` and append that
 			return;
 		}
 
-		const index = this.descriptor.values[0] as number;
+		const index = this.#descriptor.values[0] as number;
 
 		const current = context.currentExpressions[index];
 		const previous = context.previousExpressions[index];
@@ -41,38 +41,39 @@ export class ContentHole {
 				return;
 			}
 			//otherwise we delete the old dom and render again
-			this.delete();
-			this.marker.after(current.setup());
+			this.#delete();
+			this.#marker.after(current.setup());
 			return;
 		}
 
-		this.delete();
+		this.#delete();
 
-		const content = this.toString(current);
+		const content = this.#toString(current);
 
 		if (!content) {
 			return;
 		}
 
-		this.marker.after(document.createTextNode(content));
+		this.#marker.after(document.createTextNode(content));
 	}
 
-	toString(value: unknown): string {
+	#toString(value: unknown): string {
 		if (!value && typeof value !== "number") {
 			return "";
 		}
 		if (typeof value === "function") {
-			return this.toString(value());
+			return this.#toString(value());
 		}
 		return value.toString();
 	}
 
-	delete() {
-		let current = this.marker.nextSibling;
+	#delete() {
+		let current = this.#marker.nextSibling;
 		while (
 			current &&
 			!(
-				current.nodeType === 8 && (current as Comment).data === this.marker.data
+				current.nodeType === 8 &&
+				(current as Comment).data === this.#marker.data
 			)
 		) {
 			const next = current.nextSibling;

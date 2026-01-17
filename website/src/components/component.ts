@@ -1,6 +1,6 @@
 import { render } from "../../../lib/src";
-import { css } from "../../../lib/src/rendering/parser-css";
-import { html } from "../../../lib/src/rendering/parser-html";
+import { css } from "../../../lib/src/parser/parser-css";
+import { html } from "../../../lib/src/parser/parser-html";
 
 // const list = css`
 // 	border: 1px solid black;

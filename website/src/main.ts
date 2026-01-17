@@ -1,2 +1,2 @@
 // import "./app";
-import "../../lib/src/rendering/parser-html";
+import "../../lib/src/parser/parser-html";

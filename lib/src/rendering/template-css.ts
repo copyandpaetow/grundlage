@@ -1,4 +1,4 @@
-import { CssParsingResult } from "./css/split-rules";
+import { CssParsingResult } from "../parser/css/split-rules";
 
 export class CSSTemplate {
 	currentValues: Array<unknown>;

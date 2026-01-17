@@ -1,24 +1,24 @@
-import { TagDescriptor } from "./parser-html";
+import { TagDescriptor } from "../parser/parser-html";
 import { HTMLTemplate } from "./template-html";
 
 export class TagBinding {
-	descriptor: TagDescriptor;
-	marker: Comment;
-	updateId = -1;
+	#descriptor: TagDescriptor;
+	#marker: Comment;
+	#updateId = -1;
 
 	constructor(descriptor: TagDescriptor, marker: Comment) {
-		this.descriptor = descriptor;
-		this.marker = marker;
+		this.#descriptor = descriptor;
+		this.#marker = marker;
 	}
 
 	update(context: HTMLTemplate) {
-		if (this.updateId === context.updateId) {
+		if (this.#updateId === context.updateId) {
 			return;
 		}
-		this.updateId = context.updateId;
+		this.#updateId = context.updateId;
 
-		const element = this.marker.nextElementSibling!;
-		const newTag = this.getTag(context.currentExpressions);
+		const element = this.#marker.nextElementSibling!;
+		const newTag = this.#getTag(context.currentExpressions);
 
 		const newElement = document.createElement(newTag);
 		for (const attr of element.attributes) {
@@ -31,19 +31,19 @@ export class TagBinding {
 		return;
 	}
 
-	getTag(values: Array<unknown>) {
-		return this.descriptor.values
+	#getTag(values: Array<unknown>) {
+		return this.#descriptor.values
 			.map((relatedIndex) =>
 				typeof relatedIndex === "number"
-					? this.toString(values[relatedIndex])
+					? this.#toString(values[relatedIndex])
 					: relatedIndex
 			)
 			.join("");
 	}
 
-	toString(value: unknown): string {
+	#toString(value: unknown): string {
 		if (typeof value === "function") {
-			return this.toString(value());
+			return this.#toString(value());
 		}
 		if (typeof value === "number") {
 			return value.toString();

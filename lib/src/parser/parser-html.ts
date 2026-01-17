@@ -1,5 +1,5 @@
-import { stringHash } from "./hashing";
-import { HTMLTemplate } from "./template-html";
+import { stringHash } from "../utils/hashing";
+import { HTMLTemplate } from "../rendering/template-html";
 type ValueOf<T> = T[keyof T];
 
 export const BINDING_TYPES = {

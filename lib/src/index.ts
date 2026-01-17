@@ -1,5 +1,5 @@
-import "./rendering/parser-css";
-import { html } from "./rendering/parser-html";
+import "./parser/parser-css";
+import { html } from "./parser/parser-html";
 import { HTMLTemplate } from "./rendering/template-html";
 import { BaseComponent, ComponentProps, TemplateRenderer } from "./types";
 
