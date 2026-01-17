@@ -1,4 +1,5 @@
 import { TagDescriptor } from "../parser/parser-html";
+import { toPrimitive } from "../utils/to-primitve";
 import { HTMLTemplate } from "./template-html";
 
 export class TagBinding {

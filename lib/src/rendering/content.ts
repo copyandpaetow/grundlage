@@ -1,5 +1,6 @@
 import { ContentDescriptor } from "../parser/parser-html";
 import { HTMLTemplate } from "./template-html";
+import {toPrimitive} from "../utils/to-primitve"
 
 export class ContentBinding {
 	#descriptor: ContentDescriptor;
@@ -49,6 +50,7 @@ export class ContentBinding {
 		if (Array.isArray(current) && Array.isArray(previous)) {
 			//todo: handle lists
 		}
+		
 
 		this.#delete();
 		this.#marker.after(document.createTextNode(toPrimitive(current)));

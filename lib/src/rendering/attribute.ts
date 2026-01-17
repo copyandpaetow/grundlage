@@ -1,6 +1,7 @@
 import { BaseComponent } from "../types";
 import { AttributeDescriptor } from "../parser/parser-html";
 import { HTMLTemplate } from "./template-html";
+import { toPrimitive } from "../utils/to-primitve";
 
 export class AttributeBinding {
 	#descriptor: AttributeDescriptor;
@@ -86,7 +87,11 @@ export class AttributeBinding {
 			) {
 				return entry;
 			}
-			throw new Error("can only use arrays or objects here");
+			if (typeof entry === "function") {
+				return entry;
+			}
+
+			return toPrimitive(entry);
 		}
 
 		let attr = "";
