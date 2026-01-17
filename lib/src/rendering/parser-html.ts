@@ -9,7 +9,7 @@ export const BINDING_TYPES = {
 	RAW_CONTENT: 4,
 } as const;
 
-export type AttrBinding = {
+export type AttributeBinding = {
 	type: typeof BINDING_TYPES.ATTR;
 	values: Array<number | string>;
 	keys: Array<number | string>;
@@ -33,7 +33,7 @@ export type TagBinding = {
 
 export type Binding =
 	| TagBinding
-	| AttrBinding
+	| AttributeBinding
 	| ContentBinding
 	| RawContentBinding;
 
@@ -175,7 +175,7 @@ const setBinding = () => {
 				type: BINDING_TYPES.ATTR,
 				values: [],
 				keys: [],
-			} satisfies AttrBinding;
+			} satisfies AttributeBinding;
 		case STATE.COMMENT:
 		case STATE.TEXT:
 			return {
@@ -274,11 +274,11 @@ const completeAttribute = () => {
 	if (activeBinding) {
 		moveArrayContents(
 			buffers.attributeKey,
-			(activeBinding as AttrBinding).keys
+			(activeBinding as AttributeBinding).keys
 		);
 		moveArrayContents(
 			buffers.attributeValue,
-			(activeBinding as AttrBinding).values
+			(activeBinding as AttributeBinding).values
 		);
 		resultBuffer.push(createComment());
 	} else {

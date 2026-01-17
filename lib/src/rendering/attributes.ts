@@ -1,13 +1,13 @@
 import { BaseComponent } from "../types";
-import { AttrBinding } from "./parser-html";
+import { AttributeBinding } from "./parser-html";
 import { HTMLTemplate } from "./template-html";
 
 export class AttributeHole {
-	binding: AttrBinding;
+	binding: AttributeBinding;
 	pointer: Comment;
 	updateId = -1;
 
-	constructor(binding: AttrBinding, pointer: Comment) {
+	constructor(binding: AttributeBinding, pointer: Comment) {
 		this.binding = binding;
 		this.pointer = pointer;
 	}
@@ -26,11 +26,13 @@ export class AttributeHole {
 
 		if (typeof previousKey === "object") {
 			if (Array.isArray(previousKey)) {
-				previousKey.forEach((name) => this.removeAttribute(name, undefined));
+				for (const name of previousKey) {
+					this.removeAttribute(name, undefined);
+				}
 			} else {
-				Object.entries(previousKey!).forEach(([name, value]) =>
-					this.removeAttribute(name, value)
-				);
+				for (const name in previousKey as object) {
+					this.removeAttribute(name, previousKey[name]);
+				}
 			}
 		} else {
 			this.removeAttribute(
@@ -42,11 +44,13 @@ export class AttributeHole {
 		// Add new
 		if (typeof key === "object") {
 			if (Array.isArray(key)) {
-				key.forEach((name) => this.addAttribute(name, ""));
+				for (const name of key) {
+					this.removeAttribute(name, "");
+				}
 			} else {
-				Object.entries(key!).forEach(([name, value]) =>
-					this.addAttribute(name, value)
-				);
+				for (const name in key) {
+					this.addAttribute(name, key[name]);
+				}
 			}
 		} else {
 			this.addAttribute(
@@ -68,7 +72,7 @@ export class AttributeHole {
 
 		for (let index = 0; index < keyOrValue.length; index++) {
 			const entry = keyOrValue[index];
-			attr += typeof entry === "number" ? currentValues[index] : index;
+			attr += typeof entry === "number" ? currentValues[entry] : entry;
 		}
 
 		return attr;

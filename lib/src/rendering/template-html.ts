@@ -34,9 +34,9 @@ export class HTMLTemplate {
 
 		let lastIndex = -1;
 		while (treeWalker.nextNode()) {
-			const node = treeWalker.currentNode as Comment;
-			const index = parseInt(node.substringData(3, 4));
-			const amount = parseInt(node.substringData(5, 6));
+			const pointer = treeWalker.currentNode as Comment;
+			const index = parseInt(pointer.substringData(3, 4));
+			const amount = parseInt(pointer.substringData(5, 6));
 
 			//content nodes are there twice with the same index, so we can filter them here
 			if (isNaN(index) || index === lastIndex) {
@@ -48,16 +48,16 @@ export class HTMLTemplate {
 
 			switch (binding.type) {
 				case BINDING_TYPES.ATTR:
-					result = new AttributeHole(binding, node);
+					result = new AttributeHole(binding, pointer);
 					break;
 				case BINDING_TYPES.TAG:
-					result = new TagHole(binding, node);
+					result = new TagHole(binding, pointer);
 					break;
 				case BINDING_TYPES.CONTENT:
-					result = new ContentHole(binding, node);
+					result = new ContentHole(binding, pointer);
 					break;
 				case BINDING_TYPES.RAW_CONTENT:
-					result = new RawContentHole(binding, node);
+					result = new RawContentHole(binding, pointer);
 					break;
 
 				default:

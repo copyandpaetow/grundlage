@@ -1,23 +1,27 @@
 import "./rendering/parser-css";
 import { html } from "./rendering/parser-html";
 import { HTMLTemplate } from "./rendering/template-html";
-import { BaseComponent, ComponentProps, RenderFn } from "./types";
+import { BaseComponent, ComponentProps, RenderFunction } from "./types";
 
 //@ts-expect-error options will come soon
-export const render: ComponentProps = (name, generatorFn, options = {}) => {
+export const render: ComponentProps = (
+	name,
+	generatorFunction,
+	options = {}
+) => {
 	class BaseElement extends HTMLElement implements BaseComponent {
 		#props = new Map<string, unknown>();
 		#observer: MutationObserver;
-		#renderFn: RenderFn | null = null;
+		#renderFunction: RenderFunction | null = null;
 		#renderTemplate: HTMLTemplate | null = null;
 		#cleanupFn: ((props: Record<string, unknown>) => void) | null = null;
 
 		constructor() {
 			super();
 			this.attachShadow({ mode: "open", serializable: true });
-			Array.from(this.attributes).forEach((attr) => {
+			for (const attr of this.attributes) {
 				this.#props.set(attr.name, attr.value);
-			});
+			}
 		}
 
 		async connectedCallback() {
@@ -58,12 +62,12 @@ export const render: ComponentProps = (name, generatorFn, options = {}) => {
 		#watchAttributes() {
 			this.#observer?.disconnect();
 			this.#observer = new MutationObserver((mutations) => {
-				mutations.forEach((mutation) => {
+				for (const mutation of mutations) {
 					this.setProperty(
 						mutation.attributeName!,
 						this.getAttribute(mutation.attributeName!)
 					);
-				});
+				}
 			});
 			this.#observer.observe(this, { attributes: true });
 		}
@@ -75,14 +79,12 @@ export const render: ComponentProps = (name, generatorFn, options = {}) => {
 
 			todo: CSSTemplates need to be added as style and as class
 			=> for now lets make it simple and replace the whole block whenever a value changes
-			=> when do we need to add a dynamically generated class 
 
 			todo: try hashes as stable keys for list items 
 
-			### code consistency
-			- use one type of loop 
-
 			### future
+
+			? we could store the bindings, the pointers etc as SoA
 
 			? delay rendering if component is not visible? could be checked if intersection observer
 
@@ -92,11 +94,11 @@ export const render: ComponentProps = (name, generatorFn, options = {}) => {
 		*/
 
 		async update() {
-			if (!this.#renderFn) {
+			if (!this.#renderFunction) {
 				return;
 			}
 
-			let template = this.#renderFn(Object.fromEntries(this.#props));
+			let template = this.#renderFunction(Object.fromEntries(this.#props));
 
 			if (!(template instanceof HTMLTemplate)) {
 				template = html`${template}`;
@@ -115,7 +117,10 @@ export const render: ComponentProps = (name, generatorFn, options = {}) => {
 
 		async #setup() {
 			try {
-				const generator = generatorFn(Object.fromEntries(this.#props), this);
+				const generator = generatorFunction(
+					Object.fromEntries(this.#props),
+					this
+				);
 				let result;
 
 				while (true) {
@@ -141,9 +146,9 @@ export const render: ComponentProps = (name, generatorFn, options = {}) => {
 					if (template instanceof HTMLTemplate) {
 						this.shadowRoot?.replaceChildren(template.setup());
 						this.#renderTemplate = template;
-						this.#renderFn = (
+						this.#renderFunction = (
 							typeof value === "function" ? value : () => value
-						) as RenderFn;
+						) as RenderFunction;
 						result = this.shadowRoot;
 						continue;
 					}

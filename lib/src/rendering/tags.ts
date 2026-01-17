@@ -21,11 +21,9 @@ export class TagHole {
 		const newTag = this.getTag(context.currentValues);
 
 		const newElement = document.createElement(newTag);
-		element
-			.getAttributeNames()
-			.forEach((name) =>
-				newElement.setAttribute(name, element.getAttribute(name)!)
-			);
+		for (const attr of element.attributes) {
+			newElement.setAttribute(attr.name, attr.value);
+		}
 
 		newElement.replaceChildren(...element.childNodes);
 		element.replaceWith(newElement);

@@ -40,10 +40,10 @@ export type GeneratorFn = (
 	context: BaseComponent
 ) => Generator;
 
-export type RenderFn = (props: Props) => HTMLTemplate;
+export type RenderFunction = (props: Props) => HTMLTemplate;
 
 export type ComponentProps<Props = Record<string, unknown>> = (
 	name: string,
-	generatorFn: GeneratorFn,
+	generatorFunction: GeneratorFn,
 	options?: ComponentOptions
 ) => (props?: Props) => HTMLTemplate;

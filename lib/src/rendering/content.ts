@@ -70,7 +70,13 @@ export class ContentHole {
 
 	delete() {
 		let current = this.pointer.nextSibling;
-		while (current && !current.isEqualNode(this.pointer)) {
+		while (
+			current &&
+			!(
+				current.nodeType === 8 &&
+				(current as Comment).data === this.pointer.data
+			)
+		) {
 			const next = current.nextSibling;
 			current.remove();
 			current = next;
