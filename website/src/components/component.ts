@@ -26,18 +26,35 @@ import { html } from "../../../lib/src/parser/parser-html";
 export const Component = render(
 	"props-component",
 	function* (initialProps, ctx) {
-		let seconds = 0;
-		const interval = setInterval(() => {
-			seconds++;
+		let headingLevel = 1;
+
+		const updateHeadingLevel = () => {
+			headingLevel++;
 			ctx.update();
-		}, 1000);
+		};
 
 		console.log(initialProps, ctx);
 
-		yield () => html`<p>${seconds} seconds</p>`;
-
-		return () => {
-			clearInterval(interval);
-		};
-	}
+		yield () =>
+			html`<h${headingLevel} onclick=${updateHeadingLevel}> headingLevel: ${headingLevel} </h${headingLevel}>`;
+	},
 );
+
+// export const Component = render(
+// 	"props-component",
+// 	function* (initialProps, ctx) {
+// 		let seconds = 0;
+// 		const interval = setInterval(() => {
+// 			seconds++;
+// 			ctx.update();
+// 		}, 1000);
+
+// 		console.log(initialProps, ctx);
+
+// 		yield () => html`<p>${seconds} seconds</p>`;
+
+// 		return () => {
+// 			clearInterval(interval);
+// 		};
+// 	}
+// );

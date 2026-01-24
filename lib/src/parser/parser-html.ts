@@ -214,7 +214,7 @@ const setBinding = () => {
 const capture = (
 	buffer: Array<string | number>,
 	start: number,
-	end?: number
+	end?: number,
 ) => {
 	if (!end || end > start) {
 		const slice = activeTemplate.slice(start, end);
@@ -228,7 +228,7 @@ const completeComment = () => {
 	if (activeBinding) {
 		moveArrayContents(
 			buffers.comment,
-			(activeBinding as ContentDescriptor).values
+			(activeBinding as ContentDescriptor).values,
 		);
 		buffers.content.push(createComment() + createComment());
 	} else {
@@ -242,7 +242,7 @@ const completeSpecialContent = () => {
 		resultBuffer.push(createComment());
 		moveArrayContents(
 			buffers.rawContent,
-			(activeBinding as RawContentDescriptor).values
+			(activeBinding as RawContentDescriptor).values,
 		);
 	} else {
 		moveArrayContents(buffers.rawContent, buffers.content);
@@ -279,11 +279,11 @@ const completeAttribute = () => {
 	if (activeBinding) {
 		moveArrayContents(
 			buffers.attributeKey,
-			(activeBinding as AttributeDescriptor).keys
+			(activeBinding as AttributeDescriptor).keys,
 		);
 		moveArrayContents(
 			buffers.attributeValue,
-			(activeBinding as AttributeDescriptor).values
+			(activeBinding as AttributeDescriptor).values,
 		);
 		resultBuffer.push(createComment());
 	} else {
@@ -436,7 +436,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					continue;
 				case STATE.ATTRIBUTE_KEY:
 					if (char === "=") {
-						capture(buffers.attributeKey, splitIndex, charIndex);
+						capture(buffers.attributeKey, splitIndex + 1, charIndex);
 						splitIndex = charIndex + 1;
 						state = STATE.ATTRIBUTE_VALUE;
 					} else if (isWhitespace(char)) {

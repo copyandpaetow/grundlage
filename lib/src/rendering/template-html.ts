@@ -87,7 +87,10 @@ export class HTMLTemplate {
 				default:
 					throw new Error("unknown type");
 			}
-			binding.update(this);
+
+			queueMicrotask(() => {
+				binding.update(this);
+			});
 
 			for (let amountIndex = 0; amountIndex < amount; amountIndex++) {
 				this.bindings.push(binding);
@@ -103,7 +106,7 @@ export class HTMLTemplate {
 		this.currentExpressions = expressions;
 
 		const nextId = this.updateId + 1;
-		for (let index = 0; index < this.currentExpressions.length; index++) {
+		for (let index = 0; index < this.currentExpressions.length - 1; index++) {
 			const previousHash = this.expressionHashes[index];
 			const currentHash = hashValue(this.currentExpressions[index]);
 

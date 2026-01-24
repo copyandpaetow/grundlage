@@ -21,11 +21,11 @@ export class AttributeBinding {
 
 		const key = this.#buildAttribute(
 			this.#descriptor.keys,
-			context.currentExpressions
+			context.currentExpressions,
 		);
 		const previousKey = this.#buildAttribute(
 			this.#descriptor.keys,
-			context.previousExpressions
+			context.previousExpressions,
 		);
 
 		if (typeof previousKey === "object") {
@@ -37,7 +37,7 @@ export class AttributeBinding {
 				for (const name in previousKey) {
 					this.#removeAttribute(
 						name,
-						previousKey[name as keyof typeof previousKey]
+						previousKey[name as keyof typeof previousKey],
 					);
 				}
 			}
@@ -46,8 +46,8 @@ export class AttributeBinding {
 				previousKey as string,
 				this.#buildAttribute(
 					this.#descriptor.values,
-					context.previousExpressions
-				)
+					context.previousExpressions,
+				),
 			);
 		}
 
@@ -66,15 +66,15 @@ export class AttributeBinding {
 				key as string,
 				this.#buildAttribute(
 					this.#descriptor.values,
-					context.currentExpressions
-				)
+					context.currentExpressions,
+				),
 			);
 		}
 	}
 
 	#buildAttribute(
 		descriptorContent: Array<number | string>,
-		currentValues: Array<unknown>
+		currentValues: Array<unknown>,
 	) {
 		if (
 			descriptorContent.length === 1 &&
@@ -87,7 +87,11 @@ export class AttributeBinding {
 			) {
 				return entry;
 			}
-			if (typeof entry === "function") {
+			if (
+				typeof entry === "function" ||
+				entry === null ||
+				entry === undefined
+			) {
 				return entry;
 			}
 
