@@ -19,10 +19,9 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "tsup"
+		"build": "tsdown"
 	},
-	"dependencies": {},
 	"devDependencies": {
-		"tsup": "^8.5.0"
+		"tsdown": "^0.20.1"
 	}
 }

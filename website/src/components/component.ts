@@ -27,16 +27,26 @@ export const Component = render(
 	"props-component",
 	function* (initialProps, ctx) {
 		let headingLevel = 1;
+		let count = 0;
 
 		const updateHeadingLevel = () => {
 			headingLevel++;
 			ctx.update();
 		};
 
+		const updateCount = () => {
+			count++;
+			ctx.update();
+			if (count < 2000) {
+				requestAnimationFrame(updateCount);
+			}
+		};
+		requestAnimationFrame(updateCount);
+
 		console.log(initialProps, ctx);
 
 		yield () =>
-			html`<h${headingLevel} onclick=${updateHeadingLevel}> headingLevel: ${headingLevel} </h${headingLevel}>`;
+			html`<h${headingLevel} onclick=${updateHeadingLevel}> headingLevel: ${count} </h${headingLevel}>`;
 	},
 );
 
