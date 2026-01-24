@@ -86,15 +86,8 @@ export const render: ComponentProps = (
 
 			### bugs ###
 
-			? if a tag is changed, will the eventListeners then also reapply? I currently think they wont
-			* we could get the attribute markers as they are between the tag marker and the element and read the index from them. That we can use to get the binding from the binding array
-					Event listeners - they're attached to the old element instance, not transferred
-					Animation state - any running CSS animations/transitions, WAAPI animations
-					Focus state - if the element had focus
-					Scroll position - if it's a scrollable container
-					Form state - selection range in inputs, uncaptured user input
-					Custom element state - if it's a web component, its internal state is gone
-					References - anything external holding a reference to the old element
+			* if a tag is changed, we lose some internal states eventListeners get reapplied
+			todo: restore focus, animation, scroll position
 
 			### future ###
 
