@@ -7,7 +7,7 @@ import { BaseComponent, ComponentProps, TemplateRenderer } from "./types";
 export const render: ComponentProps = (
 	name,
 	componentGenerator,
-	options = {}
+	options = {},
 ) => {
 	class BaseElement extends HTMLElement implements BaseComponent {
 		#props = new Map<string, unknown>();
@@ -67,7 +67,7 @@ export const render: ComponentProps = (
 				for (const mutation of mutations) {
 					this.setProperty(
 						mutation.attributeName!,
-						this.getAttribute(mutation.attributeName!)
+						this.getAttribute(mutation.attributeName!),
 					);
 				}
 			});
@@ -85,7 +85,16 @@ export const render: ComponentProps = (
 			todo: try hashes as stable keys for list items 
 
 			### bugs ###
+
 			? if a tag is changed, will the eventListeners then also reapply? I currently think they wont
+			* we could get the attribute markers as they are between the tag marker and the element and read the index from them. That we can use to get the binding from the binding array
+					Event listeners - they're attached to the old element instance, not transferred
+					Animation state - any running CSS animations/transitions, WAAPI animations
+					Focus state - if the element had focus
+					Scroll position - if it's a scrollable container
+					Form state - selection range in inputs, uncaptured user input
+					Custom element state - if it's a web component, its internal state is gone
+					References - anything external holding a reference to the old element
 
 			### future ###
 
@@ -125,7 +134,7 @@ export const render: ComponentProps = (
 			try {
 				const generator = componentGenerator(
 					Object.fromEntries(this.#props),
-					this
+					this,
 				);
 				let result;
 

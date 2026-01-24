@@ -12,13 +12,32 @@ const references = new WeakMap<Object, number>();
 let counter = 0;
 
 export const hashValue = (value: unknown): number => {
-	if (value == null) return 0;
+	if (value === null || value === undefined) return 0;
 	if (typeof value === "string") return stringHash(value);
 	if (typeof value === "number") return value | 0;
 	if (typeof value === "boolean") return value ? 1 : 0;
-	if (typeof value === "function") return stringHash(value.toString());
 	if (value instanceof HTMLTemplate)
 		return value.parsedHTML.templateHash ^ (value.expressionsHash * 31);
+
+	if (Array.isArray(value)) {
+		let hash = value.length;
+		for (const entry of value) {
+			hash = (hash * 31 + hashValue(entry)) | 0;
+		}
+		return hash;
+	}
+
+	if (value.constructor === Object) {
+		let hash = 0;
+		for (const name in value) {
+			hash =
+				(hash * 31 +
+					hashValue(name) +
+					hashValue(value[name as keyof typeof value])) |
+				0;
+		}
+		return hash;
+	}
 
 	if (references.has(value)) {
 		return references.get(value)!;

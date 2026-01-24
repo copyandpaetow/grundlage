@@ -14,13 +14,16 @@ import { TagBinding } from "./tag";
 
 const EMPTY_ARRAY: Array<unknown> = [];
 
+type Bindings = Array<
+	AttributeBinding | TagBinding | ContentBinding | RawContentBinding
+>;
+
 export class HTMLTemplate {
 	currentExpressions: Array<unknown>;
 	previousExpressions: Array<unknown>;
+	expressionHashes: Array<number>;
 	parsedHTML: ParsedHTML;
-	bindings: Array<
-		AttributeBinding | TagBinding | ContentBinding | RawContentBinding
-	> = [];
+	bindings: Bindings;
 	expressionsHash = 0;
 	updateId = 0;
 
@@ -31,14 +34,17 @@ export class HTMLTemplate {
 	}
 
 	setup(): DocumentFragment {
+		this.bindings = [];
+		this.expressionHashes = this.currentExpressions.map(hashValue);
+
 		const fragment = this.parsedHTML.fragment.cloneNode(
-			true
+			true,
 		) as DocumentFragment;
 
 		const treeWalker = document.createTreeWalker(
 			fragment,
 			NodeFilter.SHOW_COMMENT,
-			{ acceptNode: () => NodeFilter.FILTER_ACCEPT }
+			{ acceptNode: () => NodeFilter.FILTER_ACCEPT },
 		);
 
 		let lastIndex = -1;
@@ -46,10 +52,10 @@ export class HTMLTemplate {
 			const marker = treeWalker.currentNode as Comment;
 
 			const index = parseInt(
-				marker.substringData(MARKER_INDEX_START, MARKER_INDEX_END)
+				marker.substringData(MARKER_INDEX_START, MARKER_INDEX_END),
 			);
 			const amount = parseInt(
-				marker.substringData(MARKER_AMOUNT_START, MARKER_AMOUNT_END)
+				marker.substringData(MARKER_AMOUNT_START, MARKER_AMOUNT_END),
 			);
 
 			//content nodes are there twice with the same index, so we can filter them here
@@ -92,38 +98,26 @@ export class HTMLTemplate {
 		return fragment;
 	}
 
-	update(expressions: Array<unknown>): boolean {
+	update(expressions: Array<unknown>) {
 		this.previousExpressions = this.currentExpressions;
 		this.currentExpressions = expressions;
 
 		const nextId = this.updateId + 1;
 		for (let index = 0; index < this.currentExpressions.length; index++) {
-			const previous = this.previousExpressions[index];
-			const current = this.currentExpressions[index];
+			const previousHash = this.expressionHashes[index];
+			const currentHash = hashValue(this.currentExpressions[index]);
 
-			if (previous === current) {
-				continue;
-			}
+			if (previousHash === currentHash) continue;
 
-			if (
-				previous instanceof HTMLTemplate &&
-				current instanceof HTMLTemplate &&
-				previous.parsedHTML.templateHash === current.parsedHTML.templateHash &&
-				previous.expressionsHash === current.expressionsHash
-			) {
-				continue;
-			}
-
+			this.expressionHashes[index] = currentHash;
 			this.updateId = nextId;
 			this.bindings[index].update(this);
 		}
 
-		if (this.updateId !== nextId) {
-			return false;
+		this.expressionsHash = 0;
+
+		for (const hash of this.expressionHashes) {
+			this.expressionsHash = (this.expressionsHash * 31 + hash) | 0;
 		}
-
-		this.expressionsHash = hashValue(this.currentExpressions);
-
-		return true;
 	}
 }
