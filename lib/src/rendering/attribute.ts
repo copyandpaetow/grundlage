@@ -48,7 +48,9 @@ export class AttributeBinding {
 				previousKey as string,
 				this.#buildAttribute(
 					this.#descriptor.values,
-					context.previousExpressions,
+					context.previousExpressions.length > 0
+						? context.previousExpressions
+						: context.currentExpressions,
 				),
 			);
 		}

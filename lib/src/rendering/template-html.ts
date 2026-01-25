@@ -93,7 +93,7 @@ export class HTMLTemplate {
 		this.currentExpressions = expressions;
 
 		const nextId = this.updateId + 1;
-		for (let index = 0; index < this.currentExpressions.length - 1; index++) {
+		for (let index = 0; index < this.currentExpressions.length; index++) {
 			const previousHash = this.expressionHashes[index];
 			const currentHash = hashValue(this.currentExpressions[index]);
 
