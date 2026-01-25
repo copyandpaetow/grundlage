@@ -1,8 +1,4 @@
-import {
-	MARKER_INDEX_END,
-	MARKER_INDEX_START,
-	TagDescriptor,
-} from "../parser/parser-html";
+import { TagDescriptor } from "../parser/parser-html";
 import { toPrimitive } from "../utils/to-primitve";
 import { HTMLTemplate } from "./template-html";
 
@@ -43,12 +39,8 @@ export class TagBinding {
 
 		while (marker.nextSibling?.nodeType === 8) {
 			marker = marker.nextSibling as Comment;
-			const relatedIndex = parseInt(
-				marker.substringData(MARKER_INDEX_START, MARKER_INDEX_END),
-			);
-			if (isNaN(relatedIndex)) {
-				continue;
-			}
+			const [_, bindingIndices] = marker.data.split("::");
+			const relatedIndex = Number(bindingIndices.split(",")[0]);
 
 			context.bindings[relatedIndex].update(context);
 		}

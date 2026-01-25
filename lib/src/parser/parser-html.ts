@@ -95,16 +95,24 @@ let currentTagName = "";
 let activeBinding: Descriptor | null = null;
 const openTagBindings: Array<TagDescriptor> = [];
 
-const resultBuffer: Array<string | number> = [];
+type BufferArray = Array<
+	| string
+	| number
+	| {
+			toString(): string;
+	  }
+>;
+
+const resultBuffer: BufferArray = [];
 const buffers = {
-	element: [] as Array<string | number>,
-	tag: [] as Array<string | number>,
-	endTag: [] as Array<string | number>,
-	content: [] as Array<string | number>,
-	comment: [] as Array<string | number>,
-	attributeKey: [] as Array<string | number>,
-	attributeValue: [] as Array<string | number>,
-	rawContent: [] as Array<string | number>,
+	element: [] as BufferArray,
+	tag: [] as BufferArray,
+	endTag: [] as BufferArray,
+	content: [] as BufferArray,
+	comment: [] as BufferArray,
+	attributeKey: [] as BufferArray,
+	attributeValue: [] as BufferArray,
+	rawContent: [] as BufferArray,
 };
 
 const setup = (strings: TemplateStringsArray) => {
@@ -120,18 +128,46 @@ const setup = (strings: TemplateStringsArray) => {
 	currentTagName = "";
 };
 
-export const MARKER_AMOUNT_START = 5;
-export const MARKER_AMOUNT_END = 6;
-export const MARKER_INDEX_START = 3;
-export const MARKER_INDEX_END = 4;
+const createComment = () => {
+	const descriptorIndex = bindings.length - 1;
+	const descriptor = bindings[descriptorIndex];
 
-const createComment = () => `<!-- h:${bindings.length - 1}:${bindingIndex} -->`;
+	return {
+		toString() {
+			let indices = "";
+
+			if ("keys" in descriptor) {
+				for (const value of descriptor.keys) {
+					if (typeof value === "number") {
+						indices += value + ",";
+					}
+				}
+			}
+
+			for (const value of descriptor.values) {
+				if (typeof value === "number") {
+					indices += value + ",";
+				}
+			}
+
+			if ("endValues" in descriptor) {
+				for (const value of descriptor.endValues) {
+					if (typeof value === "number") {
+						indices += value + ",";
+					}
+				}
+			}
+
+			return `<!--${descriptorIndex}::${indices.slice(0, -1)}-->`;
+		},
+	};
+};
 
 const updateBinding = () => {
 	switch (state) {
 		case STATE.TEXT:
 			capture(buffers.content, splitIndex);
-			buffers.content.push(createComment() + createComment());
+			buffers.content.push(createComment(), createComment());
 			(activeBinding as ContentDescriptor).values.push(index);
 			activeBinding = null;
 			break;
@@ -211,11 +247,7 @@ const setBinding = () => {
 	}
 };
 
-const capture = (
-	buffer: Array<string | number>,
-	start: number,
-	end?: number,
-) => {
+const capture = (buffer: BufferArray, start: number, end?: number) => {
 	if (!end || end > start) {
 		const slice = activeTemplate.slice(start, end);
 		if (slice) {
@@ -230,7 +262,7 @@ const completeComment = () => {
 			buffers.comment,
 			(activeBinding as ContentDescriptor).values,
 		);
-		buffers.content.push(createComment() + createComment());
+		buffers.content.push(createComment(), createComment());
 	} else {
 		moveArrayContents(buffers.comment, buffers.content);
 	}
@@ -286,6 +318,10 @@ const completeAttribute = () => {
 			(activeBinding as AttributeDescriptor).values,
 		);
 		resultBuffer.push(createComment());
+		const firstKey = (activeBinding as AttributeDescriptor).keys[0];
+		if (typeof firstKey === "string") {
+			(activeBinding as AttributeDescriptor).keys[0] = firstKey.trimStart();
+		}
 	} else {
 		moveArrayContents(buffers.attributeKey, buffers.element);
 		if (buffers.attributeValue.length) {
@@ -436,7 +472,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					continue;
 				case STATE.ATTRIBUTE_KEY:
 					if (char === "=") {
-						capture(buffers.attributeKey, splitIndex + 1, charIndex);
+						capture(buffers.attributeKey, splitIndex, charIndex);
 						splitIndex = charIndex + 1;
 						state = STATE.ATTRIBUTE_VALUE;
 					} else if (isWhitespace(char)) {

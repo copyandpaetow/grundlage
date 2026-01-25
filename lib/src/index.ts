@@ -86,6 +86,10 @@ export const render: ComponentProps = (
 
 			### bugs ###
 
+			todo: attribute cutting is off, sometimes there is a space, sometimes not
+			todo: parser creates self closing divs for self closing elements in general
+			todo: the parser needs to be adapted in a way that the comments show the descriptor indices they are relating to 
+
 			* if a tag is changed, we lose some internal states eventListeners get reapplied
 			todo: restore focus, animation, scroll position
 

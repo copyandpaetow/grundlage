@@ -25,7 +25,9 @@ export class AttributeBinding {
 		);
 		const previousKey = this.#buildAttribute(
 			this.#descriptor.keys,
-			context.previousExpressions,
+			context.previousExpressions.length > 0
+				? context.previousExpressions
+				: context.currentExpressions,
 		);
 
 		if (typeof previousKey === "object") {

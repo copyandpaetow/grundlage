@@ -1,14 +1,7 @@
 import { AttributeBinding } from "./attribute";
 import { ContentBinding } from "./content";
 import { hashValue } from "../utils/hashing";
-import {
-	BINDING_TYPES,
-	MARKER_AMOUNT_END,
-	MARKER_AMOUNT_START,
-	MARKER_INDEX_END,
-	MARKER_INDEX_START,
-	ParsedHTML,
-} from "../parser/parser-html";
+import { BINDING_TYPES, ParsedHTML } from "../parser/parser-html";
 import { RawContentBinding } from "./raw-content";
 import { TagBinding } from "./tag";
 
@@ -47,23 +40,19 @@ export class HTMLTemplate {
 			{ acceptNode: () => NodeFilter.FILTER_ACCEPT },
 		);
 
-		let lastIndex = -1;
+		let lastDescriptorIndex = "";
 		while (treeWalker.nextNode()) {
 			const marker = treeWalker.currentNode as Comment;
-
-			const index = parseInt(
-				marker.substringData(MARKER_INDEX_START, MARKER_INDEX_END),
-			);
-			const amount = parseInt(
-				marker.substringData(MARKER_AMOUNT_START, MARKER_AMOUNT_END),
-			);
+			const [descriptorIndex, bindingIndices] = marker.data.split("::");
 
 			//content nodes are there twice with the same index, so we can filter them here
-			if (isNaN(index) || index === lastIndex) {
+			if (lastDescriptorIndex === descriptorIndex) {
 				continue;
 			}
+			lastDescriptorIndex = descriptorIndex;
 
-			const descriptor = this.parsedHTML.descriptors[index];
+			const descriptor = this.parsedHTML.descriptors[Number(descriptorIndex)];
+
 			let binding:
 				| AttributeBinding
 				| TagBinding
@@ -92,11 +81,9 @@ export class HTMLTemplate {
 				binding.update(this);
 			});
 
-			for (let amountIndex = 0; amountIndex < amount; amountIndex++) {
-				this.bindings.push(binding);
+			for (const bindingIndex of bindingIndices.split(",")) {
+				this.bindings[Number(bindingIndex)] = binding;
 			}
-
-			lastIndex = index;
 		}
 		return fragment;
 	}

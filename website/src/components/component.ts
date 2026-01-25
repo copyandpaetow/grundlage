@@ -1,5 +1,4 @@
 import { render } from "../../../lib/src";
-import { css } from "../../../lib/src/parser/parser-css";
 import { html } from "../../../lib/src/parser/parser-html";
 
 // const list = css`
@@ -23,32 +22,50 @@ import { html } from "../../../lib/src/parser/parser-html";
 // 	}
 // `;
 
-export const Component = render(
-	"props-component",
-	function* (initialProps, ctx) {
-		let headingLevel = 1;
-		let count = 0;
+// export const Component = render(
+// 	"props-component",
+// 	function* (initialProps, ctx) {
+// 		let count = 0;
+// 		let base = 100;
+// 		let direction = 1;
+// 		let percentage = (count / base) * 100;
+// 		let safeGuard = 1000;
 
-		const updateHeadingLevel = () => {
-			headingLevel++;
-			ctx.update();
-		};
+// 		const updateCount = () => {
+// 			safeGuard--;
+// 			count = count + 1 * direction;
+// 			percentage = (count / base) * 100;
+// 			ctx.update();
+// 			if (count > base) {
+// 				direction = -1;
+// 			} else if (count <= 0) {
+// 				direction = 1;
+// 			}
+// 			if (safeGuard) {
+// 				requestAnimationFrame(updateCount);
+// 			}
+// 		};
+// 		requestAnimationFrame(updateCount);
 
-		const updateCount = () => {
-			count++;
-			ctx.update();
-			if (count < 2000) {
-				requestAnimationFrame(updateCount);
-			}
-		};
-		requestAnimationFrame(updateCount);
+// 		console.log(initialProps, ctx);
 
-		console.log(initialProps, ctx);
+// 		yield () => html`
+// 			<style>
+// 				:host {
+// 					display: block;
+// 				}
 
-		yield () =>
-			html`<h${headingLevel} onclick=${updateHeadingLevel}> headingLevel: ${count} </h${headingLevel}>`;
-	},
-);
+// 				div {
+// 					height: 2rem;
+// 					background: blue;
+// 					width: var(--width);
+// 				}
+// 			</style>
+// 			<h1>progress: ${Math.floor(percentage)}%</h1>
+// 			<div style="--width: ${percentage}%"></div>
+// 		`;
+// 	},
+// );
 
 // export const Component = render(
 // 	"props-component",
@@ -68,3 +85,25 @@ export const Component = render(
 // 		};
 // 	}
 // );
+
+export const Component = render(
+	"props-component",
+	function* (initialProps, ctx) {
+		let headingLevel = 1;
+
+		const updateHeadingLevel = () => {
+			headingLevel++;
+			ctx.update();
+		};
+
+		console.log(initialProps, ctx);
+
+		yield () =>
+			html`
+			<h${headingLevel} onclick=${updateHeadingLevel} data-${"test"}="${123}"> headingLevel: ${headingLevel} </h${headingLevel}>
+			<${"input"} id="123" type=${"text"} />
+			`;
+	},
+);
+
+//
