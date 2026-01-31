@@ -122,6 +122,7 @@ export class AttributeBinding {
 		customElements.upgrade(element);
 		if ("setProperty" in element) {
 			(element as BaseComponent).setProperty(key, value);
+			return;
 		}
 
 		if (value === null || value === undefined || value === false) {

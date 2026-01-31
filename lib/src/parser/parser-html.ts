@@ -128,6 +128,8 @@ const setup = (strings: TemplateStringsArray) => {
 	currentTagName = "";
 };
 
+export const COMMENT_DELIMMITER = ":::";
+
 const createComment = () => {
 	const descriptorIndex = bindings.length - 1;
 	const descriptor = bindings[descriptorIndex];
@@ -157,8 +159,13 @@ const createComment = () => {
 					}
 				}
 			}
-
-			return `<!--${descriptorIndex}::${indices.slice(0, -1)}-->`;
+			return (
+				"<!--" +
+				descriptorIndex +
+				COMMENT_DELIMMITER +
+				indices.slice(0, -1) +
+				"-->"
+			);
 		},
 	};
 };
@@ -406,8 +413,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						continue;
 					}
 
-					const remaining = activeTemplate.slice(charIndex + 2);
-					if (remaining.startsWith(currentTagName)) {
+					if (activeTemplate.startsWith(currentTagName, charIndex + 2)) {
 						capture(buffers.rawContent, splitIndex, charIndex);
 						splitIndex = charIndex + 2 + currentTagName.length;
 						charIndex += 1;
@@ -539,7 +545,10 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 		updateBinding();
 	}
 
+	flushElement();
+
 	const result = resultBuffer.join("");
+	resultBuffer.length = 0;
 
 	return {
 		descriptors: bindings,
@@ -547,17 +556,6 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 		templateHash: stringHash(result),
 	};
 };
-
-/*
-
-todo: how do we continue from here? 
-
-- do we keep an array with just data or add functionality to it?
-- do we keep using classes or find a different way? 
-? maybe we can use the array without actually changing anything in it
-- if we keep the binding array from here, we need to be careful as this array is shared
-
-*/
 
 const htmlCache = new WeakMap<TemplateStringsArray, ParsedHTML>();
 

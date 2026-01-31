@@ -1,4 +1,4 @@
-import { TagDescriptor } from "../parser/parser-html";
+import { COMMENT_DELIMMITER, TagDescriptor } from "../parser/parser-html";
 import { toPrimitive } from "../utils/to-primitve";
 import { HTMLTemplate } from "./template-html";
 
@@ -37,9 +37,9 @@ export class TagBinding {
 	#updateRelated(context: HTMLTemplate) {
 		let marker = this.#marker;
 
-		while (marker.nextSibling?.nodeType === 8) {
+		while (marker.nextSibling?.nodeType === Node.COMMENT_NODE) {
 			marker = marker.nextSibling as Comment;
-			const [_, bindingIndices] = marker.data.split("::");
+			const [_, bindingIndices] = marker.data.split(COMMENT_DELIMMITER);
 			const relatedIndex = Number(bindingIndices.split(",")[0]);
 
 			context.bindings[relatedIndex].update(context);

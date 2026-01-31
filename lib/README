@@ -1,105 +1,47 @@
-# Grundlage
+# Idea
 
-A minimal, zero-dependency library for building web components with tagged template literals.
+## parsing html
 
-## Concepts
+We have a html tagged template literal helper function that takes the static templateStringArray and turns it into documentFragment and descriptors for each slot.
+Since the templateStringArray is unique, we can cache the result and avoid the parsing cost from string to documentFragment, which is usually one of the bottlenecks.
 
-### Components as Generators
+### fragment
 
-Components are defined using generator functions. This gives you explicit control over the component lifecycle: setup runs until you yield a render function, and the return value is your cleanup.
+the fragment marks the dynamic parts with comment nodes. Most descriptor types only need one comment node, the content descriptor needs 2 (to replace everything between on value change).
+In the comment nodes we encode which binding index they have and which expression indices they need. Since one binding can be made out of multiple expressions these dont always match.
 
-```javascript
-import { render, html } from "grundlage";
+### descriptors
 
-render("my-counter", function* (props, ctx) {
-	// Setup phase
-	let count = 0;
+There are currently 4 types: tag, attribute, rawContent (style, textArea), content
+These have somewhat different descriptor shapes what mainly involve arrays with either string content or numbers
 
-	const increment = () => {
-		count++;
-		ctx.update();
-	};
-
-	// Yield a render function - component is now mounted
-	yield () => html` <button onClick=${increment}>${count}</button> `;
-
-	// Cleanup phase (returned function runs on disconnect)
-	return () => {
-		console.log("unmounted");
-	};
-});
+```ts
+html`<div class="${dynamicClass1} static ${dynamicClass2}"></div>`[
+	//becomes
+	fragment: <!--0:::0,1--><div></div>
+	descriptors: [{
+		keys: ["class"],
+		values: [0, "static ", 1],
+	}]
+];
 ```
 
-### Templating
+These descriptors than can be combined with the expression array to the final html part (an attribute in this case)
 
-The `html` tagged template literal parses your markup once and caches the result. Subsequent renders only update the dynamic parts.
+## Bindings
 
-```javascript
-html`<div class="card ${isActive ? "active" : ""}">
-	<h2>${title}</h2>
-	<p>${description}</p>
-</div>`;
+### setup
+
+In the begining we walk the fragment to find all relevant comment nodes and read out the encoded data: binding index and relvant expression indices.
+We then take the binding at the encoded index, populate it into its own binding class, and store the same instance on the several expression index positions in a new array.
+
+```ts
+
+bindings: [attributeBinding1, attributeBinding1],
+expressions: [dynamicClass1, dynamicClass2]
+
 ```
 
-Supported bindings:
+### updating
 
-- Content: `<p>${text}</p>`
-- Attributes: `<div class=${className}>`
-- Mixed attributes: `<div class="static ${dynamic}">`
-- Event handlers: `<button onClick=${handler}>`
-- Lists: `<ul>${items.map(i => html`<li>${i}</li>`)}</ul>`
-- Nested templates: `<div>${showDetails ? html`<details>...</details>` : null}</div>`
-- Dynamic tags: `<${tagName}>content</${tagName}>`
-- Raw content (style/script/textarea): `<style>${css}</style>`
-
-### Reactivity
-
-Grundlage uses a hash-based change detection system. When you call `ctx.update()`, it compares hashes of each expression to determine what actually changed.
-
-This means:
-
-- Primitives are compared by value
-- Arrays and objects are compared by content (shallow)
-- Nested templates are compared by structure and values
-- DOM updates only happen for expressions that changed
-
-```javascript
-render("todo-list", function* (props, ctx) {
-	const items = [];
-
-	const add = (text) => {
-		items.push({ id: Date.now(), text });
-		ctx.update();
-	};
-
-	yield () => html`
-		<ul>
-			${items.map((item) => html`<li>${item.text}</li>`)}
-		</ul>
-	`;
-});
-```
-
-### Web Components
-
-Components are registered as custom elements. Use them in HTML or within other templates:
-
-```html
-<my-counter></my-counter>
-```
-
-```javascript
-html`<my-counter initial=${5}></my-counter>`;
-```
-
-Props are passed as attributes and available in the generator's first argument.
-
-## Installation
-
-```bash
-npm install grundlage
-```
-
-## Status
-
-Experimental. API may change.
+We compare the last array of expressions with the current one. If one entry changes, we can acccess the binding at the same index and call its update function

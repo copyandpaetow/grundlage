@@ -1,13 +1,19 @@
 import "./parser/parser-css";
 import { html } from "./parser/parser-html";
 import { HTMLTemplate } from "./rendering/template-html";
-import { BaseComponent, ComponentProps, TemplateRenderer } from "./types";
+import { BaseComponent, Component, TemplateRenderer } from "./types";
 
-//@ts-expect-error options will come soon
-export const render: ComponentProps = (
+const defaultOptions: ShadowRootInit = {
+	clonable: true,
+	delegatesFocus: true,
+	mode: "open",
+	serializable: true,
+};
+
+export const render: Component = (
 	name,
 	componentGenerator,
-	options = {},
+	options = defaultOptions,
 ) => {
 	class BaseElement extends HTMLElement implements BaseComponent {
 		#props = new Map<string, unknown>();
@@ -19,13 +25,13 @@ export const render: ComponentProps = (
 
 		constructor() {
 			super();
-			this.attachShadow({ mode: "open", serializable: true });
-			for (const attr of this.attributes) {
-				this.#props.set(attr.name, attr.value);
-			}
+			this.attachShadow(options);
 		}
 
 		async connectedCallback() {
+			for (const attr of this.attributes) {
+				this.#props.set(attr.name, attr.value);
+			}
 			await this.#setup();
 			this.#watchAttributes();
 		}
@@ -33,6 +39,7 @@ export const render: ComponentProps = (
 		async disconnectedCallback() {
 			await Promise.resolve();
 			if (!this.isConnected) {
+				this.#observer?.disconnect();
 				this.#cleanup?.(Object.fromEntries(this.#props));
 			}
 		}
@@ -79,25 +86,29 @@ export const render: ComponentProps = (
 
 			### structure ###
 
-			todo: CSSTemplates need to be added as style and as class
-			=> for now lets make it simple and replace the whole block whenever a value changes
-
 			todo: try hashes as stable keys for list items 
+
 
 			### bugs ###
 
-			todo: attribute cutting is off, sometimes there is a space, sometimes not
-			todo: parser creates self closing divs for self closing elements in general
-			todo: the parser needs to be adapted in a way that the comments show the descriptor indices they are relating to 
-
-			* if a tag is changed, we lose some internal states eventListeners get reapplied
+			* if a tag is changed, we lose some internal states, eventListeners get reapplied
 			todo: restore focus, animation, scroll position
 
+
 			### future ###
+
+			? template updating became a little ugly, it would be nice not to carry around 2 expression arrays
 
 			? we could store the bindings, the pointers etc as SoA
 
 			? delay rendering if component is not visible? could be checked if intersection observer
+
+			? maybe it would be cleaner for the parser to return a string instead of the documentFragment and we do the caching in a different step?
+			
+			todo: attributes get a starting whitespace, the current trimStart would need a better solution
+
+			todo: CSSTemplates need to be added as style and as class
+			=> for now lets make it simple and replace the whole block whenever a value changes
 
 		
 		*/
@@ -169,7 +180,7 @@ export const render: ComponentProps = (
 				}
 			} catch (error) {
 				console.error(error);
-				this.shadowRoot!.innerHTML = `${error}`;
+				this.shadowRoot!.textContent = `${error}`;
 			}
 		}
 	}
@@ -178,7 +189,7 @@ export const render: ComponentProps = (
 		customElements.define(name, BaseElement);
 	}
 
-	// return (currentProps = {}) => {
-	// 	return html`<${name} ${currentProps}></${name}>`;
-	// };
+	return (currentProps = {}) => {
+		return html`<${name} ${currentProps}></${name}>`;
+	};
 };

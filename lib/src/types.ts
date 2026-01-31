@@ -5,19 +5,19 @@ export interface BaseComponent extends HTMLElement {
 	setProperty(name: string, value: unknown): void;
 }
 
-export type ComponentOptions = {};
+export type ComponentOptions = ShadowRootInit;
 
 export type Props = Record<string, unknown>;
 
 export type GeneratorFn = (
 	initialProps: Props,
-	context: BaseComponent
+	context: BaseComponent,
 ) => Generator;
 
 export type TemplateRenderer = (props: Props) => HTMLTemplate;
 
-export type ComponentProps<Props = Record<string, unknown>> = (
+export type Component<Props = Record<string, unknown>> = (
 	name: string,
 	generatorFunction: GeneratorFn,
-	options?: ComponentOptions
+	options?: ComponentOptions,
 ) => (props?: Props) => HTMLTemplate;

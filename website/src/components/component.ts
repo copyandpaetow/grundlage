@@ -25,47 +25,73 @@ import { html } from "../../../lib/src/parser/parser-html";
 export const Component = render(
 	"props-component",
 	function* (initialProps, ctx) {
-		let count = 0;
-		let base = 100;
-		let direction = 1;
-		let percentage = (count / base) * 100;
-		let safeGuard = 1000;
-
-		const updateCount = () => {
-			safeGuard--;
-			count = count + 1 * direction;
-			percentage = (count / base) * 100;
-			ctx.update();
-			if (count > base) {
-				direction = -1;
-			} else if (count <= 0) {
-				direction = 1;
-			}
-			if (safeGuard) {
-				requestAnimationFrame(updateCount);
-			}
-		};
-		requestAnimationFrame(updateCount);
-
 		console.log(initialProps, ctx);
+		let entries = [10, 20, 30];
+
+		const add = () => {
+			entries.push(entries.reduce((a, b) => a + b));
+			entries = entries
+				.map((value) => ({ value, sort: Math.random() }))
+				.sort((a, b) => a.sort - b.sort)
+				.map(({ value }) => value);
+			console.log(entries);
+			ctx.update();
+		};
 
 		yield () => html`
-			<style>
-				:host {
-					display: block;
-				}
+			<ul>
+				${entries.map((data) => html`<li>${data}</li>`)}
+			</ul>
 
-				div {
-					height: 2rem;
-					background: blue;
-					width: var(--width);
-				}
-			</style>
-			<h1>progress: ${Math.floor(percentage)}%</h1>
-			<div style="--width: ${Math.floor(percentage)}%"></div>
+			<button onclick="${add}">length: ${entries.length}</button>
 		`;
 	},
 );
+
+// export const Component = render(
+// 	"props-component",
+// 	function* (initialProps, ctx) {
+// 		let count = 0;
+// 		let base = 100;
+// 		let direction = 1;
+// 		let percentage = (count / base) * 100;
+// 		let safeGuard = 100;
+
+// 		const updateCount = () => {
+// 			safeGuard--;
+// 			count = count + 1 * direction;
+// 			percentage = (count / base) * 100;
+// 			ctx.update();
+// 			if (count > base) {
+// 				direction = -1;
+// 			} else if (count <= 0) {
+// 				direction = 1;
+// 			}
+// 			if (safeGuard) {
+// 				requestAnimationFrame(updateCount);
+// 			}
+// 		};
+// 		requestAnimationFrame(updateCount);
+
+// 		console.log(initialProps, ctx);
+
+// 		yield () => html`
+// 			<style>
+// 				:host {
+// 					display: block;
+// 				}
+
+// 				div {
+// 					height: 2rem;
+// 					background: blue;
+// 					width: var(--width);
+// 				}
+// 			</style>
+// 			<h1>progress: ${Math.floor(percentage)}%</h1>
+// 			${html`<div style="--width: ${Math.floor(percentage)}%"></div>`}
+// 		`;
+// 	},
+// );
 
 // export const Component = render(
 // 	"props-component",

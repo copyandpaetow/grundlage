@@ -1,7 +1,11 @@
 import { AttributeBinding } from "./attribute";
 import { ContentBinding } from "./content";
 import { hashValue } from "../utils/hashing";
-import { BINDING_TYPES, ParsedHTML } from "../parser/parser-html";
+import {
+	BINDING_TYPES,
+	COMMENT_DELIMMITER,
+	ParsedHTML,
+} from "../parser/parser-html";
 import { RawContentBinding } from "./raw-content";
 import { TagBinding } from "./tag";
 
@@ -24,11 +28,17 @@ export class HTMLTemplate {
 		this.parsedHTML = parsedHTML;
 		this.currentExpressions = expressions;
 		this.previousExpressions = EMPTY_ARRAY;
+
+		this.expressionHashes = [];
+		for (const value of this.currentExpressions) {
+			const hash = hashValue(value);
+			this.expressionHashes.push(hash);
+			this.expressionsHash = (this.expressionsHash * 31 + hash) | 0;
+		}
 	}
 
 	setup(): DocumentFragment {
 		this.bindings = [];
-		this.expressionHashes = this.currentExpressions.map(hashValue);
 
 		const fragment = this.parsedHTML.fragment.cloneNode(
 			true,
@@ -43,7 +53,8 @@ export class HTMLTemplate {
 		let lastDescriptorIndex = "";
 		while (treeWalker.nextNode()) {
 			const marker = treeWalker.currentNode as Comment;
-			const [descriptorIndex, bindingIndices] = marker.data.split("::");
+			const [descriptorIndex, bindingIndices] =
+				marker.data.split(COMMENT_DELIMMITER);
 
 			//content nodes are there twice with the same index, so we can filter them here
 			if (lastDescriptorIndex === descriptorIndex) {
@@ -77,13 +88,13 @@ export class HTMLTemplate {
 					throw new Error("unknown type");
 			}
 
-			queueMicrotask(() => {
-				binding.update(this);
-			});
-
 			for (const bindingIndex of bindingIndices.split(",")) {
 				this.bindings[Number(bindingIndex)] = binding;
 			}
+		}
+
+		for (const binding of this.bindings) {
+			binding.update(this);
 		}
 		return fragment;
 	}
@@ -95,13 +106,20 @@ export class HTMLTemplate {
 		const nextId = this.updateId + 1;
 		for (let index = 0; index < this.currentExpressions.length; index++) {
 			const previousHash = this.expressionHashes[index];
+
 			const currentHash = hashValue(this.currentExpressions[index]);
 
-			if (previousHash === currentHash) continue;
+			if (previousHash === currentHash) {
+				if (this.currentExpressions[index] instanceof HTMLTemplate) {
+					this.currentExpressions[index] = this.previousExpressions;
+				}
+				continue;
+			}
 
 			this.expressionHashes[index] = currentHash;
 			this.updateId = nextId;
 			this.bindings[index].update(this);
+			//todo: can this be an issue when the first value is rehashed but a potential additional value related to the same binding here is not?
 		}
 
 		this.expressionsHash = 0;
