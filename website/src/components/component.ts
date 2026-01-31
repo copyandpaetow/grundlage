@@ -43,7 +43,7 @@ export const Component = render(
 				${entries.map((data) => html`<li>${data}</li>`)}
 			</ul>
 
-			<button onclick="${add}">length: ${entries.length}</button>
+			<${"button"} onclick="${add}">length: ${entries.length}</${"button"}>
 		`;
 	},
 );

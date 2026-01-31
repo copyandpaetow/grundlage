@@ -16,8 +16,7 @@ export const hashValue = (value: unknown): number => {
 	if (typeof value === "string") return stringHash(value);
 	if (typeof value === "number") return value | 0;
 	if (typeof value === "boolean") return value ? 1 : 0;
-	if (value instanceof HTMLTemplate)
-		return value.parsedHTML.templateHash ^ (value.expressionsHash * 31);
+	if (value instanceof HTMLTemplate) return value.hash;
 
 	if (Array.isArray(value)) {
 		let hash = value.length;

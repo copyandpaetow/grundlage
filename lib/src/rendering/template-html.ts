@@ -1,44 +1,40 @@
-import { AttributeBinding } from "./attribute";
-import { ContentBinding } from "./content";
+import { ParsedHTML } from "../parser/parser-html";
 import { hashValue } from "../utils/hashing";
-import {
-	BINDING_TYPES,
-	COMMENT_DELIMMITER,
-	ParsedHTML,
-} from "../parser/parser-html";
-import { RawContentBinding } from "./raw-content";
-import { TagBinding } from "./tag";
+import { updateAttribute } from "./attribute";
+import { updateContent } from "./content";
+import { updateRawContent } from "./raw-content";
+import { updateTag } from "./tag";
 
 const EMPTY_ARRAY: Array<unknown> = [];
 
-type Bindings = Array<
-	AttributeBinding | TagBinding | ContentBinding | RawContentBinding
->;
+const updateByType = [
+	updateTag,
+	updateAttribute,
+	updateContent,
+	updateRawContent,
+] as const;
 
 export class HTMLTemplate {
+	hash = 0;
+	parsedHTML: ParsedHTML;
+	markers: Array<Comment>;
+	dirtyBindings: Set<number>;
+	expressionHashes: Array<number>;
 	currentExpressions: Array<unknown>;
 	previousExpressions: Array<unknown>;
-	expressionHashes: Array<number>;
-	parsedHTML: ParsedHTML;
-	bindings: Bindings;
-	expressionsHash = 0;
-	updateId = 0;
 
 	constructor(parsedHTML: ParsedHTML, expressions: Array<unknown>) {
 		this.parsedHTML = parsedHTML;
-		this.currentExpressions = expressions;
+		this.currentExpressions = EMPTY_ARRAY;
 		this.previousExpressions = EMPTY_ARRAY;
-
 		this.expressionHashes = [];
-		for (const value of this.currentExpressions) {
-			const hash = hashValue(value);
-			this.expressionHashes.push(hash);
-			this.expressionsHash = (this.expressionsHash * 31 + hash) | 0;
-		}
+
+		this.setExpressions(expressions);
 	}
 
 	setup(): DocumentFragment {
-		this.bindings = [];
+		this.markers = [];
+		this.dirtyBindings = new Set(this.parsedHTML.descriptorToBindings);
 
 		const fragment = this.parsedHTML.fragment.cloneNode(
 			true,
@@ -53,61 +49,41 @@ export class HTMLTemplate {
 		let lastDescriptorIndex = "";
 		while (treeWalker.nextNode()) {
 			const marker = treeWalker.currentNode as Comment;
-			const [descriptorIndex, bindingIndices] =
-				marker.data.split(COMMENT_DELIMMITER);
 
 			//content nodes are there twice with the same index, so we can filter them here
-			if (lastDescriptorIndex === descriptorIndex) {
+			if (lastDescriptorIndex === marker.data) {
 				continue;
 			}
-			lastDescriptorIndex = descriptorIndex;
-
-			const descriptor = this.parsedHTML.descriptors[Number(descriptorIndex)];
-
-			let binding:
-				| AttributeBinding
-				| TagBinding
-				| ContentBinding
-				| RawContentBinding;
-
-			switch (descriptor.type) {
-				case BINDING_TYPES.ATTR:
-					binding = new AttributeBinding(descriptor, marker);
-					break;
-				case BINDING_TYPES.TAG:
-					binding = new TagBinding(descriptor, marker);
-					break;
-				case BINDING_TYPES.CONTENT:
-					binding = new ContentBinding(descriptor, marker);
-					break;
-				case BINDING_TYPES.RAW_CONTENT:
-					binding = new RawContentBinding(descriptor, marker);
-					break;
-
-				default:
-					throw new Error("unknown type");
-			}
-
-			for (const bindingIndex of bindingIndices.split(",")) {
-				this.bindings[Number(bindingIndex)] = binding;
-			}
+			lastDescriptorIndex = marker.data;
+			this.markers.push(marker);
 		}
 
-		for (const binding of this.bindings) {
-			binding.update(this);
-		}
+		this.flush();
+
 		return fragment;
 	}
 
-	update(expressions: Array<unknown>) {
+	setExpressions(expressions: Array<unknown>) {
 		this.previousExpressions = this.currentExpressions;
 		this.currentExpressions = expressions;
+		this.hash = 0;
 
-		const nextId = this.updateId + 1;
-		for (let index = 0; index < this.currentExpressions.length; index++) {
-			const previousHash = this.expressionHashes[index];
+		for (const value of this.currentExpressions) {
+			const hash = hashValue(value);
+			this.expressionHashes.push(hash);
+			this.hash = (this.hash * 31 + hash) | 0;
+		}
 
-			const currentHash = hashValue(this.currentExpressions[index]);
+		this.hash = this.parsedHTML.templateHash ^ (this.hash * 31);
+	}
+
+	update(expressions: Array<unknown>) {
+		const previousHashes = this.expressionHashes;
+		this.setExpressions(expressions);
+
+		for (let index = 0; index < previousHashes.length; index++) {
+			const currentHash = this.expressionHashes[index];
+			const previousHash = previousHashes[index];
 
 			if (previousHash === currentHash) {
 				if (this.currentExpressions[index] instanceof HTMLTemplate) {
@@ -115,17 +91,18 @@ export class HTMLTemplate {
 				}
 				continue;
 			}
-
-			this.expressionHashes[index] = currentHash;
-			this.updateId = nextId;
-			this.bindings[index].update(this);
-			//todo: can this be an issue when the first value is rehashed but a potential additional value related to the same binding here is not?
+			this.dirtyBindings.add(index);
 		}
+		this.flush();
+	}
 
-		this.expressionsHash = 0;
-
-		for (const hash of this.expressionHashes) {
-			this.expressionsHash = (this.expressionsHash * 31 + hash) | 0;
+	flush() {
+		for (const bindingIndex of this.dirtyBindings) {
+			updateByType[this.parsedHTML.descriptors[bindingIndex].type](
+				this,
+				bindingIndex,
+			);
 		}
+		this.dirtyBindings.clear();
 	}
 }

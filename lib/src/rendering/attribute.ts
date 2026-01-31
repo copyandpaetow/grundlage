@@ -1,150 +1,119 @@
-import { BaseComponent } from "../types";
 import { AttributeDescriptor } from "../parser/parser-html";
-import { HTMLTemplate } from "./template-html";
+import { BaseComponent } from "../types";
+import { descriptorToString } from "../utils/descriptor-to-string";
 import { toPrimitive } from "../utils/to-primitve";
+import { HTMLTemplate } from "./template-html";
 
-export class AttributeBinding {
-	#descriptor: AttributeDescriptor;
-	#marker: Comment;
-	#updateId = -1;
+const isEventListener = (key: string, value: unknown) => {
+	if (typeof value !== "function") {
+		return false;
+	}
+	return key.startsWith("on");
+};
 
-	constructor(descriptor: AttributeDescriptor, marker: Comment) {
-		this.#descriptor = descriptor;
-		this.#marker = marker;
+const addAttribute = (element: Element, key: string, value: unknown) => {
+	if (isEventListener(key, value)) {
+		const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
+		element.addEventListener(event, value as EventListener);
+		return;
 	}
 
-	update(context: HTMLTemplate) {
-		if (this.#updateId === context.updateId) {
-			return;
-		}
-		this.#updateId = context.updateId;
-
-		const key = this.#buildAttribute(
-			this.#descriptor.keys,
-			context.currentExpressions,
-		);
-		const previousKey = this.#buildAttribute(
-			this.#descriptor.keys,
-			context.previousExpressions.length > 0
-				? context.previousExpressions
-				: context.currentExpressions,
-		);
-
-		if (typeof previousKey === "object") {
-			if (Array.isArray(previousKey)) {
-				for (const name of previousKey) {
-					this.#removeAttribute(name, undefined);
-				}
-			} else {
-				for (const name in previousKey) {
-					this.#removeAttribute(
-						name,
-						previousKey[name as keyof typeof previousKey],
-					);
-				}
-			}
-		} else {
-			this.#removeAttribute(
-				previousKey as string,
-				this.#buildAttribute(
-					this.#descriptor.values,
-					context.previousExpressions.length > 0
-						? context.previousExpressions
-						: context.currentExpressions,
-				),
-			);
-		}
-
-		if (typeof key === "object") {
-			if (Array.isArray(key)) {
-				for (const name of key) {
-					this.#addAttribute(name, "");
-				}
-			} else {
-				for (const name in key) {
-					this.#addAttribute(name, key[name as keyof typeof key]);
-				}
-			}
-		} else {
-			this.#addAttribute(
-				key as string,
-				this.#buildAttribute(
-					this.#descriptor.values,
-					context.currentExpressions,
-				),
-			);
-		}
+	customElements.upgrade(element);
+	if ("setProperty" in element) {
+		(element as BaseComponent).setProperty(key, value);
+		return;
 	}
 
-	#buildAttribute(
-		descriptorContent: Array<number | string>,
-		currentValues: Array<unknown>,
-	) {
-		if (
-			descriptorContent.length === 1 &&
-			typeof descriptorContent[0] === "number"
-		) {
-			const entry = currentValues[descriptorContent[0]];
-			if (
-				Array.isArray(entry) ||
-				(entry !== null && typeof entry === "object")
-			) {
-				return entry;
-			}
-			if (
-				typeof entry === "function" ||
-				entry === null ||
-				entry === undefined
-			) {
-				return entry;
-			}
-
-			return toPrimitive(entry);
-		}
-
-		let attr = "";
-
-		for (const key of descriptorContent) {
-			attr += typeof key === "number" ? toPrimitive(currentValues[key]) : key;
-		}
-
-		return attr;
+	if (value === null || value === undefined || value === false) {
+		return;
 	}
 
-	#addAttribute(key: string, value: unknown) {
-		const element = this.#marker.nextElementSibling!;
-		if (typeof value === "function" && key.slice(0, 2) === "on") {
-			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
-			element.addEventListener(event, value as EventListener);
-			return;
-		}
+	element.setAttribute(key, String(value));
+};
 
-		customElements.upgrade(element);
-		if ("setProperty" in element) {
-			(element as BaseComponent).setProperty(key, value);
-			return;
-		}
-
-		if (value === null || value === undefined || value === false) {
-			return;
-		}
-
-		element.setAttribute(key, String(value));
+const removeAttribute = (element: Element, key: string, value?: unknown) => {
+	if (isEventListener(key, value)) {
+		const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
+		element?.removeEventListener(event, value as EventListener);
+		return;
 	}
 
-	#removeAttribute(key: string, value: unknown) {
-		const element = this.#marker.nextElementSibling!;
-		if (typeof value === "function" && key.slice(0, 2) === "on") {
-			const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
-			element?.removeEventListener(event, value as EventListener);
-			return;
-		}
-
-		if ("setProperty" in element) {
-			(element as BaseComponent).setProperty(key, undefined);
-			return;
-		}
-
-		element.removeAttribute(key);
+	if ("setProperty" in element) {
+		(element as BaseComponent).setProperty(key, undefined);
+		return;
 	}
-}
+
+	element.removeAttribute(key);
+};
+
+const handleExpandableAttribute = (
+	context: HTMLTemplate,
+	element: Element,
+	index: number,
+) => {
+	const current = context.currentExpressions[index];
+	const previous = context.previousExpressions[index];
+
+	if (Array.isArray(previous)) {
+		for (const name of previous) {
+			removeAttribute(element, name);
+		}
+	} else if (previous?.constructor === Object) {
+		for (const name in previous) {
+			removeAttribute(element, name, previous[name as keyof typeof previous]);
+		}
+	} else if (previous) {
+		removeAttribute(element, toPrimitive(previous));
+	}
+
+	if (Array.isArray(current)) {
+		for (const name of current) {
+			addAttribute(element, name, "");
+		}
+	} else if (current?.constructor === Object) {
+		for (const name in current) {
+			addAttribute(element, name, current[name as keyof typeof previous]);
+		}
+	} else if (current) {
+		addAttribute(element, toPrimitive(current), "");
+	}
+};
+
+export const updateAttribute = (context: HTMLTemplate, index: number) => {
+	const element = context.markers[index].nextElementSibling!;
+	const descriptor = context.parsedHTML.descriptors[
+		index
+	] as AttributeDescriptor;
+
+	const isBooleanAttribute = descriptor.values.length === 0;
+	const isExpandable = descriptor.keys.length === 1;
+
+	if (isBooleanAttribute && isExpandable) {
+		handleExpandableAttribute(context, element, descriptor.keys[0] as number);
+		return;
+	}
+	const previousName = descriptorToString(
+		descriptor.keys,
+		context.previousExpressions,
+	);
+	const currentName = descriptorToString(
+		descriptor.keys,
+		context.currentExpressions,
+	);
+
+	if (isBooleanAttribute) {
+		removeAttribute(element, previousName);
+		addAttribute(element, currentName, "");
+		return;
+	}
+
+	const expression = context.currentExpressions[descriptor.values[0]];
+
+	const currentValue = isEventListener(currentName, expression)
+		? expression
+		: descriptorToString(descriptor.values, context.currentExpressions);
+
+	removeAttribute(element, previousName, expression);
+	addAttribute(element, currentName, currentValue);
+	return;
+};

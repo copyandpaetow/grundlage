@@ -1,9 +1,9 @@
-import { ContentDescriptor } from "../parser/parser-html";
-import { HTMLTemplate } from "./template-html";
-import { toPrimitive } from "../utils/to-primitve";
+import { descriptorToString } from "../utils/descriptor-to-string";
 import { hashValue } from "../utils/hashing";
+import { toPrimitive } from "../utils/to-primitve";
+import { HTMLTemplate } from "./template-html";
 
-function diff(oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) {
+const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 	const oldHashes = new Set(oldList.map(hashValue));
 	const newHashes = new Set(newList.map(hashValue));
 
@@ -74,7 +74,7 @@ function diff(oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) {
 	}
 
 	return operations;
-}
+};
 
 const collectMarker = (listMarker: Comment) => {
 	const markers: Array<{ start: Comment; end: Comment }> = [];
@@ -105,147 +105,155 @@ const collectMarker = (listMarker: Comment) => {
 	return markers;
 };
 
-export class ContentBinding {
-	#descriptor: ContentDescriptor;
-	#marker: Comment;
-	#updateId = -1;
+const getNodesBetween = (start: Node, end: Node) => {
+	const nodes = [];
 
-	constructor(descriptor: ContentDescriptor, marker: Comment) {
-		this.#descriptor = descriptor;
-		this.#marker = marker;
+	let current = start.nextSibling;
+	while (current && current !== end) {
+		nodes.push(current);
+		current = current.nextSibling;
 	}
+	return nodes;
+};
 
-	update(context: HTMLTemplate) {
-		if (this.#updateId === context.updateId) {
-			return;
-		}
-		this.#updateId = context.updateId;
+const deleteNodesBetween = (start: Node, end?: Node) => {
+	let current = start.nextSibling;
 
-		if (this.#descriptor.values.length > 1) {
-			this.#delete(this.#marker);
-			this.#marker.after(new Comment(this.#createComment(context)));
-			return;
-		}
+	while (current) {
+		const isComment = current.nodeType === Node.COMMENT_NODE;
+		const isLastComment =
+			current === end || (current as Comment)?.data === (start as Comment).data;
 
-		const index = this.#descriptor.values[0] as number;
-
-		const current = context.currentExpressions[index];
-		const previous = context.previousExpressions[index];
-
-		//if the new value is a renderTemplate, we need to check if the old one is also a renderTemplate and if they have the same templateHash
-		if (current instanceof HTMLTemplate) {
-			if (
-				previous instanceof HTMLTemplate &&
-				previous.parsedHTML.templateHash === current.parsedHTML.templateHash
-			) {
-				//if they do, we can update the old one just with new dynamic values
-				previous.update(current.currentExpressions);
-				//to not lose the reference we need to keep it in the currentValeus
-				context.currentExpressions[index] = previous;
-				return;
-			}
-
-			//otherwise we delete the old dom and render again
-			this.#delete(this.#marker);
-			this.#marker.after(current.setup());
-			return;
-		}
-
-		if (Array.isArray(current)) {
-			let oldList = [];
-			if (Array.isArray(previous)) {
-				oldList = previous;
-			} else if (previous) {
-				oldList.push(previous);
-			}
-
-			const operations = diff(oldList, current);
-			const markers = collectMarker(this.#marker);
-
-			for (const operation of operations) {
-				if (operation.type === "add") {
-					const start = new Comment("list" + operation.index);
-					const end = new Comment("list" + operation.index);
-					const content = (current[operation.index] as HTMLTemplate).setup();
-
-					const insertAfter = markers[operation.index - 1]?.end || this.#marker;
-					insertAfter.after(start, content, end);
-					markers.splice(operation.index, 0, { start, end });
-				} else if (operation.type === "replace") {
-					//todo: we need to investigate if it makes sense to update the template instead of moving dom nodes
-
-					const marker = markers[operation.index];
-					this.#delete(marker.start, marker.end);
-					const content = (current[operation.index] as HTMLTemplate).setup();
-					marker.start.after(content);
-				} else if (operation.type === "delete") {
-					const marker = markers[operation.index];
-					this.#delete(marker.start, marker.end);
-					marker.start.remove();
-					marker.end.remove();
-					markers.splice(operation.index, 1);
-				} else if (operation.type === "swap") {
-					//todo: we need to investigate if it makes sense to update the template instead of moving dom nodes
-					const markerA = markers[operation.index];
-					const markerB = markers[operation.with!];
-					const nodesA = this.#getNodesBetween(markerA.start, markerA.end);
-					const nodesB = this.#getNodesBetween(markerB.start, markerB.end);
-					markerA.start.after(...nodesB);
-					markerB.start.after(...nodesA);
-				}
-			}
-
-			return;
-		}
-
-		this.#delete(this.#marker);
-		this.#marker.after(document.createTextNode(toPrimitive(current)));
-	}
-
-	#createComment(context: HTMLTemplate) {
-		let commentData = "";
-		//the first and last entries are the comment markers
-		for (let index = 1; index < this.#descriptor.values.length - 1; index++) {
-			const entry = this.#descriptor.values[index];
-			commentData +=
-				typeof entry === "number"
-					? toPrimitive(context.currentExpressions[entry])
-					: entry;
-		}
-		return commentData;
-	}
-
-	#delete(start: Comment, end?: Comment) {
-		let current = start.nextSibling;
-
-		while (current) {
-			const isComment = current.nodeType === Node.COMMENT_NODE;
-			const isLastComment =
-				current === end || (current as Comment)?.data === start.data;
-
-			if (!isComment) {
-				current = current.nextSibling;
-				continue;
-			}
-
-			if (isLastComment) {
-				break;
-			}
-
-			const next = current.nextSibling;
-			current.remove();
-			current = next;
-		}
-	}
-
-	#getNodesBetween(start: Node, end: Node) {
-		const nodes = [];
-
-		let current = start.nextSibling;
-		while (current && current !== end) {
-			nodes.push(current);
+		if (!isComment) {
 			current = current.nextSibling;
+			continue;
 		}
-		return nodes;
+
+		if (isLastComment) {
+			break;
+		}
+
+		const next = current.nextSibling;
+		current.remove();
+		current = next;
 	}
-}
+};
+
+const renderList = (
+	context: HTMLTemplate,
+	marker: Comment,
+	expressionIndex: number,
+) => {
+	const current = context.currentExpressions[
+		expressionIndex
+	] as Array<HTMLTemplate>;
+	const previous = context.previousExpressions[expressionIndex];
+
+	let oldList = [];
+	if (Array.isArray(previous)) {
+		oldList = previous;
+	} else if (previous) {
+		oldList.push(previous);
+	}
+
+	const operations = diff(oldList, current);
+	const markers = collectMarker(marker);
+
+	for (const operation of operations) {
+		if (operation.type === "add") {
+			const start = new Comment("list" + operation.index);
+			const end = new Comment("list" + operation.index);
+			const content = (current[operation.index] as HTMLTemplate).setup();
+
+			const insertAfter = markers[operation.index - 1]?.end || marker;
+			insertAfter.after(start, content, end);
+			markers.splice(operation.index, 0, { start, end });
+		} else if (operation.type === "replace") {
+			//todo: we need to investigate if it makes sense to update the template instead of moving dom nodes
+
+			const marker = markers[operation.index];
+			deleteNodesBetween(marker.start, marker.end);
+			const content = (current[operation.index] as HTMLTemplate).setup();
+			marker.start.after(content);
+		} else if (operation.type === "delete") {
+			const marker = markers[operation.index];
+			deleteNodesBetween(marker.start, marker.end);
+			marker.start.remove();
+			marker.end.remove();
+			markers.splice(operation.index, 1);
+		} else if (operation.type === "swap") {
+			//todo: we need to investigate if it makes sense to update the template instead of moving dom nodes
+			const markerA = markers[operation.index];
+			const markerB = markers[operation.with!];
+			const nodesA = getNodesBetween(markerA.start, markerA.end);
+			const nodesB = getNodesBetween(markerB.start, markerB.end);
+			markerA.start.after(...nodesB);
+			markerB.start.after(...nodesA);
+		}
+	}
+};
+
+const renderTemplate = (
+	context: HTMLTemplate,
+	marker: Comment,
+	expressionIndex: number,
+) => {
+	const current = context.currentExpressions[expressionIndex] as HTMLTemplate;
+	const previous = context.previousExpressions[expressionIndex];
+
+	if (
+		previous instanceof HTMLTemplate &&
+		previous.parsedHTML.templateHash === current.parsedHTML.templateHash
+	) {
+		//if they do, we can update the old one just with new dynamic values
+		previous.update(current.currentExpressions);
+		//to not lose the reference we need to keep it in the currentValeus
+		context.currentExpressions[expressionIndex] = previous;
+		return;
+	}
+
+	deleteNodesBetween(marker);
+	marker.after(current.setup());
+	//otherwise we delete the old dom and render again
+	return;
+};
+
+const renderComment = (
+	context: HTMLTemplate,
+	marker: Comment,
+	descriptorValues: Array<string | number>,
+) => {
+	deleteNodesBetween(marker);
+	marker.after(
+		new Comment(
+			descriptorToString(descriptorValues, context.currentExpressions),
+		),
+	);
+};
+
+export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
+	const descriptor = context.parsedHTML.descriptors[bindingIndex];
+	const marker = context.markers[bindingIndex];
+
+	//only true for comments
+	if (descriptor.values.length > 1) {
+		renderComment(context, marker, descriptor.values);
+		return;
+	}
+
+	const expressionIndex = descriptor.values[0] as number;
+	const current = context.currentExpressions[expressionIndex];
+
+	if (current instanceof HTMLTemplate) {
+		renderTemplate(context, marker, expressionIndex);
+		return;
+	}
+
+	if (Array.isArray(current)) {
+		renderList(context, marker, expressionIndex);
+		return;
+	}
+
+	deleteNodesBetween(marker);
+	marker.after(document.createTextNode(toPrimitive(current)));
+};

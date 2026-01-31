@@ -84,12 +84,9 @@ export const render: Component = (
 		/*
 			*next steps
 
-			### structure ###
-
-			todo: try hashes as stable keys for list items 
-
-
 			### bugs ###
+
+			todo: check why content is not updating
 
 			* if a tag is changed, we lose some internal states, eventListeners get reapplied
 			todo: restore focus, animation, scroll position
@@ -98,10 +95,6 @@ export const render: Component = (
 			### future ###
 
 			? template updating became a little ugly, it would be nice not to carry around 2 expression arrays
-
-			? we could store the bindings, the pointers etc as SoA
-
-			? delay rendering if component is not visible? could be checked if intersection observer
 
 			? maybe it would be cleaner for the parser to return a string instead of the documentFragment and we do the caching in a different step?
 			

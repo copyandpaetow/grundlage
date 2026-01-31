@@ -12,8 +12,8 @@ In the comment nodes we encode which binding index they have and which expressio
 
 ### descriptors
 
-There are currently 4 types: tag, attribute, rawContent (style, textArea), content
-These have somewhat different descriptor shapes what mainly involve arrays with either string content or numbers
+Descriptors describe the gaps/holes/slots of the tagged template literal input. There are currently 4 types: tag, attribute, rawContent (style, textArea), content
+These descriptors have somewhat different shapes what mainly involve arrays with either string content or numbers
 
 ```ts
 html`<div class="${dynamicClass1} static ${dynamicClass2}"></div>`[
@@ -26,7 +26,7 @@ html`<div class="${dynamicClass1} static ${dynamicClass2}"></div>`[
 ];
 ```
 
-These descriptors than can be combined with the expression array to the final html part (an attribute in this case)
+They than can be combined with the expression array to the final html part (an attribute in this case). Like in the example above, a descriptor can be made out of more than one dynamic part.
 
 ## Bindings
 

@@ -3,10 +3,10 @@ import { HTMLTemplate } from "../rendering/template-html";
 type ValueOf<T> = T[keyof T];
 
 export const BINDING_TYPES = {
-	TAG: 1,
-	ATTR: 2,
-	CONTENT: 3,
-	RAW_CONTENT: 4,
+	TAG: 0,
+	ATTR: 1,
+	CONTENT: 2,
+	RAW_CONTENT: 3,
 } as const;
 
 export type AttributeDescriptor = {
@@ -29,6 +29,7 @@ export type TagDescriptor = {
 	type: typeof BINDING_TYPES.TAG;
 	values: Array<number | string>;
 	endValues: Array<number | string>;
+	relatedAttributes: Array<number>;
 };
 
 export type Descriptor =
@@ -38,6 +39,7 @@ export type Descriptor =
 	| RawContentDescriptor;
 
 export type ParsedHTML = {
+	descriptorToBindings: Array<number>;
 	descriptors: Array<Descriptor>;
 	fragment: DocumentFragment;
 	templateHash: number;
@@ -79,9 +81,9 @@ type StateValue = ValueOf<typeof STATE>;
 
 let state: StateValue = STATE.TEXT;
 let bindings: Array<Descriptor>;
+let descriptorToBindings: Array<number>;
 let templates: TemplateStringsArray;
 
-let bindingIndex = 0;
 let index = 0;
 let activeTemplate = "";
 
@@ -93,6 +95,7 @@ let attrQuote = "";
 let currentTagName = "";
 
 let activeBinding: Descriptor | null = null;
+let activeTagBinding: Descriptor | null = null;
 const openTagBindings: Array<TagDescriptor> = [];
 
 type BufferArray = Array<
@@ -119,7 +122,7 @@ const setup = (strings: TemplateStringsArray) => {
 	state = STATE.TEXT;
 	templates = strings;
 	bindings = [];
-	bindingIndex = 0;
+	descriptorToBindings = [];
 	index = 0;
 	activeTemplate = templates[index];
 	charIndex = 0;
@@ -128,47 +131,8 @@ const setup = (strings: TemplateStringsArray) => {
 	currentTagName = "";
 };
 
-export const COMMENT_DELIMMITER = ":::";
-
-const createComment = () => {
-	const descriptorIndex = bindings.length - 1;
-	const descriptor = bindings[descriptorIndex];
-
-	return {
-		toString() {
-			let indices = "";
-
-			if ("keys" in descriptor) {
-				for (const value of descriptor.keys) {
-					if (typeof value === "number") {
-						indices += value + ",";
-					}
-				}
-			}
-
-			for (const value of descriptor.values) {
-				if (typeof value === "number") {
-					indices += value + ",";
-				}
-			}
-
-			if ("endValues" in descriptor) {
-				for (const value of descriptor.endValues) {
-					if (typeof value === "number") {
-						indices += value + ",";
-					}
-				}
-			}
-			return (
-				"<!--" +
-				descriptorIndex +
-				COMMENT_DELIMMITER +
-				indices.slice(0, -1) +
-				"-->"
-			);
-		},
-	};
-};
+const createComment = () =>
+	`<!--${activeBinding?.type}-${bindings.length - 1}-->`;
 
 const updateBinding = () => {
 	switch (state) {
@@ -240,6 +204,7 @@ const setBinding = () => {
 				type: BINDING_TYPES.TAG,
 				values: [],
 				endValues: [],
+				relatedAttributes: [],
 			} satisfies TagDescriptor;
 			openTagBindings.push(binding);
 
@@ -295,6 +260,7 @@ const completeTag = () => {
 		moveArrayContents(buffers.tag, (activeBinding as TagDescriptor).values);
 		buffers.element.push("div");
 		resultBuffer.push(createComment());
+		activeTagBinding = activeBinding;
 	} else {
 		currentTagName = buffers.tag[0] as string;
 		moveArrayContents(buffers.tag, buffers.element);
@@ -329,6 +295,9 @@ const completeAttribute = () => {
 		if (typeof firstKey === "string") {
 			(activeBinding as AttributeDescriptor).keys[0] = firstKey.trimStart();
 		}
+		(activeTagBinding as TagDescriptor)?.relatedAttributes.push(
+			bindings.length - 1,
+		);
 	} else {
 		moveArrayContents(buffers.attributeKey, buffers.element);
 		if (buffers.attributeValue.length) {
@@ -341,6 +310,8 @@ const completeAttribute = () => {
 };
 
 const flushElement = () => {
+	activeTagBinding = null;
+
 	if (buffers.element.length === 0) {
 		if (buffers.content.length > 0) {
 			moveArrayContents(buffers.content, resultBuffer);
@@ -537,11 +508,18 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 		}
 
 		if (!activeBinding) {
-			bindingIndex = 0;
 			activeBinding = setBinding();
-			bindings.push(activeBinding);
+			if (state !== STATE.END_TAG) {
+				bindings.push(activeBinding);
+			}
 		}
-		bindingIndex++;
+
+		if (state !== STATE.END_TAG) {
+			descriptorToBindings.push(bindings.length - 1);
+		} else {
+			descriptorToBindings.push(bindings.indexOf(activeBinding));
+		}
+
 		updateBinding();
 	}
 
@@ -551,6 +529,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 	resultBuffer.length = 0;
 
 	return {
+		descriptorToBindings,
 		descriptors: bindings,
 		fragment: range.createContextualFragment(result),
 		templateHash: stringHash(result),

@@ -1,60 +1,25 @@
-import { COMMENT_DELIMMITER, TagDescriptor } from "../parser/parser-html";
-import { toPrimitive } from "../utils/to-primitve";
+import { TagDescriptor } from "../parser/parser-html";
+import { descriptorToString } from "../utils/descriptor-to-string";
 import { HTMLTemplate } from "./template-html";
 
-export class TagBinding {
-	#descriptor: TagDescriptor;
-	#marker: Comment;
-	#updateId = -1;
+export const updateTag = (context: HTMLTemplate, index: number) => {
+	const marker = context.markers[index];
+	const descriptor = context.parsedHTML.descriptors[index] as TagDescriptor;
+	const element = marker.nextElementSibling!;
+	const newTag = descriptorToString(
+		descriptor.values,
+		context.currentExpressions,
+	);
 
-	constructor(descriptor: TagDescriptor, marker: Comment) {
-		this.#descriptor = descriptor;
-		this.#marker = marker;
+	const newElement = document.createElement(newTag);
+	for (const attr of element.attributes) {
+		newElement.setAttribute(attr.name, attr.value);
 	}
 
-	update(context: HTMLTemplate) {
-		if (this.#updateId === context.updateId) {
-			return;
-		}
-		this.#updateId = context.updateId;
+	newElement.replaceChildren(...element.childNodes);
+	element.replaceWith(newElement);
 
-		const element = this.#marker.nextElementSibling!;
-		const newTag = this.#getTag(context.currentExpressions);
-
-		const newElement = document.createElement(newTag);
-		for (const attr of element.attributes) {
-			newElement.setAttribute(attr.name, attr.value);
-		}
-
-		newElement.replaceChildren(...element.childNodes);
-		element.replaceWith(newElement);
-
-		this.#updateRelated(context);
-
-		return;
+	for (const relatedIndex of descriptor.relatedAttributes) {
+		context.dirtyBindings.add(relatedIndex);
 	}
-
-	#updateRelated(context: HTMLTemplate) {
-		let marker = this.#marker;
-
-		while (marker.nextSibling?.nodeType === Node.COMMENT_NODE) {
-			marker = marker.nextSibling as Comment;
-			const [_, bindingIndices] = marker.data.split(COMMENT_DELIMMITER);
-			const relatedIndex = Number(bindingIndices.split(",")[0]);
-
-			context.bindings[relatedIndex].update(context);
-		}
-	}
-
-	#getTag(values: Array<unknown>) {
-		let tag = "";
-
-		for (const relatedIndex of this.#descriptor.values) {
-			tag +=
-				typeof relatedIndex === "number"
-					? toPrimitive(values[relatedIndex])
-					: relatedIndex;
-		}
-		return tag;
-	}
-}
+};
