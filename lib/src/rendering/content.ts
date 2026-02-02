@@ -3,6 +3,13 @@ import { hashValue } from "../utils/hashing";
 import { toPrimitive } from "../utils/to-primitve";
 import { HTMLTemplate } from "./template-html";
 
+export const OPERATION_TYPES = {
+	ADD: 1,
+	DELETE: 2,
+	REPLACE: 3,
+	SWAP: 4,
+} as const;
+
 const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 	const oldHashes = new Set(oldList.map(hashValue));
 	const newHashes = new Set(newList.map(hashValue));
@@ -29,13 +36,13 @@ const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 		}
 
 		if (currentHash === null) {
-			operations.push({ index: newIndex, type: "add" });
+			operations.push({ index: newIndex, type: OPERATION_TYPES.ADD });
 			newIndex++;
 			continue;
 		}
 
 		if (newHash === null) {
-			operations.push({ index: oldIndex, type: "delete" });
+			operations.push({ index: oldIndex, type: OPERATION_TYPES.DELETE });
 			oldIndex++;
 			continue;
 		}
@@ -44,17 +51,17 @@ const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 		const currentExistsInNew = newHashes.has(currentHash);
 
 		if (!currentExistsInNew) {
-			operations.push({ index: oldIndex, type: "delete" });
+			operations.push({ index: oldIndex, type: OPERATION_TYPES.DELETE });
 			current.splice(oldIndex, 1);
 			continue;
 		}
 
 		if (!newExistsInOld) {
 			if (newList.length === operations.length) {
-				operations.push({ index: newIndex, type: "replace" });
+				operations.push({ index: newIndex, type: OPERATION_TYPES.REPLACE });
 				current[oldIndex] = newHash;
 			} else {
-				operations.push({ index: newIndex, type: "add" });
+				operations.push({ index: newIndex, type: OPERATION_TYPES.ADD });
 				current.splice(oldIndex, 0, newHash);
 			}
 
@@ -64,7 +71,11 @@ const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 		}
 
 		const swapTarget = current.indexOf(newHash, oldIndex + 1);
-		operations.push({ index: oldIndex, type: "swap", with: swapTarget });
+		operations.push({
+			index: oldIndex,
+			type: OPERATION_TYPES.SWAP,
+			with: swapTarget,
+		});
 		[current[oldIndex], current[swapTarget]] = [
 			current[swapTarget],
 			current[oldIndex],
@@ -160,7 +171,7 @@ const renderList = (
 	const markers = collectMarker(marker);
 
 	for (const operation of operations) {
-		if (operation.type === "add") {
+		if (operation.type === OPERATION_TYPES.ADD) {
 			const start = new Comment("list" + operation.index);
 			const end = new Comment("list" + operation.index);
 			const content = (current[operation.index] as HTMLTemplate).setup();
@@ -168,20 +179,20 @@ const renderList = (
 			const insertAfter = markers[operation.index - 1]?.end || marker;
 			insertAfter.after(start, content, end);
 			markers.splice(operation.index, 0, { start, end });
-		} else if (operation.type === "replace") {
+		} else if (operation.type === OPERATION_TYPES.REPLACE) {
 			//todo: we need to investigate if it makes sense to update the template instead of moving dom nodes
 
 			const marker = markers[operation.index];
 			deleteNodesBetween(marker.start, marker.end);
 			const content = (current[operation.index] as HTMLTemplate).setup();
 			marker.start.after(content);
-		} else if (operation.type === "delete") {
+		} else if (operation.type === OPERATION_TYPES.DELETE) {
 			const marker = markers[operation.index];
 			deleteNodesBetween(marker.start, marker.end);
 			marker.start.remove();
 			marker.end.remove();
 			markers.splice(operation.index, 1);
-		} else if (operation.type === "swap") {
+		} else if (operation.type === OPERATION_TYPES.SWAP) {
 			//todo: we need to investigate if it makes sense to update the template instead of moving dom nodes
 			const markerA = markers[operation.index];
 			const markerB = markers[operation.with!];

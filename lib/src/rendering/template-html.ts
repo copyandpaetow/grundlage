@@ -27,7 +27,6 @@ export class HTMLTemplate {
 		this.parsedHTML = parsedHTML;
 		this.currentExpressions = EMPTY_ARRAY;
 		this.previousExpressions = EMPTY_ARRAY;
-		this.expressionHashes = [];
 
 		this.setExpressions(expressions);
 	}
@@ -66,6 +65,7 @@ export class HTMLTemplate {
 	setExpressions(expressions: Array<unknown>) {
 		this.previousExpressions = this.currentExpressions;
 		this.currentExpressions = expressions;
+		this.expressionHashes = [];
 		this.hash = 0;
 
 		for (const value of this.currentExpressions) {
@@ -87,7 +87,7 @@ export class HTMLTemplate {
 
 			if (previousHash === currentHash) {
 				if (this.currentExpressions[index] instanceof HTMLTemplate) {
-					this.currentExpressions[index] = this.previousExpressions;
+					this.currentExpressions[index] = this.previousExpressions[index];
 				}
 				continue;
 			}

@@ -131,8 +131,9 @@ const setup = (strings: TemplateStringsArray) => {
 	currentTagName = "";
 };
 
+export const COMMENT_IDENTIFIER = "__grundlage__";
 const createComment = () =>
-	`<!--${activeBinding?.type}-${bindings.length - 1}-->`;
+	`<!--${COMMENT_IDENTIFIER}${activeBinding?.type}-${bindings.length - 1}${COMMENT_IDENTIFIER}-->`;
 
 const updateBinding = () => {
 	switch (state) {

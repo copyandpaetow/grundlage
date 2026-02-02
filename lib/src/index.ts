@@ -86,13 +86,16 @@ export const render: Component = (
 
 			### bugs ###
 
-			todo: check why content is not updating
+			todo: setExpressions could be nicer / less oop
 
 			* if a tag is changed, we lose some internal states, eventListeners get reapplied
 			todo: restore focus, animation, scroll position
 
 
 			### future ###
+
+			? we should be able to detect if there already is a template and in that case just read the markers and dont update
+			=> we would need to mark the comments somehow so they are recognizable but also different from the list markers
 
 			? template updating became a little ugly, it would be nice not to carry around 2 expression arrays
 

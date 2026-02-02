@@ -107,7 +107,7 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 		return;
 	}
 
-	const expression = context.currentExpressions[descriptor.values[0]];
+	const expression = context.currentExpressions[descriptor.values[0] as number];
 
 	const currentValue = isEventListener(currentName, expression)
 		? expression
