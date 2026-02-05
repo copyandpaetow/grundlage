@@ -1,4 +1,5 @@
 import { html } from "./parser/html";
+import { ValueOf } from "./parser/types";
 import { HTMLTemplate } from "./rendering/template-html";
 import { BaseComponent, Component, TemplateRenderer } from "./types";
 
@@ -9,6 +10,11 @@ const defaultOptions: ShadowRootInit = {
 	serializable: true,
 };
 
+const RENDER_MODE = {
+	SSR: 1,
+	CSR: 2,
+} as const;
+
 export { html } from "./parser/html";
 
 export const render: Component = (
@@ -17,19 +23,19 @@ export const render: Component = (
 	options = defaultOptions,
 ) => {
 	class BaseElement extends HTMLElement implements BaseComponent {
-		#props = new Map<string, unknown>();
+		#props: Record<string, unknown> = {};
 		#observer: MutationObserver;
 		#render: TemplateRenderer | null = null;
 		#view: HTMLTemplate | null = null;
 		#cleanup: ((props: Record<string, unknown>) => void) | null = null;
 		#isUpdating = false;
-		#isSSR = false;
+		#renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
+		#syncAttributeInProgress = false;
 
 		constructor() {
 			super();
-
 			if (this.shadowRoot) {
-				this.#isSSR = true;
+				this.#renderMode = RENDER_MODE.SSR;
 			} else {
 				this.attachShadow(options);
 			}
@@ -37,22 +43,24 @@ export const render: Component = (
 
 		async connectedCallback() {
 			for (const attr of this.attributes) {
-				this.#props.set(attr.name, attr.value);
+				this.#props[attr.name] = attr.value;
 			}
 			await this.#setup();
 			this.#watchAttributes();
 		}
 
 		async disconnectedCallback() {
+			//this callback is also called when moving inside of the dom.
+			//By waiting a tick and checking if we are back in the dom, we can avoid false cleanup calls
 			await Promise.resolve();
 			if (!this.isConnected) {
 				this.#observer?.disconnect();
-				this.#cleanup?.(Object.fromEntries(this.#props));
+				this.#cleanup?.(this.#props);
 			}
 		}
 
 		setProperty(name: string, value: unknown) {
-			const previousValue = this.#props.get(name);
+			const previousValue = this.#props[name];
 			if (previousValue === value) {
 				return;
 			}
@@ -62,22 +70,29 @@ export const render: Component = (
 				typeof value === "number" ||
 				typeof value === "boolean"
 			) {
+				this.#syncAttributeInProgress = true;
 				this.setAttribute(name, String(value));
+				this.#syncAttributeInProgress = false;
 			}
 
 			if (value === undefined || value === null) {
-				this.#props.delete(name);
+				delete this.#props[name];
+				this.#syncAttributeInProgress = true;
 				this.removeAttribute(name);
-				return;
+				this.#syncAttributeInProgress = false;
+			} else {
+				this.#props[name] = value;
 			}
 
-			this.#props.set(name, value);
 			this.update();
 		}
 
 		#watchAttributes() {
 			this.#observer?.disconnect();
 			this.#observer = new MutationObserver((mutations) => {
+				if (this.#syncAttributeInProgress) {
+					return;
+				}
 				for (const mutation of mutations) {
 					this.setProperty(
 						mutation.attributeName!,
@@ -113,52 +128,23 @@ export const render: Component = (
 
 		async #setup() {
 			try {
-				const generator = componentGenerator(
-					Object.fromEntries(this.#props),
-					this,
-				);
+				const generator = componentGenerator(this.#props, this);
 				let result;
 
 				while (true) {
 					const { done, value } = await generator.next(result);
 
 					if (done) {
-						if (typeof value === "function") {
-							this.#cleanup = value;
-						}
+						this.#cleanup = typeof value === "function" ? value : null;
 						break;
 					}
 
-					if (value instanceof Promise) {
-						result = await value;
-						continue;
-					}
-
-					const template =
-						typeof value === "function"
-							? value(Object.fromEntries(this.#props))
-							: value;
-
-					if (template instanceof HTMLTemplate) {
-						if (!this.#isSSR) {
-							this.shadowRoot?.replaceChildren(template.setup());
-						}
-
-						this.#view = template;
-						this.#render = (
-							typeof value === "function" ? value : () => value
-						) as TemplateRenderer;
-						result = this.shadowRoot;
-						continue;
-					}
-
-					result = value;
+					result = await this.#processYield(value);
 				}
 
-				console.log(this.#isSSR, this.#view);
-
-				if (this.#isSSR) {
-					this.#view!.hydrate(this.shadowRoot!);
+				if (this.#view && this.#renderMode === RENDER_MODE.SSR) {
+					this.#view.hydrate(this.shadowRoot!);
+					this.#renderMode = RENDER_MODE.CSR;
 				}
 			} catch (error) {
 				console.error(error);
@@ -166,14 +152,40 @@ export const render: Component = (
 			}
 		}
 
+		async #processYield(value: unknown): Promise<unknown> {
+			if (value instanceof Promise) {
+				return value;
+			}
+
+			if (typeof value === "function") {
+				this.#render = value as TemplateRenderer;
+				return this.#mount(value(this.#props));
+			}
+
+			if (value instanceof HTMLTemplate) {
+				this.#render = () => value;
+				return this.#mount(value);
+			}
+
+			return value;
+		}
+
+		#mount(template: HTMLTemplate): ShadowRoot | null {
+			this.#view = template;
+			if (this.#renderMode === RENDER_MODE.CSR) {
+				this.shadowRoot?.replaceChildren(template.setup());
+			}
+			return this.shadowRoot;
+		}
+
 		async update() {
 			if (!this.#render || this.#isUpdating) {
 				return;
 			}
 			this.#isUpdating = true;
-			await Promise.resolve().then();
+			await Promise.resolve();
 
-			let template = this.#render(Object.fromEntries(this.#props));
+			let template = this.#render(this.#props);
 
 			if (!(template instanceof HTMLTemplate)) {
 				template = html`${template}`;
@@ -183,7 +195,7 @@ export const render: Component = (
 				!this.#view ||
 				this.#view.parsedHTML.templateHash !== template.parsedHTML.templateHash
 			) {
-				this.shadowRoot?.replaceChildren(template.setup());
+				this.#mount(template);
 				this.#isUpdating = false;
 				return;
 			}
@@ -196,7 +208,7 @@ export const render: Component = (
 		customElements.define(name, BaseElement);
 	}
 
-	return (currentProps = {}) => {
-		return html`<${name} ${currentProps}></${name}>`;
+	return (props = {}) => {
+		return html`<${name} ${props}></${name}>`;
 	};
 };

@@ -12,6 +12,28 @@ import {
 } from "./types";
 import { COMMENT_IDENTIFIER, isQuote, isWhitespace } from "./html-util";
 
+/*
+the idea here is to analyse and parse a tagged template string to give us
+- a document fragment
+- a hash
+- an array of expressions descriptions aka "descriptors"
+- a mapping of which expressions map to which descriptor
+
+several expressions can be part of one descriptor like
+<div class="${dynamic1} static ${dynamic1}"> 
+=> one attribute descriptor
+
+They also dont have to be next to each other
+<h${headingLevel}>Hello, ${name}<h${headingLevel}>
+=> one tag descriptor
+=> one content descriptor
+
+We walk each character and listen for different character combinations to change the state machine. 
+Depending on the state we move the last characters to the dedicated buffer array.
+=> this way we can change and insert parts dynamically while also keeping memory usage low / performance up
+
+*/
+
 type StateValue = ValueOf<typeof STATE>;
 type BufferArray = Array<string | number>;
 
@@ -31,7 +53,7 @@ const STATE = {
 
 let state: StateValue = STATE.TEXT;
 let descriptors: Array<Descriptor>;
-let descriptorToBindings: Array<number>;
+let expressionToDescriptor: Array<number>;
 let templates: TemplateStringsArray;
 let index = 0;
 let activeTemplate = "";
@@ -43,6 +65,22 @@ let activeDescriptor: Descriptor | null = null;
 let activeTagDescriptor: Descriptor | null = null;
 const openTagDescriptors: Array<TagDescriptor> = [];
 
+const setup = (strings: TemplateStringsArray) => {
+	state = STATE.TEXT;
+	descriptors = [];
+	expressionToDescriptor = [];
+	templates = strings;
+	index = 0;
+	activeTemplate = templates[index];
+	charIndex = 0;
+	splitIndex = -1;
+	attrQuote = "";
+	currentTagName = "";
+	activeDescriptor = null;
+	activeTagDescriptor = null;
+	openTagDescriptors.length = 0;
+};
+
 const resultBuffer: BufferArray = [];
 const buffers = {
 	element: [] as BufferArray,
@@ -53,19 +91,6 @@ const buffers = {
 	attributeKey: [] as BufferArray,
 	attributeValue: [] as BufferArray,
 	rawContent: [] as BufferArray,
-};
-
-const setup = (strings: TemplateStringsArray) => {
-	state = STATE.TEXT;
-	templates = strings;
-	descriptors = [];
-	descriptorToBindings = [];
-	index = 0;
-	activeTemplate = templates[index];
-	charIndex = 0;
-	splitIndex = -1;
-	attrQuote = "";
-	currentTagName = "";
 };
 
 const moveArrayContents = (from: Array<unknown>, to: Array<unknown>) => {
@@ -459,9 +484,9 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 		}
 
 		if (state !== STATE.END_TAG) {
-			descriptorToBindings.push(descriptors.length - 1);
+			expressionToDescriptor.push(descriptors.length - 1);
 		} else {
-			descriptorToBindings.push(descriptors.indexOf(activeDescriptor));
+			expressionToDescriptor.push(descriptors.indexOf(activeDescriptor));
 		}
 
 		updateDescriptor();
@@ -473,7 +498,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 	resultBuffer.length = 0;
 
 	return {
-		descriptorToBindings,
+		expressionToDescriptor,
 		descriptors,
 		fragment: range.createContextualFragment(result),
 		templateHash: stringHash(result),
@@ -491,69 +516,3 @@ export const html = (
 	}
 	return new HTMLTemplate(htmlCache.get(tokens)!, dynamicValues);
 };
-
-// const runTest = () => {
-// 	const randomNr = Math.random();
-
-// 	if (randomNr <= 0.33) {
-// 		html` <div>hello ${"you"} there</div> `;
-// 	} else if (randomNr <= 0.66) {
-// 		html`
-// 			<div class="card ${13} stuff">
-// 				hello ${"you"}
-// 				<!-- your ${"test"} name -->
-// 				there
-// 				<style>
-// 					${"123"}
-// 				</style>
-// 			</div>
-// 		`;
-// 	} else {
-// 		html`
-// 	<section class="${"card"}">
-// 		<h2>${"props"}</h2>
-// 			<style media="(width < ${500}px)">
-// 				* {
-// 					margin: ${5}px;
-// 				}
-// 			</style>
-// 			<style>
-// 				* {
-// 					margin: ${2}px;
-// 				}
-// 			</style>
-// 			<style>${"* {all: unset}"}</style>
-// 			<script>${"console.log('hello', 1 > 5, 2 < 4)"}</script>
-// 			<script>console.log('hello', 1 > 5, 2 < 4)</script>
-// 		<ul>
-// 			<li class="class1 ${"test"} class3">complex attribute</li>
-// 			<li class="${"test"} class3 ${"test"}">complexer attribute</li>
-// 			<li disabled="${true}">boolean attribute</li>
-// 		</ul>
-// 		<div>
-// 			<!-- some comment-->
-// 			 ${"ignore comment"}
-// 		</div>
-
-// 		<textarea rows="${10}">tell me more about ${"parsing"}</textarea>
-
-// 		<label>
-// 			self closing tag
-// 			<input value="${123}" />
-// 		</label>
-
-// 		<${"span"}>simple-tag</${"span"}>
-// 		<custom-${"span"}>custom-tag</custom-${"span"}>
-// 		<${"custom-"}${"span"}>custom-tag</${"custom-"}${"span"}>
-// 	</section>
-// `;
-// 	}
-// };
-
-// setTimeout(() => {
-// 	console.time("10000 iterations");
-// 	for (let index = 0; index < 10000; index++) {
-// 		runTest();
-// 	}
-// 	console.timeEnd("10000 iterations");
-// }, 1000);

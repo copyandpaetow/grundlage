@@ -37,7 +37,7 @@ export type Descriptor =
 	| RawContentDescriptor;
 
 export type ParsedHTML = {
-	descriptorToBindings: Array<number>;
+	expressionToDescriptor: Array<number>;
 	descriptors: Array<Descriptor>;
 	fragment: DocumentFragment;
 	templateHash: number;

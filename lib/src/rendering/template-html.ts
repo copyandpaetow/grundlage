@@ -6,7 +6,7 @@ import { updateContent } from "./content";
 import { updateRawContent } from "./raw-content";
 import { updateTag } from "./tag";
 
-const EMPTY_ARRAY: Array<unknown> = [];
+const EMPTY_ARRAY: Array<unknown> = [] as const;
 
 const updateByType = {
 	[BINDING_TYPES.TAG]: updateTag,
@@ -26,14 +26,11 @@ export class HTMLTemplate {
 
 	constructor(parsedHTML: ParsedHTML, expressions: Array<unknown>) {
 		this.parsedHTML = parsedHTML;
-		this.currentExpressions = EMPTY_ARRAY;
-		this.previousExpressions = EMPTY_ARRAY;
-
 		this.#setExpressions(expressions);
 	}
 
 	setup(): DocumentFragment {
-		this.dirtyBindings = new Set(this.parsedHTML.descriptorToBindings);
+		this.dirtyBindings = new Set(this.parsedHTML.expressionToDescriptor);
 		const fragment = this.parsedHTML.fragment.cloneNode(
 			true,
 		) as DocumentFragment;
@@ -84,7 +81,7 @@ export class HTMLTemplate {
 	}
 
 	#setExpressions(expressions: Array<unknown>) {
-		this.previousExpressions = this.currentExpressions;
+		this.previousExpressions = this.currentExpressions ?? [];
 		this.currentExpressions = expressions;
 		this.expressionHashes = [];
 		this.hash = expressions.length;
@@ -114,7 +111,7 @@ export class HTMLTemplate {
 				continue;
 			}
 			//todo: this we need to double check, before it was just the index
-			this.dirtyBindings.add(this.parsedHTML.descriptorToBindings[index]);
+			this.dirtyBindings.add(this.parsedHTML.expressionToDescriptor[index]);
 		}
 		this.#flush();
 	}
