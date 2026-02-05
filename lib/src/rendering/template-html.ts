@@ -1,4 +1,5 @@
-import { ParsedHTML } from "../parser/parser-html";
+import { COMMENT_IDENTIFIER } from "../parser/html-util";
+import { BINDING_TYPES, ParsedHTML } from "../parser/types";
 import { hashValue } from "../utils/hashing";
 import { updateAttribute } from "./attribute";
 import { updateContent } from "./content";
@@ -7,12 +8,12 @@ import { updateTag } from "./tag";
 
 const EMPTY_ARRAY: Array<unknown> = [];
 
-const updateByType = [
-	updateTag,
-	updateAttribute,
-	updateContent,
-	updateRawContent,
-] as const;
+const updateByType = {
+	[BINDING_TYPES.TAG]: updateTag,
+	[BINDING_TYPES.ATTR]: updateAttribute,
+	[BINDING_TYPES.CONTENT]: updateContent,
+	[BINDING_TYPES.RAW_CONTENT]: updateRawContent,
+} as const;
 
 export class HTMLTemplate {
 	hash = 0;
@@ -28,19 +29,37 @@ export class HTMLTemplate {
 		this.currentExpressions = EMPTY_ARRAY;
 		this.previousExpressions = EMPTY_ARRAY;
 
-		this.setExpressions(expressions);
+		this.#setExpressions(expressions);
 	}
 
 	setup(): DocumentFragment {
-		this.markers = [];
 		this.dirtyBindings = new Set(this.parsedHTML.descriptorToBindings);
-
 		const fragment = this.parsedHTML.fragment.cloneNode(
 			true,
 		) as DocumentFragment;
 
+		this.markers = this.#findMarkers(fragment);
+		this.#flush();
+
+		return fragment;
+	}
+
+	hydrate(context: ShadowRoot) {
+		this.dirtyBindings = new Set();
+		this.markers = this.#findMarkers(context);
+
+		for (let index = 0; index < this.parsedHTML.descriptors.length; index++) {
+			const binding = this.parsedHTML.descriptors[index];
+			if (binding.type === BINDING_TYPES.ATTR) {
+				updateByType[binding.type](this, index);
+			}
+		}
+	}
+
+	#findMarkers(parent: DocumentFragment | ShadowRoot) {
+		const markers = [];
 		const treeWalker = document.createTreeWalker(
-			fragment,
+			parent,
 			NodeFilter.SHOW_COMMENT,
 			{ acceptNode: () => NodeFilter.FILTER_ACCEPT },
 		);
@@ -49,24 +68,26 @@ export class HTMLTemplate {
 		while (treeWalker.nextNode()) {
 			const marker = treeWalker.currentNode as Comment;
 
+			if (!marker.data.startsWith(COMMENT_IDENTIFIER)) {
+				continue;
+			}
+
 			//content nodes are there twice with the same index, so we can filter them here
 			if (lastDescriptorIndex === marker.data) {
 				continue;
 			}
 			lastDescriptorIndex = marker.data;
-			this.markers.push(marker);
+			markers.push(marker);
 		}
 
-		this.flush();
-
-		return fragment;
+		return markers;
 	}
 
-	setExpressions(expressions: Array<unknown>) {
+	#setExpressions(expressions: Array<unknown>) {
 		this.previousExpressions = this.currentExpressions;
 		this.currentExpressions = expressions;
 		this.expressionHashes = [];
-		this.hash = 0;
+		this.hash = expressions.length;
 
 		for (const value of this.currentExpressions) {
 			const hash = hashValue(value);
@@ -79,24 +100,26 @@ export class HTMLTemplate {
 
 	update(expressions: Array<unknown>) {
 		const previousHashes = this.expressionHashes;
-		this.setExpressions(expressions);
+		this.#setExpressions(expressions);
 
 		for (let index = 0; index < previousHashes.length; index++) {
 			const currentHash = this.expressionHashes[index];
 			const previousHash = previousHashes[index];
 
+			//todo: is this correct here for functions?
 			if (previousHash === currentHash) {
 				if (this.currentExpressions[index] instanceof HTMLTemplate) {
 					this.currentExpressions[index] = this.previousExpressions[index];
 				}
 				continue;
 			}
-			this.dirtyBindings.add(index);
+			//todo: this we need to double check, before it was just the index
+			this.dirtyBindings.add(this.parsedHTML.descriptorToBindings[index]);
 		}
-		this.flush();
+		this.#flush();
 	}
 
-	flush() {
+	#flush() {
 		for (const bindingIndex of this.dirtyBindings) {
 			updateByType[this.parsedHTML.descriptors[bindingIndex].type](
 				this,

@@ -1,4 +1,4 @@
-import { TagDescriptor } from "../parser/parser-html";
+import { TagDescriptor } from "../parser/types";
 import { descriptorToString } from "../utils/descriptor-to-string";
 import { HTMLTemplate } from "./template-html";
 

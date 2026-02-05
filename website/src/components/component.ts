@@ -1,5 +1,4 @@
-import { render } from "../../../lib/src";
-import { html } from "../../../lib/src/parser/parser-html";
+import { render, html } from "../../../lib/src";
 
 // const list = css`
 // 	border: 1px solid black;

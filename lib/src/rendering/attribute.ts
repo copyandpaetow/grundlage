@@ -1,4 +1,4 @@
-import { AttributeDescriptor } from "../parser/parser-html";
+import { AttributeDescriptor } from "../parser/types";
 import { BaseComponent } from "../types";
 import { descriptorToString } from "../utils/descriptor-to-string";
 import { toPrimitive } from "../utils/to-primitve";

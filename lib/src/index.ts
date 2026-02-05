@@ -1,5 +1,4 @@
-import "./parser/parser-css";
-import { html } from "./parser/parser-html";
+import { html } from "./parser/html";
 import { HTMLTemplate } from "./rendering/template-html";
 import { BaseComponent, Component, TemplateRenderer } from "./types";
 
@@ -9,6 +8,8 @@ const defaultOptions: ShadowRootInit = {
 	mode: "open",
 	serializable: true,
 };
+
+export { html } from "./parser/html";
 
 export const render: Component = (
 	name,
@@ -22,10 +23,16 @@ export const render: Component = (
 		#view: HTMLTemplate | null = null;
 		#cleanup: ((props: Record<string, unknown>) => void) | null = null;
 		#isUpdating = false;
+		#isSSR = false;
 
 		constructor() {
 			super();
-			this.attachShadow(options);
+
+			if (this.shadowRoot) {
+				this.#isSSR = true;
+			} else {
+				this.attachShadow(options);
+			}
 		}
 
 		async connectedCallback() {
@@ -83,10 +90,7 @@ export const render: Component = (
 
 		/*
 			*next steps
-
 			### bugs ###
-
-			todo: setExpressions could be nicer / less oop
 
 			* if a tag is changed, we lose some internal states, eventListeners get reapplied
 			todo: restore focus, animation, scroll position
@@ -94,45 +98,18 @@ export const render: Component = (
 
 			### future ###
 
-			? we should be able to detect if there already is a template and in that case just read the markers and dont update
-			=> we would need to mark the comments somehow so they are recognizable but also different from the list markers
-
 			? template updating became a little ugly, it would be nice not to carry around 2 expression arrays
 
 			? maybe it would be cleaner for the parser to return a string instead of the documentFragment and we do the caching in a different step?
 			
-			todo: attributes get a starting whitespace, the current trimStart would need a better solution
+			? should we allow for styles to be directly added as a class on a component? Have styles register in an additional way?
 
-			todo: CSSTemplates need to be added as style and as class
-			=> for now lets make it simple and replace the whole block whenever a value changes
+			? We could try to isolate changes in the css and only update the specific rule
 
-		
+			? Do we need a more precise SSR? 
+			=> Like having a meta data comment that shows the current template hash and we walk the iterator until we find that hash?
+
 		*/
-
-		async update() {
-			if (!this.#render || this.#isUpdating) {
-				return;
-			}
-			this.#isUpdating = true;
-			await Promise.resolve().then();
-
-			let template = this.#render(Object.fromEntries(this.#props));
-
-			if (!(template instanceof HTMLTemplate)) {
-				template = html`${template}`;
-			}
-
-			if (
-				!this.#view ||
-				this.#view.parsedHTML.templateHash !== template.parsedHTML.templateHash
-			) {
-				this.shadowRoot?.replaceChildren(template.setup());
-				this.#isUpdating = false;
-				return;
-			}
-			this.#view.update(template.currentExpressions);
-			this.#isUpdating = false;
-		}
 
 		async #setup() {
 			try {
@@ -163,7 +140,10 @@ export const render: Component = (
 							: value;
 
 					if (template instanceof HTMLTemplate) {
-						this.shadowRoot?.replaceChildren(template.setup());
+						if (!this.#isSSR) {
+							this.shadowRoot?.replaceChildren(template.setup());
+						}
+
 						this.#view = template;
 						this.#render = (
 							typeof value === "function" ? value : () => value
@@ -174,10 +154,41 @@ export const render: Component = (
 
 					result = value;
 				}
+
+				console.log(this.#isSSR, this.#view);
+
+				if (this.#isSSR) {
+					this.#view!.hydrate(this.shadowRoot!);
+				}
 			} catch (error) {
 				console.error(error);
 				this.shadowRoot!.textContent = `${error}`;
 			}
+		}
+
+		async update() {
+			if (!this.#render || this.#isUpdating) {
+				return;
+			}
+			this.#isUpdating = true;
+			await Promise.resolve().then();
+
+			let template = this.#render(Object.fromEntries(this.#props));
+
+			if (!(template instanceof HTMLTemplate)) {
+				template = html`${template}`;
+			}
+
+			if (
+				!this.#view ||
+				this.#view.parsedHTML.templateHash !== template.parsedHTML.templateHash
+			) {
+				this.shadowRoot?.replaceChildren(template.setup());
+				this.#isUpdating = false;
+				return;
+			}
+			this.#view.update(template.currentExpressions);
+			this.#isUpdating = false;
 		}
 	}
 
