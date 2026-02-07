@@ -10,7 +10,12 @@ import {
 	RawContentDescriptor,
 	ParsedHTML,
 } from "./types";
-import { COMMENT_IDENTIFIER, isQuote, isWhitespace } from "./html-util";
+import {
+	COMMENT_IDENTIFIER,
+	isQuote,
+	isWhitespace,
+	moveArrayContents,
+} from "./html-util";
 
 /*
 the idea here is to analyse and parse a tagged template string to give us
@@ -29,7 +34,7 @@ They also dont have to be next to each other
 => one content descriptor
 
 We walk each character and listen for different character combinations to change the state machine. 
-Depending on the state we move the last characters to the dedicated buffer array.
+Depending on the state we move the last characters sine the state change to the dedicated buffer array.
 => this way we can change and insert parts dynamically while also keeping memory usage low / performance up
 
 */
@@ -38,7 +43,11 @@ type StateValue = ValueOf<typeof STATE>;
 type BufferArray = Array<string | number>;
 
 const range = new Range();
-const specialElements = ["style", "script", "textarea", "template"];
+/*
+these elements we need to handle differently as we cant have comment markers in them, so we can only replace them as a hole
+this requires a different marker strategy
+*/
+const SPECIAL_ELEMENT_TAGS = ["style", "script", "textarea", "template"];
 
 const STATE = {
 	TEXT: 10,
@@ -58,13 +67,20 @@ let templates: TemplateStringsArray;
 let index = 0;
 let activeTemplate = "";
 let charIndex = 0;
-let splitIndex = -1;
+let splitIndex = 0;
 let attrQuote = "";
 let currentTagName = "";
 let activeDescriptor: Descriptor | null = null;
 let activeTagDescriptor: Descriptor | null = null;
 const openTagDescriptors: Array<TagDescriptor> = [];
 
+/*
+using the module scope was chose to keep performance high / reduce memory usage as much as possible
+as this is executed early and needs to be fast
+
+if concurrency becomes a requirement, we would need to put this into a class/closure and create a pool of parsers 
+
+*/
 const setup = (strings: TemplateStringsArray) => {
 	state = STATE.TEXT;
 	descriptors = [];
@@ -73,12 +89,21 @@ const setup = (strings: TemplateStringsArray) => {
 	index = 0;
 	activeTemplate = templates[index];
 	charIndex = 0;
-	splitIndex = -1;
+	splitIndex = 0;
 	attrQuote = "";
 	currentTagName = "";
 	activeDescriptor = null;
 	activeTagDescriptor = null;
 	openTagDescriptors.length = 0;
+	resultBuffer.length = 0;
+	buffers.element.length = 0;
+	buffers.tag.length = 0;
+	buffers.endTag.length = 0;
+	buffers.content.length = 0;
+	buffers.comment.length = 0;
+	buffers.attributeKey.length = 0;
+	buffers.attributeValue.length = 0;
+	buffers.rawContent.length = 0;
 };
 
 const resultBuffer: BufferArray = [];
@@ -91,13 +116,6 @@ const buffers = {
 	attributeKey: [] as BufferArray,
 	attributeValue: [] as BufferArray,
 	rawContent: [] as BufferArray,
-};
-
-const moveArrayContents = (from: Array<unknown>, to: Array<unknown>) => {
-	for (let arrIndex = 0; arrIndex < from.length; arrIndex++) {
-		to.push(from[arrIndex]);
-	}
-	from.length = 0;
 };
 
 const createComment = () =>
@@ -169,16 +187,12 @@ const setDescriptor = () => {
 				values: [],
 			} satisfies RawContentDescriptor;
 		case STATE.TAG:
-			const descriptor = {
+			return {
 				type: BINDING_TYPES.TAG,
 				values: [],
 				endValues: [],
 				relatedAttributes: [],
 			} satisfies TagDescriptor;
-			openTagDescriptors.push(descriptor);
-
-			return descriptor;
-
 		case STATE.END_TAG:
 			return openTagDescriptors.at(-1)!;
 
@@ -310,18 +324,21 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 			switch (state) {
 				case STATE.TEXT:
+					//inside an element, we only care for the exit, which is either another tag (e.g. <strong>), the currents tag end (e.g. </div>), or a comment (e.g. <!-- -->)
 					if (char !== "<") {
 						continue;
 					}
 					capture(buffers.content, splitIndex, charIndex);
 					splitIndex = charIndex + 1;
 
+					//comment
 					if (nextChar === "!") {
 						state = STATE.COMMENT;
 						splitIndex = charIndex;
 						continue;
 					}
 
+					//end tag
 					if (nextChar === "/") {
 						state = STATE.END_TAG;
 						splitIndex = charIndex + 2;
@@ -329,11 +346,14 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						continue;
 					}
 
+					//new element
 					flushElement();
 					state = STATE.ELEMENT;
 					charIndex--;
 					continue;
+
 				case STATE.COMMENT:
+					//inside a comment we can only exit when the comment is ended by -->
 					if (
 						char !== ">" ||
 						activeTemplate[charIndex - 1] !== "-" ||
@@ -348,7 +368,9 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					state = STATE.TEXT;
 
 					continue;
+
 				case STATE.RAW_CONTENT:
+					//here we also only care for the exit of the current element
 					if (char !== "<" || nextChar !== "/") {
 						continue;
 					}
@@ -362,7 +384,9 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						buffers.endTag.push(currentTagName);
 					}
 					continue;
+
 				case STATE.TAG:
+					//the tag only refers to the name (div, span, etc.) and can be exited by a white space, indicated attributes, or by a closing braket
 					if (char !== ">" && !isWhitespace(char)) {
 						continue;
 					}
@@ -371,12 +395,14 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					splitIndex = charIndex;
 					completeTag();
 
+					//white space means attributes
 					if (char !== ">") {
 						state = STATE.ELEMENT;
-						charIndex--;
+						charIndex--; // we rewind the counter so the overarching element state can handle the white space, otherwise we would need more transitions here
 						continue;
 					}
 
+					//special case of a self closing tag
 					if (activeTemplate[charIndex - 1] === "/") {
 						flushElement();
 						state = STATE.TEXT;
@@ -384,13 +410,15 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						continue;
 					}
 
-					state = specialElements.includes(currentTagName)
+					state = SPECIAL_ELEMENT_TAGS.includes(currentTagName)
 						? STATE.RAW_CONTENT
 						: STATE.TEXT;
 
 					splitIndex = charIndex + 1;
 					continue;
+
 				case STATE.ELEMENT:
+					//this is a meta state, coordinating tags and attributes, and marks the transition to the elements content
 					if (char === "<") {
 						state = STATE.TAG;
 						continue;
@@ -400,7 +428,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						if (activeTemplate[charIndex - 1] === "/") {
 							flushElement();
 							state = STATE.TEXT;
-						} else if (specialElements.includes(currentTagName)) {
+						} else if (SPECIAL_ELEMENT_TAGS.includes(currentTagName)) {
 							state = STATE.RAW_CONTENT;
 						} else {
 							state = STATE.TEXT;
@@ -410,33 +438,38 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					}
 
 					if (!isWhitespace(char)) {
-						charIndex--;
+						charIndex--; //rewind so the attribute starts correctly
 					}
 					state = STATE.ATTRIBUTE_KEY;
 					splitIndex = charIndex;
 
 					continue;
+
 				case STATE.ATTRIBUTE_KEY:
+					//there are different types of attributes - boolean attributes and attributes with a value
+					//if we find an equal sign its a value attribute
 					if (char === "=") {
 						capture(buffers.attributeKey, splitIndex, charIndex);
 						splitIndex = charIndex + 1;
 						state = STATE.ATTRIBUTE_VALUE;
+						//a white space marks the end of the current attribute and we move back to the element
 					} else if (isWhitespace(char)) {
-						// Boolean attribute
 						capture(buffers.attributeKey, splitIndex, charIndex);
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind
+						charIndex--; // rewind for element state management
+						//special case if the element ends directly after the boolean attribute
 					} else if (char === ">") {
-						// Boolean attribute at end
 						capture(buffers.attributeKey, splitIndex, charIndex);
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind to let ELEMENT handle >
+						charIndex--; // rewind for element state management
 					}
-					break;
+					continue;
+
 				case STATE.ATTRIBUTE_VALUE:
+					//here we need to check if we have a quoting char to detect the end of the attribute, either " or ' or a whitespace
 					if (!attrQuote && isQuote(char)) {
 						attrQuote = char;
 						splitIndex = charIndex + 1;
@@ -446,20 +479,20 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						completeAttribute();
 						state = STATE.ELEMENT;
 					} else if (!attrQuote && isWhitespace(char)) {
-						// Unquoted value ended
 						capture(buffers.attributeValue, splitIndex, charIndex);
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--;
+						charIndex--; // rewind for element state management
 					} else if (!attrQuote && char === ">") {
-						// Unquoted value at end
+						//special case if the unquoted attribute is ended by the element end
 						capture(buffers.attributeValue, splitIndex, charIndex);
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--;
+						charIndex--; // rewind for element state management
 					}
-					break;
+					continue;
+
 				case STATE.END_TAG:
 					if (char === ">") {
 						capture(buffers.endTag, splitIndex, charIndex);
@@ -468,7 +501,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						completeEndTag();
 						state = STATE.TEXT;
 					}
-					break;
+					continue;
 			}
 		}
 
@@ -478,6 +511,16 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 		if (!activeDescriptor) {
 			activeDescriptor = setDescriptor();
+
+			/*
+			 bindings for tags require special handling
+			 - the end tag has no binding but the tag descriptor still needs to know about them
+			 - so we store them in a stack to conenct them
+			*/
+			if (state === STATE.TAG) {
+				openTagDescriptors.push(activeDescriptor as TagDescriptor);
+			}
+
 			if (state !== STATE.END_TAG) {
 				descriptors.push(activeDescriptor);
 			}
@@ -495,7 +538,6 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 	flushElement();
 
 	const result = resultBuffer.join("");
-	resultBuffer.length = 0;
 
 	return {
 		expressionToDescriptor,

@@ -38,6 +38,11 @@ export const hashValue = (value: unknown): number => {
 		return hash;
 	}
 
+	/*
+		looking into complex data structures is costly and not very accurate (cant capture function closures), so we are stuck between stale state or unnecessary re-renderings
+		=> using a cache like is a compromise, as long as the reference is stable, we assume it doesnt need re-rendering
+		downside here is inline event handlers always get reapplied 
+	*/
 	if (references.has(value)) {
 		return references.get(value)!;
 	}

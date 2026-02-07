@@ -1,4 +1,4 @@
-import { toPrimitive } from "./to-primitve";
+import { toPrimitive } from "./to-primitive";
 
 export const descriptorToString = (
 	descriptor: Array<string | number>,

@@ -18,11 +18,12 @@ These descriptors have somewhat different shapes what mainly involve arrays with
 ```ts
 html`<div class="${dynamicClass1} static ${dynamicClass2}"></div>`[
 	//becomes
-	fragment: <!--0:::0,1--><div></div>
+	fragment: <!--marker--><div></div>
 	descriptors: [{
 		keys: ["class"],
 		values: [0, "static ", 1],
-	}]
+	}],
+	expressionToDescriptor: [0, 0]
 ];
 ```
 
@@ -44,4 +45,26 @@ expressions: [dynamicClass1, dynamicClass2]
 
 ### updating
 
-We compare the last array of expressions with the current one. If one entry changes, we can acccess the binding at the same index and call its update function
+We compare the last array of expressions with the current one. If one expression changes, we can acccess the binding at the same index and call its update function
+
+## usage
+
+```ts
+
+	render("component-name", function*(initialProps, element){
+
+		yield html`<p> ...loading</p>`
+
+		const data = await fetch(...)
+
+		yield (props) => html`
+			<ul>${data.map(entry => html`
+				<li>${entry}</li>`
+				)}
+			</ul>`
+
+		return () => console.log("cleanup")
+
+	})
+
+```

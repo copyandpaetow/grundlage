@@ -1,7 +1,7 @@
 import { AttributeDescriptor } from "../parser/types";
 import { BaseComponent } from "../types";
 import { descriptorToString } from "../utils/descriptor-to-string";
-import { toPrimitive } from "../utils/to-primitve";
+import { toPrimitive } from "../utils/to-primitive";
 import { HTMLTemplate } from "./template-html";
 
 const isEventListener = (key: string, value: unknown) => {
@@ -115,5 +115,4 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 
 	removeAttribute(element, previousName, expression);
 	addAttribute(element, currentName, currentValue);
-	return;
 };

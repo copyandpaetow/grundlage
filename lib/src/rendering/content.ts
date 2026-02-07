@@ -1,6 +1,6 @@
 import { descriptorToString } from "../utils/descriptor-to-string";
 import { hashValue } from "../utils/hashing";
-import { toPrimitive } from "../utils/to-primitve";
+import { toPrimitive } from "../utils/to-primitive";
 import { HTMLTemplate } from "./template-html";
 
 export const OPERATION_TYPES = {
@@ -10,6 +10,13 @@ export const OPERATION_TYPES = {
 	SWAP: 4,
 } as const;
 
+/*
+conceptually, we have 2 lists of elements and we want to compare them to find the least amount of moves to match them
+We do this by mutating the old list until and generate patches. This way we dont have to deal with shifting indices
+
+We iterate the lists and compare elements. Depending on the outcome we increment the indices or move on (when we delete entries)
+
+*/
 const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 	const oldHashes = new Set(oldList.map(hashValue));
 	const newHashes = new Set(newList.map(hashValue));
@@ -57,6 +64,7 @@ const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 		}
 
 		if (!newExistsInOld) {
+			//this is a special case to help with the shifting indices problem. It could also be an add and remove
 			if (newList.length === operations.length) {
 				operations.push({ index: newIndex, type: OPERATION_TYPES.REPLACE });
 				current[oldIndex] = newHash;
@@ -133,12 +141,8 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
 	while (current) {
 		const isComment = current.nodeType === Node.COMMENT_NODE;
 		const isLastComment =
-			current === end || (current as Comment)?.data === (start as Comment).data;
-
-		if (!isComment) {
-			current = current.nextSibling;
-			continue;
-		}
+			current === end ||
+			(isComment && (current as Comment)?.data === (start as Comment).data);
 
 		if (isLastComment) {
 			break;

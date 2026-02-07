@@ -18,8 +18,10 @@ const updateByType = {
 export class HTMLTemplate {
 	hash = 0;
 	parsedHTML: ParsedHTML;
+	//these are tied together by the index position of the individual descriptors
 	markers: Array<Comment>;
 	dirtyBindings: Set<number>;
+	//these are tied together by the index position of the individual expressions
 	expressionHashes: Array<number>;
 	currentExpressions: Array<unknown>;
 	previousExpressions: Array<unknown>;
@@ -81,7 +83,7 @@ export class HTMLTemplate {
 	}
 
 	#setExpressions(expressions: Array<unknown>) {
-		this.previousExpressions = this.currentExpressions ?? [];
+		this.previousExpressions = this.currentExpressions ?? EMPTY_ARRAY;
 		this.currentExpressions = expressions;
 		this.expressionHashes = [];
 		this.hash = expressions.length;
@@ -103,14 +105,13 @@ export class HTMLTemplate {
 			const currentHash = this.expressionHashes[index];
 			const previousHash = previousHashes[index];
 
-			//todo: is this correct here for functions?
 			if (previousHash === currentHash) {
 				if (this.currentExpressions[index] instanceof HTMLTemplate) {
 					this.currentExpressions[index] = this.previousExpressions[index];
 				}
 				continue;
 			}
-			//todo: this we need to double check, before it was just the index
+
 			this.dirtyBindings.add(this.parsedHTML.expressionToDescriptor[index]);
 		}
 		this.#flush();
