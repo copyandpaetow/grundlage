@@ -30,7 +30,7 @@ export const render: Component = (
 		#cleanup: ((props: Record<string, unknown>) => void) | null = null;
 		#isUpdating = false;
 		#renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
-		#syncAttributeInProgress = false;
+		#duplicatedMutationCallbacks = new Set();
 
 		constructor() {
 			super();
@@ -64,22 +64,23 @@ export const render: Component = (
 			if (previousValue === value) {
 				return;
 			}
+			/*
+			changing the attribute creates a delayed callback from the mutation observer, that itself triggers the setProperty again
+			*/
+
+			this.#duplicatedMutationCallbacks.add(name);
 
 			if (
 				typeof value === "string" ||
 				typeof value === "number" ||
 				typeof value === "boolean"
 			) {
-				this.#syncAttributeInProgress = true;
 				this.setAttribute(name, String(value));
-				this.#syncAttributeInProgress = false;
 			}
 
 			if (value === undefined || value === null) {
 				delete this.#props[name];
-				this.#syncAttributeInProgress = true;
 				this.removeAttribute(name);
-				this.#syncAttributeInProgress = false;
 			} else {
 				this.#props[name] = value;
 			}
@@ -90,10 +91,12 @@ export const render: Component = (
 		#watchAttributes() {
 			this.#observer?.disconnect();
 			this.#observer = new MutationObserver((mutations) => {
-				if (this.#syncAttributeInProgress) {
-					return;
-				}
 				for (const mutation of mutations) {
+					if (this.#duplicatedMutationCallbacks.has(mutation.attributeName)) {
+						this.#duplicatedMutationCallbacks.delete(mutation.attributeName);
+						continue;
+					}
+
 					this.setProperty(
 						mutation.attributeName!,
 						this.getAttribute(mutation.attributeName!),

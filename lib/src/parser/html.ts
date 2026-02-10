@@ -48,6 +48,7 @@ these elements we need to handle differently as we cant have comment markers in 
 this requires a different marker strategy
 */
 const SPECIAL_ELEMENT_TAGS = ["style", "script", "textarea", "template"];
+const PLACEHOLDER_TAG = "div";
 
 const STATE = {
 	TEXT: 10,
@@ -57,7 +58,7 @@ const STATE = {
 	TAG: 21,
 	ATTRIBUTE_KEY: 22,
 	ATTRIBUTE_VALUE: 33,
-	END_TAG: 0,
+	END_TAG: -1,
 } as const;
 
 let state: StateValue = STATE.TEXT;
@@ -239,9 +240,9 @@ const completeSpecialContent = () => {
 
 const completeTag = () => {
 	if (activeDescriptor) {
-		currentTagName = "div";
+		currentTagName = PLACEHOLDER_TAG;
 		moveArrayContents(buffers.tag, (activeDescriptor as TagDescriptor).values);
-		buffers.element.push("div");
+		buffers.element.push(PLACEHOLDER_TAG);
 		resultBuffer.push(createComment());
 		activeTagDescriptor = activeDescriptor;
 	} else {
@@ -254,7 +255,7 @@ const completeTag = () => {
 const completeEndTag = () => {
 	if (activeDescriptor) {
 		buffers.endTag.length = 0;
-		buffers.endTag.push("div");
+		buffers.endTag.push(PLACEHOLDER_TAG);
 	}
 	resultBuffer.push("</");
 	moveArrayContents(buffers.endTag, resultBuffer);
@@ -316,7 +317,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 	for (index = 0; index < templates.length; index++) {
 		activeTemplate = templates[index];
-		splitIndex = 0;
+		splitIndex = 0; //always points to the start of the uncaptured portion of activeTemplate
 
 		for (charIndex = 0; charIndex < activeTemplate.length; charIndex++) {
 			const char = activeTemplate[charIndex];

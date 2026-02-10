@@ -1,7 +1,36 @@
+import { html } from "../parser/html";
 import { descriptorToString } from "../utils/descriptor-to-string";
 import { hashValue } from "../utils/hashing";
 import { toPrimitive } from "../utils/to-primitive";
+import { isComment, isSameTemplate } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
+
+type SwapOperation = {
+	type: (typeof OPERATION_TYPES)["SWAP"];
+	index: number;
+	with: number;
+};
+
+type AddOperation = {
+	type: (typeof OPERATION_TYPES)["ADD"];
+	index: number;
+};
+
+type ReplaceOperation = {
+	type: (typeof OPERATION_TYPES)["REPLACE"];
+	index: number;
+};
+
+type DeleteOperation = {
+	type: (typeof OPERATION_TYPES)["DELETE"];
+	index: number;
+};
+
+type Operation =
+	| SwapOperation
+	| AddOperation
+	| ReplaceOperation
+	| DeleteOperation;
 
 export const OPERATION_TYPES = {
 	ADD: 1,
@@ -10,6 +39,8 @@ export const OPERATION_TYPES = {
 	SWAP: 4,
 } as const;
 
+const LIST_IDENTIFIER = "list";
+
 /*
 conceptually, we have 2 lists of elements and we want to compare them to find the least amount of moves to match them
 We do this by mutating the old list until and generate patches. This way we dont have to deal with shifting indices
@@ -17,12 +48,20 @@ We do this by mutating the old list until and generate patches. This way we dont
 We iterate the lists and compare elements. Depending on the outcome we increment the indices or move on (when we delete entries)
 
 */
-const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
-	const oldHashes = new Set(oldList.map(hashValue));
+const diff = (
+	oldList: Array<HTMLTemplate>,
+	newList: Array<HTMLTemplate>,
+): Array<Operation> => {
+	const operations: Array<Operation> = [];
+	const current = oldList.map(hashValue);
+	const oldHashes = new Set(current);
 	const newHashes = new Set(newList.map(hashValue));
 
-	const current = oldList.map(hashValue);
-	const operations = [];
+	if (oldHashes.size !== oldList.length || newHashes.size !== newList.length) {
+		console.warn(
+			"identical templates and contents are used here. This may lead to errors with the list rendering. Some change to either the content or the template needs to make each entry unique",
+		);
+	}
 
 	let oldIndex = 0;
 	let newIndex = 0;
@@ -64,8 +103,8 @@ const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 		}
 
 		if (!newExistsInOld) {
-			//this is a special case to help with the shifting indices problem. It could also be an add and remove
-			if (newList.length === operations.length) {
+			//this is a special case to help with the shifting indices problem. It could also be an add and remove but this is only have the operations
+			if (newList.length === current.length) {
 				operations.push({ index: newIndex, type: OPERATION_TYPES.REPLACE });
 				current[oldIndex] = newHash;
 			} else {
@@ -96,28 +135,20 @@ const diff = (oldList: Array<HTMLTemplate>, newList: Array<HTMLTemplate>) => {
 };
 
 const collectMarker = (listMarker: Comment) => {
-	const markers: Array<{ start: Comment; end: Comment }> = [];
+	const markers: Array<Comment> = [];
 
 	let current = listMarker.nextSibling;
-	let start: Comment | null = null;
 	while (current) {
-		if (current.nodeType !== Node.COMMENT_NODE) {
+		if (!isComment(current) || !current.data.startsWith(LIST_IDENTIFIER)) {
 			current = current.nextSibling;
 			continue;
 		}
 
-		if ((current as Comment).data === listMarker.data) {
+		if (current.data === listMarker.data) {
 			break;
 		}
 
-		if (start?.data === (current as Comment).data) {
-			markers.push({ start, end: current as Comment });
-			start = null;
-			current = current.nextSibling;
-			continue;
-		}
-
-		start = current as Comment;
+		markers.push(current);
 		current = current.nextSibling;
 	}
 
@@ -139,10 +170,8 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
 	let current = start.nextSibling;
 
 	while (current) {
-		const isComment = current.nodeType === Node.COMMENT_NODE;
 		const isLastComment =
-			current === end ||
-			(isComment && (current as Comment)?.data === (start as Comment).data);
+			current === end || (isComment(current) && current.isEqualNode(start));
 
 		if (isLastComment) {
 			break;
@@ -154,56 +183,77 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
 	}
 };
 
+const toTemplateList = (list: Array<unknown>): Array<HTMLTemplate> => {
+	for (let index = 0; index < list.length; index++) {
+		const element = list[index];
+		if (!(element instanceof HTMLTemplate)) {
+			list[index] = html`${element}`;
+		}
+	}
+	return list as Array<HTMLTemplate>;
+};
+
 const renderList = (
 	context: HTMLTemplate,
 	marker: Comment,
 	expressionIndex: number,
 ) => {
-	const current = context.currentExpressions[
-		expressionIndex
-	] as Array<HTMLTemplate>;
-	const previous = context.previousExpressions[expressionIndex];
+	const previousValue = context.previousExpressions[expressionIndex];
+	const current = toTemplateList(
+		context.currentExpressions[expressionIndex] as Array<unknown>,
+	);
+	const previous = toTemplateList(
+		Array.isArray(previousValue) ? previousValue : [],
+	);
 
-	let oldList = [];
-	if (Array.isArray(previous)) {
-		oldList = previous;
-	} else if (previous) {
-		oldList.push(previous);
+	const operations = diff(previous, current);
+
+	if (!Array.isArray(previousValue)) {
+		deleteNodesBetween(marker);
 	}
-
-	const operations = diff(oldList, current);
 	const markers = collectMarker(marker);
 
 	for (const operation of operations) {
 		if (operation.type === OPERATION_TYPES.ADD) {
-			const start = new Comment("list" + operation.index);
-			const end = new Comment("list" + operation.index);
-			const content = (current[operation.index] as HTMLTemplate).setup();
+			const listMarker = new Comment(LIST_IDENTIFIER + operation.index);
 
-			const insertAfter = markers[operation.index - 1]?.end || marker;
-			insertAfter.after(start, content, end);
-			markers.splice(operation.index, 0, { start, end });
+			(markers[operation.index - 1] || marker).after(
+				current[operation.index].setup(),
+				listMarker,
+			);
+			markers.splice(operation.index, 0, listMarker);
 		} else if (operation.type === OPERATION_TYPES.REPLACE) {
-			//todo: we need to investigate if it makes sense to update the template instead of moving dom nodes
+			const currentContent = current[operation.index];
+			const previousContent = previous[operation.index];
 
-			const marker = markers[operation.index];
-			deleteNodesBetween(marker.start, marker.end);
-			const content = (current[operation.index] as HTMLTemplate).setup();
-			marker.start.after(content);
+			if (isSameTemplate(currentContent, previousContent)) {
+				previousContent.update(currentContent.currentExpressions);
+				current[operation.index] = previous[operation.index];
+			} else {
+				deleteNodesBetween(
+					markers[operation.index - 1] || marker,
+					markers[operation.index],
+				);
+				markers[operation.index].after(current[operation.index].setup());
+			}
 		} else if (operation.type === OPERATION_TYPES.DELETE) {
-			const marker = markers[operation.index];
-			deleteNodesBetween(marker.start, marker.end);
-			marker.start.remove();
-			marker.end.remove();
+			deleteNodesBetween(
+				markers[operation.index - 1] || marker,
+				markers[operation.index],
+			);
+			markers[operation.index].remove();
 			markers.splice(operation.index, 1);
 		} else if (operation.type === OPERATION_TYPES.SWAP) {
-			//todo: we need to investigate if it makes sense to update the template instead of moving dom nodes
-			const markerA = markers[operation.index];
-			const markerB = markers[operation.with!];
-			const nodesA = getNodesBetween(markerA.start, markerA.end);
-			const nodesB = getNodesBetween(markerB.start, markerB.end);
-			markerA.start.after(...nodesB);
-			markerB.start.after(...nodesA);
+			const nodesA = getNodesBetween(
+				markers[operation.index - 1] || marker,
+				markers[operation.index],
+			);
+			const nodesB = getNodesBetween(
+				markers[operation.with - 1] || marker,
+				markers[operation.with],
+			);
+			(markers[operation.index - 1] || marker).after(...nodesB);
+			(markers[operation.with - 1] || marker).after(...nodesA);
 		}
 	}
 };
@@ -216,10 +266,7 @@ const renderTemplate = (
 	const current = context.currentExpressions[expressionIndex] as HTMLTemplate;
 	const previous = context.previousExpressions[expressionIndex];
 
-	if (
-		previous instanceof HTMLTemplate &&
-		previous.parsedHTML.templateHash === current.parsedHTML.templateHash
-	) {
+	if (previous instanceof HTMLTemplate && isSameTemplate(current, previous)) {
 		//if they do, we can update the old one just with new dynamic values
 		previous.update(current.currentExpressions);
 		//to not lose the reference we need to keep it in the currentValeus

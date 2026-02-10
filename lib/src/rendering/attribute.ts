@@ -2,6 +2,7 @@ import { AttributeDescriptor } from "../parser/types";
 import { BaseComponent } from "../types";
 import { descriptorToString } from "../utils/descriptor-to-string";
 import { toPrimitive } from "../utils/to-primitive";
+import { isObject } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
 
 const isEventListener = (key: string, value: unknown) => {
@@ -58,7 +59,7 @@ const handleExpandableAttribute = (
 		for (const name of previous) {
 			removeAttribute(element, name);
 		}
-	} else if (previous?.constructor === Object) {
+	} else if (isObject(previous)) {
 		for (const name in previous) {
 			removeAttribute(element, name, previous[name as keyof typeof previous]);
 		}
@@ -70,7 +71,7 @@ const handleExpandableAttribute = (
 		for (const name of current) {
 			addAttribute(element, name, "");
 		}
-	} else if (current?.constructor === Object) {
+	} else if (isObject(current)) {
 		for (const name in current) {
 			addAttribute(element, name, current[name as keyof typeof previous]);
 		}
@@ -107,12 +108,15 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 		return;
 	}
 
-	const expression = context.currentExpressions[descriptor.values[0] as number];
+	const currentExpression =
+		context.currentExpressions[descriptor.values[0] as number];
+	const previousExpression =
+		context.previousExpressions[descriptor.values[0] as number];
 
-	const currentValue = isEventListener(currentName, expression)
-		? expression
+	const currentValue = isEventListener(currentName, currentExpression)
+		? currentExpression
 		: descriptorToString(descriptor.values, context.currentExpressions);
 
-	removeAttribute(element, previousName, expression);
+	removeAttribute(element, previousName, previousExpression);
 	addAttribute(element, currentName, currentValue);
 };
