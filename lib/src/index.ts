@@ -1,7 +1,13 @@
 import { html } from "./parser/html";
 import { ValueOf } from "./parser/types";
 import { HTMLTemplate } from "./rendering/template-html";
-import { BaseComponent, Component, TemplateRenderer } from "./types";
+import {
+	BaseComponent,
+	Component,
+	GeneratorFn,
+	Props,
+	TemplateRenderer,
+} from "./types";
 
 const defaultOptions: ShadowRootInit = {
 	clonable: true,
@@ -23,11 +29,11 @@ export const render: Component = (
 	options = defaultOptions,
 ) => {
 	class BaseElement extends HTMLElement implements BaseComponent {
-		#props: Record<string, unknown> = {};
+		#props: Props = {};
 		#observer: MutationObserver;
 		#render: TemplateRenderer | null = null; // renders a view
 		#view: HTMLTemplate | null = null; //current rendered dom
-		#cleanup: ((props: Record<string, unknown>) => void) | null = null;
+		#cleanup: ((props: Props) => void) | null = null;
 		#updateScheduled = false;
 		#renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
 		#duplicatedMutationCallbacks = new Set();
@@ -112,7 +118,10 @@ export const render: Component = (
 
 		async #setup() {
 			try {
-				const generator = componentGenerator(this.#props, this);
+				const generator = (componentGenerator as GeneratorFn<Props>)(
+					this.#props,
+					this,
+				);
 				let result;
 
 				while (true) {

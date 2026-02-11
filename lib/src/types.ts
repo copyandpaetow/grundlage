@@ -9,15 +9,17 @@ export type ComponentOptions = ShadowRootInit;
 
 export type Props = Record<string, unknown>;
 
-export type GeneratorFn = (
-	initialProps: Props,
+export type TemplateRenderer<P extends Props = Props> = (
+	props: P,
+) => HTMLTemplate;
+
+export type GeneratorFn<P extends Props = Props> = (
+	initialProps: P,
 	context: BaseComponent,
 ) => Generator;
 
-export type TemplateRenderer = (props: Props) => HTMLTemplate;
-
-export type Component<Props = Record<string, unknown>> = (
+export type Component = <P extends Props>(
 	name: string,
-	generatorFunction: GeneratorFn,
+	generatorFunction: GeneratorFn<P>,
 	options?: ComponentOptions,
-) => (props?: Props) => HTMLTemplate;
+) => TemplateRenderer;

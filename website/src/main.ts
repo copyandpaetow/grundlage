@@ -1,1 +1,2 @@
-import "./components/component";
+import "./components/simple";
+import "./components/tag";
