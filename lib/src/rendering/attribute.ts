@@ -110,13 +110,16 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 
 	const currentExpression =
 		context.currentExpressions[descriptor.values[0] as number];
-	const previousExpression =
-		context.previousExpressions[descriptor.values[0] as number];
 
 	const currentValue = isEventListener(currentName, currentExpression)
 		? currentExpression
 		: descriptorToString(descriptor.values, context.currentExpressions);
 
-	removeAttribute(element, previousName, previousExpression);
+	if (previousName !== currentName) {
+		const previousExpression =
+			context.previousExpressions[descriptor.values[0] as number];
+		removeAttribute(element, previousName, previousExpression);
+	}
+
 	addAttribute(element, currentName, currentValue);
 };

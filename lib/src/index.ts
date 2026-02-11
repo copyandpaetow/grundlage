@@ -28,7 +28,7 @@ export const render: Component = (
 		#render: TemplateRenderer | null = null; // renders a view
 		#view: HTMLTemplate | null = null; //current rendered dom
 		#cleanup: ((props: Record<string, unknown>) => void) | null = null;
-		#isUpdating = false;
+		#updateScheduled = false;
 		#renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
 		#duplicatedMutationCallbacks = new Set();
 
@@ -42,6 +42,10 @@ export const render: Component = (
 		}
 
 		async connectedCallback() {
+			if (this.#render) {
+				//prevents re-rendering everything when this element is moved
+				return;
+			}
 			for (const attr of this.attributes) {
 				this.#props[attr.name] = attr.value;
 			}
@@ -112,14 +116,25 @@ export const render: Component = (
 				let result;
 
 				while (true) {
-					const { done, value } = await generator.next(result);
+					const next = generator.next(result);
+					const { done, value } = next instanceof Promise ? await next : next;
 
 					if (done) {
 						this.#cleanup = typeof value === "function" ? value : null;
 						break;
 					}
 
-					result = await this.#processYield(value);
+					if (value instanceof Promise) {
+						result = await value;
+					} else if (typeof value === "function") {
+						this.#render = value;
+						result = this.#mount(value(this.#props));
+					} else if (value instanceof HTMLTemplate) {
+						this.#render = () => value;
+						result = this.#mount(value);
+					} else {
+						result = value;
+					}
 				}
 
 				if (this.#view && this.#renderMode === RENDER_MODE.SSR) {
@@ -132,24 +147,6 @@ export const render: Component = (
 			}
 		}
 
-		async #processYield(value: unknown): Promise<unknown> {
-			if (value instanceof Promise) {
-				return value;
-			}
-
-			if (typeof value === "function") {
-				this.#render = value as TemplateRenderer;
-				return this.#mount(value(this.#props));
-			}
-
-			if (value instanceof HTMLTemplate) {
-				this.#render = () => value;
-				return this.#mount(value);
-			}
-
-			return value;
-		}
-
 		#mount(template: HTMLTemplate): ShadowRoot | null {
 			this.#view = template;
 			if (this.#renderMode === RENDER_MODE.CSR) {
@@ -159,10 +156,11 @@ export const render: Component = (
 		}
 
 		async update() {
-			if (!this.#render || this.#isUpdating) {
+			if (!this.#render || this.#updateScheduled) {
 				return;
 			}
-			this.#isUpdating = true;
+			this.#updateScheduled = true;
+			//wait to batch repeated update calls
 			await Promise.resolve();
 
 			let template = this.#render(this.#props);
@@ -176,11 +174,11 @@ export const render: Component = (
 				this.#view.parsedHTML.templateHash !== template.parsedHTML.templateHash
 			) {
 				this.#mount(template);
-				this.#isUpdating = false;
+				this.#updateScheduled = false;
 				return;
 			}
 			this.#view.update(template.currentExpressions);
-			this.#isUpdating = false;
+			this.#updateScheduled = false;
 		}
 	}
 

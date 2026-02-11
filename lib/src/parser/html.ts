@@ -108,15 +108,15 @@ const setup = (strings: TemplateStringsArray) => {
 };
 
 const resultBuffer: BufferArray = [];
-const buffers = {
-	element: [] as BufferArray,
-	tag: [] as BufferArray,
-	endTag: [] as BufferArray,
-	content: [] as BufferArray,
-	comment: [] as BufferArray,
-	attributeKey: [] as BufferArray,
-	attributeValue: [] as BufferArray,
-	rawContent: [] as BufferArray,
+const buffers: Record<string, BufferArray> = {
+	element: [],
+	tag: [],
+	endTag: [],
+	content: [],
+	comment: [],
+	attributeKey: [],
+	attributeValue: [],
+	rawContent: [],
 };
 
 const createComment = () =>
