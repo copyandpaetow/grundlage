@@ -7,38 +7,38 @@ export const BINDING_TYPES = {
 	RAW_CONTENT: 3,
 } as const;
 
-export type AttributeDescriptor = {
+export type AttributeBinding = {
 	type: typeof BINDING_TYPES.ATTR;
 	values: Array<number | string>;
 	keys: Array<number | string>;
 };
 
-export type ContentDescriptor = {
+export type ContentBinding = {
 	type: typeof BINDING_TYPES.CONTENT;
 	values: Array<number | string>;
 };
 
-export type RawContentDescriptor = {
+export type RawContentBinding = {
 	type: typeof BINDING_TYPES.RAW_CONTENT;
 	values: Array<number | string>;
 };
 
-export type TagDescriptor = {
+export type TagBinding = {
 	type: typeof BINDING_TYPES.TAG;
 	values: Array<number | string>;
 	endValues: Array<number | string>;
 	relatedAttributes: Array<number>;
 };
 
-export type Descriptor =
-	| TagDescriptor
-	| AttributeDescriptor
-	| ContentDescriptor
-	| RawContentDescriptor;
+export type Binding =
+	| TagBinding
+	| AttributeBinding
+	| ContentBinding
+	| RawContentBinding;
 
 export type ParsedHTML = {
-	expressionToDescriptor: Array<number>;
-	descriptors: Array<Descriptor>;
+	expressionToBinding: Array<number>;
+	bindings: Array<Binding>;
 	fragment: DocumentFragment;
 	templateHash: number;
 };

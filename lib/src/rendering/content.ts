@@ -1,5 +1,5 @@
 import { html } from "../parser/html";
-import { descriptorToString } from "../utils/descriptor-to-string";
+import { bindingToString } from "../utils/binding-to-string";
 import { hashValue } from "../utils/hashing";
 import { toPrimitive } from "../utils/to-primitive";
 import { isComment, isSameTemplate } from "../utils/validators";
@@ -283,27 +283,25 @@ const renderTemplate = (
 const renderComment = (
 	context: HTMLTemplate,
 	marker: Comment,
-	descriptorValues: Array<string | number>,
+	bindingValues: Array<string | number>,
 ) => {
 	deleteNodesBetween(marker);
 	marker.after(
-		new Comment(
-			descriptorToString(descriptorValues, context.currentExpressions),
-		),
+		new Comment(bindingToString(bindingValues, context.currentExpressions)),
 	);
 };
 
 export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
-	const descriptor = context.parsedHTML.descriptors[bindingIndex];
+	const binding = context.parsedHTML.bindings[bindingIndex];
 	const marker = context.markers[bindingIndex];
 
 	//only true for comments
-	if (descriptor.values.length > 1) {
-		renderComment(context, marker, descriptor.values);
+	if (binding.values.length > 1) {
+		renderComment(context, marker, binding.values);
 		return;
 	}
 
-	const expressionIndex = descriptor.values[0] as number;
+	const expressionIndex = binding.values[0] as number;
 	const current = context.currentExpressions[expressionIndex];
 
 	if (current instanceof HTMLTemplate) {

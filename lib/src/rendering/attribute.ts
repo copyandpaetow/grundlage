@@ -1,6 +1,6 @@
-import { AttributeDescriptor } from "../parser/types";
+import { AttributeBinding } from "../parser/types";
 import { BaseComponent } from "../types";
-import { descriptorToString } from "../utils/descriptor-to-string";
+import { bindingToString } from "../utils/binding-to-string";
 import { toPrimitive } from "../utils/to-primitive";
 import { isObject } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
@@ -82,25 +82,20 @@ const handleExpandableAttribute = (
 
 export const updateAttribute = (context: HTMLTemplate, index: number) => {
 	const element = context.markers[index].nextElementSibling!;
-	const descriptor = context.parsedHTML.descriptors[
-		index
-	] as AttributeDescriptor;
+	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
 
-	const isBooleanAttribute = descriptor.values.length === 0;
-	const isExpandable = descriptor.keys.length === 1;
+	const isBooleanAttribute = binding.values.length === 0;
+	const isExpandable = binding.keys.length === 1;
 
 	if (isBooleanAttribute && isExpandable) {
-		handleExpandableAttribute(context, element, descriptor.keys[0] as number);
+		handleExpandableAttribute(context, element, binding.keys[0] as number);
 		return;
 	}
-	const previousName = descriptorToString(
-		descriptor.keys,
+	const previousName = bindingToString(
+		binding.keys,
 		context.previousExpressions,
 	);
-	const currentName = descriptorToString(
-		descriptor.keys,
-		context.currentExpressions,
-	);
+	const currentName = bindingToString(binding.keys, context.currentExpressions);
 
 	if (isBooleanAttribute) {
 		removeAttribute(element, previousName);
@@ -109,15 +104,15 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 	}
 
 	const currentExpression =
-		context.currentExpressions[descriptor.values[0] as number];
+		context.currentExpressions[binding.values[0] as number];
 
 	const currentValue = isEventListener(currentName, currentExpression)
 		? currentExpression
-		: descriptorToString(descriptor.values, context.currentExpressions);
+		: bindingToString(binding.values, context.currentExpressions);
 
 	if (previousName !== currentName) {
 		const previousExpression =
-			context.previousExpressions[descriptor.values[0] as number];
+			context.previousExpressions[binding.values[0] as number];
 		removeAttribute(element, previousName, previousExpression);
 	}
 

@@ -1,15 +1,12 @@
-import { TagDescriptor } from "../parser/types";
-import { descriptorToString } from "../utils/descriptor-to-string";
+import { TagBinding } from "../parser/types";
+import { bindingToString } from "../utils/binding-to-string";
 import { HTMLTemplate } from "./template-html";
 
 export const updateTag = (context: HTMLTemplate, index: number) => {
 	const marker = context.markers[index];
-	const descriptor = context.parsedHTML.descriptors[index] as TagDescriptor;
+	const binding = context.parsedHTML.bindings[index] as TagBinding;
 	const element = marker.nextElementSibling!;
-	const newTag = descriptorToString(
-		descriptor.values,
-		context.currentExpressions,
-	);
+	const newTag = bindingToString(binding.values, context.currentExpressions);
 
 	const focusElement = element.contains(document.activeElement)
 		? (document.activeElement as HTMLElement)
@@ -24,9 +21,9 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	element.replaceWith(newElement);
 	focusElement?.focus();
 
-	//from the descriptor we know if there are related attributes and mark them as dirty
+	//from the binding we know if there are related attributes and mark them as dirty
 	//this is mainly for event listeners
-	for (const relatedIndex of descriptor.relatedAttributes) {
+	for (const relatedIndex of binding.relatedAttributes) {
 		context.dirtyBindings.add(relatedIndex);
 	}
 };

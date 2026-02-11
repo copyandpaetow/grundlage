@@ -2,12 +2,12 @@ import { stringHash } from "../utils/hashing";
 import { HTMLTemplate } from "../rendering/template-html";
 import {
 	ValueOf,
-	Descriptor,
-	TagDescriptor,
-	ContentDescriptor,
+	Binding,
+	TagBinding,
+	ContentBinding,
 	BINDING_TYPES,
-	AttributeDescriptor,
-	RawContentDescriptor,
+	AttributeBinding,
+	RawContentBinding,
 	ParsedHTML,
 } from "./types";
 import {
@@ -21,17 +21,17 @@ import {
 the idea here is to analyse and parse a tagged template string to give us
 - a document fragment
 - a hash
-- an array of expressions descriptions aka "descriptors"
-- a mapping of which expressions map to which descriptor
+- an array of expressions bindings
+- a mapping array of which expression maps to which binding
 
-several expressions can be part of one descriptor like
+several expressions can be part of one binding like
 <div class="${dynamic1} static ${dynamic1}"> 
-=> one attribute descriptor
+=> one attribute binding
 
 They also dont have to be next to each other
 <h${headingLevel}>Hello, ${name}<h${headingLevel}>
-=> one tag descriptor
-=> one content descriptor
+=> one tag binding
+=> one content binding
 
 We walk each character and listen for different character combinations to change the state machine. 
 Depending on the state we move the last characters sine the state change to the dedicated buffer array.
@@ -62,8 +62,8 @@ const STATE = {
 } as const;
 
 let state: StateValue = STATE.TEXT;
-let descriptors: Array<Descriptor>;
-let expressionToDescriptor: Array<number>;
+let bindings: Array<Binding>;
+let expressionToBinding: Array<number>;
 let templates: TemplateStringsArray;
 let index = 0;
 let activeTemplate = "";
@@ -71,9 +71,9 @@ let charIndex = 0;
 let splitIndex = 0;
 let attrQuote = "";
 let currentTagName = "";
-let activeDescriptor: Descriptor | null = null;
-let activeTagDescriptor: Descriptor | null = null;
-const openTagDescriptors: Array<TagDescriptor> = [];
+let activeBinding: Binding | null = null;
+let activeTagBinding: Binding | null = null;
+const openTagBindings: Array<TagBinding> = [];
 
 /*
 using the module scope was chose to keep performance high / reduce memory usage as much as possible
@@ -84,8 +84,8 @@ if concurrency becomes a requirement, we would need to put this into a class/clo
 */
 const setup = (strings: TemplateStringsArray) => {
 	state = STATE.TEXT;
-	descriptors = [];
-	expressionToDescriptor = [];
+	bindings = [];
+	expressionToBinding = [];
 	templates = strings;
 	index = 0;
 	activeTemplate = templates[index];
@@ -93,9 +93,9 @@ const setup = (strings: TemplateStringsArray) => {
 	splitIndex = 0;
 	attrQuote = "";
 	currentTagName = "";
-	activeDescriptor = null;
-	activeTagDescriptor = null;
-	openTagDescriptors.length = 0;
+	activeBinding = null;
+	activeTagBinding = null;
+	openTagBindings.length = 0;
 	resultBuffer.length = 0;
 	buffers.element.length = 0;
 	buffers.tag.length = 0;
@@ -120,15 +120,15 @@ const buffers: Record<string, BufferArray> = {
 };
 
 const createComment = () =>
-	`<!--${COMMENT_IDENTIFIER}${activeDescriptor?.type}-${descriptors.length - 1}${COMMENT_IDENTIFIER}-->`;
+	`<!--${COMMENT_IDENTIFIER}${activeBinding?.type}-${bindings.length - 1}${COMMENT_IDENTIFIER}-->`;
 
-const updateDescriptor = () => {
+const updateBinding = () => {
 	switch (state) {
 		case STATE.TEXT:
 			capture(buffers.content, splitIndex);
 			buffers.content.push(createComment(), createComment());
-			(activeDescriptor as ContentDescriptor).values.push(index);
-			activeDescriptor = null;
+			(activeBinding as ContentBinding).values.push(index);
+			activeBinding = null;
 			break;
 
 		case STATE.TAG:
@@ -138,7 +138,7 @@ const updateDescriptor = () => {
 
 		case STATE.END_TAG:
 			capture(buffers.endTag, splitIndex);
-			(activeDescriptor as TagDescriptor).endValues.push(index);
+			(activeBinding as TagBinding).endValues.push(index);
 			break;
 
 		case STATE.ATTRIBUTE_KEY:
@@ -167,7 +167,7 @@ const updateDescriptor = () => {
 	}
 };
 
-const setDescriptor = () => {
+const setBinding = () => {
 	switch (state) {
 		case STATE.ATTRIBUTE_KEY:
 		case STATE.ATTRIBUTE_VALUE:
@@ -175,27 +175,27 @@ const setDescriptor = () => {
 				type: BINDING_TYPES.ATTR,
 				values: [],
 				keys: [],
-			} satisfies AttributeDescriptor;
+			} satisfies AttributeBinding;
 		case STATE.COMMENT:
 		case STATE.TEXT:
 			return {
 				type: BINDING_TYPES.CONTENT,
 				values: [],
-			} satisfies ContentDescriptor;
+			} satisfies ContentBinding;
 		case STATE.RAW_CONTENT:
 			return {
 				type: BINDING_TYPES.RAW_CONTENT,
 				values: [],
-			} satisfies RawContentDescriptor;
+			} satisfies RawContentBinding;
 		case STATE.TAG:
 			return {
 				type: BINDING_TYPES.TAG,
 				values: [],
 				endValues: [],
 				relatedAttributes: [],
-			} satisfies TagDescriptor;
+			} satisfies TagBinding;
 		case STATE.END_TAG:
-			return openTagDescriptors.at(-1)!;
+			return openTagBindings.at(-1)!;
 
 		default:
 			console.error("impossible state: ", state);
@@ -213,74 +213,74 @@ const capture = (buffer: BufferArray, start: number, end?: number) => {
 };
 
 const completeComment = () => {
-	if (activeDescriptor) {
+	if (activeBinding) {
 		moveArrayContents(
 			buffers.comment,
-			(activeDescriptor as ContentDescriptor).values,
+			(activeBinding as ContentBinding).values,
 		);
 		buffers.content.push(createComment(), createComment());
 	} else {
 		moveArrayContents(buffers.comment, buffers.content);
 	}
-	activeDescriptor = null;
+	activeBinding = null;
 };
 
 const completeSpecialContent = () => {
-	if (activeDescriptor) {
+	if (activeBinding) {
 		resultBuffer.push(createComment());
 		moveArrayContents(
 			buffers.rawContent,
-			(activeDescriptor as RawContentDescriptor).values,
+			(activeBinding as RawContentBinding).values,
 		);
 	} else {
 		moveArrayContents(buffers.rawContent, buffers.content);
 	}
-	activeDescriptor = null;
+	activeBinding = null;
 };
 
 const completeTag = () => {
-	if (activeDescriptor) {
+	if (activeBinding) {
 		currentTagName = PLACEHOLDER_TAG;
-		moveArrayContents(buffers.tag, (activeDescriptor as TagDescriptor).values);
+		moveArrayContents(buffers.tag, (activeBinding as TagBinding).values);
 		buffers.element.push(PLACEHOLDER_TAG);
 		resultBuffer.push(createComment());
-		activeTagDescriptor = activeDescriptor;
+		activeTagBinding = activeBinding;
 	} else {
 		currentTagName = buffers.tag[0] as string;
 		moveArrayContents(buffers.tag, buffers.element);
 	}
-	activeDescriptor = null;
+	activeBinding = null;
 };
 
 const completeEndTag = () => {
-	if (activeDescriptor) {
+	if (activeBinding) {
 		buffers.endTag.length = 0;
 		buffers.endTag.push(PLACEHOLDER_TAG);
 	}
 	resultBuffer.push("</");
 	moveArrayContents(buffers.endTag, resultBuffer);
 	resultBuffer.push(">");
-	activeDescriptor = null;
-	openTagDescriptors.pop();
+	activeBinding = null;
+	openTagBindings.pop();
 };
 
 const completeAttribute = () => {
-	if (activeDescriptor) {
+	if (activeBinding) {
 		moveArrayContents(
 			buffers.attributeKey,
-			(activeDescriptor as AttributeDescriptor).keys,
+			(activeBinding as AttributeBinding).keys,
 		);
 		moveArrayContents(
 			buffers.attributeValue,
-			(activeDescriptor as AttributeDescriptor).values,
+			(activeBinding as AttributeBinding).values,
 		);
 		resultBuffer.push(createComment());
-		const firstKey = (activeDescriptor as AttributeDescriptor).keys[0];
+		const firstKey = (activeBinding as AttributeBinding).keys[0];
 		if (typeof firstKey === "string") {
-			(activeDescriptor as AttributeDescriptor).keys[0] = firstKey.trimStart();
+			(activeBinding as AttributeBinding).keys[0] = firstKey.trimStart();
 		}
-		(activeTagDescriptor as TagDescriptor)?.relatedAttributes.push(
-			descriptors.length - 1,
+		(activeTagBinding as TagBinding)?.relatedAttributes.push(
+			bindings.length - 1,
 		);
 	} else {
 		moveArrayContents(buffers.attributeKey, buffers.element);
@@ -289,12 +289,12 @@ const completeAttribute = () => {
 			moveArrayContents(buffers.attributeValue, buffers.element);
 		}
 	}
-	activeDescriptor = null;
+	activeBinding = null;
 	attrQuote = "";
 };
 
 const flushElement = () => {
-	activeTagDescriptor = null;
+	activeTagBinding = null;
 
 	if (buffers.element.length === 0) {
 		if (buffers.content.length > 0) {
@@ -510,30 +510,30 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 			break;
 		}
 
-		if (!activeDescriptor) {
-			activeDescriptor = setDescriptor();
+		if (!activeBinding) {
+			activeBinding = setBinding();
 
 			/*
 			 bindings for tags require special handling
-			 - the end tag has no binding but the tag descriptor still needs to know about them
+			 - the end tag has no binding but the tag binding still needs to know about them
 			 - so we store them in a stack to conenct them
 			*/
 			if (state === STATE.TAG) {
-				openTagDescriptors.push(activeDescriptor as TagDescriptor);
+				openTagBindings.push(activeBinding as TagBinding);
 			}
 
 			if (state !== STATE.END_TAG) {
-				descriptors.push(activeDescriptor);
+				bindings.push(activeBinding);
 			}
 		}
 
 		if (state !== STATE.END_TAG) {
-			expressionToDescriptor.push(descriptors.length - 1);
+			expressionToBinding.push(bindings.length - 1);
 		} else {
-			expressionToDescriptor.push(descriptors.indexOf(activeDescriptor));
+			expressionToBinding.push(bindings.indexOf(activeBinding));
 		}
 
-		updateDescriptor();
+		updateBinding();
 	}
 
 	flushElement();
@@ -541,8 +541,8 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 	const result = resultBuffer.join("");
 
 	return {
-		expressionToDescriptor,
-		descriptors,
+		expressionToBinding,
+		bindings,
 		fragment: range.createContextualFragment(result),
 		templateHash: stringHash(result),
 	};

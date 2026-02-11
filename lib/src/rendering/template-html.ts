@@ -18,7 +18,7 @@ const updateByType = {
 export class HTMLTemplate {
 	hash = 0;
 	parsedHTML: ParsedHTML;
-	//these are tied together by the index position of the individual descriptors
+	//these are tied together by the index position of the individual bindings
 	markers: Array<Comment>;
 	dirtyBindings: Set<number>;
 	//these are tied together by the index position of the individual expressions
@@ -32,7 +32,7 @@ export class HTMLTemplate {
 	}
 
 	setup(): DocumentFragment {
-		this.dirtyBindings = new Set(this.parsedHTML.expressionToDescriptor);
+		this.dirtyBindings = new Set(this.parsedHTML.expressionToBinding);
 		const fragment = this.parsedHTML.fragment.cloneNode(
 			true,
 		) as DocumentFragment;
@@ -47,8 +47,8 @@ export class HTMLTemplate {
 		this.dirtyBindings = new Set();
 		this.markers = this.#findMarkers(context);
 
-		for (let index = 0; index < this.parsedHTML.descriptors.length; index++) {
-			const binding = this.parsedHTML.descriptors[index];
+		for (let index = 0; index < this.parsedHTML.bindings.length; index++) {
+			const binding = this.parsedHTML.bindings[index];
 			if (binding.type === BINDING_TYPES.ATTR) {
 				updateByType[binding.type](this, index);
 			}
@@ -63,7 +63,7 @@ export class HTMLTemplate {
 			{ acceptNode: () => NodeFilter.FILTER_ACCEPT },
 		);
 
-		let lastDescriptorIndex = "";
+		let lastBindingIndex = "";
 		while (treeWalker.nextNode()) {
 			const marker = treeWalker.currentNode as Comment;
 
@@ -72,10 +72,10 @@ export class HTMLTemplate {
 			}
 
 			//content nodes are there twice with the same index, so we can filter them here
-			if (lastDescriptorIndex === marker.data) {
+			if (lastBindingIndex === marker.data) {
 				continue;
 			}
-			lastDescriptorIndex = marker.data;
+			lastBindingIndex = marker.data;
 			markers.push(marker);
 		}
 
@@ -112,14 +112,14 @@ export class HTMLTemplate {
 				continue;
 			}
 
-			this.dirtyBindings.add(this.parsedHTML.expressionToDescriptor[index]);
+			this.dirtyBindings.add(this.parsedHTML.expressionToBinding[index]);
 		}
 		this.#flush();
 	}
 
 	#flush() {
 		for (const bindingIndex of this.dirtyBindings) {
-			updateByType[this.parsedHTML.descriptors[bindingIndex].type](
+			updateByType[this.parsedHTML.bindings[bindingIndex].type](
 				this,
 				bindingIndex,
 			);
