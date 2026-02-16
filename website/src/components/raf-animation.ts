@@ -5,7 +5,7 @@ export const Component = render("raf-animation", function* (_, ctx) {
 	let base = 100;
 	let direction = 1;
 	let percentage = (count / base) * 100;
-	let safeGuard = 100;
+	let safeGuard = 1000;
 
 	const updateCount = () => {
 		safeGuard--;

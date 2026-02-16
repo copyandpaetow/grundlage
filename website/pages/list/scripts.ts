@@ -1,2 +1,2 @@
-import "../../src/components/async";
+import "../../src/components/list";
 import "../../src/components/navbar";
