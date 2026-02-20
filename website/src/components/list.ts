@@ -22,32 +22,34 @@ import { render, html } from "../../../lib/src";
 // `;
 
 export const Component = render("list-component", function* (_, ctx) {
-	let entries = [10, 20, 30];
+	let entries = Array.from({ length: 1000 }, (_, index) => index * 10);
 
 	const shuffleEntries = () => {
 		entries = entries
 			.map((value) => ({ value, sort: Math.random() }))
 			.sort((a, b) => a.sort - b.sort)
 			.map(({ value }) => value);
+		//	console.log(entries);
 		ctx.update();
 	};
 
 	const addEntry = () => {
 		entries.push(entries.reduce((a, b) => a + b));
+		//	console.log(entries);
 		ctx.update();
 	};
 
 	const deleteEntry = () => {
 		const index = Math.floor(Math.random() * entries.length);
 		entries.splice(index, 1);
-
+		//console.log(entries);
 		ctx.update();
 	};
 
 	const replaceEntry = () => {
 		const index = Math.floor(Math.random() * entries.length);
 		entries.splice(index, 1, entries[index] * -1);
-		console.log(index, entries);
+		//console.log(index, entries);
 		ctx.update();
 	};
 
