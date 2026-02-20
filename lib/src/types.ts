@@ -16,7 +16,7 @@ export type TemplateRenderer<P extends Props = Props> = (
 export type GeneratorFn<P extends Props = Props> = (
 	initialProps: P,
 	context: BaseComponent,
-) => Generator;
+) => Generator | AsyncGenerator;
 
 export type Component = <P extends Props>(
 	name: string,

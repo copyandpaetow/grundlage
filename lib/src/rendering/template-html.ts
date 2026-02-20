@@ -22,13 +22,20 @@ export class HTMLTemplate {
 	markers: Array<Comment>;
 	dirtyBindings: Set<number>;
 	//these are tied together by the index position of the individual expressions
-	expressionHashes: Array<number>;
 	currentExpressions: Array<unknown>;
-	previousExpressions: Array<unknown>;
+	previousExpressions = EMPTY_ARRAY;
 
 	constructor(parsedHTML: ParsedHTML, expressions: Array<unknown>) {
 		this.parsedHTML = parsedHTML;
-		this.#setExpressions(expressions);
+		this.currentExpressions = expressions;
+		this.hash = expressions.length;
+
+		for (const value of this.currentExpressions) {
+			const hash = hashValue(value);
+			this.hash = (this.hash * 31 + hash) | 0;
+		}
+
+		this.hash = this.parsedHTML.templateHash ^ (this.hash * 31);
 	}
 
 	setup(): DocumentFragment {
@@ -82,30 +89,22 @@ export class HTMLTemplate {
 		return markers;
 	}
 
-	#setExpressions(expressions: Array<unknown>) {
+	update(expressions: Array<unknown>) {
 		this.previousExpressions = this.currentExpressions ?? EMPTY_ARRAY;
 		this.currentExpressions = expressions;
-		this.expressionHashes = [];
 		this.hash = expressions.length;
 
-		for (const value of this.currentExpressions) {
-			const hash = hashValue(value);
-			this.expressionHashes.push(hash);
-			this.hash = (this.hash * 31 + hash) | 0;
-		}
+		for (let index = 0; index < expressions.length; index++) {
+			const currentEntry = this.currentExpressions[index];
+			const previousEntry = this.previousExpressions[index];
+			const currentHash = hashValue(currentEntry);
+			this.hash = (this.hash * 31 + currentHash) | 0;
 
-		this.hash = this.parsedHTML.templateHash ^ (this.hash * 31);
-	}
+			if (currentEntry === previousEntry) {
+				continue;
+			}
 
-	update(expressions: Array<unknown>) {
-		const previousHashes = this.expressionHashes;
-		this.#setExpressions(expressions);
-
-		for (let index = 0; index < previousHashes.length; index++) {
-			const currentHash = this.expressionHashes[index];
-			const previousHash = previousHashes[index];
-
-			if (previousHash === currentHash) {
+			if (currentHash === hashValue(previousEntry)) {
 				if (this.currentExpressions[index] instanceof HTMLTemplate) {
 					this.currentExpressions[index] = this.previousExpressions[index];
 				}

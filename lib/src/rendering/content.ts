@@ -314,6 +314,23 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 		return;
 	}
 
+	const renderableCurrent = toPrimitive(current);
+	const previous = context.previousExpressions[expressionIndex];
+
+	if (previous === undefined) {
+		marker.after(document.createTextNode(renderableCurrent));
+		return;
+	}
+
+	if (
+		typeof previous === "string" ||
+		typeof previous === "number" ||
+		typeof previous === "boolean"
+	) {
+		(marker.nextSibling as Text).data = renderableCurrent;
+		return;
+	}
+
 	deleteNodesBetween(marker);
-	marker.after(document.createTextNode(toPrimitive(current)));
+	marker.after(document.createTextNode(renderableCurrent));
 };
