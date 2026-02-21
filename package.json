@@ -1,6 +1,6 @@
 {
 	"name": "grundlage-repo",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"license": "MIT",
 	"description": "a web component base render function",
 	"keywords": [
