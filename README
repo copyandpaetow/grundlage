@@ -1,170 +1,84 @@
-# Grundlage - a web component base rendering function
+# Grundlage
 
-## Overview
+A small, zero-dependency library for building web components with tagged template literals.
 
-The Template System provides a declarative way to handle dynamic content, conditional rendering, lists, and asynchronous operations using native HTML `<template>` elements. It uses slots for state management while maintaining compatibility with regular Web Component slots.
+## Installation
 
-## Core Concepts
-
-### Template Boundaries
-
-Each template creates its own boundary for state management and error handling. Content and errors are scoped to their immediate parent template, creating clean separation between different template blocks.
-
-### State Management Slots
-
-Templates use slots to manage different states (content, fallback, error, etc.). The default slot is used for the primary content, while other states are handled through named slots.
-
-## Basic Usage
-
-### Conditional Rendering
-
-```html
-<template when="${condition}">
-  <!-- Default slot (content) -->
-  <div>Main content shown when condition is true</div>
-
-  <!-- Fallback state -->
-  <template slot="fallback">
-    <div>Shown when condition is false</div>
-  </template>
-
-  <!-- Error state -->
-  <template slot="error">
-    <div>${error => error.message}</div>
-  </template>
-</template>
+```bash
+npm install grundlage
 ```
 
-### Async Operations
+## Concepts
 
-```html
-<template suspense="${fetchData}">
-  <!-- Default slot for success state -->
-  <div>${data => data.result}</div>
+### Components as Generators
 
-  <!-- Loading state -->
-  <template slot="fallback" when="${() => status() === 'loading'}">
-    <div>Loading...</div>
-  </template>
+Components are defined using generator functions. This gives you explicit control over the component lifecycle: setup runs until you yield a render function, and the return value is your cleanup.
 
-  <!-- Error state -->
-  <template slot="error">
-    <div>${error => error.message}</div>
-  </template>
-</template>
+```javascript
+import { render, html } from "grundlage";
+
+render("async-component", async function* (props) {
+	yield html`<p>loading</p>`;
+
+	try {
+		const data = await fetch(props.url);
+		yield html`<p>name:${data.name} ${data.name}, age: ${data.age}</p>`;
+	} catch (error) {
+		yield html`<p>error: ${error}</p>`;
+	}
+
+	return () => {
+		console.log("cleanup");
+	};
+});
 ```
 
-### List Rendering
+### Templating
 
-```html
-<template each="${items}">
-  <!-- Item template -->
-  <template slot="item" key="${item => item.id}">
-    <div>${item => item.name}</div>
-  </template>
+The `html` tagged template literal parses your markup once and caches the result. Subsequent renders only update the dynamic parts.
 
-  <!-- Empty state -->
-  <template slot="empty">
-    <div>No items available</div>
-  </template>
-</template>
+```javascript
+html`<div class="card ${isActive ? "active" : ""}">
+	<h2>${title}</h2>
+	<p>${description}</p>
+</div>`;
 ```
 
-## Slot Rules
+Supported bindings:
 
-1. The default (unnamed) slot is used for primary content
-2. Special state slots:
+- Content: `<p>${text}</p>`
+- Attributes: `<div class=${className}>`
+- Mixed attributes: `<div class="static ${dynamic}">`
+- Event handlers: `<button onClick=${handler}>`
+- Lists: `<ul>${items.map(i => html`<li>${i}</li>`)}</ul>`
+- Nested templates: `<div>${showDetails ? html`<details>...</details>` : null}</div>`
+- Dynamic tags: `<${tagName}>content</${tagName}>`
+- Raw content (style/script/textarea): `<style>${css}</style>`
 
-   - `fallback`: Alternative content
-   - `error`: Error handling
-   - `empty`: Empty state for lists
-   - `item`: List item template
+### Reactivity
 
-3. Multiple elements can use the same slot:
+Grundlage uses a hash-based change detection system. When you call `ctx.update()`, it compares hashes of each expression to determine what actually changed.
 
-```html
-<template when="${condition}">
-  <!-- Both fallbacks exist, visibility controlled by conditions -->
-  <template slot="fallback" when="${loading}">
-    <div>Loading...</div>
-  </template>
-  <template slot="fallback" when="${timeout}">
-    <div>Timeout...</div>
-  </template>
-</template>
-```
+This means:
 
-## Template Boundaries and Nesting
+- Primitives are compared by value
+- Arrays and objects are compared by content (shallow)
+- Nested templates are compared by structure and values
+- DOM updates only happen for expressions that changed
 
-### Scope Rules
+```javascript
+render("todo-list", function* (props, ctx) {
+	const items = [];
 
-1. Everything can be slotted, only templates have render functionality
-2. Templates create strict boundaries
-3. Slots belong to their immediate parent template
-4. Errors are caught by the nearest parent template
+	const add = (text) => {
+		items.push({ id: Date.now(), text });
+		ctx.update();
+	};
 
-```html
-<template when="${outerCondition}">
-  <div>Outer content</div>
-
-  <!-- This template is self-contained -->
-  <template when="${innerCondition}">
-    <div>Inner content</div>
-    <!-- This fallback belongs to inner template -->
-    <template slot="fallback">
-      <div>Inner fallback</div>
-    </template>
-  </template>
-
-  <!-- This fallback belongs to outer template -->
-  <template slot="fallback">
-    <div>Outer fallback</div>
-  </template>
-</template>
-```
-
-### Component Integration
-
-Templates inside component slots are self-contained:
-
-```html
-<my-component>
-  <!-- This template manages its own states -->
-  <template when="${condition}" slot="footer">
-    <div>Footer content</div>
-    <!-- Fallback belongs to when template, not component -->
-    <template slot="fallback">
-      <div>Footer fallback</div>
-    </template>
-  </template>
-</my-component>
-```
-
-## Special Considerations
-
-1. State management attributes (`when`, `each`, `suspense`) can only be used on `<template>` elements
-
-2. Dynamic slot names are not supported
-
-3. Template order doesn't affect slot rendering, but content within slots is rendered in document order
-
-## Error Handling
-
-Errors are caught by the nearest parent template with an error slot:
-
-```html
-<template when="${condition}">
-  <template suspense="${fetchData}">
-    <div>${data => data.result}</div>
-    <!-- Fetch errors are caught here -->
-    <template slot="error">
-      <div>Fetch error: ${error => error.message}</div>
-    </template>
-  </template>
-
-  <!-- Other errors in the when template are caught here -->
-  <template slot="error">
-    <div>General error: ${error => error.message}</div>
-  </template>
-</template>
+	yield () => html`
+		<ul>
+			${items.map((item) => html`<li>${item.text}</li>`)}
+		</ul>
+	`;
+});
 ```
