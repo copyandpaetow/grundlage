@@ -5,8 +5,6 @@
 - restoring an element removes all of its internal state (and of its children), that we would need to restore as faithfully as possible
   => eventlisteners, focus, scroll positions, animation progress
 
-- descriptors as a different name to binding is not needed anymore, we can revert to just binding again
-
 ## potential features
 
 ? template updating became a little ugly, it would be nice not to carry around 2 expression arrays

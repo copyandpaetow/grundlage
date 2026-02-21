@@ -8,6 +8,7 @@ import {
 	Props,
 	TemplateRenderer,
 } from "./types";
+import { isStringable } from "./utils/to-primitive";
 
 const defaultOptions: ShadowRootInit = {
 	clonable: true,
@@ -80,11 +81,7 @@ export const render: Component = (
 
 			this.#duplicatedMutationCallbacks.add(name);
 
-			if (
-				typeof value === "string" ||
-				typeof value === "number" ||
-				typeof value === "boolean"
-			) {
+			if (isStringable(value)) {
 				this.setAttribute(name, String(value));
 			}
 
@@ -122,7 +119,7 @@ export const render: Component = (
 					this.#props,
 					this,
 				);
-				let result;
+				let result: unknown;
 
 				while (true) {
 					const next = generator.next(result);
@@ -136,7 +133,7 @@ export const render: Component = (
 					if (value instanceof Promise) {
 						result = await value;
 					} else if (typeof value === "function") {
-						this.#render = value;
+						this.#render = value as TemplateRenderer;
 						result = this.#mount(value(this.#props));
 					} else if (value instanceof HTMLTemplate) {
 						this.#render = () => value;

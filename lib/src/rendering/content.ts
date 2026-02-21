@@ -1,16 +1,8 @@
 import { html } from "../parser/html";
 import { bindingToString } from "../utils/binding-to-string";
-import { toPrimitive } from "../utils/to-primitive";
+import { isStringable, toPrimitive } from "../utils/to-primitive";
 import { isComment, isSameTemplate } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
-
-/*
-conceptually, we have 2 lists of elements and we want to compare them to find the least amount of moves to match them
-We do this by mutating the old list until and generate patches. This way we dont have to deal with shifting indices
-
-We iterate the lists and compare elements. Depending on the outcome we increment the indices or move on (when we delete entries)
-
-*/
 
 const deleteNodesBetween = (start: Node, end?: Node) => {
 	let current = start.nextSibling;
@@ -39,6 +31,8 @@ const toTemplateList = (list: Array<unknown>): Array<HTMLTemplate> => {
 	return list as Array<HTMLTemplate>;
 };
 
+const LIST_IDENTIFIER = "*.*";
+
 const renderList = (
 	context: HTMLTemplate,
 	marker: Comment,
@@ -55,20 +49,21 @@ const renderList = (
 	const hashPositions = new Map<number, Comment>();
 	const previousMarkers = [];
 
-	let element = marker;
-	while (element && (element = element.nextSibling)) {
-		if (!isComment(element)) continue;
+	let index = 0;
+	let element: Node | null = marker;
+	while ((element = element.nextSibling)) {
+		if (!isComment(element) || !element.data.startsWith(LIST_IDENTIFIER))
+			continue;
 		if (element.data === marker.data) break;
 
-		const hash = parseInt(element.data);
-
-		if (isNaN(hash)) continue;
+		const hash = previous[index].hash;
 
 		hashPositions.set(hash, element);
 		previousMarkers.push(element);
+		index++;
 	}
 
-	let position: Node | null = marker;
+	let position: Element | Comment | null = marker;
 
 	for (let index = 0; index < current.length; index++) {
 		const template = current[index];
@@ -80,12 +75,12 @@ const renderList = (
 				position = currentHashExists;
 				continue;
 			}
-			let moveableElement = currentHashExists;
+			let moveableElement: Element | Comment | null = currentHashExists;
 			while (moveableElement) {
-				let prev = moveableElement.previousSibling;
+				let prev = moveableElement.previousSibling as Element | Comment;
 				position.after(moveableElement);
 
-				if (isComment(prev)) {
+				if (isComment(prev) && prev.data.startsWith(LIST_IDENTIFIER)) {
 					position = currentHashExists;
 					break;
 				}
@@ -93,19 +88,19 @@ const renderList = (
 				moveableElement = prev;
 			}
 		} else {
-			const listItemMarker = new Comment(String(template.hash));
+			const listItemMarker = new Comment(LIST_IDENTIFIER);
 			position.after(template.setup(), listItemMarker);
 			position = listItemMarker;
 		}
 	}
 
 	for (const entry of hashPositions) {
-		let start = entry[1];
+		let start: Element | Comment = entry[1];
 
 		while (start) {
-			let prev = start.previousSibling;
+			let prev = start.previousSibling as Element | Comment;
 			start.remove();
-			if (isComment(prev)) break;
+			if (isComment(prev) && prev.data.startsWith(LIST_IDENTIFIER)) break;
 			start = prev;
 		}
 	}
@@ -175,11 +170,7 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 		return;
 	}
 
-	if (
-		typeof previous === "string" ||
-		typeof previous === "number" ||
-		typeof previous === "boolean"
-	) {
+	if (isStringable(previous)) {
 		(marker.nextSibling as Text).data = renderableCurrent;
 		return;
 	}

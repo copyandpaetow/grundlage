@@ -22,7 +22,7 @@ import { render, html } from "../../../lib/src";
 // `;
 
 export const Component = render("list-component", function* (_, ctx) {
-	let entries = Array.from({ length: 1000 }, (_, index) => index * 10);
+	let entries = Array.from({ length: 10 }, (_, index) => index * 10);
 
 	const shuffleEntries = () => {
 		entries = entries
@@ -53,16 +53,25 @@ export const Component = render("list-component", function* (_, ctx) {
 		ctx.update();
 	};
 
+	const swap = () => {
+		const index1 = Math.floor(Math.random() * entries.length);
+		const index2 = Math.floor(Math.random() * entries.length);
+		[entries[index1], entries[index2]] = [entries[index2], entries[index1]];
+		//console.log(index, entries);
+		ctx.update();
+	};
+
 	yield () => html`
 		<menu>
 			<button onclick="${addEntry}">add</button>
 			<button onclick="${deleteEntry}">delete</button>
 			<button onclick="${shuffleEntries}">shuffle</button>
 			<button onclick="${replaceEntry}">replace</button>
+			<button onclick="${swap}">swap 2</button>
 		</menu>
 
 		<ul>
-			${entries.map((data) => html`<li>${data}</li>`)}
+			${entries.map((data) => html`<li data-key=${data}>${data}</li>`)}
 		</ul>
 	`;
 });

@@ -1,4 +1,4 @@
-export const COMMENT_IDENTIFIER = "__grundlage__";
+export const COMMENT_IDENTIFIER = "^.^";
 
 export const isWhitespace = (char: string) =>
 	char === " " || char === "\t" || char === "\n" || char === "\r";

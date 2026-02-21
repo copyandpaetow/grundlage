@@ -2,34 +2,34 @@
 
 ## parsing html
 
-We have a html tagged template literal helper function that takes the static templateStringArray and turns it into documentFragment and descriptors for each slot.
+We have a html tagged template literal helper function that takes the static templateStringArray and turns it into documentFragment and bindings for each slot.
 Since the templateStringArray is unique, we can cache the result and avoid the parsing cost from string to documentFragment, which is usually one of the bottlenecks.
 
 ### fragment
 
-the fragment marks the dynamic parts with comment nodes. Most descriptor types only need one comment node, the content descriptor needs 2 (to replace everything between on value change).
-In the comment nodes we encode which binding index they have and which expression indices they need. Since one binding can be made out of multiple expressions these dont always match.
+the fragment marks the dynamic parts with comment nodes. Most binding types only need one comment node, the content binding needs 2 (to replace everything between on value change).
+Having a comment for every binding "slot" makes it possible to hook up a server rendered version again, without having to re-render the component.
 
-### descriptors
+### bindings
 
-Descriptors describe the gaps/holes/slots of the tagged template literal input. There are currently 4 types: tag, attribute, rawContent (style, textArea), content
-These descriptors have somewhat different shapes what mainly involve arrays with either string content or numbers
+Bindings describe the gaps/holes/slots of the tagged template literal input. There are currently 4 types: tag, attribute, rawContent (style, textArea), and content.
+These bindings have somewhat different shapes what mainly involve arrays with either string content or numbers
 
 ```ts
 html`<div class="${dynamicClass1} static ${dynamicClass2}"></div>`[
 	//becomes
 	fragment: <!--marker--><div></div>
-	descriptors: [{
+	bindings: [{
 		keys: ["class"],
 		values: [0, "static ", 1],
 	}],
-	expressionToDescriptor: [0, 0]
+	expressionToBinding: [0, 0]
 ];
 ```
 
-They than can be combined with the expression array to the final html part (an attribute in this case). Like in the example above, a descriptor can be made out of more than one dynamic part.
+They than can be combined with the expression array to the final html part (an attribute in this case). Like in the example above, a binding can be made out of more than one dynamic part.
 
-## Bindings
+## Runtime
 
 ### setup
 

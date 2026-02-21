@@ -120,7 +120,7 @@ const buffers: Record<string, BufferArray> = {
 };
 
 const createComment = () =>
-	`<!--${COMMENT_IDENTIFIER}${activeBinding?.type}-${bindings.length - 1}${COMMENT_IDENTIFIER}-->`;
+	`<!--${COMMENT_IDENTIFIER} ${activeBinding?.type}-${bindings.length - 1}-->`;
 
 const updateBinding = () => {
 	switch (state) {
