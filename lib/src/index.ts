@@ -56,7 +56,12 @@ export const render: Component = (
 			for (const attr of this.attributes) {
 				this.#props[attr.name] = attr.value;
 			}
-			await this.#setup();
+
+			const generator = (componentGenerator as GeneratorFn<Props>)(
+				this.#props,
+				this,
+			);
+			this.#step(generator, undefined);
 			this.#watchAttributes();
 		}
 
@@ -113,43 +118,50 @@ export const render: Component = (
 			this.#observer.observe(this, { attributes: true });
 		}
 
-		async #setup() {
-			try {
-				const generator = (componentGenerator as GeneratorFn<Props>)(
-					this.#props,
-					this,
-				);
-				let result: unknown;
+		#handleError(error: Error) {
+			console.warn(error);
+			this.shadowRoot!.textContent = `${error}`;
+		}
 
-				while (true) {
-					const next = generator.next(result);
-					const { done, value } = next instanceof Promise ? await next : next;
+		#step(generator: Generator | AsyncGenerator, result: unknown) {
+			while (true) {
+				const next = generator.next(result);
 
-					if (done) {
-						this.#cleanup = typeof value === "function" ? value : null;
-						break;
-					}
-
-					if (value instanceof Promise) {
-						result = await value;
-					} else if (typeof value === "function") {
-						this.#render = value as TemplateRenderer;
-						result = this.#mount(value(this.#props));
-					} else if (value instanceof HTMLTemplate) {
-						this.#render = () => value;
-						result = this.#mount(value);
-					} else {
-						result = value;
-					}
+				if (next instanceof Promise) {
+					next
+						.then(({ done, value }) => {
+							if (done) {
+								this.#cleanup = typeof value === "function" ? value : null;
+								return;
+							}
+							this.#step(generator, value);
+						})
+						.catch((e) => this.#handleError(e));
+					return;
 				}
 
-				if (this.#view && this.#renderMode === RENDER_MODE.SSR) {
-					this.#view.hydrate(this.shadowRoot!);
-					this.#renderMode = RENDER_MODE.CSR;
+				const { done, value } = next;
+				if (done) {
+					this.#cleanup = typeof value === "function" ? value : null;
+					return;
 				}
-			} catch (error) {
-				console.error(error);
-				this.shadowRoot!.textContent = `${error}`;
+
+				if (value instanceof Promise) {
+					value
+						.then((resolved) => this.#step(generator, resolved))
+						.catch((e) => this.#handleError(e));
+					return;
+				}
+
+				if (typeof value === "function") {
+					this.#render = value as TemplateRenderer;
+					result = this.#mount(value(this.#props));
+				} else if (value instanceof HTMLTemplate) {
+					this.#render = () => value;
+					result = this.#mount(value);
+				} else {
+					result = value;
+				}
 			}
 		}
 

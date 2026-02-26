@@ -15,6 +15,8 @@ export default defineConfig({
 				main: resolve(__dirname, "index.html"),
 				async: resolve(__dirname, "pages/async/index.html"),
 				animation: resolve(__dirname, "pages/animation/index.html"),
+				list: resolve(__dirname, "pages/list/index.html"),
+				cubes: resolve(__dirname, "pages/cubes/index.html"),
 			},
 		},
 	},
