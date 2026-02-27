@@ -285,8 +285,9 @@ const completeAttribute = () => {
 	} else {
 		moveArrayContents(buffers.attributeKey, buffers.element);
 		if (buffers.attributeValue.length) {
-			buffers.element.push("=");
+			buffers.element.push("=", "'");
 			moveArrayContents(buffers.attributeValue, buffers.element);
+			buffers.element.push("'");
 		}
 	}
 	activeBinding = null;

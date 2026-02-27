@@ -18,19 +18,43 @@ todos:
 
 */
 
+const styles = /*css*/ `
+    transform: perspective(var(--camera-perspective)) translateZ(var(--camera-perspective))
+      translateX(calc(var(--camera-truck) * -1))
+      translateY(var(--camera-pedestal))
+      translateZ(calc(var(--camera-dolly) * -1)) rotateX(var(--camera-roll))
+      rotateY(var(--camera-pan)) rotateZ(var(--camera-tilt))
+      translateZ(calc(var(--camera-perspective) * -1));
+
+      display: block;
+      contain: layout;
+       transform-style: preserve-3d;
+
+      & :where(*) {
+        transform-style: preserve-3d;
+      }
+
+    & :where(*:not(button, label, a, input, summary)) {
+      outline: 1px solid transparent;
+    }
+`;
+
 render("cube-scene", function* (props: SceneProps) {
-	yield html`
+	console.log(props);
+	yield (props: SceneProps) => html`
 		<style>
-			--perspective: var(${props.perspective || "200000px"});
-			--truck: var(${props.truck || "0px"});
-			--pedestal: var(${props.pedestal || "0px"});
-			--dolly: var(${props.dolly || "0px"});
+			:host {
+			     --camera-perspective: ${props.perspective || "200000px"};
+			     --camera-truck: ${props.truck || "0px"};
+			     --camera-pedestal: ${props.pedestal || "0px"};
+			     --camera-dolly: ${props.dolly || "0px"};
 
-			--roll: var(${props.roll || "0deg"});
-			--pan: var(${props.pan || "0deg"});
-			--tilt: var(${props.tilt || "0deg"});
+			     --camera-roll: ${props.roll || "0deg"};
+			     --camera-pan: ${props.pan || "0deg"};
+			     --camera-tilt: ${props.tilt || "0deg"};
 
-			display: block;
+			  ${styles}
+			  }
 		</style>
 		<section>
 			<slot></slot>

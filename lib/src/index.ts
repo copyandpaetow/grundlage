@@ -77,6 +77,7 @@ export const render: Component = (
 
 		setProperty(name: string, value: unknown) {
 			const previousValue = this.#props[name];
+
 			if (previousValue === value) {
 				return;
 			}
