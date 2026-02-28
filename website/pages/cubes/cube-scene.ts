@@ -18,6 +18,24 @@ todos:
 
 */
 
+const calculateHiddenFaces = (props: SceneProps) => {
+	let style = "";
+
+	if (parseInt(props.roll || "0deg") > 0) {
+		style += "\n --cube-render-top: none;";
+	} else {
+		style += "\n --cube-render-bottom: none;";
+	}
+
+	if (parseInt(props.pan || "0deg") > 0) {
+		style += "\n --cube-render-right: none;";
+	} else {
+		style += "\n --cube-render-left: none;";
+	}
+
+	return style;
+};
+
 const styles = /*css*/ `
     transform: perspective(var(--camera-perspective)) translateZ(var(--camera-perspective))
       translateX(calc(var(--camera-truck) * -1))
@@ -39,11 +57,10 @@ const styles = /*css*/ `
     }
 `;
 
-render("cube-scene", function* (props: SceneProps) {
-	console.log(props);
+render("cube-scene", function* () {
 	yield (props: SceneProps) => html`
 		<style>
-			:host {
+			section {
 			     --camera-perspective: ${props.perspective || "200000px"};
 			     --camera-truck: ${props.truck || "0px"};
 			     --camera-pedestal: ${props.pedestal || "0px"};
@@ -53,7 +70,9 @@ render("cube-scene", function* (props: SceneProps) {
 			     --camera-pan: ${props.pan || "0deg"};
 			     --camera-tilt: ${props.tilt || "0deg"};
 
+			     ${calculateHiddenFaces(props)}
 			  ${styles}
+
 			  }
 		</style>
 		<section>
