@@ -15,78 +15,110 @@ type GridProps = BlockProps & {
 
 /*
 todos:
-- query for all inner blocks and get their dimension. From that we can calculate the 3d grid
-- this needs to be done whenever there is a change in their attributes
-
-
+- we need a different auto-filling strat. If the next element (if fixed) would overlap the current one, we need to move it after
 
 */
 
+const axisToDimension = {
+	x: "width",
+	y: "height",
+	z: "depth",
+} as const;
+
+type DimensionState = {
+	size: string;
+	units: string;
+	index: number;
+	axis: "x" | "y" | "z";
+};
+
+const normalizeChildPositions = (
+	state: DimensionState,
+	element: BaseComponent,
+) => {
+	const elementAxis = element.getAttribute(state.axis);
+	const elementDimension = parseFloat(
+		element.getAttribute(axisToDimension[state.axis]) ?? "1",
+	);
+
+	if (elementAxis === null) {
+		element.style.setProperty(`--${state.axis}`, String(state.index));
+		state.index += elementDimension;
+	} else if (elementAxis === "start") {
+		element.style.setProperty(`--${state.axis}`, "0");
+	} else if (elementAxis === "center") {
+		const mid = parseFloat(state.units ?? "1") / 2;
+		const childMid = elementDimension / 2;
+		element.style.setProperty(`--${state.axis}`, String(mid - childMid));
+	} else if (elementAxis === "end") {
+		element.style.setProperty(
+			`--${state.axis}`,
+			String(parseFloat(state.units ?? "1") - elementDimension),
+		);
+	} else {
+		if (isNaN(parseFloat(elementAxis))) {
+			console.error(
+				`element axis ${state.axis} is not a valid value, defaulting to 1`,
+			);
+			element.style.setProperty(`--${state.axis}`, "1");
+		} else {
+			element.style.setProperty(`--${state.axis}`, elementAxis);
+		}
+	}
+	element.style.setProperty(
+		`--${axisToDimension[state.axis]}`,
+		String(elementDimension),
+	);
+};
+
 render("cube-grid", function* (props: GridProps, self: BaseComponent) {
-	const width = props["size-width"] ?? props.size ?? "1";
-	const widthUnits = props["units-width"] ?? props.units ?? "1rem";
+	const xState: DimensionState = {
+		size: props["size-width"] ?? props.size ?? "1",
+		units: props["units-width"] ?? props.units ?? "1em",
+		index: 0,
+		axis: "x",
+	};
 
-	const height = props["size-height"] ?? props.size ?? "1";
-	const heightUnits = props["units-height"] ?? props.units ?? "1rem";
+	const yState: DimensionState = {
+		size: props["size-height"] ?? props.size ?? "1",
+		units: props["units-height"] ?? props.units ?? "1em",
+		index: 0,
+		axis: "y",
+	};
 
-	const depth = props["size-height"] ?? props.size ?? "1";
-	const depthsUnits = props["units-height"] ?? props.units ?? "1rem";
-
-	let xIndex = 0;
-	let yIndex = 0;
-	let zIndex = 0;
+	const zState: DimensionState = {
+		size: props["size-depth"] ?? props.size ?? "1",
+		units: props["units-depth"] ?? props.units ?? "1em",
+		index: 0,
+		axis: "z",
+	};
 
 	for (const child of self.children) {
 		if (!child.tagName.startsWith("CUBE")) {
 			continue;
 		}
-		const x = child.getAttribute("x");
-		const y = child.getAttribute("y");
-		const z = child.getAttribute("z");
-		const childWidth = child.getAttribute("width");
-		const childHeight = child.getAttribute("height");
-		const childDepth = child.getAttribute("depth");
-
-		if (childWidth === null) {
-			child.setAttribute("width", "1");
-		}
-		if (childHeight === null) {
-			child.setAttribute("height", "1");
-		}
-		if (childDepth === null) {
-			child.setAttribute("depth", "1");
-		}
-
-		if (x === null) {
-			child.setAttribute("x", String(xIndex));
-			xIndex += parseInt(childWidth ?? "1");
-		}
-		if (y === null) {
-			child.setAttribute("y", String(yIndex));
-			yIndex += parseInt(childHeight ?? "1");
-		}
-		if (z === null) {
-			child.setAttribute("z", String(zIndex));
-			zIndex += parseInt(childDepth ?? "1");
-		}
-
-		//handle center/auto positionings here
+		normalizeChildPositions(xState, child as BaseComponent);
+		normalizeChildPositions(yState, child as BaseComponent);
+		normalizeChildPositions(zState, child as BaseComponent);
 	}
 
 	yield html`
 		<style>
-			 :host {
-			 --height-unit: ${height};
-			 --depth-unit: ${depth};
-			 --width-unit: ${width};
+					:host {
+				--height-units: ${yState.units};
+					 --depth-units: ${zState.units};
+					 --width-units: ${xState.units};
+			--height-size: ${yState.size};
+					 --depth-size: ${zState.size};
+					 --width-size: ${xState.size};
 
-			 position: relative;
-			  display: block;
-			  height: calc(${height} * ${heightUnits}) ;
-			  width: calc(${width} * ${widthUnits}) ;
+				      position: relative;
+					       display: block;
+					       height: calc(${yState.size} * ${yState.units}) ;
+					       width: calc(${xState.size} * ${xState.units}) ;
 
-			${blockStyles}
-			 }
+					       ${blockStyles}
+					}
 		</style>
 		<div>
 			<div class="front">

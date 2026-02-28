@@ -14,13 +14,23 @@
 
 		<main>
 			<h1>Cube Project</h1>
-			<cube-scene
+			<!-- <cube-scene
 				perspective="2000px"
-				truck="1200px"
-				pan="-40deg"
-				dolly="1000px"
-				pedestal="1130px"
-				roll="-34deg"
+				truck="1200px" //left & right
+				pedestal="1130px" //up & down
+				dolly="1000px" //near & far
+				pan="-40deg" //rotates y axis => moves left/right
+				roll="-34deg" //rotates x axis => moves up/down
+				tilt="0deg" //rotates z axis => moves clockwise/counter-clockwise
+			> -->
+			<cube-scene
+				perspective="1000px"
+				truck="0px"
+				pedestal="0px"
+				dolly="0px"
+				pan="0deg"
+				roll="0deg"
+				tilt="0deg"
 			>
 				<cube-grid units="12" units-height="20" size="1rem">
 					<cube-block
@@ -54,6 +64,14 @@
 						height="8"
 						x="3"
 						z="3"
+					></cube-block>
+					<cube-block
+						class="remote"
+						width="2"
+						depth="1"
+						height="1"
+						x="center"
+						z="center"
 					></cube-block>
 				</cube-grid>
 			</cube-scene>

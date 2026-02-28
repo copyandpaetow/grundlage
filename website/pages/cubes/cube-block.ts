@@ -9,13 +9,6 @@ export type BlockProps = {
 	depth: string;
 };
 
-/*
-todos:
-- needs to have variable for each face that regulates the display value
-- a toplevel display value also makes sense
-
-*/
-
 export const blockStyles = /*css*/ `
  transform-style: preserve-3d;
   & :where(*) {
@@ -76,49 +69,53 @@ export const blockStyles = /*css*/ `
   `;
 
 render("cube-block", function* () {
-	yield (props: BlockProps) => {
-		return html`
-			<style>
-				:host {
-				  --cube-height: calc(${props.height} * var(--height-unit));
-				  --cube-width: calc(${props.width} * var(--width-unit));
-				  --cube-depth: calc(${props.depth} * var(--depth-unit));
+	yield html`
+		<style>
+			:host {
+			  --cube-height: calc(var(--height) * var(--height-size));
+			  --cube-width: calc(var(--width) * var(--width-size));
+			  --cube-depth: calc(var(--depth) * var(--depth-size));
 
-				  position: absolute;
-				  left: calc(${props.x} * var(--width-unit));
-				  top: calc(${props.y || "1"} * var(--height-unit));
+			     --translate-z: calc((var(--z) + var(--depth) - var(--depth-units)) * var(--depth-size));
+			     --translate-y:calc((var(--height-units) - var(--y) - var(--height)) * var(--height-size));
+			     --translate-x: calc(var(--x)* var(--width-size));
 
-				      height: var(--cube-height);
-				      width: var(--cube-width);
-				      display: block;
 
-				      --block-background: red;
-				      --block-border: blue;
+			  position: absolute;
+			  /* left: calc(var(--x)* var(--width-size)); */
+			  /* top: calc((var(--height-units) - var(--y) - var(--height)) * var(--height-size)); */
+			 /* transform: translateX(var(--translate-x)) translateY(var(--translate-y)) translateZ(var(--translate-z)) ; */
+			    transform: translate3d(var(--translate-x), var(--translate-y), var(--translate-z)) ;
 
-				      position: relative;
+			      height: var(--cube-height);
+			      width: var(--cube-width);
+			      display: block;
 
-				      ${blockStyles}
-				}
-			</style>
+			      --block-background: red;
+			      --block-border: blue;
 
-			<div class="face front">
-				<slot name="front"></slot>
-			</div>
-			<div class="face top">
-				<slot name="top"></slot>
-			</div>
-			<div class="face right">
-				<slot name="right"></slot>
-			</div>
-			<div class="face back">
-				<slot name="back"></slot>
-			</div>
-			<div class="face bottom">
-				<slot name="bottom"></slot>
-			</div>
-			<div class="face left">
-				<slot name="left"></slot>
-			</div>
-		`;
-	};
+
+			      ${blockStyles}
+			}
+		</style>
+
+		<div class="face front">
+			<slot name="front"></slot>
+		</div>
+		<div class="face top">
+			<slot name="top"></slot>
+		</div>
+		<div class="face right">
+			<slot name="right"></slot>
+		</div>
+		<div class="face back">
+			<slot name="back"></slot>
+		</div>
+		<div class="face bottom">
+			<slot name="bottom"></slot>
+		</div>
+		<div class="face left">
+			<slot name="left"></slot>
+		</div>
+	`;
 });
