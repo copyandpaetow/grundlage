@@ -1,6 +1,6 @@
 import { render, html } from "../../../lib/src";
 import { BaseComponent } from "../../../lib/src/types";
-import { type BlockProps, blockStyles } from "./cube-block";
+import { type BlockProps, cubeStyles, cubeFaceStyles } from "./cube-block";
 
 type GridProps = BlockProps & {
 	size?: string;
@@ -12,12 +12,6 @@ type GridProps = BlockProps & {
 	"units-height"?: string;
 	"units-depth"?: string;
 };
-
-/*
-todos:
-- we need a different auto-filling strat. If the next element (if fixed) would overlap the current one, we need to move it after
-
-*/
 
 const axisToDimension = {
 	x: "width",
@@ -38,7 +32,7 @@ const normalizeChildPositions = (
 ) => {
 	const elementAxis = element.getAttribute(state.axis);
 	const elementDimension = parseFloat(
-		element.getAttribute(axisToDimension[state.axis]) ?? "1",
+		element.getAttribute(axisToDimension[state.axis]) ?? "0",
 	);
 
 	if (elementAxis === null) {
@@ -47,20 +41,20 @@ const normalizeChildPositions = (
 	} else if (elementAxis === "start") {
 		element.style.setProperty(`--${state.axis}`, "0");
 	} else if (elementAxis === "center") {
-		const mid = parseFloat(state.units ?? "1") / 2;
+		const mid = parseFloat(state.units ?? "0") / 2;
 		const childMid = elementDimension / 2;
 		element.style.setProperty(`--${state.axis}`, String(mid - childMid));
 	} else if (elementAxis === "end") {
 		element.style.setProperty(
 			`--${state.axis}`,
-			String(parseFloat(state.units ?? "1") - elementDimension),
+			String(parseFloat(state.units ?? "0") - elementDimension),
 		);
 	} else {
 		if (isNaN(parseFloat(elementAxis))) {
 			console.error(
-				`element axis ${state.axis} is not a valid value, defaulting to 1`,
+				`element axis ${state.axis} is not a valid value, defaulting to 0`,
 			);
-			element.style.setProperty(`--${state.axis}`, "1");
+			element.style.setProperty(`--${state.axis}`, "0");
 		} else {
 			element.style.setProperty(`--${state.axis}`, elementAxis);
 		}
@@ -72,23 +66,28 @@ const normalizeChildPositions = (
 };
 
 render("cube-grid", function* (props: GridProps, self: BaseComponent) {
+	const xUnits = props["units-width"] ?? props.units ?? props.width ?? "1";
+	const yUnits = props["units-height"] ?? props.units ?? props.height ?? "1";
+	const zUnits = props["units-depth"] ?? props.units ?? props.depth ?? "1";
+
 	const xState: DimensionState = {
-		size: props["size-width"] ?? props.size ?? "1",
-		units: props["units-width"] ?? props.units ?? "1em",
+		size: props["size-width"] ?? props.size ?? `${100 / parseFloat(xUnits)}cqw`,
+		units: xUnits,
 		index: 0,
 		axis: "x",
 	};
 
 	const yState: DimensionState = {
-		size: props["size-height"] ?? props.size ?? "1",
-		units: props["units-height"] ?? props.units ?? "1em",
+		size:
+			props["size-height"] ?? props.size ?? `${100 / parseFloat(yUnits)}cqw`,
+		units: yUnits,
 		index: 0,
 		axis: "y",
 	};
 
 	const zState: DimensionState = {
-		size: props["size-depth"] ?? props.size ?? "1",
-		units: props["units-depth"] ?? props.units ?? "1em",
+		size: props["size-depth"] ?? props.size ?? `${100 / parseFloat(zUnits)}cqw`,
+		units: zUnits,
 		index: 0,
 		axis: "z",
 	};
@@ -104,43 +103,46 @@ render("cube-grid", function* (props: GridProps, self: BaseComponent) {
 
 	yield html`
 		<style>
-					:host {
-				--height-units: ${yState.units};
-					 --depth-units: ${zState.units};
-					 --width-units: ${xState.units};
-			--height-size: ${yState.size};
-					 --depth-size: ${zState.size};
-					 --width-size: ${xState.size};
+			:host {
+				${cubeStyles}
 
-				      position: relative;
-					       display: block;
-					       height: calc(${yState.size} * ${yState.units}) ;
-					       width: calc(${xState.size} * ${xState.units}) ;
+				.grid {
+					display: block;
+					position: relative;
+					height: var(--cube-height);
+					width: var(--cube-width);
 
-					       ${blockStyles}
-					}
+					--height-units: ${yState.units};
+					--depth-units: ${zState.units};
+					--width-units: ${xState.units};
+					--height-size: ${yState.size};
+					--depth-size: ${zState.size};
+					--width-size: ${xState.size};
+
+					${cubeFaceStyles}
+				}
+			}
 		</style>
-		<div>
-			<div class="front">
+		<div class="grid">
+			<div class="face front">
 				<slot name="front"></slot>
 			</div>
-			<div class="top">
+			<div class="face top">
 				<slot name="top"></slot>
 			</div>
-			<div class="right">
+			<div class="face right">
 				<slot name="right"></slot>
 			</div>
-			<div class="back">
+			<div class="face back">
 				<slot name="back"></slot>
 			</div>
-			<div class="bottom">
+			<div class="face bottom">
 				<slot name="bottom"></slot>
 			</div>
-			<div class="left">
+			<div class="face left">
 				<slot name="left"></slot>
 			</div>
 			<slot></slot>
-			<cube-block></cube-block>
 		</div>
 	`;
 });
