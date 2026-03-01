@@ -1,4 +1,4 @@
-import { render, html } from "../../../lib/src";
+import { html, render } from "../../../lib/src";
 
 type SceneProps = {
 	perspective?: string;
@@ -10,29 +10,27 @@ type SceneProps = {
 	tilt?: string;
 };
 
-/*
-todos:
-- from the rotation values we need to calculate which faces are showing
-- we pass that down as css variables
-
-
-*/
+const normalizeAngle = (raw: string) => ((parseFloat(raw) % 360) + 360) % 360;
 
 const calculateHiddenFaces = (props: SceneProps) => {
+	const pan = normalizeAngle(props.pan ?? "0deg");
+	const tilt = normalizeAngle(props.tilt ?? "0deg");
+
+	console.log({ pan, tilt });
+
+	const facingBack = pan > 90 && pan < 270;
+	const flippedOver = tilt > 90 && tilt < 270;
+
 	let style = "";
 
-	if (parseInt(props.roll || "0deg") > 0) {
-		style += "\n --cube-render-top: none;";
-	} else {
-		style += "\n --cube-render-bottom: none;";
-	}
-
-	if (parseInt(props.pan || "0deg") > 0) {
-		style += "\n --cube-render-right: none;";
-	} else {
-		style += "\n --cube-render-left: none;";
-	}
-
+	style +=
+		pan > 180 ? "\n--cube-render-left: none;" : "\n--cube-render-right: none;";
+	style +=
+		tilt < 180 ? "\n--cube-render-bottom: none;" : "\n--cube-render-top: none;";
+	style +=
+		facingBack === flippedOver
+			? "\n--cube-render-back: none;"
+			: "\n--cube-render-front: none;";
 	return style;
 };
 
@@ -45,7 +43,8 @@ const styles = /*css*/ `
       translateZ(calc(var(--camera-perspective) * -1));
 
       display: block;
-      contain: layout;
+			position: relative;
+   
        transform-style: preserve-3d;
 
       & :where(*) {
@@ -60,20 +59,32 @@ const styles = /*css*/ `
 render("cube-scene", function* () {
 	yield (props: SceneProps) => html`
 		<style>
-			section {
-			     --camera-perspective: ${props.perspective || "200000px"};
-			     --camera-truck: ${props.truck || "0px"};
-			     --camera-pedestal: ${props.pedestal || "0px"};
-			     --camera-dolly: ${props.dolly || "0px"};
+			:host {
+				display: block;
+				contain: layout;
+				container-type: size;
+				container-name: scene;
+				aspect-ratio: 1;
 
-			     --camera-roll: ${props.roll || "0deg"};
-			     --camera-pan: ${props.pan || "0deg"};
-			     --camera-tilt: ${props.tilt || "0deg"};
+				::slotted(*) {
+						height: 100cqh;
+						width: 100cqw;
+					}
 
-			     ${calculateHiddenFaces(props)}
-			  ${styles}
+				section {
+					--camera-perspective: ${props.perspective || "200000px"};
+					--camera-truck: ${props.truck || "0px"};
+					--camera-pedestal: ${props.pedestal || "0px"};
+					--camera-dolly: ${props.dolly || "0px"};
 
-			  }
+					--camera-roll: ${props.roll || "0deg"};
+					--camera-pan: ${props.pan || "0deg"};
+					--camera-tilt: ${props.tilt || "0deg"};
+
+					${calculateHiddenFaces(props)}
+					${styles}
+				}
+			}
 		</style>
 		<section>
 			<slot></slot>
