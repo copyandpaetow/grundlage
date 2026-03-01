@@ -9,12 +9,7 @@ export type BlockProps = {
 	depth: string;
 };
 
-export const blockStyles = /*css*/ `
- transform-style: preserve-3d;
-  & :where(*) {
-    transform-style: preserve-3d;
-  }
-
+export const cubeFaceStyles = /*css*/ `
   .face {
     inset: 0;
     position: absolute;
@@ -65,6 +60,36 @@ export const blockStyles = /*css*/ `
     background: pink;
   }
 
+  transform-style: preserve-3d;
+  & :where(*) {
+    transform-style: preserve-3d;
+  }
+`;
+
+export const cubeStyles = /*css*/ `
+  --cube-height: calc(var(--height) * var(--height-size, 1cqw));
+  --cube-width: calc(var(--width) * var(--width-size, 1cqw));
+  --cube-depth: calc(var(--depth) * var(--depth-size, 1cqw));
+
+  --translate-z: calc((var(--z) + var(--depth) - var(--depth-units)) * var(--depth-size));
+  --translate-y:calc((var(--height-units) - var(--y) - var(--height)) * var(--height-size));
+  --translate-x: calc(var(--x)* var(--width-size));
+
+  --block-background: red;
+  --block-border: blue;
+
+  position: absolute;
+  translate: var(--translate-x) var(--translate-y) var(--translate-z);
+
+  height: var(--cube-height);
+  width: var(--cube-width);
+  display: block;
+
+
+ transform-style: preserve-3d;
+  & :where(*) {
+    transform-style: preserve-3d;
+  }
 
   `;
 
@@ -72,30 +97,8 @@ render("cube-block", function* () {
 	yield html`
 		<style>
 			:host {
-			  --cube-height: calc(var(--height) * var(--height-size));
-			  --cube-width: calc(var(--width) * var(--width-size));
-			  --cube-depth: calc(var(--depth) * var(--depth-size));
-
-			     --translate-z: calc((var(--z) + var(--depth) - var(--depth-units)) * var(--depth-size));
-			     --translate-y:calc((var(--height-units) - var(--y) - var(--height)) * var(--height-size));
-			     --translate-x: calc(var(--x)* var(--width-size));
-
-
-			  position: absolute;
-			  /* left: calc(var(--x)* var(--width-size)); */
-			  /* top: calc((var(--height-units) - var(--y) - var(--height)) * var(--height-size)); */
-			 /* transform: translateX(var(--translate-x)) translateY(var(--translate-y)) translateZ(var(--translate-z)) ; */
-			    transform: translate3d(var(--translate-x), var(--translate-y), var(--translate-z)) ;
-
-			      height: var(--cube-height);
-			      width: var(--cube-width);
-			      display: block;
-
-			      --block-background: red;
-			      --block-border: blue;
-
-
-			      ${blockStyles}
+			  ${cubeStyles}
+			     ${cubeFaceStyles}
 			}
 		</style>
 
