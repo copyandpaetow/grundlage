@@ -1,20 +1,10 @@
 import { html, render } from "../../../lib/src";
 
-type SceneProps = {
-	perspective?: string;
-	truck?: string;
-	pedestal?: string;
-	dolly?: string;
-	roll?: string;
-	pan?: string;
-	tilt?: string;
-};
-
 const normalizeAngle = (raw: string) => ((parseFloat(raw) % 360) + 360) % 360;
 
-const calculateHiddenFaces = (props: SceneProps) => {
-	const pan = normalizeAngle(props.pan ?? "0deg");
-	const tilt = normalizeAngle(props.tilt ?? "0deg");
+const calculateHiddenFaces = (element: Element) => {
+	const pan = normalizeAngle(element.getAttribute("pan") ?? "0deg");
+	const tilt = normalizeAngle(element.getAttribute("tilt") ?? "0deg");
 
 	console.log({ pan, tilt });
 
@@ -58,8 +48,8 @@ const styles = /*css*/ `
 
 customElements.define(
 	"cube-scene",
-	render(function* () {
-		yield (props: SceneProps) => html`
+	render(function* (element) {
+		yield () => html`
 			<style>
 				:host {
 					display: block;
@@ -74,16 +64,17 @@ customElements.define(
 						}
 
 					section {
-						--camera-perspective: ${props.perspective || "200000px"};
-						--camera-truck: ${props.truck || "0px"};
-						--camera-pedestal: ${props.pedestal || "0px"};
-						--camera-dolly: ${props.dolly || "0px"};
+						--camera-perspective: ${element.getAttribute("perspective") ||
+				"200000px"};
+						--camera-truck: ${element.getAttribute("truck") || "0px"};
+						--camera-pedestal: ${element.getAttribute("pedestal") || "0px"};
+						--camera-dolly: ${element.getAttribute("dolly") || "0px"};
 
-						--camera-roll: ${props.roll || "0deg"};
-						--camera-pan: ${props.pan || "0deg"};
-						--camera-tilt: ${props.tilt || "0deg"};
+						--camera-roll: ${element.getAttribute("roll") || "0deg"};
+						--camera-pan: ${element.getAttribute("pan") || "0deg"};
+						--camera-tilt: ${element.getAttribute("tilt") || "0deg"};
 
-						${calculateHiddenFaces(props)};
+						${calculateHiddenFaces(element)};
 						${styles};
 					}
 				}
