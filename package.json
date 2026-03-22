@@ -1,22 +1,22 @@
 {
 	"name": "grundlage-repo",
-	"version": "0.1.1",
-	"license": "MIT",
-	"description": "a web component base render function",
-	"keywords": [
-		"web-components"
-	],
+	"private": true,
 	"scripts": {
-		"dev": "cd website && vite dev",
-		"build": "cd website && vite build",
-		"preview": "cd website && vite build && vite preview",
-		"test": "vitest"
+		"dev": "npm run dev -w website",
+		"build": "npm run build -w grundlage",
+		"build:site": "npm run build -w website",
+		"preview": "npm run preview -w website",
+		"test": "vitest",
+		"version:patch": "npm version patch -w grundlage",
+		"version:minor": "npm version minor -w grundlage",
+		"version:major": "npm version major -w grundlage"
 	},
 	"devDependencies": {
-		"vitest": "^4.0.18"
+		"vitest": "^4.1.0",
+		"@vitest/browser-playwright": "^4.1.0"
 	},
 	"workspaces": [
-		"/lib",
-		"/website"
+		"lib",
+		"website"
 	]
 }
