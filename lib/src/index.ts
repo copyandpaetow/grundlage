@@ -11,6 +11,12 @@ const defaultOptions: ShadowRootInit = {
 	serializable: true,
 };
 
+const UPDATE_STATE = {
+	IDLE: 0,
+	SCHEDULED: 1,
+	RENDERING: 2,
+} as const;
+
 const RENDER_MODE = {
 	SSR: 1,
 	CSR: 2,
@@ -27,7 +33,7 @@ export const render = (
 		#render: TemplateRenderer | null = null; // renders a view
 		#view: HTMLTemplate | null = null; //current rendered dom
 		#cleanup: VoidFunction | null = null;
-		#updateScheduled = false;
+		#updateState: ValueOf<typeof UPDATE_STATE> = UPDATE_STATE.IDLE;
 		#renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
 
 		constructor() {
@@ -115,12 +121,13 @@ export const render = (
 		}
 
 		async update() {
-			if (!this.#render || this.#updateScheduled) {
+			if (!this.#render || this.#updateState !== UPDATE_STATE.IDLE) {
 				return;
 			}
-			this.#updateScheduled = true;
+			this.#updateState = UPDATE_STATE.SCHEDULED;
 			//wait to batch repeated update calls
 			await Promise.resolve();
+			this.#updateState = UPDATE_STATE.RENDERING;
 
 			let template = this.#render();
 
@@ -133,11 +140,11 @@ export const render = (
 				this.#view.parsedHTML.templateHash !== template.parsedHTML.templateHash
 			) {
 				this.#mount(template);
-				this.#updateScheduled = false;
+				this.#updateState = UPDATE_STATE.IDLE;
 				return;
 			}
 			this.#view.update(template.currentExpressions);
-			this.#updateScheduled = false;
+			this.#updateState = UPDATE_STATE.IDLE;
 		}
 	}
 

@@ -1,4 +1,5 @@
 import { AttributeBinding } from "../parser/types";
+import { BaseComponent } from "../types";
 import { bindingToString } from "../utils/binding-to-string";
 import { isStringable, toPrimitive } from "../utils/to-primitive";
 import { isObject } from "../utils/validators";
@@ -38,6 +39,10 @@ export const addOrRemoveProperty = (
 	} else {
 		// @ts-expect-error - dynamic property assignment for complex (non-stringable) values passed via template bindings
 		element[key] = value;
+
+		if ("update" in element) {
+			(element as BaseComponent).update();
+		}
 	}
 };
 
