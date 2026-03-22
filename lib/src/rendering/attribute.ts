@@ -1,7 +1,6 @@
 import { AttributeBinding } from "../parser/types";
-import { BaseComponent } from "../types";
 import { bindingToString } from "../utils/binding-to-string";
-import { toPrimitive } from "../utils/to-primitive";
+import { isStringable, toPrimitive } from "../utils/to-primitive";
 import { isObject } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
 
@@ -12,39 +11,34 @@ const isEventListener = (key: string, value: unknown) => {
 	return key.startsWith("on");
 };
 
-const addAttribute = (element: Element, key: string, value: unknown) => {
-	if (isEventListener(key, value)) {
-		const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
-		element.addEventListener(event, value as EventListener);
+export const addOrRemoveProperty = (
+	element: Element,
+	key: string,
+	value: unknown,
+	oldValue?: unknown,
+) => {
+	if (isEventListener(key, value) || isEventListener(key, oldValue)) {
+		const event = key.slice(2).toLowerCase();
+		if (oldValue) {
+			element.removeEventListener(event, oldValue as EventListener);
+		}
+		if (value) {
+			element.addEventListener(event, value as EventListener);
+		}
 		return;
 	}
 
-	customElements.upgrade(element);
-	if ("setProperty" in element) {
-		(element as BaseComponent).setProperty(key, value);
+	if (value === null || value === undefined) {
+		element.removeAttribute(key);
 		return;
 	}
 
-	if (value === null || value === undefined || value === false) {
-		return;
+	if (isStringable(value)) {
+		element.setAttribute(key, String(value));
+	} else {
+		// @ts-expect-error - dynamic property assignment for complex (non-stringable) values passed via template bindings
+		element[key] = value;
 	}
-
-	element.setAttribute(key, String(value));
-};
-
-const removeAttribute = (element: Element, key: string, value?: unknown) => {
-	if (isEventListener(key, value)) {
-		const event = key.slice(2).toLowerCase() as keyof HTMLElementEventMap;
-		element?.removeEventListener(event, value as EventListener);
-		return;
-	}
-
-	if ("setProperty" in element) {
-		(element as BaseComponent).setProperty(key, undefined);
-		return;
-	}
-
-	element.removeAttribute(key);
 };
 
 const handleExpandableAttribute = (
@@ -57,26 +51,35 @@ const handleExpandableAttribute = (
 
 	if (Array.isArray(previous)) {
 		for (const name of previous) {
-			removeAttribute(element, name);
+			addOrRemoveProperty(element, name, null);
 		}
 	} else if (isObject(previous)) {
 		for (const name in previous) {
-			removeAttribute(element, name, previous[name as keyof typeof previous]);
+			addOrRemoveProperty(
+				element,
+				name,
+				null,
+				previous[name as keyof typeof previous],
+			);
 		}
 	} else if (previous) {
-		removeAttribute(element, toPrimitive(previous));
+		addOrRemoveProperty(element, toPrimitive(previous), null);
 	}
 
 	if (Array.isArray(current)) {
 		for (const name of current) {
-			addAttribute(element, name, "");
+			addOrRemoveProperty(element, name, "");
 		}
 	} else if (isObject(current)) {
 		for (const name in current) {
-			addAttribute(element, name, current[name as keyof typeof previous]);
+			addOrRemoveProperty(
+				element,
+				name,
+				current[name as keyof typeof previous],
+			);
 		}
 	} else if (current) {
-		addAttribute(element, toPrimitive(current), "");
+		addOrRemoveProperty(element, toPrimitive(current), "");
 	}
 };
 
@@ -98,8 +101,8 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 	const currentName = bindingToString(binding.keys, context.currentExpressions);
 
 	if (isBooleanAttribute) {
-		removeAttribute(element, previousName);
-		addAttribute(element, currentName, "");
+		addOrRemoveProperty(element, previousName, null);
+		addOrRemoveProperty(element, currentName, "");
 		return;
 	}
 
@@ -113,8 +116,8 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 	if (previousName !== currentName) {
 		const previousExpression =
 			context.previousExpressions[binding.values[0] as number];
-		removeAttribute(element, previousName, previousExpression);
+		addOrRemoveProperty(element, previousName, null, previousExpression);
 	}
 
-	addAttribute(element, currentName, currentValue);
+	addOrRemoveProperty(element, currentName, currentValue);
 };

@@ -1,14 +1,12 @@
 import { render, html } from "../../../lib/src";
 
-type Props = { start: string };
-
-export const Component = render(
+customElements.define(
 	"simple-component",
-	function* (initialProps: Props, ctx) {
-		let seconds = parseInt(initialProps.start ?? "0");
+	render(function* (element) {
+		let seconds = parseInt(element.getAttribute("start") ?? "0");
 		const interval = setInterval(() => {
 			seconds++;
-			ctx.update();
+			element.update();
 		}, 1000);
 
 		yield () => html`<p>${seconds} seconds</p>`;
@@ -16,5 +14,5 @@ export const Component = render(
 		return () => {
 			clearInterval(interval);
 		};
-	},
+	}),
 );

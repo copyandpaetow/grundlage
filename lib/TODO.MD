@@ -1,5 +1,7 @@
 # TODO
 
+## features
+
 ## known issues
 
 - restoring an element removes all of its internal state (and of its children), that we would need to restore as faithfully as possible

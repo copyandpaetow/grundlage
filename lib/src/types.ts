@@ -7,19 +7,8 @@ export interface BaseComponent extends HTMLElement {
 
 export type ComponentOptions = ShadowRootInit;
 
-export type Props = Record<string, unknown>;
+export type TemplateRenderer = () => HTMLTemplate;
 
-export type TemplateRenderer<P extends Props = Props> = (
-	props: P,
-) => HTMLTemplate;
-
-export type GeneratorFn<P extends Props = Props> = (
-	initialProps: P,
-	context: BaseComponent,
+export type GeneratorFn = (
+	element: BaseComponent,
 ) => Generator | AsyncGenerator;
-
-export type Component = <P extends Props>(
-	name: string,
-	generatorFunction: GeneratorFn<P>,
-	options?: ComponentOptions,
-) => TemplateRenderer;

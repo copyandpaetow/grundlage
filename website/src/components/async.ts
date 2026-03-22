@@ -13,17 +13,20 @@ const mockFetch = () =>
 		},
 	);
 
-export const Component = render("async-component", async function* () {
-	yield html`<p>loading</p>`;
+customElements.define(
+	"async-component",
+	render(async function* () {
+		yield html`<p>loading</p>`;
 
-	try {
-		const data = await mockFetch();
-		yield html`<p>name:${data.name} ${data.name}, age: ${data.age}</p>`;
-	} catch (error) {
-		yield html`<p>error: ${error}</p>`;
-	}
+		try {
+			const data = await mockFetch();
+			yield html`<p>name:${data.name} ${data.name}, age: ${data.age}</p>`;
+		} catch (error) {
+			yield html`<p>error: ${error}</p>`;
+		}
 
-	return () => {
-		console.log("cleanup");
-	};
-});
+		return () => {
+			console.log("cleanup");
+		};
+	}),
+);

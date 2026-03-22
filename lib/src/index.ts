@@ -1,14 +1,8 @@
 import { html } from "./parser/html";
 import { ValueOf } from "./parser/types";
+import { addOrRemoveProperty } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
-import {
-	BaseComponent,
-	Component,
-	GeneratorFn,
-	Props,
-	TemplateRenderer,
-} from "./types";
-import { isStringable } from "./utils/to-primitive";
+import { BaseComponent, GeneratorFn, TemplateRenderer } from "./types";
 
 const defaultOptions: ShadowRootInit = {
 	clonable: true,
@@ -24,20 +18,17 @@ const RENDER_MODE = {
 
 export { html } from "./parser/html";
 
-export const render: Component = (
-	name,
-	componentGenerator,
+export const render = (
+	componentGenerator: GeneratorFn,
 	options = defaultOptions,
 ) => {
 	class BaseElement extends HTMLElement implements BaseComponent {
-		#props: Props = {};
 		#observer: MutationObserver;
 		#render: TemplateRenderer | null = null; // renders a view
 		#view: HTMLTemplate | null = null; //current rendered dom
-		#cleanup: ((props: Props) => void) | null = null;
+		#cleanup: VoidFunction | null = null;
 		#updateScheduled = false;
 		#renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
-		#duplicatedMutationCallbacks = new Set();
 
 		constructor() {
 			super();
@@ -53,9 +44,6 @@ export const render: Component = (
 				//prevents re-rendering everything when this element is moved
 				return;
 			}
-			for (const attr of this.attributes) {
-				this.#props[attr.name] = attr.value;
-			}
 			await this.#setup();
 			this.#watchAttributes();
 		}
@@ -66,59 +54,24 @@ export const render: Component = (
 			await Promise.resolve();
 			if (!this.isConnected) {
 				this.#observer?.disconnect();
-				this.#cleanup?.(this.#props);
+				this.#cleanup?.();
 			}
 		}
 
-		setProperty(name: string, value: unknown) {
-			const previousValue = this.#props[name];
-			if (previousValue === value) {
-				return;
-			}
-			/*
-			changing the attribute creates a delayed callback from the mutation observer, that itself triggers the setProperty again
-			*/
-
-			this.#duplicatedMutationCallbacks.add(name);
-
-			if (isStringable(value)) {
-				this.setAttribute(name, String(value));
-			}
-
-			if (value === undefined || value === null) {
-				delete this.#props[name];
-				this.removeAttribute(name);
-			} else {
-				this.#props[name] = value;
-			}
-
+		setProperty(name: string, value: unknown, oldValue?: unknown) {
+			addOrRemoveProperty(this, name, value, oldValue);
 			this.update();
 		}
 
 		#watchAttributes() {
 			this.#observer?.disconnect();
-			this.#observer = new MutationObserver((mutations) => {
-				for (const mutation of mutations) {
-					if (this.#duplicatedMutationCallbacks.has(mutation.attributeName)) {
-						this.#duplicatedMutationCallbacks.delete(mutation.attributeName);
-						continue;
-					}
-
-					this.setProperty(
-						mutation.attributeName!,
-						this.getAttribute(mutation.attributeName!),
-					);
-				}
-			});
+			this.#observer = new MutationObserver(() => this.update());
 			this.#observer.observe(this, { attributes: true });
 		}
 
 		async #setup() {
 			try {
-				const generator = (componentGenerator as GeneratorFn<Props>)(
-					this.#props,
-					this,
-				);
+				const generator = componentGenerator(this);
 				let result: unknown;
 
 				while (true) {
@@ -134,7 +87,7 @@ export const render: Component = (
 						result = await value;
 					} else if (typeof value === "function") {
 						this.#render = value as TemplateRenderer;
-						result = this.#mount(value(this.#props));
+						result = this.#mount(value());
 					} else if (value instanceof HTMLTemplate) {
 						this.#render = () => value;
 						result = this.#mount(value);
@@ -169,7 +122,7 @@ export const render: Component = (
 			//wait to batch repeated update calls
 			await Promise.resolve();
 
-			let template = this.#render(this.#props);
+			let template = this.#render();
 
 			if (!(template instanceof HTMLTemplate)) {
 				template = html`${template}`;
@@ -188,11 +141,5 @@ export const render: Component = (
 		}
 	}
 
-	if (!customElements?.get(name)) {
-		customElements.define(name, BaseElement);
-	}
-
-	return (props = {}) => {
-		return html`<${name} ${props}></${name}>`;
-	};
+	return BaseElement;
 };
