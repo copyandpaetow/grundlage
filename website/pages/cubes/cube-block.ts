@@ -93,32 +93,35 @@ export const cubeStyles = /*css*/ `
 
   `;
 
-render("cube-block", function* () {
-	yield html`
-		<style>
-			:host {
-			  ${cubeStyles}
-			     ${cubeFaceStyles}
-			}
-		</style>
+customElements.define(
+	"cube-block",
+	render(function* () {
+		yield html`
+			<style>
+				:host {
+				  ${cubeStyles};
+				  ${cubeFaceStyles};
+				}
+			</style>
 
-		<div class="face front">
-			<slot name="front"></slot>
-		</div>
-		<div class="face top">
-			<slot name="top"></slot>
-		</div>
-		<div class="face right">
-			<slot name="right"></slot>
-		</div>
-		<div class="face back">
-			<slot name="back"></slot>
-		</div>
-		<div class="face bottom">
-			<slot name="bottom"></slot>
-		</div>
-		<div class="face left">
-			<slot name="left"></slot>
-		</div>
-	`;
-});
+			<div class="face front">
+				<slot name="front"></slot>
+			</div>
+			<div class="face top">
+				<slot name="top"></slot>
+			</div>
+			<div class="face right">
+				<slot name="right"></slot>
+			</div>
+			<div class="face back">
+				<slot name="back"></slot>
+			</div>
+			<div class="face bottom">
+				<slot name="bottom"></slot>
+			</div>
+			<div class="face left">
+				<slot name="left"></slot>
+			</div>
+		`;
+	}),
+);
