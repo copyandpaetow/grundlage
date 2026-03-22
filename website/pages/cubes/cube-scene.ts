@@ -56,38 +56,41 @@ const styles = /*css*/ `
     }
 `;
 
-render("cube-scene", function* () {
-	yield (props: SceneProps) => html`
-		<style>
-			:host {
-				display: block;
-				contain: layout;
-				container-type: size;
-				container-name: scene;
-				aspect-ratio: 1;
+customElements.define(
+	"cube-scene",
+	render(function* () {
+		yield (props: SceneProps) => html`
+			<style>
+				:host {
+					display: block;
+					contain: layout;
+					container-type: size;
+					container-name: scene;
+					aspect-ratio: 1;
 
-				::slotted(*) {
-						height: 100cqh;
-						width: 100cqw;
+					::slotted(*) {
+							height: 100cqh;
+							width: 100cqw;
+						}
+
+					section {
+						--camera-perspective: ${props.perspective || "200000px"};
+						--camera-truck: ${props.truck || "0px"};
+						--camera-pedestal: ${props.pedestal || "0px"};
+						--camera-dolly: ${props.dolly || "0px"};
+
+						--camera-roll: ${props.roll || "0deg"};
+						--camera-pan: ${props.pan || "0deg"};
+						--camera-tilt: ${props.tilt || "0deg"};
+
+						${calculateHiddenFaces(props)};
+						${styles};
 					}
-
-				section {
-					--camera-perspective: ${props.perspective || "200000px"};
-					--camera-truck: ${props.truck || "0px"};
-					--camera-pedestal: ${props.pedestal || "0px"};
-					--camera-dolly: ${props.dolly || "0px"};
-
-					--camera-roll: ${props.roll || "0deg"};
-					--camera-pan: ${props.pan || "0deg"};
-					--camera-tilt: ${props.tilt || "0deg"};
-
-					${calculateHiddenFaces(props)}
-					${styles}
 				}
-			}
-		</style>
-		<section>
-			<slot></slot>
-		</section>
-	`;
-});
+			</style>
+			<section>
+				<slot></slot>
+			</section>
+		`;
+	}),
+);
