@@ -3,7 +3,12 @@ import { props as propHelper, Schema } from "./validator/props";
 import { ValueOf } from "./parser/types";
 import { addOrRemoveProperty } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
-import { BaseComponent, GeneratorFn, TemplateRenderer } from "./types";
+import {
+	BaseComponent,
+	ComponentConstructor,
+	GeneratorFn,
+	TemplateRenderer,
+} from "./types";
 
 const defaultOptions: ShadowRootInit = {
 	clonable: true,
@@ -29,7 +34,7 @@ export { props } from "./validator/props";
 export const render = (
 	componentGenerator: GeneratorFn,
 	options = defaultOptions,
-) => {
+): ComponentConstructor => {
 	class BaseElement extends HTMLElement implements BaseComponent {
 		#observer: MutationObserver;
 		#render: TemplateRenderer | null = null; // renders a view

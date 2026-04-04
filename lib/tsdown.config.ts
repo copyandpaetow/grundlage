@@ -9,5 +9,7 @@ export default defineConfig({
 	minify: true,
 	sourcemap: true,
 	clean: true,
-	skipNodeModulesBundle: true,
+	deps: {
+		skipNodeModulesBundle: true,
+	},
 });
