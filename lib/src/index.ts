@@ -1,4 +1,5 @@
 import { html } from "./parser/html";
+import { props as propHelper, Schema } from "./validator/props";
 import { ValueOf } from "./parser/types";
 import { addOrRemoveProperty } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
@@ -23,6 +24,7 @@ const RENDER_MODE = {
 } as const;
 
 export { html } from "./parser/html";
+export { props } from "./validator/props";
 
 export const render = (
 	componentGenerator: GeneratorFn,
@@ -69,6 +71,10 @@ export const render = (
 		setProperty(name: string, value: unknown, oldValue?: unknown) {
 			addOrRemoveProperty(this, name, value, oldValue);
 			this.update();
+		}
+
+		props(schema: Schema) {
+			propHelper(this, schema);
 		}
 
 		#watchAttributes() {

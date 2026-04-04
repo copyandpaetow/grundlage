@@ -5,11 +5,11 @@ import { isStringable, toPrimitive } from "../utils/to-primitive";
 import { isObject } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
 
-const isEventListener = (key: string, value: unknown) => {
+const isEventListener = (element: Element, key: string, value: unknown) => {
 	if (typeof value !== "function") {
 		return false;
 	}
-	return key.startsWith("on");
+	return key.startsWith("on") && key in element;
 };
 
 export const addOrRemoveProperty = (
@@ -18,7 +18,10 @@ export const addOrRemoveProperty = (
 	value: unknown,
 	oldValue?: unknown,
 ) => {
-	if (isEventListener(key, value) || isEventListener(key, oldValue)) {
+	if (
+		isEventListener(element, key, value) ||
+		isEventListener(element, key, oldValue)
+	) {
 		const event = key.slice(2).toLowerCase();
 		if (oldValue) {
 			element.removeEventListener(event, oldValue as EventListener);
@@ -29,7 +32,7 @@ export const addOrRemoveProperty = (
 		return;
 	}
 
-	if (value === null || value === undefined) {
+	if (value === null || value === undefined || value === false) {
 		element.removeAttribute(key);
 		return;
 	}
@@ -114,7 +117,7 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 	const currentExpression =
 		context.currentExpressions[binding.values[0] as number];
 
-	const currentValue = isEventListener(currentName, currentExpression)
+	const currentValue = isEventListener(element, currentName, currentExpression)
 		? currentExpression
 		: bindingToString(binding.values, context.currentExpressions);
 

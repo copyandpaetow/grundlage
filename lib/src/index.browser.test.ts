@@ -1,6 +1,9 @@
 import { describe, test, expect } from "vitest";
 import { render, html } from "./index";
 
+const sleep = (duration = 0) =>
+	new Promise((resolve) => setTimeout(resolve, duration));
+
 describe("component lifecycle", () => {
 	let tagId = 0;
 
@@ -8,78 +11,78 @@ describe("component lifecycle", () => {
 	const uniqueTag = () => `test-el-${tagId++}-${Date.now()}`;
 
 	const mount = (tag: string): HTMLElement => {
-		const el = document.createElement(tag);
-		document.body.appendChild(el);
-		return el;
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+		return element;
 	};
 
-	const cleanup = (el: HTMLElement) => {
-		el.remove();
+	const cleanup = (element: HTMLElement) => {
+		element.remove();
 	};
 
 	test("mounts and renders into shadow DOM", async () => {
 		const tag = uniqueTag();
 
-		const MyEl = render(function* (el) {
+		const MyElement = render(function* () {
 			yield () => html`<p>hello</p>`;
 		});
 
-		customElements.define(tag, MyEl);
-		const el = mount(tag);
+		customElements.define(tag, MyElement);
+		const element = mount(tag);
 
 		// wait for connectedCallback + initial render
-		await new Promise((r) => setTimeout(r, 0));
+		await sleep();
 
-		const p = el.shadowRoot?.querySelector("p");
+		const p = element.shadowRoot?.querySelector("p");
 		expect(p).not.toBeNull();
 		expect(p?.textContent).toBe("hello");
 
-		cleanup(el);
+		cleanup(element);
 	});
 
 	test("update() re-renders with new state", async () => {
 		const tag = uniqueTag();
 		let count = 0;
 
-		const Counter = render(function* (el) {
+		const Counter = render(function* () {
 			yield () => html`<span>${count}</span>`;
 		});
 
 		customElements.define(tag, Counter);
-		const el = mount(tag) as InstanceType<typeof Counter>;
+		const element = mount(tag) as InstanceType<typeof Counter>;
 
-		await new Promise((r) => setTimeout(r, 0));
-		expect(el.shadowRoot?.querySelector("span")?.textContent).toBe("0");
+		await sleep();
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("0");
 
 		count = 5;
-		await el.update();
+		await element.update();
 		// update batches via microtask, wait for it to flush
-		await new Promise((r) => setTimeout(r, 0));
+		await sleep();
 
-		expect(el.shadowRoot?.querySelector("span")?.textContent).toBe("5");
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("5");
 
-		cleanup(el);
+		cleanup(element);
 	});
 
 	test("disconnectedCallback cleans up", async () => {
 		const tag = uniqueTag();
 		let cleaned = false;
 
-		const MyEl = render(function* (el) {
+		const MyElement = render(function* () {
 			yield () => html`<p>temp</p>`;
 			return () => {
 				cleaned = true;
 			};
 		});
 
-		customElements.define(tag, MyEl);
-		const el = mount(tag);
+		customElements.define(tag, MyElement);
+		const element = mount(tag);
 
-		await new Promise((r) => setTimeout(r, 0));
-		cleanup(el);
+		await sleep();
+		cleanup(element);
 
 		// disconnectedCallback waits a microtask before cleanup
-		await new Promise((r) => setTimeout(r, 0));
+		await sleep();
 
 		expect(cleaned).toBe(true);
 	});
