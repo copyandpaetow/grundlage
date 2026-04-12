@@ -251,12 +251,13 @@ const completeEndTag = () => {
     if (activeBinding) {
         buffers.endTag.length = 0;
         buffers.endTag.push(PLACEHOLDER_TAG);
+        openTagBindings.pop();
     }
     resultBuffer.push("</");
     moveArrayContents(buffers.endTag, resultBuffer);
     resultBuffer.push(">");
     activeBinding = null;
-    openTagBindings.pop();
+
 };
 
 const completeAttribute = () => {

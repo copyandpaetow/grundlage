@@ -10,6 +10,7 @@ customElements.define(
                 <a href="/grundlage/pages/animation/">animation</a>
                 <a href="/grundlage/pages/attributes/">attributes</a>
                 <a href="/grundlage/pages/list/">list</a>
+                <a href="/grundlage/pages/tags/">heading</a>
             </nav>
         `;
     }),

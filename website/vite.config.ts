@@ -15,6 +15,7 @@ export default defineConfig({
                 async: resolve(__dirname, "pages/async/index.html"),
                 animation: resolve(__dirname, "pages/animation/index.html"),
                 attributes: resolve(__dirname, "pages/attributes/index.html"),
+                tags: resolve(__dirname, "pages/tags/index.html"),
             },
         },
     },

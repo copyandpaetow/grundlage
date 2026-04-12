@@ -3,7 +3,7 @@ import {type ComponentConstructor} from "../../../lib/src/types";
 
 let attrs = ["disabled", "hidden"];
 
-const component = render(async function* () {
+const component = render(function* () {
     yield () => html`
         <button ${attrs}>click</button>
         <p>attributes are </p>

@@ -20,14 +20,7 @@ export class HTMLTemplate {
     parsedHTML: ParsedHTML;
     //these are tied together by the index position of the individual bindings
     markers: Array<Comment>;
-    /*
-        Tracks which bindings need a DOM update this cycle.
-        Uses a bitmask to avoid object/GC overhead on every update
-        Each bit position corresponds to a binding index.
-        A Uint32Array of ⌈bindings.length / 32⌉ words covers any component size.
-        Operations: set a bit with [i >> 5] |= 1 << (i & 31), clear all with .fill(0).
-    */
-    dirtyBindings: Uint32Array;
+    dirtyBindings: Set<number>;
     //these are tied together by the index position of the individual expressions
     currentExpressions: Array<unknown>;
     previousExpressions = EMPTY_ARRAY;
@@ -49,12 +42,7 @@ export class HTMLTemplate {
     }
 
     setup(): DocumentFragment {
-        this.dirtyBindings = new Uint32Array(
-            ((this.parsedHTML.bindings.length - 1) >> 5) + 1,
-        );
-        for (const bindingIndex of this.parsedHTML.expressionToBinding) {
-            this.dirtyBindings[bindingIndex >> 5] |= 1 << (bindingIndex & 31);
-        }
+        this.dirtyBindings = new Set(this.parsedHTML.expressionToBinding);
         const fragment = this.parsedHTML.fragment.cloneNode(
             true,
         ) as DocumentFragment;
@@ -66,9 +54,7 @@ export class HTMLTemplate {
     }
 
     hydrate(context: ShadowRoot) {
-        this.dirtyBindings = new Uint32Array(
-            ((this.parsedHTML.bindings.length - 1) >> 5) + 1,
-        );
+        this.dirtyBindings = new Set();
         this.markers = this.#findMarkers(context);
 
         for (let index = 0; index < this.parsedHTML.bindings.length; index++) {
@@ -128,26 +114,19 @@ export class HTMLTemplate {
                 continue;
             }
 
-            const bindingIndex = this.parsedHTML.expressionToBinding[index];
-            this.dirtyBindings[bindingIndex >> 5] |= 1 << (bindingIndex & 31);
+            this.dirtyBindings.add(this.parsedHTML.expressionToBinding[index]);
         }
         this.#hash = this.parsedHTML.templateHash ^ (hash * 31);
         this.#flush();
     }
 
     #flush() {
-        for (let word = 0; word < this.dirtyBindings.length; word++) {
-            let bits = this.dirtyBindings[word];
-            while (bits !== 0) {
-                const lowestBit = bits & -bits;
-                const bindingIndex = (word << 5) + 31 - Math.clz32(lowestBit);
-                updateByType[this.parsedHTML.bindings[bindingIndex].type](
-                    this,
-                    bindingIndex,
-                );
-                bits ^= lowestBit;
-            }
+        for (const bindingIndex of this.dirtyBindings) {
+            updateByType[this.parsedHTML.bindings[bindingIndex].type](
+                this,
+                bindingIndex,
+            );
         }
-        this.dirtyBindings.fill(0);
+        this.dirtyBindings.clear();
     }
 }
