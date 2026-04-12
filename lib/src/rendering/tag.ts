@@ -24,6 +24,6 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	//from the binding we know if there are related attributes and mark them as dirty
 	//this is mainly for event listeners
 	for (const relatedIndex of binding.relatedAttributes) {
-		context.dirtyBindings.add(relatedIndex);
+		context.dirtyBindings[relatedIndex >> 5] |= 1 << (relatedIndex & 31);
 	}
 };
