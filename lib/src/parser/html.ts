@@ -215,7 +215,10 @@ const completeComment = () => {
         );
         buffers.content.push(createComment(), createComment());
     } else {
+        // static comments: re-wrap with delimiters since they were stripped during capture
+        buffers.content.push("<!--");
         moveArrayContents(buffers.comment, buffers.content);
+        buffers.content.push("-->");
     }
     activeBinding = null;
 };
@@ -338,7 +341,8 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
                     //comment
                     if (nextChar === "!") {
                         state = STATE.COMMENT;
-                        splitIndex = charIndex;
+                        splitIndex = charIndex + 4; // skip past "<!--"
+                        charIndex += 2; // advance past "<!"
                         continue;
                     }
 
@@ -366,7 +370,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
                         continue;
                     }
 
-                    capture(buffers.comment, splitIndex, charIndex + 1);
+                    capture(buffers.comment, splitIndex, charIndex - 2); // exclude "-->"
                     splitIndex = charIndex + 1;
                     completeComment();
                     state = STATE.TEXT;
@@ -463,6 +467,12 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
                         completeAttribute();
                         state = STATE.ELEMENT;
                         charIndex--; // rewind for element state management
+                        //self-closing tag: "/" before ">" ends the attribute without including the "/"
+                    } else if (char === "/" && nextChar === ">") {
+                        capture(buffers.attributeKey, splitIndex, charIndex);
+                        completeAttribute();
+                        // transition to ELEMENT without rewinding — the next char ">" will be handled there
+                        state = STATE.ELEMENT;
                         //special case if the element ends directly after the boolean attribute
                     } else if (char === ">") {
                         capture(buffers.attributeKey, splitIndex, charIndex);
