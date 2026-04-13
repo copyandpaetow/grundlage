@@ -20,8 +20,8 @@ export const hashValue = (value: unknown): number => {
 
 	if (Array.isArray(value)) {
 		let hash = value.length;
-		for (const entry of value) {
-			hash = (hash * 31 + hashValue(entry)) | 0;
+		for (let index = 0; index < value.length; index++) {
+			hash = (hash * 31 + hashValue(value[index])) | 0;
 		}
 		return hash;
 	}

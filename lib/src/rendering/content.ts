@@ -9,7 +9,7 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
 
     while (current) {
         const isLastComment =
-            current === end || (isComment(current) && current.isEqualNode(start));
+            current === end || (isComment(current) && current.data === (start as Comment).data);
 
         if (isLastComment) {
             break;
@@ -42,9 +42,7 @@ const renderList = (
     const current = toTemplateList(
         context.currentExpressions[expressionIndex] as Array<unknown>,
     );
-    const previous = toTemplateList(
-        Array.isArray(previousValue) ? previousValue : [],
-    );
+    const previous = (Array.isArray(previousValue) ? previousValue : []) as Array<HTMLTemplate>;
 
     const hashPositions = new Map<number, Comment>();
     const previousMarkers = [];

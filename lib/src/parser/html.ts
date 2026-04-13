@@ -155,10 +155,6 @@ const updateBinding = () => {
             capture(buffers.rawContent, splitIndex);
             buffers.rawContent.push(index);
             break;
-
-        default:
-            console.warn("you shouldnt be here");
-            break;
     }
 };
 
@@ -193,18 +189,14 @@ const setBinding = () => {
             return openTagBindings.at(-1)!;
 
         default:
-            console.error("impossible state: ", state);
             throw new Error("impossible state");
     }
 };
 
 const capture = (buffer: BufferArray, start: number, end?: number) => {
-    if (!end || end > start) {
-        const slice = activeTemplate.slice(start, end);
-        if (slice) {
-            buffer.push(slice);
-        }
-    }
+    if (end !== undefined && end <= start) return;
+    const slice = activeTemplate.slice(start, end);
+    if (slice) buffer.push(slice);
 };
 
 const completeComment = () => {

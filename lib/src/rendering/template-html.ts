@@ -20,7 +20,7 @@ export class HTMLTemplate {
     parsedHTML: ParsedHTML;
     //these are tied together by the index position of the individual bindings
     markers: Array<Comment>;
-    dirtyBindings: Set<number>;
+    dirtyBindings: Array<boolean>;
     //these are tied together by the index position of the individual expressions
     currentExpressions: Array<unknown>;
     previousExpressions = EMPTY_ARRAY;
@@ -42,7 +42,11 @@ export class HTMLTemplate {
     }
 
     setup(): DocumentFragment {
-        this.dirtyBindings = new Set(this.parsedHTML.expressionToBinding);
+        const bindingCount = this.parsedHTML.bindings.length;
+        this.dirtyBindings = new Array(bindingCount);
+        for (let i = 0; i < bindingCount; i++) {
+            this.dirtyBindings[i] = true;
+        }
         const fragment = this.parsedHTML.fragment.cloneNode(
             true,
         ) as DocumentFragment;
@@ -54,7 +58,11 @@ export class HTMLTemplate {
     }
 
     hydrate(context: ShadowRoot) {
-        this.dirtyBindings = new Set();
+        const bindingCount = this.parsedHTML.bindings.length;
+        this.dirtyBindings = new Array(bindingCount);
+        for (let i = 0; i < bindingCount; i++) {
+            this.dirtyBindings[i] = false;
+        }
         this.markers = this.#findMarkers(context);
 
         for (let index = 0; index < this.parsedHTML.bindings.length; index++) {
@@ -70,7 +78,6 @@ export class HTMLTemplate {
         const treeWalker = document.createTreeWalker(
             parent,
             NodeFilter.SHOW_COMMENT,
-            {acceptNode: () => NodeFilter.FILTER_ACCEPT},
         );
 
         let lastBindingIndex = "";
@@ -97,9 +104,10 @@ export class HTMLTemplate {
         this.currentExpressions = expressions;
         let hash = expressions.length;
 
+        const previousExpressions = this.previousExpressions;
         for (let index = 0; index < expressions.length; index++) {
-            const currentEntry = this.currentExpressions[index];
-            const previousEntry = this.previousExpressions[index];
+            const currentEntry = expressions[index];
+            const previousEntry = previousExpressions[index];
             const currentHash = hashValue(currentEntry);
             hash = (hash * 31 + currentHash) | 0;
 
@@ -108,25 +116,26 @@ export class HTMLTemplate {
             }
 
             if (currentHash === hashValue(previousEntry)) {
-                if (this.currentExpressions[index] instanceof HTMLTemplate) {
-                    this.currentExpressions[index] = this.previousExpressions[index];
+                if (currentEntry instanceof HTMLTemplate) {
+                    expressions[index] = previousEntry;
                 }
                 continue;
             }
 
-            this.dirtyBindings.add(this.parsedHTML.expressionToBinding[index]);
+            this.dirtyBindings[this.parsedHTML.expressionToBinding[index]] = true;
         }
         this.#hash = this.parsedHTML.templateHash ^ (hash * 31);
         this.#flush();
     }
 
     #flush() {
-        for (const bindingIndex of this.dirtyBindings) {
+        for (let bindingIndex = 0; bindingIndex < this.dirtyBindings.length; bindingIndex++) {
+            if (!this.dirtyBindings[bindingIndex]) continue;
+            this.dirtyBindings[bindingIndex] = false;
             updateByType[this.parsedHTML.bindings[bindingIndex].type](
                 this,
                 bindingIndex,
             );
         }
-        this.dirtyBindings.clear();
     }
 }

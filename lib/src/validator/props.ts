@@ -27,8 +27,6 @@ type InferSchema<T extends Schema> = {
 
 type StringableValue = StringConstructor | NumberConstructor;
 
-const STRINGABLE = new Set([String, Number, Boolean]);
-
 export const props = <T extends Schema>(
 	element: HTMLElement,
 	schema: T,
@@ -57,7 +55,7 @@ export const props = <T extends Schema>(
 			} else {
 				value = false;
 			}
-		} else if (STRINGABLE.has(constructorValue as StringableValue)) {
+		} else if (constructorValue === String || constructorValue === Number) {
 			const raw = element.getAttribute(key);
 			if (raw !== null) {
 				value = (constructorValue as StringableValue)(raw);
