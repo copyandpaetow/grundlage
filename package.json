@@ -11,6 +11,7 @@
     "test:dom": "vitest --project unit --project dom --project browser-as-dom",
     "test:browser": "vitest --project browser",
     "test:ci": "vitest run",
+    "bench": "vitest bench",
     "coverage": "vitest run --coverage",
     "version:patch": "npm version patch -w grundlage",
     "version:minor": "npm version minor -w grundlage",
@@ -18,6 +19,7 @@
     "release": "npm run build -w grundlage && npm test -- --run && npm publish -w grundlage"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "@vitest/browser-playwright": "^4.1.0",
     "@vitest/coverage-v8": "^4.1.2",
     "vitest": "^4.1.0"

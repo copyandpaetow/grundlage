@@ -11,6 +11,9 @@ export default defineConfig({
                     include: ["src/**/*.test.ts"],
                     exclude: [...configDefaults.exclude, "src/**/*.browser.test.ts", "src/**/*.dom.test.ts"],
                     environment: "node",
+                    benchmark: {
+                        include: [],
+                    },
                 },
             },
             {
@@ -27,6 +30,9 @@ export default defineConfig({
                     name: "browser-as-dom",
                     include: ["src/**/*.browser.test.ts"],
                     environment: "happy-dom",
+                    benchmark: {
+                        include: [],
+                    },
                 },
             },
             {
@@ -38,6 +44,9 @@ export default defineConfig({
                         enabled: true,
                         provider: playwright(),
                         instances: [{browser: "chromium"}],
+                    },
+                    benchmark: {
+                        include: [],
                     },
                 },
             },
