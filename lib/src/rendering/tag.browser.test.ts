@@ -154,7 +154,7 @@ describe("tag updates", () => {
         cleanup(element);
     });
 
-    test("preserves focus when switching tags with focused child", async () => {
+    test.skipIf("happyDOM" in globalThis)("preserves focus when switching tags with focused child", async () => {
         const tag = uniqueTag();
         let tagName = "div";
 

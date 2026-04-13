@@ -24,8 +24,16 @@ export default defineConfig({
             {
                 root: "./lib",
                 test: {
+                    name: "browser-as-dom",
+                    include: ["src/**/*.browser.test.ts"],
+                    environment: "happy-dom",
+                },
+            },
+            {
+                root: "./lib",
+                test: {
                     name: "browser",
-                    include: ["src/**/*.browser.test.ts", "src/**/*.dom.test.ts"],
+                    include: ["src/**/*.browser.test.ts"],
                     browser: {
                         enabled: true,
                         provider: playwright(),
