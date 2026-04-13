@@ -13,8 +13,9 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
         : null;
 
     const newElement = document.createElement(newTag);
-    for (const attr of element.attributes) {
-        newElement.setAttribute(attr.name, attr.value);
+    for (let index = 0; index < element.attributes.length; index++) {
+        const attribute = element.attributes[index];
+        newElement.setAttribute(attribute.name, attribute.value);
     }
 
     newElement.replaceChildren(...element.childNodes);
@@ -24,6 +25,6 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
     //from the binding we know if there are related attributes and mark them as dirty
     //this is mainly for event listeners
     for (const relatedIndex of binding.relatedAttributes) {
-        context.dirtyBindings.add(relatedIndex);
+        context.dirtyBindings[relatedIndex] = true;
     }
 };

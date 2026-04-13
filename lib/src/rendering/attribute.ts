@@ -63,8 +63,8 @@ const handleExpandableAttribute = (
     const previous = previousExpressions[index];
 
     if (Array.isArray(previous)) {
-        for (const name of previous) {
-            addOrRemoveProperty(element, name, null);
+        for (let index = 0; index < previous.length; index++) {
+            addOrRemoveProperty(element, previous[index], null);
         }
     } else if (isObject(previous)) {
         for (const name in previous) {
@@ -80,13 +80,11 @@ const handleExpandableAttribute = (
     }
 
     if (Array.isArray(current)) {
-        for (const name of current) {
-
-            addOrRemoveProperty(element, name, "");
+        for (let index = 0; index < current.length; index++) {
+            addOrRemoveProperty(element, current[index], "");
         }
     } else if (isObject(current)) {
         for (const name in current) {
-
             addOrRemoveProperty(
                 element,
                 name,
@@ -115,15 +113,18 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
     }
 
 
-    const previousName = bindingToString(
-        binding.keys,
-        previousExpressions,
-    );
-    const currentName = bindingToString(binding.keys, context.currentExpressions);
-
+    const isStaticName = binding.keys.length === 1 && typeof binding.keys[0] === "string";
+    const currentName = isStaticName
+        ? binding.keys[0] as string
+        : bindingToString(binding.keys, context.currentExpressions);
+    const previousName = isStaticName
+        ? currentName
+        : bindingToString(binding.keys, previousExpressions);
 
     if (isBooleanAttribute) {
-        addOrRemoveProperty(element, previousName, null);
+        if (!isStaticName) {
+            addOrRemoveProperty(element, previousName, null);
+        }
         addOrRemoveProperty(element, currentName, "");
         return;
     }
