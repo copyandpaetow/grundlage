@@ -64,6 +64,7 @@ export const render = (
             await Promise.resolve();
             if (!this.isConnected) {
                 this.#observer?.disconnect();
+                this.#render = null
                 this.#cleanup?.();
             }
         }
@@ -159,7 +160,7 @@ export const render = (
         }
 
         async update() {
-            if (!this.#render || this.#updateState !== UPDATE_STATE.IDLE) {
+            if (!this.#render || this.#updateState !== UPDATE_STATE.IDLE || !this.isConnected) {
                 return;
             }
             this.#updateState = UPDATE_STATE.SCHEDULED;

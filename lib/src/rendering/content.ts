@@ -152,6 +152,11 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
     const expressionIndex = binding.values[0] as number;
     const current = context.currentExpressions[expressionIndex];
 
+    if (current == null) {
+        deleteNodesBetween(marker);
+        return;
+    }
+
     if (current instanceof HTMLTemplate) {
         renderTemplate(context, marker, expressionIndex);
         return;

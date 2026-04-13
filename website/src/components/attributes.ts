@@ -3,7 +3,15 @@ import {type ComponentConstructor} from "../../../lib/src/types";
 
 let attrs = ["disabled", "hidden"];
 
-const component = render(function* () {
+const component = render(function* (element) {
+
+    let attr = "data-name"
+
+    const updateAttr = () => {
+        attr = "data-type"
+        element.update()
+    }
+
     yield () => html`
         <button ${attrs}>click</button>
         <p>attributes are </p>
@@ -11,10 +19,9 @@ const component = render(function* () {
             ${attrs.map(item => html`
                 <li>${item}</li>`)}
         </ul>
+        <div ${attr}="hello">test dynamic attributes</div>
+        <button onclick="${updateAttr}">update attribute</button>
     `;
-    yield () => {
-        throw new Error("here")
-    }
 }) as ComponentConstructor
 
 customElements.define(

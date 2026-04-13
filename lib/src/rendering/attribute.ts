@@ -38,6 +38,10 @@ export const addOrRemoveProperty = (
     }
 
     if (isStringable(value)) {
+        if (oldValue !== undefined && !isStringable(oldValue)) {
+            // Clean up the JS property that was previously set for a complex value
+            delete (element as any)[key];
+        }
         element.setAttribute(key, String(value));
     } else {
         // @ts-expect-error - dynamic property assignment for complex (non-stringable) values passed via template bindings
@@ -53,9 +57,10 @@ const handleExpandableAttribute = (
     context: HTMLTemplate,
     element: Element,
     index: number,
+    previousExpressions: Array<unknown>,
 ) => {
     const current = context.currentExpressions[index];
-    const previous = context.previousExpressions[index];
+    const previous = previousExpressions[index];
 
     if (Array.isArray(previous)) {
         for (const name of previous) {
@@ -100,16 +105,22 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
     const isBooleanAttribute = binding.values.length === 0;
     const isExpandable = binding.keys.length === 1;
 
+    const previousExpressions = context.previousExpressions.length > 0
+        ? context.previousExpressions
+        : context.currentExpressions;
+
     if (isBooleanAttribute && isExpandable) {
-        handleExpandableAttribute(context, element, binding.keys[0] as number);
+        handleExpandableAttribute(context, element, binding.keys[0] as number, previousExpressions);
         return;
     }
 
+
     const previousName = bindingToString(
         binding.keys,
-        context.previousExpressions,
+        previousExpressions,
     );
     const currentName = bindingToString(binding.keys, context.currentExpressions);
+
 
     if (isBooleanAttribute) {
         addOrRemoveProperty(element, previousName, null);
@@ -117,24 +128,27 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
         return;
     }
 
-    const currentExpression =
-        context.currentExpressions[binding.values[0] as number];
+    const isSingleExpression =
+        binding.values.length === 1 && typeof binding.values[0] === "number";
 
-    const previousExpression =
-        context.previousExpressions[binding.values[0] as number];
-
-    const isFalsy =
-        currentExpression === null ||
-        currentExpression === undefined ||
-        currentExpression === false;
+    const previousExpression = isSingleExpression
+        ? previousExpressions[binding.values[0] as number]
+        : undefined;
 
     let currentValue: unknown;
-    if (isFalsy) {
-        currentValue = null;
-    } else if (isEventListener(element, currentName, currentExpression)) {
-        currentValue = currentExpression;
-    } else {
+
+    if (!isSingleExpression) {
         currentValue = bindingToString(binding.values, context.currentExpressions);
+    } else {
+        const expression = context.currentExpressions[binding.values[0] as number];
+
+        if (expression === null || expression === undefined || expression === false) {
+            currentValue = null;
+        } else if (isEventListener(element, currentName, expression) || !isStringable(expression)) {
+            currentValue = expression;
+        } else {
+            currentValue = bindingToString(binding.values, context.currentExpressions);
+        }
     }
 
     if (previousName !== currentName) {

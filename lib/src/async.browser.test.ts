@@ -122,6 +122,136 @@ describe("async generator components", () => {
 
         cleanup(element);
     });
+
+    test("yields multiple promises in sequence", async () => {
+        const tag = uniqueTag();
+        const order: string[] = [];
+
+        const MyElement = render(async function* () {
+            yield new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    order.push("first");
+                    resolve();
+                }, 10);
+            });
+            yield new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    order.push("second");
+                    resolve();
+                }, 10);
+            });
+            yield () => html`<p>${order.join(",")}</p>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag);
+        await sleep(100);
+
+        expect(order).toEqual(["first", "second"]);
+        expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
+            "first,second",
+        );
+
+        cleanup(element);
+    });
+
+    test("yields a static HTMLTemplate from async generator", async () => {
+        const tag = uniqueTag();
+
+        const MyElement = render(async function* () {
+            yield html`<p>async static</p>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag);
+        await sleep();
+
+        expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+            "async static",
+        );
+
+        cleanup(element);
+    });
+
+    test("yields promise then render function", async () => {
+        const tag = uniqueTag();
+        let data = "loading";
+
+        const MyElement = render(async function* () {
+            // Show nothing initially, wait for data
+            yield new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    data = "ready";
+                    resolve();
+                }, 10);
+            });
+            // Then show render function with loaded data
+            yield () => html`<p>${data}</p>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep(50);
+
+        expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
+            "ready",
+        );
+
+        // Verify updates still work after async init
+        data = "updated";
+        await element.update();
+        await sleep();
+
+        expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
+            "updated",
+        );
+
+        cleanup(element);
+    });
+
+    test("async generator receives element as argument", async () => {
+        const tag = uniqueTag();
+        let receivedElement: HTMLElement | null = null;
+
+        const MyElement = render(async function* (el) {
+            receivedElement = el;
+            yield () => html`<p>check</p>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag);
+        await sleep();
+
+        expect(receivedElement).toBe(element);
+
+        cleanup(element);
+    });
+
+    test("async cleanup runs on disconnect", async () => {
+        const tag = uniqueTag();
+        const cleanupOrder: string[] = [];
+
+        const MyElement = render(async function* () {
+            yield new Promise<void>((resolve) => setTimeout(resolve, 10));
+            yield () => html`<p>content</p>`;
+            return () => {
+                cleanupOrder.push("cleaned");
+            };
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag);
+        await sleep(50);
+
+        expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+            "content",
+        );
+
+        cleanup(element);
+        await sleep();
+
+        expect(cleanupOrder).toEqual(["cleaned"]);
+    });
 });
 
 describe("error handling", () => {
