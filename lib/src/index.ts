@@ -155,6 +155,9 @@ export const render = (
             this.#view = template;
             if (this.#renderMode === RENDER_MODE.CSR) {
                 this.shadowRoot?.replaceChildren(template.setup());
+            } else {
+                this.#view.hydrate(this.shadowRoot!);
+                this.#renderMode = RENDER_MODE.CSR;
             }
             return this.shadowRoot;
         }
