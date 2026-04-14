@@ -1,18 +1,21 @@
-import { render, html } from "../../../lib/src";
+import {html, props, render} from "../../../lib/src";
 
-export const Component = render(
-	"heading-component",
-	function* (initialProps: { heading: string }, ctx) {
-		let headingLevel = parseInt(initialProps.heading ?? "2");
+customElements.define(
+    "tag-component",
+    render(function* (element) {
+        let {headingLevel} = props(element, {headingLevel: Number})
+        let previous = headingLevel
 
-		const updateHeadingLevel = () => {
-			headingLevel++;
-			ctx.update();
-		};
+        const updateHeadingLevel = () => {
+            previous = headingLevel
+            headingLevel++;
+            element.update();
+        };
 
-		yield () =>
-			html`
-			<h${headingLevel} onclick=${updateHeadingLevel}> headingLevel: ${headingLevel} </h${headingLevel}>
-			`;
-	},
+        yield () =>
+            html`
+                <!-- ${headingLevel} and ${previous}  -->
+                <h${headingLevel} onclick=${updateHeadingLevel}> headingLevel: ${headingLevel}</h${headingLevel}>
+            `;
+    }),
 );
