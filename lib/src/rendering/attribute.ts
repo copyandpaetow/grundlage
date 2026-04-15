@@ -9,7 +9,7 @@ const isEventListener = (element: Element, key: string, value: unknown) => {
     if (typeof value !== "function") {
         return false;
     }
-    return key.startsWith("on") && key in element;
+    return key.startsWith("on") && key.toLowerCase() in element;
 };
 
 export const addOrRemoveProperty = (
