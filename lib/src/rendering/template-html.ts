@@ -102,20 +102,26 @@ export class HTMLTemplate {
     update(expressions: Array<unknown>) {
         this.previousExpressions = this.currentExpressions ?? EMPTY_ARRAY;
         this.currentExpressions = expressions;
-        let hash = expressions.length;
+        this.#hash = undefined;
 
         const previousExpressions = this.previousExpressions;
         for (let index = 0; index < expressions.length; index++) {
             const currentEntry = expressions[index];
             const previousEntry = previousExpressions[index];
-            const currentHash = hashValue(currentEntry);
-            hash = (hash * 31 + currentHash) | 0;
 
-            if (currentEntry === previousEntry) {
-                continue;
-            }
+            if (currentEntry === previousEntry) continue;
 
-            if (currentHash === hashValue(previousEntry)) {
+            // Strict equality already decided for primitives; only reference
+            // types need hash-based content comparison.
+            const currentType = typeof currentEntry;
+            const needsContentCompare =
+                (currentType === "object" && currentEntry !== null) ||
+                currentType === "function";
+
+            if (
+                needsContentCompare &&
+                hashValue(currentEntry) === hashValue(previousEntry)
+            ) {
                 if (currentEntry instanceof HTMLTemplate) {
                     expressions[index] = previousEntry;
                 }
@@ -124,7 +130,6 @@ export class HTMLTemplate {
 
             this.dirtyBindings[this.parsedHTML.expressionToBinding[index]] = true;
         }
-        this.#hash = this.parsedHTML.templateHash ^ (hash * 31);
         this.#flush();
     }
 
