@@ -463,4 +463,84 @@ describe("content updates", () => {
 
         cleanup(element);
     });
+
+    test("updates text content when a decimal value changes", async () => {
+        const tag = uniqueTag();
+        let value = 1.5;
+
+        const MyElement = render(function* () {
+            yield () => html`<p>${value}</p>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const paragraph = element.shadowRoot?.querySelector("p")!;
+        expect(paragraph.textContent).toContain("1.5");
+
+        value = 1.7;
+        await element.update();
+        await sleep();
+        expect(paragraph.textContent).toContain("1.7");
+
+        value = 1.70001;
+        await element.update();
+        await sleep();
+        expect(paragraph.textContent).toContain("1.70001");
+
+        value = 2.3;
+        await element.update();
+        await sleep();
+        expect(paragraph.textContent).toContain("2.3");
+
+        cleanup(element);
+    });
+
+    test("batches rapid updates into a single render and reflects the final value", async () => {
+        const tag = uniqueTag();
+        let value = 0;
+        let renderCount = 0;
+
+        const MyElement = render(function* () {
+            yield () => {
+                renderCount++;
+                return html`<p>${value}</p>`;
+            };
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const paragraph = element.shadowRoot?.querySelector("p")!;
+        const textNode = paragraph.childNodes[1];
+        expect(paragraph.textContent).toContain("0");
+
+        const baselineRenderCount = renderCount;
+
+        for (let index = 1; index <= 25; index++) {
+            value = index;
+            element.update();
+        }
+
+        await sleep();
+
+        expect(paragraph.textContent).toContain("25");
+        expect(paragraph.childNodes[1]).toBe(textNode);
+        expect(renderCount - baselineRenderCount).toBe(1);
+
+        value = 26;
+        element.update();
+        value = 27;
+        element.update();
+        value = 28;
+        element.update();
+        await sleep();
+
+        expect(paragraph.textContent).toContain("28");
+        expect(renderCount - baselineRenderCount).toBe(2);
+
+        cleanup(element);
+    });
 });

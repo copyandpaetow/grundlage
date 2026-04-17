@@ -14,7 +14,8 @@ let counter = 0;
 export const hashValue = (value: unknown): number => {
 	if (value === null || value === undefined) return 0;
 	if (typeof value === "string") return stringHash(value);
-	if (typeof value === "number") return value | 0;
+	if (typeof value === "number")
+		return value === (value | 0) ? value | 0 : stringHash(String(value));
 	if (typeof value === "boolean") return value ? 1 : 0;
 	if (value instanceof HTMLTemplate) return value.hash;
 
