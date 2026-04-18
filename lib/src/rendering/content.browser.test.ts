@@ -728,4 +728,419 @@ describe("content updates", () => {
 
         cleanup(element);
     });
+
+    test("reuses list item DOM when every item's values change but structure stays the same", async () => {
+        const tag = uniqueTag();
+        let items = [10, 20, 30, 40];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map(
+                (value) => html`<li><span>${value}</span><em>${value * 2}</em></li>`,
+            )}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const originalItems = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        const originalSpans = Array.from(element.shadowRoot!.querySelectorAll("span"));
+        expect(originalItems.length).toBe(4);
+
+        // Every value changes — no hash match anywhere, but structure is identical.
+        items = [11, 21, 31, 41];
+        await element.update();
+        await sleep();
+
+        const updatedItems = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        const updatedSpans = Array.from(element.shadowRoot!.querySelectorAll("span"));
+        expect(updatedItems.length).toBe(4);
+        for (let index = 0; index < 4; index++) {
+            expect(updatedItems[index]).toBe(originalItems[index]);
+            expect(updatedSpans[index]).toBe(originalSpans[index]);
+        }
+        expect(updatedSpans[0].textContent).toBe("11");
+        expect(updatedSpans[3].textContent).toBe("41");
+
+        cleanup(element);
+    });
+
+    test("mixes hash match with in-place reuse without creating extra nodes", async () => {
+        const tag = uniqueTag();
+        let items = ["alpha", "beta"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((value) => html`<li>${value}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [alphaNode, betaNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        // alpha stays (hash match), beta slot gets new value "gamma" (in-place).
+        items = ["alpha", "gamma"];
+        await element.update();
+        await sleep();
+
+        const result = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(result.length).toBe(2);
+        expect(result[0]).toBe(alphaNode);
+        expect(result[1]).toBe(betaNode);
+        expect(result[1].textContent).toContain("gamma");
+
+        cleanup(element);
+    });
+
+    test("in-place reuse does not starve hash matches that appear later", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "c"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((value) => html`<li>${value}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [aNode, cNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        // Inserting in the middle: hash for "c" must still find the existing cNode
+        // rather than cNode being consumed by an in-place update for "b".
+        items = ["a", "b", "c"];
+        await element.update();
+        await sleep();
+
+        const after = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(after.length).toBe(3);
+        expect(after[0]).toBe(aNode);
+        expect(after[2]).toBe(cNode);
+        expect(after[1].textContent).toContain("b");
+
+        cleanup(element);
+    });
+
+    test("updates attributes in place when values change on a same-structure list", async () => {
+        const tag = uniqueTag();
+        let items = [
+            {width: 10, label: "first"},
+            {width: 20, label: "second"},
+        ];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map(
+                (item) => html`<li style="width:${item.width}px">${item.label}</li>`,
+            )}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const originalLis = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(originalLis[0].getAttribute("style")).toContain("10px");
+
+        items = [
+            {width: 15, label: "first"},
+            {width: 25, label: "second"},
+        ];
+        await element.update();
+        await sleep();
+
+        const updatedLis = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(updatedLis[0]).toBe(originalLis[0]);
+        expect(updatedLis[1]).toBe(originalLis[1]);
+        expect(updatedLis[0].getAttribute("style")).toContain("15px");
+        expect(updatedLis[1].getAttribute("style")).toContain("25px");
+
+        cleanup(element);
+    });
+
+    test("reconciles nested lists across outer reorder and inner reorder", async () => {
+        const tag = uniqueTag();
+        let groups = [
+            {name: "a", items: ["a1", "a2"]},
+            {name: "b", items: ["b1", "b2"]},
+        ];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${groups.map(
+                (group) => html`<li>
+                    <h3>${group.name}</h3>
+                    <ul>${group.items.map((item) => html`<li>${item}</li>`)}</ul>
+                </li>`,
+            )}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const outerUl = element.shadowRoot!.querySelector("ul")!;
+        const outerLisBefore = Array.from(outerUl.children) as Array<HTMLElement>;
+        const aGroupNode = outerLisBefore[0];
+        const bGroupNode = outerLisBefore[1];
+        const aInnerItemsBefore = Array.from(
+            aGroupNode.querySelector("ul")!.children,
+        ) as Array<HTMLElement>;
+        const bInnerItemsBefore = Array.from(
+            bGroupNode.querySelector("ul")!.children,
+        ) as Array<HTMLElement>;
+
+        // Phase 1: pure outer reorder, inner items unchanged. Outer hashes
+        // match, so hash-identity reuse should move whole groups (and their
+        // inner subtrees) to the new positions without disturbing inner DOM.
+        groups = [
+            {name: "b", items: ["b1", "b2"]},
+            {name: "a", items: ["a1", "a2"]},
+        ];
+        await element.update();
+        await sleep();
+
+        const outerLisAfterSwap = Array.from(outerUl.children) as Array<HTMLElement>;
+        expect(outerLisAfterSwap[0]).toBe(bGroupNode);
+        expect(outerLisAfterSwap[1]).toBe(aGroupNode);
+        expect(
+            Array.from(bGroupNode.querySelector("ul")!.children),
+        ).toEqual(bInnerItemsBefore);
+        expect(
+            Array.from(aGroupNode.querySelector("ul")!.children),
+        ).toEqual(aInnerItemsBefore);
+
+        // Phase 2: inner reorder within one group, outer unchanged. Exercises
+        // re-entrant renderList — inner reconciliation must not corrupt the
+        // outer list markers or the sibling group.
+        groups = [
+            {name: "b", items: ["b2", "b1"]},
+            {name: "a", items: ["a1", "a2"]},
+        ];
+        await element.update();
+        await sleep();
+
+        const outerLisAfterInnerSwap = Array.from(outerUl.children) as Array<HTMLElement>;
+        expect(outerLisAfterInnerSwap[0]).toBe(bGroupNode);
+        expect(outerLisAfterInnerSwap[1]).toBe(aGroupNode);
+
+        const bInnerItemsAfter = Array.from(
+            bGroupNode.querySelector("ul")!.children,
+        ) as Array<HTMLElement>;
+        expect(bInnerItemsAfter[0]).toBe(bInnerItemsBefore[1]);
+        expect(bInnerItemsAfter[1]).toBe(bInnerItemsBefore[0]);
+
+        const aInnerItemsAfter = Array.from(
+            aGroupNode.querySelector("ul")!.children,
+        ) as Array<HTMLElement>;
+        expect(aInnerItemsAfter).toEqual(aInnerItemsBefore);
+
+        cleanup(element);
+    });
+
+    test("handles lists with duplicate values across reorder and edit", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "a", "b"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const before = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(before.length).toBe(3);
+        expect(before.map((node) => node.textContent?.trim())).toEqual([
+            "a",
+            "a",
+            "b",
+        ]);
+
+        items = ["b", "a", "a"];
+        await element.update();
+        await sleep();
+
+        const afterReorder = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(afterReorder.length).toBe(3);
+        expect(afterReorder.map((node) => node.textContent?.trim())).toEqual([
+            "b",
+            "a",
+            "a",
+        ]);
+
+        items = ["b", "a", "c"];
+        await element.update();
+        await sleep();
+
+        const afterEdit = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(afterEdit.length).toBe(3);
+        expect(afterEdit.map((node) => node.textContent?.trim())).toEqual([
+            "b",
+            "a",
+            "c",
+        ]);
+
+        cleanup(element);
+    });
+
+    test("clears to empty and re-populates without leaking DOM", async () => {
+        const tag = uniqueTag();
+        let items: Array<string> = ["a", "b", "c"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        expect(element.shadowRoot!.querySelectorAll("li").length).toBe(3);
+
+        items = [];
+        await element.update();
+        await sleep();
+
+        expect(element.shadowRoot!.querySelectorAll("li").length).toBe(0);
+
+        items = ["x", "y", "z"];
+        await element.update();
+        await sleep();
+
+        const afterRepopulate = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(afterRepopulate.length).toBe(3);
+        expect(afterRepopulate.map((node) => node.textContent?.trim())).toEqual([
+            "x",
+            "y",
+            "z",
+        ]);
+
+        cleanup(element);
+    });
+
+    test("appends a single item and keeps prior nodes untouched", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "b"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [aNode, bNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["a", "b", "c"];
+        await element.update();
+        await sleep();
+
+        const afterAppend = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(afterAppend.length).toBe(3);
+        expect(afterAppend[0]).toBe(aNode);
+        expect(afterAppend[1]).toBe(bNode);
+        expect(afterAppend[2].textContent).toContain("c");
+
+        cleanup(element);
+    });
+
+    test("reconciles a list with mixed template shapes", async () => {
+        const tag = uniqueTag();
+        let items: Array<{kind: "item" | "divider"; value: string}> = [
+            {kind: "item", value: "one"},
+            {kind: "divider", value: "---"},
+            {kind: "item", value: "two"},
+        ];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((entry) =>
+                entry.kind === "item"
+                    ? html`<li>${entry.value}</li>`
+                    : html`<hr data-label="${entry.value}"/>`,
+            )}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const rootBefore = element.shadowRoot!.querySelector("ul")!;
+        const liNodesBefore = Array.from(rootBefore.querySelectorAll("li"));
+        const hrNodeBefore = rootBefore.querySelector("hr")!;
+        expect(liNodesBefore.length).toBe(2);
+        expect(hrNodeBefore.getAttribute("data-label")).toBe("---");
+
+        // Pure reorder of mixed-shape entries. Hash matching must preserve
+        // each node across the reshuffle even though neighbours at every
+        // position change shape (pass-2 structural reuse must NOT kick in).
+        items = [
+            {kind: "divider", value: "---"},
+            {kind: "item", value: "two"},
+            {kind: "item", value: "one"},
+        ];
+        await element.update();
+        await sleep();
+
+        const rootAfter = element.shadowRoot!.querySelector("ul")!;
+        const children = Array.from(rootAfter.children);
+        expect(children[0].tagName).toBe("HR");
+        expect(children[1].tagName).toBe("LI");
+        expect(children[2].tagName).toBe("LI");
+
+        const hrNodeAfter = rootAfter.querySelector("hr")!;
+        expect(hrNodeAfter).toBe(hrNodeBefore);
+        expect(hrNodeAfter.getAttribute("data-label")).toBe("---");
+
+        const liNodesAfter = Array.from(rootAfter.querySelectorAll("li"));
+        expect(liNodesAfter[0]).toBe(liNodesBefore[1]);
+        expect(liNodesAfter[1]).toBe(liNodesBefore[0]);
+
+        cleanup(element);
+    });
+
+    test("deleting a middle item preserves identity of the monotonic prefix and the tail", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "b", "c", "d", "e"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [aNode, bNode, cNode, , eNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["a", "b", "c", "e"];
+        await element.update();
+        await sleep();
+
+        const after = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(after.length).toBe(4);
+        expect(after[0]).toBe(aNode);
+        expect(after[1]).toBe(bNode);
+        expect(after[2]).toBe(cNode);
+        expect(after[3]).toBe(eNode);
+
+        cleanup(element);
+    });
 });

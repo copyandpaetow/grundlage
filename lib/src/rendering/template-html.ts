@@ -118,6 +118,14 @@ export class HTMLTemplate {
                 (currentType === "object" && currentEntry !== null) ||
                 currentType === "function";
 
+            // Arrays are reconciled per-item inside renderList via hash-based
+            // identity matching. Hashing the whole list here would walk every
+            // item twice per frame;
+            if (Array.isArray(currentEntry)) {
+                this.dirtyBindings[this.parsedHTML.expressionToBinding[index]] = true;
+                continue;
+            }
+
             if (
                 needsContentCompare &&
                 hashValue(currentEntry) === hashValue(previousEntry)

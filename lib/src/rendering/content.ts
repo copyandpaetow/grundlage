@@ -32,6 +32,42 @@ const toTemplateList = (list: Array<unknown>): Array<HTMLTemplate> => {
 };
 
 const LIST_IDENTIFIER = "*.*";
+const EMPTY_PREVIOUS: ReadonlyArray<HTMLTemplate> = [];
+
+const isListMarker = (node: Node): node is Comment =>
+    isComment(node) && node.data === LIST_IDENTIFIER;
+
+const removeItemDom = (itemMarker: Comment, listContainerMarker: Comment) => {
+    let current: ChildNode | null = itemMarker;
+    while (current) {
+        const prev = current.previousSibling as ChildNode | null;
+        current.remove();
+        // Stop at a per-item marker (next item above) or the outer list
+        // container marker — crossing the container marker would delete the
+        // binding's own anchor and corrupt subsequent renders.
+        if (!prev || prev === listContainerMarker || isListMarker(prev)) return;
+        current = prev;
+    }
+};
+
+const isAlreadyInPosition = (position: Node, itemMarker: Comment) => {
+    let scan: Node | null = itemMarker.previousSibling;
+    while (scan && scan !== position) {
+        if (isListMarker(scan)) return false;
+        scan = scan.previousSibling;
+    }
+    return scan === position;
+};
+
+const moveItemAfter = (position: ChildNode, itemMarker: Comment) => {
+    let current: ChildNode | null = itemMarker;
+    while (current) {
+        const prev = current.previousSibling as ChildNode | null;
+        position.after(current);
+        if (!prev || isListMarker(prev)) return;
+        current = prev;
+    }
+};
 
 const renderList = (
     context: HTMLTemplate,
@@ -42,64 +78,103 @@ const renderList = (
     const current = toTemplateList(
         context.currentExpressions[expressionIndex] as Array<unknown>,
     );
-    const previous = (Array.isArray(previousValue) ? previousValue : []) as Array<HTMLTemplate>;
+    const trackedPrevious = (Array.isArray(previousValue)
+        ? previousValue
+        : EMPTY_PREVIOUS) as Array<HTMLTemplate>;
 
-    const hashPositions = new Map<number, Comment>();
-    const previousMarkers = [];
-
-    let index = 0;
-    let element: Node | null = marker;
-    while ((element = element.nextSibling)) {
-        if (!isComment(element) || !element.data.startsWith(LIST_IDENTIFIER))
-            continue;
-        if (element.data === marker.data) break;
-
-        const hash = previous[index].hash;
-
-        hashPositions.set(hash, element);
-        previousMarkers.push(element);
-        index++;
+    // Walk the current DOM once, collecting per-item markers. The DOM is the
+    // source of truth: if it's shorter than the tracked array (e.g. the slot
+    // was cleared between renders), we treat the tail as absent.
+    const previousMarkers: Array<Comment> = [];
+    const hashToPrevIndex = new Map<number, number>();
+    let sibling: Node | null = marker.nextSibling;
+    while (sibling) {
+        if (isComment(sibling) && sibling.data === marker.data) break;
+        if (isListMarker(sibling) && previousMarkers.length < trackedPrevious.length) {
+            const previousIndex = previousMarkers.length;
+            previousMarkers.push(sibling);
+            hashToPrevIndex.set(trackedPrevious[previousIndex].hash, previousIndex);
+        }
+        sibling = sibling.nextSibling;
     }
 
-    let position: Element | Comment | null = marker;
+    const previousLength = previousMarkers.length;
 
+    // currentToPrev[i] = -1 if current[i] needs a fresh DOM node, otherwise the
+    // previous index whose DOM (and template instance) should be reused.
+    // Both views share one ArrayBuffer — for components with many small lists
+    // updating per frame, that halves the buffer allocations versus two
+    // independent typed arrays.
+    const bookkeeping = new ArrayBuffer(current.length * 4 + previousLength);
+    const currentToPrev = new Int32Array(bookkeeping, 0, current.length);
+    const previousClaimed = new Uint8Array(bookkeeping, current.length * 4, previousLength);
+
+    // Pass 1: hash-identity matches. These preserve DOM identity across reorder,
+    // insert, delete, and swap — the existing contract.
     for (let index = 0; index < current.length; index++) {
-        const template = current[index];
-        const currentHashExists = hashPositions.get(template.hash);
-
-        if (currentHashExists) {
-            hashPositions.delete(template.hash);
-            if (previousMarkers[index] === currentHashExists) {
-                position = currentHashExists;
-                continue;
-            }
-            let moveableElement: Element | Comment | null = currentHashExists;
-            while (moveableElement) {
-                let prev = moveableElement.previousSibling as Element | Comment;
-                position.after(moveableElement);
-
-                if (isComment(prev) && prev.data.startsWith(LIST_IDENTIFIER)) {
-                    position = currentHashExists;
-                    break;
-                }
-
-                moveableElement = prev;
-            }
+        const match = hashToPrevIndex.get(current[index].hash);
+        if (match !== undefined && !previousClaimed[match]) {
+            currentToPrev[index] = match;
+            previousClaimed[match] = 1;
         } else {
-            const listItemMarker = new Comment(LIST_IDENTIFIER);
-            position.after(template.setup(), listItemMarker);
-            position = listItemMarker;
+            currentToPrev[index] = -1;
         }
     }
 
-    for (const entry of hashPositions) {
-        let start: Element | Comment = entry[1];
+    // Pass 2: structural fallback. When current[i] has no hash twin, an
+    // unclaimed previous[i] with the same parsed template can be updated in
+    // place — no clone, no new marker, no DOM insertion.
+    for (let index = 0; index < current.length; index++) {
+        if (currentToPrev[index] !== -1) continue;
+        if (
+            index < previousLength &&
+            !previousClaimed[index] &&
+            trackedPrevious[index].parsedHTML === current[index].parsedHTML
+        ) {
+            currentToPrev[index] = index;
+            previousClaimed[index] = 1;
+        }
+    }
 
-        while (start) {
-            let prev = start.previousSibling as Element | Comment;
-            start.remove();
-            if (isComment(prev) && prev.data.startsWith(LIST_IDENTIFIER)) break;
-            start = prev;
+    // Pass 3: apply — reuse matched items (moving DOM only when necessary),
+    // build fresh items for the rest.
+    let position: ChildNode = marker;
+    let expectedPreviousIndex = 0;
+    for (let index = 0; index < current.length; index++) {
+        const template = current[index];
+        const previousIndex = currentToPrev[index];
+
+        if (previousIndex === -1) {
+            const listItemMarker = new Comment(LIST_IDENTIFIER);
+            position.after(template.setup(), listItemMarker);
+            position = listItemMarker;
+            continue;
+        }
+
+        const reusedTemplate = trackedPrevious[previousIndex];
+        if (reusedTemplate.hash !== template.hash) {
+            reusedTemplate.update(template.currentExpressions);
+        }
+        current[index] = reusedTemplate;
+
+        const itemMarker = previousMarkers[previousIndex];
+        // Monotonic reuse (the steady state for "same list, values changed")
+        // means the existing DOM is already in place — no need to walk
+        // siblings to verify. Only reach for isAlreadyInPosition/moveItemAfter
+        // when a reorder could have happened.
+        if (previousIndex !== expectedPreviousIndex) {
+            if (!isAlreadyInPosition(position, itemMarker)) {
+                moveItemAfter(position, itemMarker);
+            }
+        }
+        expectedPreviousIndex = previousIndex + 1;
+        position = itemMarker;
+    }
+
+    // Pass 4: drop whatever was not claimed.
+    for (let index = 0; index < previousLength; index++) {
+        if (!previousClaimed[index]) {
+            removeItemDom(previousMarkers[index], marker);
         }
     }
 };
