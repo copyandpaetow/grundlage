@@ -437,11 +437,11 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
                         continue;
                     }
 
+                    state = STATE.ATTRIBUTE_KEY;
+                    splitIndex = charIndex;
                     if (!isWhitespace(char)) {
                         charIndex--; //rewind so the attribute starts correctly
                     }
-                    state = STATE.ATTRIBUTE_KEY;
-                    splitIndex = charIndex;
 
                     continue;
 

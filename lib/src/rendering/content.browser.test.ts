@@ -464,6 +464,191 @@ describe("content updates", () => {
         cleanup(element);
     });
 
+    test("preserves DOM node identity when list is reordered", async () => {
+        const tag = uniqueTag();
+        let items = ["alpha", "beta", "gamma"];
+
+        const MyElement = render(function* () {
+            yield () =>
+                html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [alphaNode, betaNode, gammaNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["gamma", "beta", "alpha"];
+        await element.update();
+        await sleep();
+
+        const reorderedNodes = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(reorderedNodes).toEqual([gammaNode, betaNode, alphaNode]);
+
+        cleanup(element);
+    });
+
+    test("preserves DOM node identity when swapping two adjacent items", async () => {
+        const tag = uniqueTag();
+        let items = ["one", "two", "three"];
+
+        const MyElement = render(function* () {
+            yield () =>
+                html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [oneNode, twoNode, threeNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["two", "one", "three"];
+        await element.update();
+        await sleep();
+
+        const swappedNodes = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(swappedNodes).toEqual([twoNode, oneNode, threeNode]);
+
+        cleanup(element);
+    });
+
+    test("inserts an item in the middle without replacing surrounding nodes", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "c"];
+
+        const MyElement = render(function* () {
+            yield () =>
+                html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [aNode, cNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["a", "b", "c"];
+        await element.update();
+        await sleep();
+
+        const nodesAfterInsert = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(nodesAfterInsert.length).toBe(3);
+        expect(nodesAfterInsert[0]).toBe(aNode);
+        expect(nodesAfterInsert[2]).toBe(cNode);
+        expect(nodesAfterInsert[1].textContent).toContain("b");
+
+        cleanup(element);
+    });
+
+    test("removes an item from the middle without replacing surrounding nodes", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "b", "c"];
+
+        const MyElement = render(function* () {
+            yield () =>
+                html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const originalNodes = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        const aNode = originalNodes[0];
+        const cNode = originalNodes[2];
+
+        items = ["a", "c"];
+        await element.update();
+        await sleep();
+
+        const nodesAfterRemove = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(nodesAfterRemove.length).toBe(2);
+        expect(nodesAfterRemove[0]).toBe(aNode);
+        expect(nodesAfterRemove[1]).toBe(cNode);
+
+        cleanup(element);
+    });
+
+    test("prepends items and keeps the original node at the tail", async () => {
+        const tag = uniqueTag();
+        let items = ["tail"];
+
+        const MyElement = render(function* () {
+            yield () =>
+                html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [tailNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["first", "middle", "tail"];
+        await element.update();
+        await sleep();
+
+        const nodesAfterPrepend = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(nodesAfterPrepend.length).toBe(3);
+        expect(nodesAfterPrepend[0].textContent).toContain("first");
+        expect(nodesAfterPrepend[1].textContent).toContain("middle");
+        expect(nodesAfterPrepend[2]).toBe(tailNode);
+
+        cleanup(element);
+    });
+
+    test("preserves input element state across list reorder", async () => {
+        const tag = uniqueTag();
+        let items = ["alpha", "beta", "gamma"];
+
+        const MyElement = render(function* () {
+            yield () =>
+                html`<ul>${items.map(
+                    (item) => html`<li><input data-name="${item}"/></li>`,
+                )}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const inputsBefore = element.shadowRoot!.querySelectorAll("input");
+        const betaInput = inputsBefore[1] as HTMLInputElement;
+        betaInput.value = "user typed";
+
+        items = ["gamma", "beta", "alpha"];
+        await element.update();
+        await sleep();
+
+        const inputsAfter = element.shadowRoot!.querySelectorAll("input");
+        expect(inputsAfter[1]).toBe(betaInput);
+        expect((inputsAfter[1] as HTMLInputElement).value).toBe("user typed");
+
+        cleanup(element);
+    });
+
     test("updates text content when a decimal value changes", async () => {
         const tag = uniqueTag();
         let value = 1.5;
