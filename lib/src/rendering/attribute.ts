@@ -136,21 +136,9 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
         ? previousExpressions[binding.values[0] as number]
         : undefined;
 
-    let currentValue: unknown;
-
-    if (!isSingleExpression) {
-        currentValue = bindingToString(binding.values, context.currentExpressions);
-    } else {
-        const expression = context.currentExpressions[binding.values[0] as number];
-
-        if (expression === null || expression === undefined || expression === false) {
-            currentValue = null;
-        } else if (isEventListener(element, currentName, expression) || !isStringable(expression)) {
-            currentValue = expression;
-        } else {
-            currentValue = bindingToString(binding.values, context.currentExpressions);
-        }
-    }
+    const currentValue: unknown = isSingleExpression
+        ? context.currentExpressions[binding.values[0] as number]
+        : bindingToString(binding.values, context.currentExpressions);
 
     if (previousName !== currentName) {
         addOrRemoveProperty(element, previousName, null, previousExpression);
