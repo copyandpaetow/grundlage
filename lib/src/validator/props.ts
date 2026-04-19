@@ -35,11 +35,12 @@ export const props = <T extends Schema>(
 
 	for (const key in schema) {
 		const entry = schema[key] as SchemaDefinition;
+		const isArrayEntry = Array.isArray(entry);
 		let constructorValue = entry;
 		let defaultValue = undefined;
 		let hasDefault = false;
 
-		if (Array.isArray(entry)) {
+		if (isArrayEntry) {
 			constructorValue = entry[0];
 			defaultValue = entry[1];
 			hasDefault = entry.length > 1;
@@ -77,7 +78,7 @@ export const props = <T extends Schema>(
 			result[key] = value;
 		} else if (hasDefault) {
 			result[key] = defaultValue;
-		} else if (Array.isArray(entry)) {
+		} else if (isArrayEntry) {
 			result[key] = undefined;
 		} else {
 			throw new Error(`Missing required prop: "${key}"`);

@@ -5,12 +5,9 @@ import {isStringable, toPrimitive} from "../utils/to-primitive";
 import {isObject} from "../utils/validators";
 import {HTMLTemplate} from "./template-html";
 
-const isEventListener = (element: Element, key: string, value: unknown) => {
-    if (typeof value !== "function") {
-        return false;
-    }
-    return key.startsWith("on") && key.toLowerCase() in element;
-};
+// 'o' = 111, 'n' = 110 — char-code check avoids allocating from startsWith.
+const CHAR_LOWER_O = 111;
+const CHAR_LOWER_N = 110;
 
 export const addOrRemoveProperty = (
     element: Element,
@@ -18,18 +15,24 @@ export const addOrRemoveProperty = (
     value: unknown,
     oldValue?: unknown,
 ) => {
+    const valueIsFunction = typeof value === "function";
+    const oldValueIsFunction = typeof oldValue === "function";
     if (
-        isEventListener(element, key, value) ||
-        isEventListener(element, key, oldValue)
+        (valueIsFunction || oldValueIsFunction) &&
+        key.charCodeAt(0) === CHAR_LOWER_O &&
+        key.charCodeAt(1) === CHAR_LOWER_N
     ) {
-        const event = key.slice(2).toLowerCase();
-        if (oldValue) {
-            element.removeEventListener(event, oldValue as EventListener);
+        const lowerKey = key.toLowerCase();
+        if (lowerKey in element) {
+            const eventName = lowerKey.slice(2);
+            if (oldValueIsFunction) {
+                element.removeEventListener(eventName, oldValue as EventListener);
+            }
+            if (valueIsFunction) {
+                element.addEventListener(eventName, value as EventListener);
+            }
+            return;
         }
-        if (value) {
-            element.addEventListener(event, value as EventListener);
-        }
-        return;
     }
 
     if (value === null || value === undefined || value === false) {

@@ -19,13 +19,18 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
         newElement.setAttribute(attribute.name, attribute.value);
     }
 
-    newElement.replaceChildren(...element.childNodes);
+    // appendChild adopts the node out of `element`, draining its childNodes
+    // in place — no spread, no iterator, no temporary array.
+    while (element.firstChild) {
+        newElement.appendChild(element.firstChild);
+    }
     element.replaceWith(newElement);
     focusElement?.focus();
 
     //from the binding we know if there are related attributes and mark them as dirty
     //this is mainly for event listeners
-    for (const relatedIndex of binding.relatedAttributes) {
-        context.dirtyBindings[relatedIndex] = true;
+    const relatedAttributes = binding.relatedAttributes;
+    for (let index = 0; index < relatedAttributes.length; index++) {
+        context.dirtyBindings[relatedAttributes[index]] = 1;
     }
 };

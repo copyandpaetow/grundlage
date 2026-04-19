@@ -3,7 +3,7 @@ import { HTMLTemplate } from "../rendering/template-html";
 export const stringHash = (str: string): number => {
 	let hash = 0;
 	for (let index = 0; index < str.length; index++) {
-		hash = (hash * 31 + str.charCodeAt(index)) | 0;
+		hash = (Math.imul(hash, 31) + str.charCodeAt(index)) | 0;
 	}
 	return hash;
 };
@@ -28,7 +28,7 @@ export const hashValue = (value: unknown): number => {
 	if (Array.isArray(value)) {
 		let hash = value.length;
 		for (let index = 0; index < value.length; index++) {
-			hash = (hash * 31 + hashValue(value[index])) | 0;
+			hash = (Math.imul(hash, 31) + hashValue(value[index])) | 0;
 		}
 		return hash;
 	}
@@ -36,9 +36,10 @@ export const hashValue = (value: unknown): number => {
 	if (value.constructor === Object) {
 		let hash = 0;
 		for (const name in value) {
+			// name is always a string — skip the typeof dispatch in hashValue.
 			hash =
-				(hash * 31 +
-					hashValue(name) +
+				(Math.imul(hash, 31) +
+					stringHash(name) +
 					hashValue(value[name as keyof typeof value])) |
 				0;
 		}
