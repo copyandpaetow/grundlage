@@ -8,6 +8,7 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
     let current = start.nextSibling;
 
     while (current) {
+        //list markers all have the same data, if we find another comment with the same data as our marker, we found the start of the next entry
         const isLastComment =
             current === end || (isComment(current) && current.data === (start as Comment).data);
 
@@ -31,7 +32,7 @@ const toTemplateList = (list: Array<unknown>): Array<HTMLTemplate> => {
     return list as Array<HTMLTemplate>;
 };
 
-const LIST_IDENTIFIER = "*.*";
+const LIST_IDENTIFIER = "*.*"; //small enough to save space but unique enough to not collide with potential user comments
 const EMPTY_PREVIOUS: ReadonlyArray<HTMLTemplate> = [];
 
 const isListMarker = (node: Node): node is Comment =>
@@ -100,7 +101,7 @@ const renderList = (
 
     const previousLength = previousMarkers.length;
 
-    // currentToPrev[i] = -1 if current[i] needs a fresh DOM node, otherwise the
+    // currentToPrev[index] = -1 if current[index] needs a fresh DOM node, otherwise the
     // previous index whose DOM (and template instance) should be reused.
     // Both views share one ArrayBuffer — for components with many small lists
     // updating per frame, that halves the buffer allocations versus two
@@ -216,7 +217,7 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
     const binding = context.parsedHTML.bindings[bindingIndex];
     const marker = context.markers[bindingIndex];
 
-    //only true for comments
+    //only comments can have multiple bindings, normal content only has one
     if (binding.values.length > 1) {
         renderComment(context, marker, binding.values);
         return;

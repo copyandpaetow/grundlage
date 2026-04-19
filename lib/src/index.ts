@@ -32,8 +32,8 @@ export const render = (
 ): ComponentConstructor => {
     class BaseElement extends HTMLElement implements BaseComponent {
         #observer: MutationObserver;
-        #render: TemplateRenderer | null = null; // renders a view
-        #view: HTMLTemplate | null = null; //current rendered dom
+        #render: TemplateRenderer | null = null;
+        #view: HTMLTemplate | null = null;
         #cleanup: VoidFunction | null = null;
         #updateState: ValueOf<typeof UPDATE_STATE> = UPDATE_STATE.IDLE;
         #renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
@@ -47,7 +47,7 @@ export const render = (
             }
         }
 
-        async connectedCallback() {
+        connectedCallback() {
             if (this.#render) {
                 //prevents re-rendering everything when this element is moved
                 return;
@@ -87,9 +87,12 @@ export const render = (
         #handleError(error: Error) {
             this.#render = null;
             console.warn(error);
+            //visualizes the error better than just the warning
+            //TODO: we could think about whether to try to revert to the previous dom?
             this.shadowRoot!.textContent = `${error}`;
         }
 
+        //coordinates the generator process in a semi-synchronous why so connectedCallback stays synchronous as well, otherwise we get timing issues with nested components
         #step(generator: Generator | AsyncGenerator, result: unknown) {
             while (true) {
                 try {
@@ -123,7 +126,7 @@ export const render = (
                         return;
                     }
 
-                    result = this.#resolveValue(value);
+                    result = this.#applyYieldedValue(value);
                 } catch (error) {
                     this.#handleError(error as Error);
                     return;
@@ -131,7 +134,7 @@ export const render = (
             }
         }
 
-        #resolveValue(value: unknown): unknown {
+        #applyYieldedValue(value: unknown): unknown {
             if (typeof value === "function") {
                 this.#render = value as TemplateRenderer;
                 return this.#mount(value());
@@ -144,7 +147,7 @@ export const render = (
 
         #stepAsync(generator: Generator | AsyncGenerator, value: unknown) {
             try {
-                const result = this.#resolveValue(value);
+                const result = this.#applyYieldedValue(value);
                 this.#step(generator, result);
             } catch (error) {
                 this.#handleError(error as Error);

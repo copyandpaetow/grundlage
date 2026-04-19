@@ -158,7 +158,7 @@ const updateBinding = () => {
     }
 };
 
-const setBinding = () => {
+const createBinding = () => {
     switch (state) {
         case STATE.ATTRIBUTE_KEY:
         case STATE.ATTRIBUTE_VALUE:
@@ -268,7 +268,8 @@ const completeAttribute = () => {
         resultBuffer.push(createComment());
         const firstKey = (activeBinding as AttributeBinding).keys[0];
         if (typeof firstKey === "string") {
-            //todo: this needs a better version. The issue: a leading whitespace is added here
+            //The issue: a leading whitespace is added here
+            //todo: this needs a better version: use a more performant trimming
             const trimmed = firstKey.trimStart();
             if (trimmed) {
                 (activeBinding as AttributeBinding).keys[0] = trimmed;
@@ -276,6 +277,7 @@ const completeAttribute = () => {
                 (activeBinding as AttributeBinding).keys.shift();
             }
         }
+        //links attribute bindings to the tag binding. This reduces complexity later on as tag updates need to communicate to attribute updates
         (activeTagBinding as TagBinding)?.relatedAttributes.push(
             bindings.length - 1,
         );
@@ -516,12 +518,12 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
         }
 
         if (!activeBinding) {
-            activeBinding = setBinding();
+            activeBinding = createBinding();
 
             /*
              bindings for tags require special handling
              - the end tag has no binding but the tag binding still needs to know about them
-             - so we store them in a stack to conenct them
+             - so we store them in a stack to connect them
             */
             if (state === STATE.TAG) {
                 openTagBindings.push(activeBinding as TagBinding);

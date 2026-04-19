@@ -112,27 +112,22 @@ describe("html parser — whitespace handling", () => {
         expect(b1.keys).toEqual(["id"]);
     });
 
-    test("tabs in attribute spacing", () => {
-        const val = "test";
-        const template = html`
-            <div class="${val}"></div>`;
+    test("tabs as attribute separator", () => {
+        const cls = "red";
+        const id = "main";
+        const template = html`<div\tclass="${cls}"\tid="${id}"></div>`;
 
-        expect(template.parsedHTML.bindings).toHaveLength(1);
-        const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-        expect(binding.keys).toEqual(["class"]);
+        expect(template.parsedHTML.bindings).toHaveLength(2);
+        const first = template.parsedHTML.bindings[0] as AttributeBinding;
+        const second = template.parsedHTML.bindings[1] as AttributeBinding;
+        expect(first.keys).toEqual(["class"]);
+        expect(second.keys).toEqual(["id"]);
     });
 
-    test("whitespace between tag name and self-closing slash", () => {
-        const template = html`<br/>`;
+    test("whitespace before self-closing slash", () => {
+        const template = html`<br />`;
         expect(template.parsedHTML.bindings).toHaveLength(0);
-    });
-
-    test("whitespace around attribute equals sign is part of key/value", () => {
-        const val = "test";
-        const template = html`
-            <div class="${val}"></div>`;
-
-        expect(template.parsedHTML.bindings).toHaveLength(1);
+        expect(template.parsedHTML.fragment.querySelector("br")).not.toBeNull();
     });
 });
 
@@ -212,32 +207,32 @@ describe("html parser — fragment structure", () => {
         expect(div?.getAttribute("id")).toBe("static");
     });
 
-    test("content binding inserts comment markers", () => {
+    test("content binding inserts two comment markers", () => {
+        //two markers delimit the mutable range so updates can replace everything between them
         const val = "text";
-        const template = html`
-            <div>${val}</div>`;
+        const template = html`<div>${val}</div>`;
 
-        const div = template.parsedHTML.fragment.querySelector("div");
-        // Comment markers should be present for content bindings
-        const comments = Array.from(div?.childNodes ?? []).filter(
-            n => n.nodeType === Node.COMMENT_NODE
+        const div = template.parsedHTML.fragment.querySelector("div")!;
+        const comments = Array.from(div.childNodes).filter(
+            node => node.nodeType === Node.COMMENT_NODE,
         );
-        expect(comments.length).toBeGreaterThan(0);
+        expect(comments).toHaveLength(2);
     });
 
-    test("raw content style has no comment markers inside", () => {
+    test("raw-content element places its marker as a sibling, not a child", () => {
+        //raw-content elements cannot host comments as children, so the marker sits before the element
         const color = "red";
-        const template = html`
-            <style>p {
-                color: ${color};
-            }</style>`;
+        const template = html`<style>p { color: ${color}; }</style>`;
 
-        // Style content should not have comment markers inside
-        // Instead the whole content is managed as raw content
-        const style = template.parsedHTML.fragment.querySelector("style");
-        // The style element might be empty in the fragment (content added at render time)
-        // or have comment markers at the element level, not inside text
-        expect(style).not.toBeNull();
+        const style = template.parsedHTML.fragment.querySelector("style")!;
+        const innerComments = Array.from(style.childNodes).filter(
+            node => node.nodeType === Node.COMMENT_NODE,
+        );
+        expect(innerComments).toHaveLength(0);
+
+        const markerBeforeStyle = style.previousSibling as Comment;
+        expect(markerBeforeStyle.nodeType).toBe(Node.COMMENT_NODE);
+        expect(markerBeforeStyle.data).toContain("^.^");
     });
 });
 

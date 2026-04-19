@@ -25,6 +25,7 @@ export class HTMLTemplate {
     currentExpressions: Array<unknown>;
     previousExpressions = EMPTY_ARRAY;
 
+    // cached per-update; invalidated in update() when expressions change
     get hash(): number {
         if (this.#hash === undefined) {
             let hash = this.currentExpressions.length;
@@ -44,8 +45,8 @@ export class HTMLTemplate {
     setup(): DocumentFragment {
         const bindingCount = this.parsedHTML.bindings.length;
         this.dirtyBindings = new Array(bindingCount);
-        for (let i = 0; i < bindingCount; i++) {
-            this.dirtyBindings[i] = true;
+        for (let index = 0; index < bindingCount; index++) {
+            this.dirtyBindings[index] = true;
         }
         const fragment = this.parsedHTML.fragment.cloneNode(
             true,
@@ -60,8 +61,8 @@ export class HTMLTemplate {
     hydrate(context: ShadowRoot) {
         const bindingCount = this.parsedHTML.bindings.length;
         this.dirtyBindings = new Array(bindingCount);
-        for (let i = 0; i < bindingCount; i++) {
-            this.dirtyBindings[i] = false;
+        for (let index = 0; index < bindingCount; index++) {
+            this.dirtyBindings[index] = false;
         }
         this.markers = this.#findMarkers(context);
 
@@ -80,7 +81,7 @@ export class HTMLTemplate {
             NodeFilter.SHOW_COMMENT,
         );
 
-        let lastBindingIndex = "";
+        let lastMarkerData = "";
         while (treeWalker.nextNode()) {
             const marker = treeWalker.currentNode as Comment;
 
@@ -89,10 +90,10 @@ export class HTMLTemplate {
             }
 
             //content nodes are there twice with the same index, so we can filter them here
-            if (lastBindingIndex === marker.data) {
+            if (lastMarkerData === marker.data) {
                 continue;
             }
-            lastBindingIndex = marker.data;
+            lastMarkerData = marker.data;
             markers.push(marker);
         }
 

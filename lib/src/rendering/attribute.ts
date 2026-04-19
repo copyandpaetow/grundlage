@@ -103,6 +103,7 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
     const isBooleanAttribute = binding.values.length === 0;
     const isExpandable = binding.keys.length === 1;
 
+    //On initial render, the previousExpressions is empty, this way we keep the shape consistent and dont need to check downstream
     const previousExpressions = context.previousExpressions.length > 0
         ? context.previousExpressions
         : context.currentExpressions;

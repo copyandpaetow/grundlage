@@ -8,6 +8,7 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
     const element = marker.nextElementSibling!;
     const newTag = bindingToString(binding.values, context.currentExpressions);
 
+    //we are going to replace the surrounding element with something new. To the browser, its a series of removals and additions and clears browser states like focus
     const focusElement = element.contains((element.getRootNode() as ShadowRoot).activeElement)
         ? (document.activeElement as HTMLElement)
         : null;
