@@ -114,4 +114,31 @@ describe("html parser — raw content bindings", () => {
             BINDING_TYPES.RAW_CONTENT,
         );
     });
+
+    test("adjacent raw-content elements each get their own binding", () => {
+        const a = "red";
+        const b = "blue";
+        const template = html`<style>${a}</style><style>${b}</style>`;
+
+        expect(template.parsedHTML.bindings).toHaveLength(2);
+        expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.RAW_CONTENT);
+        expect(template.parsedHTML.bindings[1].type).toBe(BINDING_TYPES.RAW_CONTENT);
+        const styles = template.parsedHTML.fragment.querySelectorAll("style");
+        expect(styles).toHaveLength(2);
+    });
+
+    test("script content with stray '</other>' does not exit raw-content early", () => {
+        //raw-content state only exits when the match targets the SAME tag name;
+        //stray close-tags of other elements must be treated as plain script text
+        const template = html`<script>if (a < 10) { log("</other>"); }</script>`;
+        const script = template.parsedHTML.fragment.querySelector("script")!;
+        expect(script).not.toBeNull();
+        expect(script.textContent).toContain("</other>");
+    });
+
+    test("script content with '<' not followed by '/' stays in raw-content", () => {
+        const template = html`<script>if (a < b) return;</script>`;
+        const script = template.parsedHTML.fragment.querySelector("script")!;
+        expect(script.textContent).toContain("<");
+    });
 });

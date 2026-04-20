@@ -85,4 +85,20 @@ describe("html parser — comment bindings", () => {
         const staticComment = comments.find(c => c.data.includes("static"));
         expect(staticComment).not.toBeUndefined();
     });
+
+    test("static comment containing HTML-like text does not affect parsing", () => {
+        //inside COMMENT state '<' and '>' are plain characters — only '-->' exits
+        const template = html`<div>before</div><!-- <fake-tag class="x"> --><p>after</p>`;
+        expect(template.parsedHTML.bindings).toHaveLength(0);
+        expect(template.parsedHTML.fragment.querySelector("div")).not.toBeNull();
+        expect(template.parsedHTML.fragment.querySelector("p")).not.toBeNull();
+        expect(template.parsedHTML.fragment.querySelector("fake-tag")).toBeNull();
+    });
+
+    test("comment with no whitespace around the expression", () => {
+        const msg = "x";
+        const template = html`<!--${msg}-->`;
+        expect(template.parsedHTML.bindings).toHaveLength(1);
+        expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+    });
 });

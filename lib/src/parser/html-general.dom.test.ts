@@ -384,6 +384,30 @@ describe("html parser — mixed scenarios", () => {
         expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
     });
 
+    test("cache returns identical parsedHTML reference for the same tagged literal", () => {
+        //reference equality — not structural — is the perf contract of the WeakMap cache.
+        //toStrictEqual wouldn't catch a regression that re-parses on every call.
+        const render = (value: string) => html`<div>${value}</div>`;
+        const first = render("a");
+        const second = render("b");
+        expect(first.parsedHTML).toBe(second.parsedHTML);
+    });
+
+    test("void element without trailing slash followed by dynamic content", () => {
+        const value = "text";
+        const template = html`<br>${value}`;
+        expect(template.parsedHTML.bindings).toHaveLength(1);
+        expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+        expect(template.parsedHTML.fragment.querySelector("br")).not.toBeNull();
+    });
+
+    test("void element without trailing slash nested in a parent", () => {
+        const value = "text";
+        const template = html`<div><br>${value}</div>`;
+        const div = template.parsedHTML.fragment.querySelector("div")!;
+        expect(div.querySelector("br")).not.toBeNull();
+    });
+
     test("real-world component pattern with style, attributes, and content", () => {
         const color = "blue";
         const cls = "active";

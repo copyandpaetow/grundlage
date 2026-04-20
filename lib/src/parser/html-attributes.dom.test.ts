@@ -275,3 +275,41 @@ describe("html parser — attribute edge cases", () => {
         expect(binding.keys).toEqual(["onclick"]);
     });
 });
+
+describe("html parser — custom element and namespaced attribute names", () => {
+    test("hyphenated custom element tag with static attribute", () => {
+        const template = html`<my-component id="x"></my-component>`;
+        expect(template.parsedHTML.bindings).toHaveLength(0);
+        const element = template.parsedHTML.fragment.querySelector("my-component")!;
+        expect(element).not.toBeNull();
+        expect(element.getAttribute("id")).toBe("x");
+    });
+
+    test("hyphenated custom element tag with dynamic attribute", () => {
+        const value = "red";
+        const template = html`<my-component class="${value}"></my-component>`;
+        expect(template.parsedHTML.bindings).toHaveLength(1);
+        const binding = template.parsedHTML.bindings[0] as AttributeBinding;
+        expect(binding.keys).toEqual(["class"]);
+        expect(template.parsedHTML.fragment.querySelector("my-component")).not.toBeNull();
+    });
+
+    test("aria-* and data-* attribute names preserve hyphens", () => {
+        const label = "submit";
+        const id = "main";
+        const template = html`<button aria-label="${label}" data-test-id="${id}"></button>`;
+        expect(template.parsedHTML.bindings).toHaveLength(2);
+        const first = template.parsedHTML.bindings[0] as AttributeBinding;
+        const second = template.parsedHTML.bindings[1] as AttributeBinding;
+        expect(first.keys).toEqual(["aria-label"]);
+        expect(second.keys).toEqual(["data-test-id"]);
+    });
+
+    test("namespaced attribute name with colon", () => {
+        const value = "en";
+        const template = html`<div xml:lang="${value}"></div>`;
+        expect(template.parsedHTML.bindings).toHaveLength(1);
+        const binding = template.parsedHTML.bindings[0] as AttributeBinding;
+        expect(binding.keys).toEqual(["xml:lang"]);
+    });
+});
