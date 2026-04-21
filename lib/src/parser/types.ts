@@ -28,6 +28,7 @@ export type TagBinding = {
 	values: Array<number | string>;
 	endValues: Array<number | string>;
 	relatedAttributes: Array<number>;
+	bindingIndex: number;
 };
 
 export type Binding =

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - Animation (list)</title>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
+		<main>
+			<h1>raf-animation-list</h1>
+			<p>
+				Same animation as the <code>raf-animation</code> page, but each bar is
+				produced by mapping over an array. Every frame the entire list
+				reconciles with fresh hashes — a worst-case stress for list diffing.
+			</p>
+			<raf-animation-list></raf-animation-list>
+			<h2>another one</h2>
+			<raf-animation-list></raf-animation-list>
+		</main>
+	</body>
+</html>

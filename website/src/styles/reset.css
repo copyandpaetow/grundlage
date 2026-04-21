@@ -10,7 +10,9 @@
 }
 
 :where(html) {
-	font-family: Inter, Roboto, "Helvetica Neue", "Arial Nova", "Nimbus Sans", system-ui, sans-serif;
+	font-family:
+		Inter, Roboto, "Helvetica Neue", "Arial Nova", "Nimbus Sans", system-ui,
+		sans-serif;
 	line-height: 1.5;
 	min-height: 100dvh;
 	height: 100%;

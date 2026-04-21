@@ -3,45 +3,47 @@ type SchemaDefinition = SchemaEntry | [SchemaEntry] | [SchemaEntry, any];
 
 export type Schema = Record<string, SchemaDefinition>;
 
-type InferEntry<T extends SchemaDefinition> = T extends [infer C, infer D]
-	? Primitive<C> | (D extends undefined ? undefined : never)
-	: T extends [infer C]
-		? Primitive<C> | undefined
-		: T extends SchemaEntry
-			? Primitive<T>
+type InferEntry<Type extends SchemaDefinition> = Type extends [
+	infer Constructor,
+	infer Default,
+]
+	? Primitive<Constructor> | (Default extends undefined ? undefined : never)
+	: Type extends [infer Constructor]
+		? Primitive<Constructor> | undefined
+		: Type extends SchemaEntry
+			? Primitive<Type>
 			: unknown;
 
-type Primitive<T> = T extends StringConstructor
+type Primitive<Type> = Type extends StringConstructor
 	? string
-	: T extends NumberConstructor
+	: Type extends NumberConstructor
 		? number
-		: T extends BooleanConstructor
+		: Type extends BooleanConstructor
 			? boolean
-			: T extends abstract new (...args: any[]) => infer R
-				? R
+			: Type extends abstract new (...args: any[]) => infer Result
+				? Result
 				: unknown;
 
-type InferSchema<T extends Schema> = {
-	[K in keyof T]: InferEntry<T[K]>;
+type InferSchema<Type extends Schema> = {
+	[Key in keyof Type]: InferEntry<Type[Key]>;
 };
 
 type StringableValue = StringConstructor | NumberConstructor;
 
-const STRINGABLE = new Set([String, Number, Boolean]);
-
-export const props = <T extends Schema>(
+export const props = <Type extends Schema>(
 	element: HTMLElement,
-	schema: T,
-): InferSchema<T> => {
+	schema: Type,
+): InferSchema<Type> => {
 	const result: Record<string, unknown> = {};
 
 	for (const key in schema) {
 		const entry = schema[key] as SchemaDefinition;
+		const isArrayEntry = Array.isArray(entry);
 		let constructorValue = entry;
 		let defaultValue = undefined;
 		let hasDefault = false;
 
-		if (Array.isArray(entry)) {
+		if (isArrayEntry) {
 			constructorValue = entry[0];
 			defaultValue = entry[1];
 			hasDefault = entry.length > 1;
@@ -57,7 +59,7 @@ export const props = <T extends Schema>(
 			} else {
 				value = false;
 			}
-		} else if (STRINGABLE.has(constructorValue as StringableValue)) {
+		} else if (constructorValue === String || constructorValue === Number) {
 			const raw = element.getAttribute(key);
 			if (raw !== null) {
 				value = (constructorValue as StringableValue)(raw);
@@ -79,12 +81,12 @@ export const props = <T extends Schema>(
 			result[key] = value;
 		} else if (hasDefault) {
 			result[key] = defaultValue;
-		} else if (Array.isArray(entry)) {
+		} else if (isArrayEntry) {
 			result[key] = undefined;
 		} else {
 			throw new Error(`Missing required prop: "${key}"`);
 		}
 	}
 
-	return result as InferSchema<T>;
+	return result as InferSchema<Type>;
 };

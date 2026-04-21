@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { html, render } from "../index";
 
+const normalizeWhitespace = (string: string) =>
+	string.replace(/\s+/g, " ").trim();
+
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
@@ -23,7 +26,13 @@ describe("raw content updates", () => {
 		let color = "red";
 
 		const MyElement = render(function* () {
-			yield () => html`<style>p { color: ${color}; }</style><p>text</p>`;
+			yield () =>
+				html`<style>
+						p {
+							color: ${color};
+						}
+					</style>
+					<p>text</p>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -31,7 +40,7 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("p { color: red; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 
 		cleanup(element);
 	});
@@ -41,7 +50,13 @@ describe("raw content updates", () => {
 		let color = "red";
 
 		const MyElement = render(function* () {
-			yield () => html`<style>p { color: ${color}; }</style><p>text</p>`;
+			yield () =>
+				html`<style>
+						p {
+							color: ${color};
+						}
+					</style>
+					<p>text</p>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -49,13 +64,13 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("p { color: red; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 
 		color = "blue";
 		await element.update();
 		await sleep();
 
-		expect(style.textContent).toBe("p { color: blue; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: blue; }");
 
 		cleanup(element);
 	});
@@ -73,13 +88,13 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const textarea = element.shadowRoot?.querySelector("textarea")!;
-		expect(textarea.textContent).toBe("initial text");
+		expect(normalizeWhitespace(textarea.textContent)).toBe("initial text");
 
 		content = "updated text";
 		await element.update();
 		await sleep();
 
-		expect(textarea.textContent).toBe("updated text");
+		expect(normalizeWhitespace(textarea.textContent)).toBe("updated text");
 
 		cleanup(element);
 	});
@@ -91,7 +106,13 @@ describe("raw content updates", () => {
 
 		const MyElement = render(function* () {
 			yield () =>
-				html`<style>p { color: ${color}; font-size: ${size}; }</style><p>text</p>`;
+				html`<style>
+						p {
+							color: ${color};
+							font-size: ${size};
+						}
+					</style>
+					<p>text</p>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -99,14 +120,18 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("p { color: red; font-size: 16px; }");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"p { color: red; font-size: 16px; }",
+		);
 
 		color = "green";
 		size = "20px";
 		await element.update();
 		await sleep();
 
-		expect(style.textContent).toBe("p { color: green; font-size: 20px; }");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"p { color: green; font-size: 20px; }",
+		);
 
 		cleanup(element);
 	});
@@ -116,7 +141,10 @@ describe("raw content updates", () => {
 		const injection = "<script>alert('xss')</script>";
 
 		const MyElement = render(function* () {
-			yield () => html`<style>${injection}</style>`;
+			yield () =>
+				html`<style>
+					${injection}
+				</style>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -124,7 +152,9 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("<script>alert('xss')</script>");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"<script>alert('xss')</script>",
+		);
 		expect(element.shadowRoot?.querySelector("script")).toBeNull();
 
 		cleanup(element);
@@ -135,7 +165,11 @@ describe("raw content updates", () => {
 		const css = "p { color: red; }";
 
 		const MyElement = render(function* () {
-			yield () => html`<style>${css}</style><p>text</p>`;
+			yield () =>
+				html`<style>
+						${css}
+					</style>
+					<p>text</p>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -158,7 +192,12 @@ describe("raw content updates", () => {
 		let size = 16;
 
 		const MyElement = render(function* () {
-			yield () => html`<style>p { font-size: ${size}px; }</style>`;
+			yield () =>
+				html`<style>
+					p {
+						font-size: ${size}px;
+					}
+				</style>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -166,13 +205,17 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("p { font-size: 16px; }");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"p { font-size: 16px; }",
+		);
 
 		size = 24;
 		await element.update();
 		await sleep();
 
-		expect(style.textContent).toBe("p { font-size: 24px; }");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"p { font-size: 24px; }",
+		);
 
 		cleanup(element);
 	});

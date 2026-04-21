@@ -1,941 +1,932 @@
-import {describe, expect, test} from "vitest";
-import {html, render} from "../index";
+import { describe, expect, test } from "vitest";
+import { html, render } from "../index";
 
 const sleep = (duration = 0) =>
-    new Promise((resolve) => setTimeout(resolve, duration));
+	new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("attribute updates", () => {
-    let tagId = 0;
-    const uniqueTag = () => `test-attr-${tagId++}-${Date.now()}`;
-
-    const mount = (tag: string): HTMLElement => {
-        const element = document.createElement(tag);
-        document.body.appendChild(element);
-        return element;
-    };
-
-    const cleanup = (element: HTMLElement) => {
-        element.remove();
-    };
-
-    test("updates a dynamic attribute value", async () => {
-        const tag = uniqueTag();
-        let cls = "red";
-
-        const MyElement = render(function* () {
-            yield () => html`
-                <div class="${cls}"></div>`;
-        });
-
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
-
-        expect(
-            element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-        ).toBe("red");
-
-        cls = "blue";
-        await element.update();
-        await sleep();
-
-        expect(
-            element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-        ).toBe("blue");
-
-        cleanup(element);
-    });
-
-    test("updates a multi-part attribute", async () => {
-        const tag = uniqueTag();
-        let first = "hello";
-        let second = "world";
-
-        const MyElement = render(function* () {
-            yield () => html`
-                <div class="${first} ${second}"></div>`;
-        });
-
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
-
-        expect(
-            element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-        ).toBe("hello world");
-
-        first = "foo";
-        await element.update();
-        await sleep();
-
-        expect(
-            element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-        ).toBe("foo world");
-
-        cleanup(element);
-    });
-
-    test("toggles a boolean attribute", async () => {
-        const tag = uniqueTag();
-        let disabled = true;
-
-        const MyElement = render(function* () {
-            yield () =>
-                html`
-                    <button disabled="${disabled}">click</button>`;
-        });
+	let tagId = 0;
+	const uniqueTag = () => `test-attr-${tagId++}-${Date.now()}`;
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+	const mount = (tag: string): HTMLElement => {
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+		return element;
+	};
 
-        const btn = element.shadowRoot?.querySelector("button");
-        expect(btn?.hasAttribute("disabled")).toBe(true);
-
-        disabled = false;
-        await element.update();
-        await sleep();
-
-        expect(btn?.hasAttribute("disabled")).toBe(false);
+	const cleanup = (element: HTMLElement) => {
+		element.remove();
+	};
 
-        cleanup(element);
-    });
+	test("updates a dynamic attribute value", async () => {
+		const tag = uniqueTag();
+		let cls = "red";
 
-    test("registers and updates event listeners", async () => {
-        const tag = uniqueTag();
-        const clicks: string[] = [];
-        let handler = () => clicks.push("first");
+		const MyElement = render(function* () {
+			yield () => html` <div class="${cls}"></div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`
-                <button onclick="${handler}">click</button>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		expect(
+			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
+		).toBe("red");
 
-        const btn = element.shadowRoot?.querySelector("button")!;
-        btn.click();
-        expect(clicks).toEqual(["first"]);
+		cls = "blue";
+		await element.update();
+		await sleep();
 
-        handler = () => clicks.push("second");
-        await element.update();
-        await sleep();
+		expect(
+			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
+		).toBe("blue");
 
-        btn.click();
-        expect(clicks).toEqual(["first", "second"]);
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("updates a multi-part attribute", async () => {
+		const tag = uniqueTag();
+		let first = "hello";
+		let second = "world";
 
-    test("expands an array into boolean attributes", async () => {
-        const tag = uniqueTag();
-        let attrs = ["disabled", "hidden"];
+		const MyElement = render(function* () {
+			yield () => html` <div class="${first} ${second}"></div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`
-                <button ${attrs}>click</button>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		expect(
+			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
+		).toBe("hello world");
 
-        const btn = element.shadowRoot?.querySelector("button")!;
-        expect(btn.hasAttribute("disabled")).toBe(true);
-        expect(btn.hasAttribute("hidden")).toBe(true);
+		first = "foo";
+		await element.update();
+		await sleep();
 
-        attrs = ["hidden"];
-        await element.update();
-        await sleep();
+		expect(
+			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
+		).toBe("foo world");
 
-        expect(btn.hasAttribute("disabled")).toBe(false);
-        expect(btn.hasAttribute("hidden")).toBe(true);
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("toggles a boolean attribute", async () => {
+		const tag = uniqueTag();
+		let disabled = true;
 
-    test("expands an object into key-value attributes", async () => {
-        const tag = uniqueTag();
-        let attrs: Record<string, string> = {class: "red", id: "main"};
+		const MyElement = render(function* () {
+			yield () => html` <button disabled="${disabled}">click</button>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`
-                <div ${attrs}>content</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const btn = element.shadowRoot?.querySelector("button");
+		expect(btn?.hasAttribute("disabled")).toBe(true);
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("class")).toBe("red");
-        expect(div.getAttribute("id")).toBe("main");
+		disabled = false;
+		await element.update();
+		await sleep();
 
-        attrs = {class: "blue", title: "hello"};
-        await element.update();
-        await sleep();
+		expect(btn?.hasAttribute("disabled")).toBe(false);
 
-        expect(div.getAttribute("class")).toBe("blue");
-        expect(div.hasAttribute("id")).toBe(false);
-        expect(div.getAttribute("title")).toBe("hello");
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("registers and updates event listeners", async () => {
+		const tag = uniqueTag();
+		const clicks: string[] = [];
+		let handler = () => clicks.push("first");
 
-    test("removes attribute when value is null", async () => {
-        const tag = uniqueTag();
-        let value: string | null = "visible";
+		const MyElement = render(function* () {
+			yield () => html` <button onclick="${handler}">click</button>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div title="${value}">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const btn = element.shadowRoot?.querySelector("button")!;
+		btn.click();
+		expect(clicks).toEqual(["first"]);
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("title")).toBe("visible");
+		handler = () => clicks.push("second");
+		await element.update();
+		await sleep();
 
-        value = null;
-        await element.update();
-        await sleep();
+		btn.click();
+		expect(clicks).toEqual(["first", "second"]);
 
-        expect(div.hasAttribute("title")).toBe(false);
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("expands an array into boolean attributes", async () => {
+		const tag = uniqueTag();
+		let attrs = ["disabled", "hidden"];
 
-    test("removes attribute when value is undefined", async () => {
-        const tag = uniqueTag();
-        let value: string | undefined = "visible";
+		const MyElement = render(function* () {
+			yield () => html` <button ${attrs}>click</button>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div title="${value}">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const btn = element.shadowRoot?.querySelector("button")!;
+		expect(btn.hasAttribute("disabled")).toBe(true);
+		expect(btn.hasAttribute("hidden")).toBe(true);
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("title")).toBe("visible");
+		attrs = ["hidden"];
+		await element.update();
+		await sleep();
 
-        value = undefined;
-        await element.update();
-        await sleep();
+		expect(btn.hasAttribute("disabled")).toBe(false);
+		expect(btn.hasAttribute("hidden")).toBe(true);
 
-        expect(div.hasAttribute("title")).toBe(false);
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("expands an object into key-value attributes", async () => {
+		const tag = uniqueTag();
+		let attrs: Record<string, string> = { class: "red", id: "main" };
 
-    test("removes attribute when value is false", async () => {
-        const tag = uniqueTag();
-        let value: string | false = "yes";
+		const MyElement = render(function* () {
+			yield () => html` <div ${attrs}>content</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div aria-hidden="${value}">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("class")).toBe("red");
+		expect(div.getAttribute("id")).toBe("main");
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("aria-hidden")).toBe("yes");
+		attrs = { class: "blue", title: "hello" };
+		await element.update();
+		await sleep();
 
-        value = false;
-        await element.update();
-        await sleep();
+		expect(div.getAttribute("class")).toBe("blue");
+		expect(div.hasAttribute("id")).toBe(false);
+		expect(div.getAttribute("title")).toBe("hello");
 
-        expect(div.hasAttribute("aria-hidden")).toBe(false);
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("removes attribute when value is null", async () => {
+		const tag = uniqueTag();
+		let value: string | null = "visible";
 
-    test("sets numeric attribute values", async () => {
-        const tag = uniqueTag();
-        let value = 5;
+		const MyElement = render(function* () {
+			yield () => html`<div title="${value}">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<input tabindex="${value}" />`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("visible");
 
-        const input = element.shadowRoot?.querySelector("input")!;
-        expect(input.getAttribute("tabindex")).toBe("5");
+		value = null;
+		await element.update();
+		await sleep();
 
-        value = 10;
-        await element.update();
-        await sleep();
+		expect(div.hasAttribute("title")).toBe(false);
 
-        expect(input.getAttribute("tabindex")).toBe("10");
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("removes attribute when value is undefined", async () => {
+		const tag = uniqueTag();
+		let value: string | undefined = "visible";
 
-    test("removes event listener when handler is set to null", async () => {
-        const tag = uniqueTag();
-        const clicks: string[] = [];
-        let handler: (() => void) | null = () => clicks.push("clicked");
+		const MyElement = render(function* () {
+			yield () => html`<div title="${value}">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<button onclick="${handler}">click</button>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("visible");
 
-        const btn = element.shadowRoot?.querySelector("button")!;
-        btn.click();
-        expect(clicks).toEqual(["clicked"]);
+		value = undefined;
+		await element.update();
+		await sleep();
 
-        handler = null;
-        await element.update();
-        await sleep();
+		expect(div.hasAttribute("title")).toBe(false);
 
-        btn.click();
-        // Should still be just one click since listener was removed
-        expect(clicks).toEqual(["clicked"]);
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("removes attribute when value is false", async () => {
+		const tag = uniqueTag();
+		let value: string | false = "yes";
 
-    test("handles multiple event listeners on same element", async () => {
-        const tag = uniqueTag();
-        const events: string[] = [];
+		const MyElement = render(function* () {
+			yield () => html`<div aria-hidden="${value}">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () =>
-                html`<button
-                    onclick="${() => events.push("click")}"
-                    onmouseenter="${() => events.push("enter")}"
-                >btn</button>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("aria-hidden")).toBe("yes");
 
-        const btn = element.shadowRoot?.querySelector("button")!;
-        btn.click();
-        btn.dispatchEvent(new MouseEvent("mouseenter"));
+		value = false;
+		await element.update();
+		await sleep();
 
-        expect(events).toEqual(["click", "enter"]);
+		expect(div.hasAttribute("aria-hidden")).toBe(false);
 
-        cleanup(element);
-    });
+		cleanup(element);
+	});
 
-    test("sets complex object as element property", async () => {
-        const tag = uniqueTag();
-        const data = {nested: {value: 42}};
+	test("sets numeric attribute values", async () => {
+		const tag = uniqueTag();
+		let value = 5;
 
-        const MyElement = render(function* () {
-            yield () => html`<div data="${data}">text</div>`;
-        });
+		const MyElement = render(function* () {
+			yield () => html`<input tabindex="${value}" />`;
+		});
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        const div = element.shadowRoot?.querySelector("div")! as any;
-        expect(div.data).toEqual({nested: {value: 42}});
+		const input = element.shadowRoot?.querySelector("input")!;
+		expect(input.getAttribute("tabindex")).toBe("5");
 
-        cleanup(element);
-    });
+		value = 10;
+		await element.update();
+		await sleep();
 
-    test("updates a complex object property", async () => {
-        const tag = uniqueTag();
-        let data: Record<string, unknown> = {nested: {value: 42}};
+		expect(input.getAttribute("tabindex")).toBe("10");
 
-        const MyElement = render(function* () {
-            yield () => html`<div data="${data}">text</div>`;
-        });
+		cleanup(element);
+	});
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+	test("removes event listener when handler is set to null", async () => {
+		const tag = uniqueTag();
+		const clicks: string[] = [];
+		let handler: (() => void) | null = () => clicks.push("clicked");
 
-        const div = element.shadowRoot?.querySelector("div")! as any;
-        expect(div.data).toEqual({nested: {value: 42}});
+		const MyElement = render(function* () {
+			yield () => html`<button onclick="${handler}">click</button>`;
+		});
 
-        data = {nested: {value: 99}, extra: "hello"};
-        await element.update();
-        await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        expect(div.data).toEqual({nested: {value: 99}, extra: "hello"});
+		const btn = element.shadowRoot?.querySelector("button")!;
+		btn.click();
+		expect(clicks).toEqual(["clicked"]);
 
-        cleanup(element);
-    });
+		handler = null;
+		await element.update();
+		await sleep();
 
-    test("updates from string attribute to object property", async () => {
-        const tag = uniqueTag();
-        let value: string | Record<string, unknown> = "simple";
+		btn.click();
+		// Should still be just one click since listener was removed
+		expect(clicks).toEqual(["clicked"]);
 
-        const MyElement = render(function* () {
-            yield () => html`<div data="${value}">text</div>`;
-        });
+		cleanup(element);
+	});
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+	test("handles multiple event listeners on same element", async () => {
+		const tag = uniqueTag();
+		const events: string[] = [];
 
-        const div = element.shadowRoot?.querySelector("div")! as any;
-        expect(div.getAttribute("data")).toBe("simple");
+		const MyElement = render(function* () {
+			yield () =>
+				html`<button
+					onclick="${() => events.push("click")}"
+					onmouseenter="${() => events.push("enter")}"
+				>
+					btn
+				</button>`;
+		});
 
-        value = {nested: true};
-        await element.update();
-        await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        expect(div.data).toEqual({nested: true});
+		const btn = element.shadowRoot?.querySelector("button")!;
+		btn.click();
+		btn.dispatchEvent(new MouseEvent("mouseenter"));
 
-        cleanup(element);
-    });
+		expect(events).toEqual(["click", "enter"]);
 
-    test("updates from object property to string attribute", async () => {
-        const tag = uniqueTag();
-        let value: string | Record<string, unknown> = {nested: true};
+		cleanup(element);
+	});
 
-        const MyElement = render(function* () {
-            yield () => html`<div data="${value}">text</div>`;
-        });
+	test("sets complex object as element property", async () => {
+		const tag = uniqueTag();
+		const data = { nested: { value: 42 } };
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const MyElement = render(function* () {
+			yield () => html`<div data="${data}">text</div>`;
+		});
 
-        const div = element.shadowRoot?.querySelector("div")! as any;
-        expect(div.data).toEqual({nested: true});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        value = "simple";
-        await element.update();
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")! as any;
+		expect(div.data).toEqual({ nested: { value: 42 } });
 
-        expect(div.getAttribute("data")).toBe("simple");
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("updates a complex object property", async () => {
+		const tag = uniqueTag();
+		let data: Record<string, unknown> = { nested: { value: 42 } };
 
-    test("sets array as element property", async () => {
-        const tag = uniqueTag();
-        let items = [1, 2, 3];
+		const MyElement = render(function* () {
+			yield () => html`<div data="${data}">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div items="${items}">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")! as any;
+		expect(div.data).toEqual({ nested: { value: 42 } });
 
-        const div = element.shadowRoot?.querySelector("div")! as any;
-        expect(div.items).toEqual([1, 2, 3]);
+		data = { nested: { value: 99 }, extra: "hello" };
+		await element.update();
+		await sleep();
 
-        items = [4, 5];
-        await element.update();
-        await sleep();
+		expect(div.data).toEqual({ nested: { value: 99 }, extra: "hello" });
 
-        expect(div.items).toEqual([4, 5]);
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("updates from string attribute to object property", async () => {
+		const tag = uniqueTag();
+		let value: string | Record<string, unknown> = "simple";
 
-    test("removes object property when value becomes null", async () => {
-        const tag = uniqueTag();
-        let data: Record<string, unknown> | null = {key: "value"};
+		const MyElement = render(function* () {
+			yield () => html`<div data="${value}">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div data="${data}">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")! as any;
+		expect(div.getAttribute("data")).toBe("simple");
 
-        const div = element.shadowRoot?.querySelector("div")! as any;
-        expect(div.data).toEqual({key: "value"});
+		value = { nested: true };
+		await element.update();
+		await sleep();
 
-        data = null;
-        await element.update();
-        await sleep();
+		expect(div.data).toEqual({ nested: true });
 
-        expect(div.hasAttribute("data")).toBe(false);
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("updates from object property to string attribute", async () => {
+		const tag = uniqueTag();
+		let value: string | Record<string, unknown> = { nested: true };
 
-    test("re-adds a previously removed attribute", async () => {
-        const tag = uniqueTag();
-        let value: string | null = "visible";
+		const MyElement = render(function* () {
+			yield () => html`<div data="${value}">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div title="${value}">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")! as any;
+		expect(div.data).toEqual({ nested: true });
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("title")).toBe("visible");
+		value = "simple";
+		await element.update();
+		await sleep();
 
-        value = null;
-        await element.update();
-        await sleep();
+		expect(div.getAttribute("data")).toBe("simple");
 
-        expect(div.hasAttribute("title")).toBe(false);
+		cleanup(element);
+	});
 
-        value = "back again";
-        await element.update();
-        await sleep();
+	test("sets array as element property", async () => {
+		const tag = uniqueTag();
+		let items = [1, 2, 3];
 
-        expect(div.getAttribute("title")).toBe("back again");
+		const MyElement = render(function* () {
+			yield () => html`<div items="${items}">text</div>`;
+		});
 
-        cleanup(element);
-    });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-    test("handles empty string as attribute value", async () => {
-        const tag = uniqueTag();
-        let value = "";
+		const div = element.shadowRoot?.querySelector("div")! as any;
+		expect(div.items).toEqual([1, 2, 3]);
 
-        const MyElement = render(function* () {
-            yield () => html`<div title="${value}">text</div>`;
-        });
+		items = [4, 5];
+		await element.update();
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		expect(div.items).toEqual([4, 5]);
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("title")).toBe("");
-        expect(div.hasAttribute("title")).toBe(true);
+		cleanup(element);
+	});
 
-        value = "filled";
-        await element.update();
-        await sleep();
+	test("removes object property when value becomes null", async () => {
+		const tag = uniqueTag();
+		let data: Record<string, unknown> | null = { key: "value" };
 
-        expect(div.getAttribute("title")).toBe("filled");
+		const MyElement = render(function* () {
+			yield () => html`<div data="${data}">text</div>`;
+		});
 
-        cleanup(element);
-    });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-    test("sets boolean true as empty attribute", async () => {
-        const tag = uniqueTag();
+		const div = element.shadowRoot?.querySelector("div")! as any;
+		expect(div.data).toEqual({ key: "value" });
 
-        const MyElement = render(function* () {
-            yield () =>
-                html`<button disabled="${true}">click</button>`;
-        });
+		data = null;
+		await element.update();
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		expect(div.hasAttribute("data")).toBe(false);
 
-        const btn = element.shadowRoot?.querySelector("button")!;
-        expect(btn.hasAttribute("disabled")).toBe(true);
-        expect(btn.getAttribute("disabled")).toBe("true");
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("re-adds a previously removed attribute", async () => {
+		const tag = uniqueTag();
+		let value: string | null = "visible";
 
-    test("handles dynamic attribute name", async () => {
-        const tag = uniqueTag();
-        let attrName = "title";
+		const MyElement = render(function* () {
+			yield () => html`<div title="${value}">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div ${attrName}="hello">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("visible");
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("title")).toBe("hello");
+		value = null;
+		await element.update();
+		await sleep();
 
-        cleanup(element);
-    });
+		expect(div.hasAttribute("title")).toBe(false);
 
-    test("handles dynamic attribute name change", async () => {
-        const tag = uniqueTag();
-        let attrName = "title";
+		value = "back again";
+		await element.update();
+		await sleep();
 
-        const MyElement = render(function* () {
-            yield () => html`<div ${attrName}="hello">text</div>`;
-        });
+		expect(div.getAttribute("title")).toBe("back again");
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		cleanup(element);
+	});
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("title")).toBe("hello");
+	test("handles empty string as attribute value", async () => {
+		const tag = uniqueTag();
+		let value = "";
 
-        attrName = "id";
-        await element.update();
-        await sleep();
+		const MyElement = render(function* () {
+			yield () => html`<div title="${value}">text</div>`;
+		});
 
-        expect(div.hasAttribute("title")).toBe(false);
-        expect(div.getAttribute("id")).toBe("hello");
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        cleanup(element);
-    });
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("");
+		expect(div.hasAttribute("title")).toBe(true);
 
-    test("handles expandable object with event listeners", async () => {
-        const tag = uniqueTag();
-        const clicks: string[] = [];
-        let attrs: Record<string, unknown> = {
-            class: "btn",
-            onclick: () => clicks.push("clicked"),
-        };
+		value = "filled";
+		await element.update();
+		await sleep();
 
-        const MyElement = render(function* () {
-            yield () => html`<button ${attrs}>click</button>`;
-        });
+		expect(div.getAttribute("title")).toBe("filled");
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		cleanup(element);
+	});
 
-        const btn = element.shadowRoot?.querySelector("button")!;
-        expect(btn.getAttribute("class")).toBe("btn");
+	test("sets boolean true as empty attribute", async () => {
+		const tag = uniqueTag();
 
-        btn.click();
-        expect(clicks).toEqual(["clicked"]);
+		const MyElement = render(function* () {
+			yield () => html`<button disabled="${true}">click</button>`;
+		});
 
-        attrs = {
-            class: "btn-primary",
-            onclick: () => clicks.push("clicked again"),
-        };
-        await element.update();
-        await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        expect(btn.getAttribute("class")).toBe("btn-primary");
-        btn.click();
-        expect(clicks).toEqual(["clicked", "clicked again"]);
+		const btn = element.shadowRoot?.querySelector("button")!;
+		expect(btn.hasAttribute("disabled")).toBe(true);
+		expect(btn.getAttribute("disabled")).toBe("true");
 
-        cleanup(element);
-    });
+		cleanup(element);
+	});
 
-    test("handles multiple dynamic attributes on same element", async () => {
-        const tag = uniqueTag();
-        let cls = "red";
-        let title = "hello";
+	test("handles dynamic attribute name", async () => {
+		const tag = uniqueTag();
+		let attrName = "title";
 
-        const MyElement = render(function* () {
-            yield () =>
-                html`<div class="${cls}" title="${title}">text</div>`;
-        });
+		const MyElement = render(function* () {
+			yield () => html`<div ${attrName}="hello">text</div>`;
+		});
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("class")).toBe("red");
-        expect(div.getAttribute("title")).toBe("hello");
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("hello");
 
-        cls = "blue";
-        await element.update();
-        await sleep();
+		cleanup(element);
+	});
 
-        expect(div.getAttribute("class")).toBe("blue");
-        expect(div.getAttribute("title")).toBe("hello");
+	test("handles dynamic attribute name change", async () => {
+		const tag = uniqueTag();
+		let attrName = "title";
 
-        title = "world";
-        await element.update();
-        await sleep();
+		const MyElement = render(function* () {
+			yield () => html`<div ${attrName}="hello">text</div>`;
+		});
 
-        expect(div.getAttribute("class")).toBe("blue");
-        expect(div.getAttribute("title")).toBe("world");
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        cleanup(element);
-    });
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("hello");
 
-    test("handles partially dynamic attribute key", async () => {
-        const tag = uniqueTag();
-        let suffix = "color";
+		attrName = "id";
+		await element.update();
+		await sleep();
 
-        const MyElement = render(function* () {
-            yield () => html`<div data-${suffix}="red">text</div>`;
-        });
+		expect(div.hasAttribute("title")).toBe(false);
+		expect(div.getAttribute("id")).toBe("hello");
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		cleanup(element);
+	});
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("data-color")).toBe("red");
+	test("handles expandable object with event listeners", async () => {
+		const tag = uniqueTag();
+		const clicks: string[] = [];
+		let attrs: Record<string, unknown> = {
+			class: "btn",
+			onclick: () => clicks.push("clicked"),
+		};
 
-        cleanup(element);
-    });
+		const MyElement = render(function* () {
+			yield () => html`<button ${attrs}>click</button>`;
+		});
 
-    test("updates partially dynamic attribute key", async () => {
-        const tag = uniqueTag();
-        let suffix = "color";
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        const MyElement = render(function* () {
-            yield () => html`<div data-${suffix}="red">text</div>`;
-        });
+		const btn = element.shadowRoot?.querySelector("button")!;
+		expect(btn.getAttribute("class")).toBe("btn");
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		btn.click();
+		expect(clicks).toEqual(["clicked"]);
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("data-color")).toBe("red");
+		attrs = {
+			class: "btn-primary",
+			onclick: () => clicks.push("clicked again"),
+		};
+		await element.update();
+		await sleep();
 
-        suffix = "size";
-        await element.update();
-        await sleep();
+		expect(btn.getAttribute("class")).toBe("btn-primary");
+		btn.click();
+		expect(clicks).toEqual(["clicked", "clicked again"]);
 
-        expect(div.hasAttribute("data-color")).toBe(false);
-        expect(div.getAttribute("data-size")).toBe("red");
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("handles multiple dynamic attributes on same element", async () => {
+		const tag = uniqueTag();
+		let cls = "red";
+		let title = "hello";
 
-    test("handles partially dynamic key with dynamic value", async () => {
-        const tag = uniqueTag();
-        let suffix = "color";
-        let value = "red";
+		const MyElement = render(function* () {
+			yield () => html`<div class="${cls}" title="${title}">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div data-${suffix}="${value}">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("class")).toBe("red");
+		expect(div.getAttribute("title")).toBe("hello");
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("data-color")).toBe("red");
+		cls = "blue";
+		await element.update();
+		await sleep();
 
-        value = "blue";
-        await element.update();
-        await sleep();
+		expect(div.getAttribute("class")).toBe("blue");
+		expect(div.getAttribute("title")).toBe("hello");
 
-        expect(div.getAttribute("data-color")).toBe("blue");
+		title = "world";
+		await element.update();
+		await sleep();
 
-        suffix = "size";
-        value = "large";
-        await element.update();
-        await sleep();
+		expect(div.getAttribute("class")).toBe("blue");
+		expect(div.getAttribute("title")).toBe("world");
 
-        expect(div.hasAttribute("data-color")).toBe(false);
-        expect(div.getAttribute("data-size")).toBe("large");
+		cleanup(element);
+	});
 
-        cleanup(element);
-    });
+	test("handles partially dynamic attribute key", async () => {
+		const tag = uniqueTag();
+		let suffix = "color";
 
-    test("handles fully dynamic key and fully dynamic value", async () => {
-        const tag = uniqueTag();
-        let key = "title";
-        let value: string | null = "hello";
+		const MyElement = render(function* () {
+			yield () => html`<div data-${suffix}="red">text</div>`;
+		});
 
-        const MyElement = render(function* () {
-            yield () => html`<div ${key}="${value}">text</div>`;
-        });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("data-color")).toBe("red");
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("title")).toBe("hello");
+		cleanup(element);
+	});
 
-        key = "id";
-        value = "main";
-        await element.update();
-        await sleep();
+	test("updates partially dynamic attribute key", async () => {
+		const tag = uniqueTag();
+		let suffix = "color";
 
-        expect(div.hasAttribute("title")).toBe(false);
-        expect(div.getAttribute("id")).toBe("main");
+		const MyElement = render(function* () {
+			yield () => html`<div data-${suffix}="red">text</div>`;
+		});
 
-        cleanup(element);
-    });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-    test("handles multi-part dynamic key", async () => {
-        const tag = uniqueTag();
-        let prefix = "data";
-        let suffix = "value";
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("data-color")).toBe("red");
 
-        const MyElement = render(function* () {
-            yield () => html`<div ${prefix}-${suffix}="test">text</div>`;
-        });
+		suffix = "size";
+		await element.update();
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		expect(div.hasAttribute("data-color")).toBe(false);
+		expect(div.getAttribute("data-size")).toBe("red");
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("data-value")).toBe("test");
+		cleanup(element);
+	});
 
-        prefix = "aria";
-        suffix = "label";
-        await element.update();
-        await sleep();
+	test("handles partially dynamic key with dynamic value", async () => {
+		const tag = uniqueTag();
+		let suffix = "color";
+		let value = "red";
 
-        expect(div.hasAttribute("data-value")).toBe(false);
-        expect(div.getAttribute("aria-label")).toBe("test");
+		const MyElement = render(function* () {
+			yield () => html`<div data-${suffix}="${value}">text</div>`;
+		});
 
-        cleanup(element);
-    });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-    test("handles dynamic key with multi-part dynamic value", async () => {
-        const tag = uniqueTag();
-        let key = "class";
-        let a = "foo";
-        let b = "bar";
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("data-color")).toBe("red");
 
-        const MyElement = render(function* () {
-            yield () => html`<div ${key}="${a}-${b}">text</div>`;
-        });
+		value = "blue";
+		await element.update();
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		expect(div.getAttribute("data-color")).toBe("blue");
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("class")).toBe("foo-bar");
+		suffix = "size";
+		value = "large";
+		await element.update();
+		await sleep();
 
-        a = "baz";
-        await element.update();
-        await sleep();
+		expect(div.hasAttribute("data-color")).toBe(false);
+		expect(div.getAttribute("data-size")).toBe("large");
 
-        expect(div.getAttribute("class")).toBe("baz-bar");
+		cleanup(element);
+	});
 
-        key = "title";
-        b = "qux";
-        await element.update();
-        await sleep();
+	test("handles fully dynamic key and fully dynamic value", async () => {
+		const tag = uniqueTag();
+		let key = "title";
+		let value: string | null = "hello";
 
-        expect(div.hasAttribute("class")).toBe(false);
-        expect(div.getAttribute("title")).toBe("baz-qux");
+		const MyElement = render(function* () {
+			yield () => html`<div ${key}="${value}">text</div>`;
+		});
 
-        cleanup(element);
-    });
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-    test("removes attribute with dynamic key when value becomes null", async () => {
-        const tag = uniqueTag();
-        let key = "title";
-        let value: string | null = "hello";
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("hello");
 
-        const MyElement = render(function* () {
-            yield () => html`<div ${key}="${value}">text</div>`;
-        });
+		key = "id";
+		value = "main";
+		await element.update();
+		await sleep();
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		expect(div.hasAttribute("title")).toBe(false);
+		expect(div.getAttribute("id")).toBe("main");
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("title")).toBe("hello");
+		cleanup(element);
+	});
 
-        value = null;
-        await element.update();
-        await sleep();
+	test("handles multi-part dynamic key", async () => {
+		const tag = uniqueTag();
+		let prefix = "data";
+		let suffix = "value";
 
-        expect(div.hasAttribute("title")).toBe(false);
+		const MyElement = render(function* () {
+			yield () => html`<div ${prefix}-${suffix}="test">text</div>`;
+		});
 
-        value = "back";
-        await element.update();
-        await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        expect(div.getAttribute("title")).toBe("back");
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("data-value")).toBe("test");
 
-        cleanup(element);
-    });
+		prefix = "aria";
+		suffix = "label";
+		await element.update();
+		await sleep();
 
-    test("handles dynamic key for event listener", async () => {
-        const tag = uniqueTag();
-        const events: string[] = [];
-        let eventName = "onclick";
-        let handler = () => events.push("click");
+		expect(div.hasAttribute("data-value")).toBe(false);
+		expect(div.getAttribute("aria-label")).toBe("test");
 
-        const MyElement = render(function* () {
-            yield () =>
-                html`<button ${eventName}="${handler}">btn</button>`;
-        });
+		cleanup(element);
+	});
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+	test("handles dynamic key with multi-part dynamic value", async () => {
+		const tag = uniqueTag();
+		let key = "class";
+		let a = "foo";
+		let b = "bar";
 
-        const btn = element.shadowRoot?.querySelector("button")!;
-        btn.click();
-        expect(events).toEqual(["click"]);
+		const MyElement = render(function* () {
+			yield () => html`<div ${key}="${a}-${b}">text</div>`;
+		});
 
-        eventName = "ondblclick";
-        handler = () => events.push("dblclick");
-        await element.update();
-        await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        btn.click();
-        // Old click handler should be removed
-        expect(events).toEqual(["click"]);
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("class")).toBe("foo-bar");
 
-        btn.dispatchEvent(new MouseEvent("dblclick"));
-        expect(events).toEqual(["click", "dblclick"]);
+		a = "baz";
+		await element.update();
+		await sleep();
 
-        cleanup(element);
-    });
+		expect(div.getAttribute("class")).toBe("baz-bar");
 
-    test("handles partially dynamic key with boolean removal", async () => {
-        const tag = uniqueTag();
-        let suffix = "hidden";
-        let value: string | false = "true";
+		key = "title";
+		b = "qux";
+		await element.update();
+		await sleep();
 
-        const MyElement = render(function* () {
-            yield () => html`<div aria-${suffix}="${value}">text</div>`;
-        });
+		expect(div.hasAttribute("class")).toBe(false);
+		expect(div.getAttribute("title")).toBe("baz-qux");
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		cleanup(element);
+	});
 
-        const div = element.shadowRoot?.querySelector("div")!;
-        expect(div.getAttribute("aria-hidden")).toBe("true");
+	test("removes attribute with dynamic key when value becomes null", async () => {
+		const tag = uniqueTag();
+		let key = "title";
+		let value: string | null = "hello";
 
-        value = false;
-        await element.update();
-        await sleep();
+		const MyElement = render(function* () {
+			yield () => html`<div ${key}="${value}">text</div>`;
+		});
 
-        expect(div.hasAttribute("aria-hidden")).toBe(false);
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-        cleanup(element);
-    });
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("hello");
 
-    test("switches from array to object expandable attributes", async () => {
-        const tag = uniqueTag();
-        let attrs: string[] | Record<string, string> = ["disabled"];
+		value = null;
+		await element.update();
+		await sleep();
 
-        const MyElement = render(function* () {
-            yield () => html`
-                <button ${attrs}>click</button>`;
-        });
+		expect(div.hasAttribute("title")).toBe(false);
 
-        customElements.define(tag, MyElement);
-        const element = mount(tag) as InstanceType<typeof MyElement>;
-        await sleep();
+		value = "back";
+		await element.update();
+		await sleep();
 
-        const btn = element.shadowRoot?.querySelector("button")!;
-        expect(btn.hasAttribute("disabled")).toBe(true);
+		expect(div.getAttribute("title")).toBe("back");
 
-        attrs = {class: "primary"};
-        await element.update();
-        await sleep();
+		cleanup(element);
+	});
 
-        expect(btn.hasAttribute("disabled")).toBe(false);
-        expect(btn.getAttribute("class")).toBe("primary");
+	test("handles dynamic key for event listener", async () => {
+		const tag = uniqueTag();
+		const events: string[] = [];
+		let eventName = "onclick";
+		let handler = () => events.push("click");
 
-        cleanup(element);
-    });
+		const MyElement = render(function* () {
+			yield () => html`<button ${eventName}="${handler}">btn</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const btn = element.shadowRoot?.querySelector("button")!;
+		btn.click();
+		expect(events).toEqual(["click"]);
+
+		eventName = "ondblclick";
+		handler = () => events.push("dblclick");
+		await element.update();
+		await sleep();
+
+		btn.click();
+		// Old click handler should be removed
+		expect(events).toEqual(["click"]);
+
+		btn.dispatchEvent(new MouseEvent("dblclick"));
+		expect(events).toEqual(["click", "dblclick"]);
+
+		cleanup(element);
+	});
+
+	test("handles partially dynamic key with boolean removal", async () => {
+		const tag = uniqueTag();
+		let suffix = "hidden";
+		let value: string | false = "true";
+
+		const MyElement = render(function* () {
+			yield () => html`<div aria-${suffix}="${value}">text</div>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("aria-hidden")).toBe("true");
+
+		value = false;
+		await element.update();
+		await sleep();
+
+		expect(div.hasAttribute("aria-hidden")).toBe(false);
+
+		cleanup(element);
+	});
+
+	test("switches from array to object expandable attributes", async () => {
+		const tag = uniqueTag();
+		let attrs: string[] | Record<string, string> = ["disabled"];
+
+		const MyElement = render(function* () {
+			yield () => html` <button ${attrs}>click</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const btn = element.shadowRoot?.querySelector("button")!;
+		expect(btn.hasAttribute("disabled")).toBe(true);
+
+		attrs = { class: "primary" };
+		await element.update();
+		await sleep();
+
+		expect(btn.hasAttribute("disabled")).toBe(false);
+		expect(btn.getAttribute("class")).toBe("primary");
+
+		cleanup(element);
+	});
 });

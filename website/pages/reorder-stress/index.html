@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - Reorder stress</title>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
+		<main>
+			<h1>reorder stress</h1>
+			<p>
+				Measures the wall time of <code>element.update()</code> for each list
+				operation. Reverse and shuffle exercise the O(n)
+				<code>isAlreadyInPosition</code>
+				walk; mutate keeps order stable and is the best-case lower bound.
+			</p>
+			<reorder-stress items="1000"></reorder-stress>
+		</main>
+	</body>
+</html>
