@@ -1115,6 +1115,206 @@ describe("content updates", () => {
         cleanup(element);
     });
 
+    test("pops a trailing item without disturbing the monotonic prefix", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "b", "c", "d"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [aNode, bNode, cNode, dNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["a", "b", "c"];
+        await element.update();
+        await sleep();
+
+        const afterPop = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(afterPop.length).toBe(3);
+        expect(afterPop[0]).toBe(aNode);
+        expect(afterPop[1]).toBe(bNode);
+        expect(afterPop[2]).toBe(cNode);
+        expect(dNode.isConnected).toBe(false);
+
+        cleanup(element);
+    });
+
+    test("shifts a leading item without disturbing the tail", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "b", "c", "d"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [aNode, bNode, cNode, dNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["b", "c", "d"];
+        await element.update();
+        await sleep();
+
+        const afterShift = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(afterShift.length).toBe(3);
+        expect(afterShift[0]).toBe(bNode);
+        expect(afterShift[1]).toBe(cNode);
+        expect(afterShift[2]).toBe(dNode);
+        expect(aNode.isConnected).toBe(false);
+
+        cleanup(element);
+    });
+
+    test("replaces a bounded middle range while preserving stable ends", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "x", "y", "z", "d"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [aNode, xNode, yNode, zNode, dNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        // Ends are hash-stable; only the middle three change value. Head/tail
+        // peel should isolate the middle so the reconciler's map is sized to
+        // three slots, and the two end <li>s must keep identity untouched.
+        items = ["a", "m", "n", "o", "d"];
+        await element.update();
+        await sleep();
+
+        const afterMiddleSwap = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(afterMiddleSwap.length).toBe(5);
+        expect(afterMiddleSwap[0]).toBe(aNode);
+        expect(afterMiddleSwap[4]).toBe(dNode);
+        expect(afterMiddleSwap[1].textContent).toContain("m");
+        expect(afterMiddleSwap[2].textContent).toContain("n");
+        expect(afterMiddleSwap[3].textContent).toContain("o");
+        // Middle <li>s are reused via structural fallback — same parsedHTML,
+        // updated text — so their DOM identity survives the value swap.
+        expect(afterMiddleSwap[1]).toBe(xNode);
+        expect(afterMiddleSwap[2]).toBe(yNode);
+        expect(afterMiddleSwap[3]).toBe(zNode);
+
+        cleanup(element);
+    });
+
+    test("re-renders an identical list without disturbing DOM identity", async () => {
+        const tag = uniqueTag();
+        // New array reference each render, identical hash-per-item contents.
+        // The binding still dirties (array path in update()), so renderList
+        // runs — head peel should consume everything with zero DOM work and no
+        // middle bookkeeping.
+        let items = ["a", "b", "c"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const original = Array.from(element.shadowRoot!.querySelectorAll("li"));
+
+        items = ["a", "b", "c"];
+        await element.update();
+        await sleep();
+
+        const afterNoop = Array.from(element.shadowRoot!.querySelectorAll("li"));
+        expect(afterNoop.length).toBe(3);
+        expect(afterNoop[0]).toBe(original[0]);
+        expect(afterNoop[1]).toBe(original[1]);
+        expect(afterNoop[2]).toBe(original[2]);
+
+        cleanup(element);
+    });
+
+    test("appends several items in one update without touching prior nodes", async () => {
+        const tag = uniqueTag();
+        let items = ["a", "b"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [aNode, bNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["a", "b", "c", "d", "e"];
+        await element.update();
+        await sleep();
+
+        const afterAppend = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(afterAppend.length).toBe(5);
+        expect(afterAppend[0]).toBe(aNode);
+        expect(afterAppend[1]).toBe(bNode);
+        expect(afterAppend[2].textContent).toContain("c");
+        expect(afterAppend[3].textContent).toContain("d");
+        expect(afterAppend[4].textContent).toContain("e");
+
+        cleanup(element);
+    });
+
+    test("prepends several items in one update without touching the surviving tail", async () => {
+        const tag = uniqueTag();
+        let items = ["d", "e"];
+
+        const MyElement = render(function* () {
+            yield () => html`<ul>${items.map((item) => html`<li>${item}</li>`)}</ul>`;
+        });
+
+        customElements.define(tag, MyElement);
+        const element = mount(tag) as InstanceType<typeof MyElement>;
+        await sleep();
+
+        const [dNode, eNode] = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+
+        items = ["a", "b", "c", "d", "e"];
+        await element.update();
+        await sleep();
+
+        const afterPrepend = Array.from(
+            element.shadowRoot!.querySelectorAll("li"),
+        );
+        expect(afterPrepend.length).toBe(5);
+        expect(afterPrepend[0].textContent).toContain("a");
+        expect(afterPrepend[1].textContent).toContain("b");
+        expect(afterPrepend[2].textContent).toContain("c");
+        // Tail peel preserves both existing <li>s — the inserts land ahead of
+        // them with no moves.
+        expect(afterPrepend[3]).toBe(dNode);
+        expect(afterPrepend[4]).toBe(eNode);
+
+        cleanup(element);
+    });
+
     test("deleting a middle item preserves identity of the monotonic prefix and the tail", async () => {
         const tag = uniqueTag();
         let items = ["a", "b", "c", "d", "e"];

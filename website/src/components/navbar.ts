@@ -14,6 +14,7 @@ customElements.define(
                 <a href="/grundlage/pages/tags/">heading</a>
                 <a href="/grundlage/pages/perf/">perf</a>
                 <a href="/grundlage/pages/reorder-stress/">reorder stress</a>
+                <a href="/grundlage/pages/mutation-stress/">mutation stress</a>
             </nav>
         `;
     }),

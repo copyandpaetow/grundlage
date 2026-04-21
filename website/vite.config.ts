@@ -20,6 +20,7 @@ export default defineConfig({
                 tags: resolve(__dirname, "pages/tags/index.html"),
                 perf: resolve(__dirname, "pages/perf/index.html"),
                 reorderStress: resolve(__dirname, "pages/reorder-stress/index.html"),
+                mutationStress: resolve(__dirname, "pages/mutation-stress/index.html"),
             },
         },
     },

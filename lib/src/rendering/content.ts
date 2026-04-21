@@ -87,95 +87,136 @@ const renderList = (
     // source of truth: if it's shorter than the tracked array (e.g. the slot
     // was cleared between renders), we treat the tail as absent.
     const previousMarkers: Array<Comment> = [];
-    const hashToPrevIndex = new Map<number, number>();
     let sibling: Node | null = marker.nextSibling;
     while (sibling) {
         if (isComment(sibling) && sibling.data === marker.data) break;
         if (isListMarker(sibling) && previousMarkers.length < trackedPrevious.length) {
-            const previousIndex = previousMarkers.length;
             previousMarkers.push(sibling);
-            hashToPrevIndex.set(trackedPrevious[previousIndex].hash, previousIndex);
         }
         sibling = sibling.nextSibling;
     }
-
     const previousLength = previousMarkers.length;
 
-    // currentToPrev[index] = -1 if current[index] needs a fresh DOM node, otherwise the
-    // previous index whose DOM (and template instance) should be reused.
-    // Both views share one ArrayBuffer — for components with many small lists
-    // updating per frame, that halves the buffer allocations versus two
-    // independent typed arrays.
-    const bookkeeping = new ArrayBuffer(current.length * 4 + previousLength);
-    const currentToPrev = new Int32Array(bookkeeping, 0, current.length);
-    const previousClaimed = new Uint8Array(bookkeeping, current.length * 4, previousLength);
+    // Two-pointer head/tail peel. Hash-equal templates are interchangeable
+    // (hash folds template shape + expression values), so matched ends stay in
+    // place with no DOM work and no bookkeeping allocation. Append, prepend,
+    // pop, shift, and adjacent-swap all resolve entirely in this phase.
+    let headCurrent = 0;
+    let headPrevious = 0;
+    let tailCurrent = current.length - 1;
+    let tailPrevious = previousLength - 1;
 
-    // Pass 1: hash-identity matches. These preserve DOM identity across reorder,
-    // insert, delete, and swap — the existing contract.
-    for (let index = 0; index < current.length; index++) {
-        const match = hashToPrevIndex.get(current[index].hash);
-        if (match !== undefined && !previousClaimed[match]) {
-            currentToPrev[index] = match;
-            previousClaimed[match] = 1;
-        } else {
-            currentToPrev[index] = -1;
-        }
+    while (
+        headCurrent <= tailCurrent &&
+        headPrevious <= tailPrevious &&
+        current[headCurrent].hash === trackedPrevious[headPrevious].hash
+    ) {
+        current[headCurrent] = trackedPrevious[headPrevious];
+        headCurrent++;
+        headPrevious++;
+    }
+    while (
+        headCurrent <= tailCurrent &&
+        headPrevious <= tailPrevious &&
+        current[tailCurrent].hash === trackedPrevious[tailPrevious].hash
+    ) {
+        current[tailCurrent] = trackedPrevious[tailPrevious];
+        tailCurrent--;
+        tailPrevious--;
     }
 
-    // Pass 2: structural fallback. When current[i] has no hash twin, an
-    // unclaimed previous[i] with the same parsed template can be updated in
-    // place — no clone, no new marker, no DOM insertion.
-    for (let index = 0; index < current.length; index++) {
-        if (currentToPrev[index] !== -1) continue;
+    // Pure removal: current middle is empty, previous middle has leftovers.
+    if (headCurrent > tailCurrent) {
+        for (let previousIndex = headPrevious; previousIndex <= tailPrevious; previousIndex++) {
+            removeItemDom(previousMarkers[previousIndex], marker);
+        }
+        return;
+    }
+
+    // Pure insertion: previous middle exhausted, current middle has new items.
+    if (headPrevious > tailPrevious) {
+        let position: ChildNode =
+            headPrevious === 0 ? marker : previousMarkers[headPrevious - 1];
+        for (let currentIndex = headCurrent; currentIndex <= tailCurrent; currentIndex++) {
+            const listItemMarker = new Comment(LIST_IDENTIFIER);
+            position.after(current[currentIndex].setup(), listItemMarker);
+            position = listItemMarker;
+        }
+        return;
+    }
+
+    // General middle: hash claim + structural fallback + apply, all fused into
+    // one walk. Fusion changes priority slightly vs. two separate passes — a
+    // structural claim for current[i] can win a slot that a later current[j]
+    // would have hash-matched. Output stays correct (the reused template is
+    // .update()d to current[j]); worst case is one extra .update() call in a
+    // pathological cross-pattern. The head/tail peel above already absorbs the
+    // common "stable ends, changed middle" case where this would matter most.
+    const middleLengthPrevious = tailPrevious - headPrevious + 1;
+    const hashToMiddleIndex = new Map<number, number>();
+    for (let middleIndex = 0; middleIndex < middleLengthPrevious; middleIndex++) {
+        hashToMiddleIndex.set(
+            trackedPrevious[headPrevious + middleIndex].hash,
+            middleIndex,
+        );
+    }
+
+    const previousClaimed = new Uint8Array(middleLengthPrevious);
+
+    let position: ChildNode =
+        headPrevious === 0 ? marker : previousMarkers[headPrevious - 1];
+    let expectedMiddleIndex = 0;
+
+    for (let currentIndex = headCurrent; currentIndex <= tailCurrent; currentIndex++) {
+        const template = current[currentIndex];
+        const relativeOffset = currentIndex - headCurrent;
+
+        let claimedMiddleIndex = hashToMiddleIndex.get(template.hash);
+        if (claimedMiddleIndex !== undefined && previousClaimed[claimedMiddleIndex]) {
+            claimedMiddleIndex = undefined;
+        }
+
         if (
-            index < previousLength &&
-            !previousClaimed[index] &&
-            trackedPrevious[index].parsedHTML === current[index].parsedHTML
+            claimedMiddleIndex === undefined &&
+            relativeOffset < middleLengthPrevious &&
+            !previousClaimed[relativeOffset] &&
+            trackedPrevious[headPrevious + relativeOffset].parsedHTML ===
+                template.parsedHTML
         ) {
-            currentToPrev[index] = index;
-            previousClaimed[index] = 1;
+            claimedMiddleIndex = relativeOffset;
         }
-    }
 
-    // Pass 3: apply — reuse matched items (moving DOM only when necessary),
-    // build fresh items for the rest.
-    let position: ChildNode = marker;
-    let expectedPreviousIndex = 0;
-    for (let index = 0; index < current.length; index++) {
-        const template = current[index];
-        const previousIndex = currentToPrev[index];
-
-        if (previousIndex === -1) {
+        if (claimedMiddleIndex === undefined) {
             const listItemMarker = new Comment(LIST_IDENTIFIER);
             position.after(template.setup(), listItemMarker);
             position = listItemMarker;
             continue;
         }
 
-        const reusedTemplate = trackedPrevious[previousIndex];
+        previousClaimed[claimedMiddleIndex] = 1;
+        const reusedTemplate = trackedPrevious[headPrevious + claimedMiddleIndex];
         if (reusedTemplate.hash !== template.hash) {
             reusedTemplate.update(template.currentExpressions);
         }
-        current[index] = reusedTemplate;
+        current[currentIndex] = reusedTemplate;
 
-        const itemMarker = previousMarkers[previousIndex];
+        const itemMarker = previousMarkers[headPrevious + claimedMiddleIndex];
         // Monotonic reuse (the steady state for "same list, values changed")
         // means the existing DOM is already in place — no need to walk
         // siblings to verify. Only reach for isAlreadyInPosition/moveItemAfter
         // when a reorder could have happened.
-        if (previousIndex !== expectedPreviousIndex) {
+        if (claimedMiddleIndex !== expectedMiddleIndex) {
             if (!isAlreadyInPosition(position, itemMarker)) {
                 moveItemAfter(position, itemMarker);
             }
         }
-        expectedPreviousIndex = previousIndex + 1;
+        expectedMiddleIndex = claimedMiddleIndex + 1;
         position = itemMarker;
     }
 
-    // Pass 4: drop whatever was not claimed.
-    for (let index = 0; index < previousLength; index++) {
-        if (!previousClaimed[index]) {
-            removeItemDom(previousMarkers[index], marker);
+    for (let middleIndex = 0; middleIndex < middleLengthPrevious; middleIndex++) {
+        if (!previousClaimed[middleIndex]) {
+            removeItemDom(previousMarkers[headPrevious + middleIndex], marker);
         }
     }
 };
