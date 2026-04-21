@@ -3,34 +3,37 @@ type SchemaDefinition = SchemaEntry | [SchemaEntry] | [SchemaEntry, any];
 
 export type Schema = Record<string, SchemaDefinition>;
 
-type InferEntry<T extends SchemaDefinition> = T extends [infer C, infer D]
-	? Primitive<C> | (D extends undefined ? undefined : never)
-	: T extends [infer C]
-		? Primitive<C> | undefined
-		: T extends SchemaEntry
-			? Primitive<T>
+type InferEntry<Type extends SchemaDefinition> = Type extends [
+	infer Constructor,
+	infer Default,
+]
+	? Primitive<Constructor> | (Default extends undefined ? undefined : never)
+	: Type extends [infer Constructor]
+		? Primitive<Constructor> | undefined
+		: Type extends SchemaEntry
+			? Primitive<Type>
 			: unknown;
 
-type Primitive<T> = T extends StringConstructor
+type Primitive<Type> = Type extends StringConstructor
 	? string
-	: T extends NumberConstructor
+	: Type extends NumberConstructor
 		? number
-		: T extends BooleanConstructor
+		: Type extends BooleanConstructor
 			? boolean
-			: T extends abstract new (...args: any[]) => infer R
-				? R
+			: Type extends abstract new (...args: any[]) => infer Result
+				? Result
 				: unknown;
 
-type InferSchema<T extends Schema> = {
-	[K in keyof T]: InferEntry<T[K]>;
+type InferSchema<Type extends Schema> = {
+	[Key in keyof Type]: InferEntry<Type[Key]>;
 };
 
 type StringableValue = StringConstructor | NumberConstructor;
 
-export const props = <T extends Schema>(
+export const props = <Type extends Schema>(
 	element: HTMLElement,
-	schema: T,
-): InferSchema<T> => {
+	schema: Type,
+): InferSchema<Type> => {
 	const result: Record<string, unknown> = {};
 
 	for (const key in schema) {
@@ -85,5 +88,5 @@ export const props = <T extends Schema>(
 		}
 	}
 
-	return result as InferSchema<T>;
+	return result as InferSchema<Type>;
 };

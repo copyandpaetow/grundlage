@@ -33,7 +33,7 @@ They than can be combined with the expression array to the final html part (an a
 
 ### setup
 
-In the begining we walk the fragment to find all relevant comment nodes and read out the encoded data: binding index and relvant expression indices.
+In the beginning we walk the fragment to find all relevant comment nodes and read out the encoded data: binding index and relvant expression indices.
 We then take the binding at the encoded index, populate it into its own binding class, and store the same instance on the several expression index positions in a new array.
 
 ```ts
@@ -45,19 +45,19 @@ expressions: [dynamicClass1, dynamicClass2]
 
 ### updating
 
-We compare the last array of expressions with the current one. If one expression changes, we can acccess the binding at the same index and call its update function
+We compare the last array of expressions with the current one. If one expression changes, we can access the binding at the same index and call its update function
 
 ## usage
 
 ```ts
 
-	render("component-name", function*(initialProps, element){
+	render("component-name", function*(element){
 
 		yield html`<p> ...loading</p>`
 
 		const data = await fetch(...)
 
-		yield (props) => html`
+		yield () => html`
 			<ul>${data.map(entry => html`
 				<li>${entry}</li>`
 				)}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { isStringable, toPrimitive } from "./to-primitive";
+import { assertPrimitiveString, isStringable } from "./to-primitive";
 
 describe("isStringable", () => {
 	test.each([
@@ -25,20 +25,20 @@ describe("isStringable", () => {
 	});
 });
 
-describe("toPrimitive", () => {
+describe("assertPrimitiveString", () => {
 	test("stringifies primitives", () => {
-		expect(toPrimitive("a")).toBe("a");
-		expect(toPrimitive(42)).toBe("42");
-		expect(toPrimitive(true)).toBe("true");
-		expect(toPrimitive(false)).toBe("false");
+		expect(assertPrimitiveString("a")).toBe("a");
+		expect(assertPrimitiveString(42)).toBe("42");
+		expect(assertPrimitiveString(true)).toBe("true");
+		expect(assertPrimitiveString(false)).toBe("false");
 	});
 
 	test("throws on non-stringable values", () => {
-		expect(() => toPrimitive({})).toThrow(
+		expect(() => assertPrimitiveString({})).toThrow(
 			/Expected string, number, or boolean/,
 		);
-		expect(() => toPrimitive(null)).toThrow();
-		expect(() => toPrimitive(undefined)).toThrow();
-		expect(() => toPrimitive(() => {})).toThrow();
+		expect(() => assertPrimitiveString(null)).toThrow();
+		expect(() => assertPrimitiveString(undefined)).toThrow();
+		expect(() => assertPrimitiveString(() => {})).toThrow();
 	});
 });

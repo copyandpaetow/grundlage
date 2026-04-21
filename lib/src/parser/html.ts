@@ -8,17 +8,10 @@ import {
 	ParsedHTML,
 	RawContentBinding,
 	TagBinding,
-	ValueOf,
+	ValueOf
 } from "./types";
-import {
-	COMMENT_IDENTIFIER,
-	isQuote,
-	isWhitespace,
-	moveArrayContents,
-} from "./html-util";
-
-/*
-the idea here is to analyse and parse a tagged template string to give us
+import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util"; /*
+the idea here is to analyze and parse a tagged template string to give us
 - a document fragment
 - a hash
 - an array of expressions bindings
@@ -28,13 +21,35 @@ several expressions can be part of one binding like
 <div class="${dynamic1} static ${dynamic1}">
 => one attribute binding
 
-They also dont have to be next to each other
+They also don't have to be next to each other
 <h${headingLevel}>Hello, ${name}<h${headingLevel}>
 => one tag binding
 => one content binding
 
 We walk each character and listen for different character combinations to change the state machine.
-Depending on the state we move the last characters sine the state change to the dedicated buffer array.
+Depending on the state we move the last characters since the state change to the dedicated buffer array.
+=> this way we can change and insert parts dynamically while also keeping memory usage low / performance up
+
+*/
+
+/*
+the idea here is to analyze and parse a tagged template string to give us
+- a document fragment
+- a hash
+- an array of expressions bindings
+- a mapping array of which expression maps to which binding
+
+several expressions can be part of one binding like
+<div class="${dynamic1} static ${dynamic1}">
+=> one attribute binding
+
+They also don't have to be next to each other
+<h${headingLevel}>Hello, ${name}<h${headingLevel}>
+=> one tag binding
+=> one content binding
+
+We walk each character and listen for different character combinations to change the state machine.
+Depending on the state we move the last characters since the state change to the dedicated buffer array.
 => this way we can change and insert parts dynamically while also keeping memory usage low / performance up
 
 */
@@ -44,7 +59,7 @@ type BufferArray = Array<string | number>;
 
 const range = new Range();
 /*
-these elements we need to handle differently as we cant have comment markers in them, so we can only replace them as a hole
+these elements we need to handle differently as we can't have comment markers in them, so we can only replace them as a whole
 this requires a different marker strategy
 */
 const isSpecialElementTag = (tag: string) =>
@@ -74,7 +89,7 @@ let index = 0;
 let activeTemplate = "";
 let charIndex = 0;
 let splitIndex = 0;
-let attrQuote = "";
+let attributeQuote = "";
 let currentTagName = "";
 let activeBinding: Binding | null = null;
 let activeTagBinding: Binding | null = null;
@@ -106,7 +121,7 @@ const setup = (strings: TemplateStringsArray) => {
 	activeTemplate = templates[index];
 	charIndex = 0;
 	splitIndex = 0;
-	attrQuote = "";
+	attributeQuote = "";
 	currentTagName = "";
 	activeBinding = null;
 	activeTagBinding = null;
@@ -200,7 +215,7 @@ const createBinding = () => {
 			return openTagBindings.at(-1)!;
 
 		default:
-			throw new Error("impossible state");
+			throw new Error(`createBinding called in non-binding state: ${state}`);
 	}
 };
 
@@ -298,7 +313,7 @@ const completeAttribute = () => {
 		}
 	}
 	activeBinding = null;
-	attrQuote = "";
+	attributeQuote = "";
 };
 
 const flushElement = () => {
@@ -398,7 +413,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					continue;
 
 				case STATE.TAG:
-					//the tag only refers to the name (div, span, etc.) and can be exited by a white space, indicated attributes, or by a closing braket
+					//the tag only refers to the name (div, span, etc.) and can be exited by a white space, indicating attributes, or by a closing bracket
 					if (char !== ">" && !isWhitespace(char)) {
 						continue;
 					}
@@ -414,7 +429,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						continue;
 					}
 
-					//special case of a self closing tag
+					//special case of a self-closing tag
 					if (activeTemplate[charIndex - 1] === "/") {
 						flushElement();
 						state = STATE.TEXT;
@@ -465,7 +480,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 				case STATE.ATTRIBUTE_KEY:
 					//there are different types of attributes - boolean attributes and attributes with a value
-					//if we find an equal sign its a value attribute
+					//if we find an equal sign it's a value attribute
 					if (char === "=") {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						splitIndex = charIndex + 1;
@@ -494,21 +509,21 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 				case STATE.ATTRIBUTE_VALUE:
 					//here we need to check if we have a quoting char to detect the end of the attribute, either " or ' or a whitespace
-					if (!attrQuote && isQuote(char)) {
-						attrQuote = char;
+					if (!attributeQuote && isQuote(char)) {
+						attributeQuote = char;
 						splitIndex = charIndex + 1;
-					} else if (attrQuote && char === attrQuote) {
+					} else if (attributeQuote && char === attributeQuote) {
 						capture(attributeValueBuffer, splitIndex, charIndex);
 						splitIndex = charIndex + 1;
 						completeAttribute();
 						state = STATE.ELEMENT;
-					} else if (!attrQuote && isWhitespace(char)) {
+					} else if (!attributeQuote && isWhitespace(char)) {
 						capture(attributeValueBuffer, splitIndex, charIndex);
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
 						charIndex--; // rewind for element state management
-					} else if (!attrQuote && char === ">") {
+					} else if (!attributeQuote && char === ">") {
 						//special case if the unquoted attribute is ended by the element end
 						capture(attributeValueBuffer, splitIndex, charIndex);
 						completeAttribute();

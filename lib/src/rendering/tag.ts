@@ -8,7 +8,7 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	const element = marker.nextElementSibling!;
 	const newTag = bindingToString(binding.values, context.currentExpressions);
 
-	//we are going to replace the surrounding element with something new. To the browser, its a series of removals and additions and clears browser states like focus
+	//we are going to replace the surrounding element with something new. To the browser, it's a series of removals and additions and clears browser states like focus
 	const focusElement = element.contains(
 		(element.getRootNode() as ShadowRoot).activeElement,
 	)
@@ -16,8 +16,12 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 		: null;
 
 	const newElement = document.createElement(newTag);
-	for (let index = 0; index < element.attributes.length; index++) {
-		const attribute = element.attributes[index];
+	for (
+		let attributeIndex = 0;
+		attributeIndex < element.attributes.length;
+		attributeIndex++
+	) {
+		const attribute = element.attributes[attributeIndex];
 		newElement.setAttribute(attribute.name, attribute.value);
 	}
 
@@ -32,7 +36,11 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	//from the binding we know if there are related attributes and mark them as dirty
 	//this is mainly for event listeners
 	const relatedAttributes = binding.relatedAttributes;
-	for (let index = 0; index < relatedAttributes.length; index++) {
-		context.dirtyBindings[relatedAttributes[index]] = 1;
+	for (
+		let attributeIndex = 0;
+		attributeIndex < relatedAttributes.length;
+		attributeIndex++
+	) {
+		context.dirtyBindings[relatedAttributes[attributeIndex]] = 1;
 	}
 };

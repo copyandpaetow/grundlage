@@ -1,16 +1,17 @@
 import { html } from "./parser/html";
 import { props as propHelper, Schema } from "./validator/props";
 import { ValueOf } from "./parser/types";
-import { addOrRemoveProperty } from "./rendering/attribute";
+import { applyAttributeBinding } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
 import {
 	BaseComponent,
 	ComponentConstructor,
+	ComponentOptions,
 	GeneratorFn,
 	TemplateRenderer,
 } from "./types";
 
-const defaultOptions: ShadowRootInit = {
+const defaultOptions: ComponentOptions = {
 	clonable: true,
 	delegatesFocus: true,
 	mode: "open",
@@ -30,10 +31,11 @@ const RENDER_MODE = {
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
+export { type ComponentOptions } from "./types";
 
 export const render = (
 	componentGenerator: GeneratorFn,
-	options = defaultOptions,
+	options: ComponentOptions = defaultOptions,
 ): ComponentConstructor => {
 	class BaseElement extends HTMLElement implements BaseComponent {
 		#observer: MutationObserver;
@@ -75,7 +77,7 @@ export const render = (
 		}
 
 		setProperty(name: string, value: unknown, oldValue?: unknown) {
-			addOrRemoveProperty(this, name, value, oldValue);
+			applyAttributeBinding(this, name, value, oldValue);
 			this.update();
 		}
 
@@ -97,7 +99,7 @@ export const render = (
 			this.shadowRoot!.textContent = `${error}`;
 		}
 
-		//coordinates the generator process in a semi-synchronous why so connectedCallback stays synchronous as well, otherwise we get timing issues with nested components
+		//coordinates the generator process in a semi-synchronous way so connectedCallback stays synchronous as well, otherwise we get timing issues with nested components
 		#step(generator: Generator | AsyncGenerator, result: unknown) {
 			while (true) {
 				try {

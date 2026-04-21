@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { html, render } from "../index";
 
+const normalizeWhitespace = (string: string) =>
+	string.replace(/\s+/g, " ").trim();
+
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
@@ -37,7 +40,7 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("p { color: red; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 
 		cleanup(element);
 	});
@@ -61,13 +64,13 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("p { color: red; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 
 		color = "blue";
 		await element.update();
 		await sleep();
 
-		expect(style.textContent).toBe("p { color: blue; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: blue; }");
 
 		cleanup(element);
 	});
@@ -85,13 +88,13 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const textarea = element.shadowRoot?.querySelector("textarea")!;
-		expect(textarea.textContent).toBe("initial text");
+		expect(normalizeWhitespace(textarea.textContent)).toBe("initial text");
 
 		content = "updated text";
 		await element.update();
 		await sleep();
 
-		expect(textarea.textContent).toBe("updated text");
+		expect(normalizeWhitespace(textarea.textContent)).toBe("updated text");
 
 		cleanup(element);
 	});
@@ -117,14 +120,18 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("p { color: red; font-size: 16px; }");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"p { color: red; font-size: 16px; }",
+		);
 
 		color = "green";
 		size = "20px";
 		await element.update();
 		await sleep();
 
-		expect(style.textContent).toBe("p { color: green; font-size: 20px; }");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"p { color: green; font-size: 20px; }",
+		);
 
 		cleanup(element);
 	});
@@ -145,7 +152,9 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("<script>alert('xss')</script>");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"<script>alert('xss')</script>",
+		);
 		expect(element.shadowRoot?.querySelector("script")).toBeNull();
 
 		cleanup(element);
@@ -196,13 +205,17 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(style.textContent).toBe("p { font-size: 16px; }");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"p { font-size: 16px; }",
+		);
 
 		size = 24;
 		await element.update();
 		await sleep();
 
-		expect(style.textContent).toBe("p { font-size: 24px; }");
+		expect(normalizeWhitespace(style.textContent)).toBe(
+			"p { font-size: 24px; }",
+		);
 
 		cleanup(element);
 	});

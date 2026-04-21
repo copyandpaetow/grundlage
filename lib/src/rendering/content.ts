@@ -1,6 +1,6 @@
 import { html } from "../parser/html";
 import { bindingToString } from "../utils/binding-to-string";
-import { isStringable, toPrimitive } from "../utils/to-primitive";
+import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
 import { isComment, isSameTemplate } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
 
@@ -301,7 +301,7 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 		return;
 	}
 
-	const renderableCurrent = toPrimitive(current);
+	const renderableCurrent = assertPrimitiveString(current);
 	const previous = context.previousExpressions[expressionIndex];
 
 	if (previous === undefined) {

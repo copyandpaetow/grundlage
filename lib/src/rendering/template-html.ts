@@ -20,8 +20,6 @@ export class HTMLTemplate {
 	parsedHTML: ParsedHTML;
 	//these are tied together by the index position of the individual bindings
 	markers: Array<Comment>;
-	// Uint8Array: 1 byte per binding vs. V8's tagged-slot boolean array.
-	// 0/1 interop works with all existing truthy checks.
 	dirtyBindings: Uint8Array;
 	//these are tied together by the index position of the individual expressions
 	currentExpressions: Array<unknown>;

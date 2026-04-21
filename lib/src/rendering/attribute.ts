@@ -1,7 +1,7 @@
 import { AttributeBinding } from "../parser/types";
 import { BaseComponent } from "../types";
 import { bindingToString } from "../utils/binding-to-string";
-import { isStringable, toPrimitive } from "../utils/to-primitive";
+import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
 import { isObject } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
 
@@ -9,7 +9,7 @@ import { HTMLTemplate } from "./template-html";
 const CHAR_LOWER_O = 111;
 const CHAR_LOWER_N = 110;
 
-export const addOrRemoveProperty = (
+export const applyAttributeBinding = (
 	element: Element,
 	key: string,
 	value: unknown,
@@ -67,11 +67,11 @@ const handleExpandableAttribute = (
 
 	if (Array.isArray(previous)) {
 		for (let index = 0; index < previous.length; index++) {
-			addOrRemoveProperty(element, previous[index], null);
+			applyAttributeBinding(element, previous[index], null);
 		}
 	} else if (isObject(previous)) {
 		for (const name in previous) {
-			addOrRemoveProperty(
+			applyAttributeBinding(
 				element,
 				name,
 				null,
@@ -79,23 +79,23 @@ const handleExpandableAttribute = (
 			);
 		}
 	} else if (previous) {
-		addOrRemoveProperty(element, toPrimitive(previous), null);
+		applyAttributeBinding(element, assertPrimitiveString(previous), null);
 	}
 
 	if (Array.isArray(current)) {
 		for (let index = 0; index < current.length; index++) {
-			addOrRemoveProperty(element, current[index], "");
+			applyAttributeBinding(element, current[index], "");
 		}
 	} else if (isObject(current)) {
 		for (const name in current) {
-			addOrRemoveProperty(
+			applyAttributeBinding(
 				element,
 				name,
 				current[name as keyof typeof previous],
 			);
 		}
 	} else if (current) {
-		addOrRemoveProperty(element, toPrimitive(current), "");
+		applyAttributeBinding(element, assertPrimitiveString(current), "");
 	}
 };
 
@@ -106,7 +106,7 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 	const isBooleanAttribute = binding.values.length === 0;
 	const isExpandable = binding.keys.length === 1;
 
-	//On initial render, the previousExpressions is empty, this way we keep the shape consistent and dont need to check downstream
+	//On initial render, the previousExpressions is empty, this way we keep the shape consistent and don't need to check downstream
 	const previousExpressions =
 		context.previousExpressions.length > 0
 			? context.previousExpressions
@@ -133,9 +133,9 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 
 	if (isBooleanAttribute) {
 		if (!isStaticName) {
-			addOrRemoveProperty(element, previousName, null);
+			applyAttributeBinding(element, previousName, null);
 		}
-		addOrRemoveProperty(element, currentName, "");
+		applyAttributeBinding(element, currentName, "");
 		return;
 	}
 
@@ -151,8 +151,8 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 		: bindingToString(binding.values, context.currentExpressions);
 
 	if (previousName !== currentName) {
-		addOrRemoveProperty(element, previousName, null, previousExpression);
+		applyAttributeBinding(element, previousName, null, previousExpression);
 	}
 
-	addOrRemoveProperty(element, currentName, currentValue, previousExpression);
+	applyAttributeBinding(element, currentName, currentValue, previousExpression);
 };

@@ -141,7 +141,7 @@ describe("content updates", () => {
 	});
 
 	test('renders false as the literal string "false"', async () => {
-		//false is stringable — the renderer uses toPrimitive, so the text node holds "false"
+		//false is stringable — the renderer uses assertPrimitiveString, so the text node holds "false"
 		const tag = uniqueTag();
 		let value: unknown = false;
 
