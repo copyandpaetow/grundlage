@@ -1,70 +1,106 @@
-# Idea
+# Grundlage
 
-## parsing html
+A small, zero-dependency library for building web components with tagged template literals.
 
-We have a html tagged template literal helper function that takes the static templateStringArray and turns it into documentFragment and bindings for each slot.
-Since the templateStringArray is unique, we can cache the result and avoid the parsing cost from string to documentFragment, which is usually one of the bottlenecks.
+## Installation
 
-### fragment
-
-the fragment marks the dynamic parts with comment nodes. Most binding types only need one comment node, the content binding needs 2 (to replace everything between on value change).
-Having a comment for every binding "slot" makes it possible to hook up a server rendered version again, without having to re-render the component.
-
-### bindings
-
-Bindings describe the gaps/holes/slots of the tagged template literal input. There are currently 4 types: tag, attribute, rawContent (style, textArea), and content.
-These bindings have somewhat different shapes what mainly involve arrays with either string content or numbers
-
-```ts
-html`<div class="${dynamicClass1} static ${dynamicClass2}"></div>`[
-	//becomes
-	fragment: <!--marker--><div></div>
-	bindings: [{
-		keys: ["class"],
-		values: [0, "static ", 1],
-	}],
-	expressionToBinding: [0, 0]
-];
+```bash
+npm install grundlage
 ```
 
-They than can be combined with the expression array to the final html part (an attribute in this case). Like in the example above, a binding can be made out of more than one dynamic part.
+## Concepts
 
-## Runtime
+### Components as Generators
 
-### setup
+Components are defined using generator functions. This gives you explicit control over the component lifecycle: setup runs until you yield a render function, and the return value is your cleanup.
 
-In the beginning we walk the fragment to find all relevant comment nodes and read out the encoded data: binding index and relvant expression indices.
-We then take the binding at the encoded index, populate it into its own binding class, and store the same instance on the several expression index positions in a new array.
+```javascript
+import { render, html } from "grundlage";
 
-```ts
+render("async-component", async function* (element) {
+	yield html`<p>loading</p>`;
 
-bindings: [attributeBinding1, attributeBinding1],
-expressions: [dynamicClass1, dynamicClass2]
+	try {
+		const data = await fetch("...");
+		yield html`<p>name:${data.name} ${data.name}, age: ${data.age}</p>`;
+	} catch (error) {
+		yield html`<p>error: ${error}</p>`;
+	}
+
+	return () => {
+		console.log("cleanup");
+	};
+});
+```
+
+### Templating
+
+The `html` tagged template literal parses your markup once and caches the result. Subsequent renders only update the dynamic parts.
+
+```javascript
+html`<div class="card ${isActive ? "active" : ""}">
+	<h2>${title}</h2>
+	<p>${description}</p>
+</div>`;
+```
+
+### props
+
+Managing props on web-components is tedious. As attributes they are always strings and are not that ergonomic to get to. Other types can be saved as
+properties on the element itself, but requires different handling. As a helper, we have a props function that takes an element and an object of Keys and Constructors.
+They will be used for typing and validating the input regardless of attribute or property.
+If the value is missing, a fallback can be provided.
+
+```javascript
+
+render("props-example", function* (element) {
+    const result = props(element, {
+        label: String,
+        count: Number,
+        disabled: Boolean,
+        callback: Function,
+        items: Array,
+        missing: [String, "default"],
+    });
 
 ```
 
-### updating
 
-We compare the last array of expressions with the current one. If one expression changes, we can access the binding at the same index and call its update function
+Supported bindings:
 
-## usage
+- Content: `<p>${text}</p>`
+- Attributes: `<div class=${className}>`
+- Mixed attributes: `<div class="static ${dynamic}">`
+- Event handlers: `<button onClick=${handler}>`
+- Lists: `<ul>${items.map(i => html`<li>${i}</li>`)}</ul>`
+- Nested templates: `<div>${showDetails ? html`<details>...</details>` : null}</div>`
+- Dynamic tags: `<${tagName}>content</${tagName}>`
+- Raw content (style/script/textarea): `<style>${css}</style>`
 
-```ts
+### Reactivity
 
-	render("component-name", function*(element){
+Grundlage uses a hash-based change detection system. When you call `ctx.update()`, it compares hashes of each expression to determine what actually changed.
 
-		yield html`<p> ...loading</p>`
+This means:
 
-		const data = await fetch(...)
+- Primitives are compared by value
+- Arrays and objects are compared by content (shallow)
+- Nested templates are compared by structure and values
+- DOM updates only happen for expressions that changed
 
-		yield () => html`
-			<ul>${data.map(entry => html`
-				<li>${entry}</li>`
-				)}
-			</ul>`
+```javascript
+render("todo-list", function* (element) {
+	const items = [];
 
-		return () => console.log("cleanup")
+	const add = (text) => {
+		items.push({ id: Date.now(), text });
+		element.update();
+	};
 
-	})
-
+	yield () => html`
+		<ul>
+			${items.map((item) => html`<li>${item.text}</li>`)}
+		</ul>
+	`;
+});
 ```
