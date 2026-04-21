@@ -23,7 +23,13 @@ describe("raw content updates", () => {
 		let color = "red";
 
 		const MyElement = render(function* () {
-			yield () => html`<style>p { color: ${color}; }</style><p>text</p>`;
+			yield () =>
+				html`<style>
+						p {
+							color: ${color};
+						}
+					</style>
+					<p>text</p>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -41,7 +47,13 @@ describe("raw content updates", () => {
 		let color = "red";
 
 		const MyElement = render(function* () {
-			yield () => html`<style>p { color: ${color}; }</style><p>text</p>`;
+			yield () =>
+				html`<style>
+						p {
+							color: ${color};
+						}
+					</style>
+					<p>text</p>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -91,7 +103,13 @@ describe("raw content updates", () => {
 
 		const MyElement = render(function* () {
 			yield () =>
-				html`<style>p { color: ${color}; font-size: ${size}; }</style><p>text</p>`;
+				html`<style>
+						p {
+							color: ${color};
+							font-size: ${size};
+						}
+					</style>
+					<p>text</p>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -116,7 +134,10 @@ describe("raw content updates", () => {
 		const injection = "<script>alert('xss')</script>";
 
 		const MyElement = render(function* () {
-			yield () => html`<style>${injection}</style>`;
+			yield () =>
+				html`<style>
+					${injection}
+				</style>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -135,7 +156,11 @@ describe("raw content updates", () => {
 		const css = "p { color: red; }";
 
 		const MyElement = render(function* () {
-			yield () => html`<style>${css}</style><p>text</p>`;
+			yield () =>
+				html`<style>
+						${css}
+					</style>
+					<p>text</p>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -158,7 +183,12 @@ describe("raw content updates", () => {
 		let size = 16;
 
 		const MyElement = render(function* () {
-			yield () => html`<style>p { font-size: ${size}px; }</style>`;
+			yield () =>
+				html`<style>
+					p {
+						font-size: ${size}px;
+					}
+				</style>`;
 		});
 
 		customElements.define(tag, MyElement);

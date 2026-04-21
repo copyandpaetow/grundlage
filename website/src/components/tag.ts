@@ -1,21 +1,21 @@
-import {html, props, render} from "../../../lib/src";
+import { html, props, render } from "../../../lib/src";
 
 customElements.define(
-    "tag-component",
-    render(function* (element) {
-        let {headingLevel} = props(element, {headingLevel: Number})
-        let previous = headingLevel
+	"tag-component",
+	render(function* (element) {
+		let { headingLevel } = props(element, { headingLevel: Number });
+		let previous = headingLevel;
 
-        const updateHeadingLevel = () => {
-            previous = headingLevel
-            headingLevel++;
-            element.update();
-        };
+		const updateHeadingLevel = () => {
+			previous = headingLevel;
+			headingLevel++;
+			element.update();
+		};
 
-        yield () =>
-            html`
+		yield () =>
+			html`
                 <!-- ${headingLevel} and ${previous}  -->
                 <h${headingLevel} onclick=${updateHeadingLevel}> headingLevel: ${headingLevel}</h${headingLevel}>
             `;
-    }),
+	}),
 );
