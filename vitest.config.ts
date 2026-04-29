@@ -8,11 +8,11 @@ export default defineConfig({
 				root: "./lib",
 				test: {
 					name: "unit",
-					include: ["src/**/*.test.ts"],
+					include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
 					exclude: [
 						...configDefaults.exclude,
-						"src/**/*.browser.test.ts",
-						"src/**/*.dom.test.ts",
+						"**/*.browser.test.ts",
+						"**/*.dom.test.ts",
 					],
 					environment: "node",
 					benchmark: {
@@ -24,7 +24,7 @@ export default defineConfig({
 				root: "./lib",
 				test: {
 					name: "dom",
-					include: ["src/**/*.dom.test.ts"],
+					include: ["src/**/*.dom.test.ts", "tests/**/*.dom.test.ts"],
 					environment: "happy-dom",
 				},
 			},
@@ -32,7 +32,10 @@ export default defineConfig({
 				root: "./lib",
 				test: {
 					name: "browser-as-dom",
-					include: ["src/**/*.browser.test.ts"],
+					include: [
+						"src/**/*.browser.test.ts",
+						"tests/**/*.browser.test.ts",
+					],
 					environment: "happy-dom",
 					benchmark: {
 						include: [],
@@ -43,7 +46,10 @@ export default defineConfig({
 				root: "./lib",
 				test: {
 					name: "browser",
-					include: ["src/**/*.browser.test.ts"],
+					include: [
+						"src/**/*.browser.test.ts",
+						"tests/**/*.browser.test.ts",
+					],
 					browser: {
 						enabled: true,
 						provider: playwright(),

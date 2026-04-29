@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { bench, describe } from "vitest";
-import { html } from "../parser/html";
-import { HTMLTemplate } from "./template-html";
+import { html } from "../../src/parser/html";
+import { HTMLTemplate } from "../../src/rendering/template-html";
 
 /*
     Measures the render hot path — parse (cached), setup, and update.

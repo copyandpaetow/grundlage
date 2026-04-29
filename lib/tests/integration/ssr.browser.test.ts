@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "./index";
+import { html, render } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));

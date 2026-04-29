@@ -1,5 +1,5 @@
 import { bench, describe } from "vitest";
-import { html } from "./html";
+import { html } from "../../src/parser/html";
 
 describe("html tagged template - parsing (cold)", () => {
 	/*

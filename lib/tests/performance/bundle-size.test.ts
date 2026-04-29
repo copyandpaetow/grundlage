@@ -4,7 +4,7 @@ import { gzipSync } from "node:zlib";
 import { resolve } from "node:path";
 
 describe("bundle size", () => {
-	const distPath = resolve(import.meta.dirname, "../dist/index.mjs");
+	const distPath = resolve(import.meta.dirname, "../../dist/index.mjs");
 
 	test("raw bundle size stays under 15 KB", () => {
 		const raw = readFileSync(distPath);
