@@ -30,6 +30,57 @@ type InferSchema<Type extends Schema> = {
 
 type StringableValue = StringConstructor | NumberConstructor;
 
+type ResolvedSchemaEntry = {
+	constructorValue: SchemaEntry;
+	defaultValue: unknown;
+	hasDefault: boolean;
+	isOptional: boolean;
+};
+
+const resolveSchemaEntry = (entry: SchemaDefinition): ResolvedSchemaEntry => {
+	if (Array.isArray(entry)) {
+		return {
+			constructorValue: entry[0],
+			defaultValue: entry.length > 1 ? entry[1] : undefined,
+			hasDefault: entry.length > 1,
+			isOptional: true,
+		};
+	}
+	return {
+		constructorValue: entry,
+		defaultValue: undefined,
+		hasDefault: false,
+		isOptional: false,
+	};
+};
+
+const readBooleanProp = (
+	element: HTMLElement,
+	key: string,
+	hasDefault: boolean,
+	defaultValue: unknown,
+): unknown => {
+	if (element.hasAttribute(key)) return true;
+	if (hasDefault) return defaultValue;
+	return false;
+};
+
+const readStringableProp = (
+	element: HTMLElement,
+	key: string,
+	constructorValue: StringableValue,
+): unknown => {
+	const raw = element.getAttribute(key);
+	if (raw === null) {
+		return element[key as keyof typeof element] ?? undefined;
+	}
+	const coerced = constructorValue(raw);
+	if (constructorValue === Number && Number.isNaN(coerced)) {
+		throw new Error(`Invalid number value for attribute "${key}": "${raw}"`);
+	}
+	return coerced;
+};
+
 export const props = <Type extends Schema>(
 	element: HTMLElement,
 	schema: Type,
@@ -37,51 +88,24 @@ export const props = <Type extends Schema>(
 	const result: Record<string, unknown> = {};
 
 	for (const key in schema) {
-		const entry = schema[key] as SchemaDefinition;
-		const isArrayEntry = Array.isArray(entry);
-		let constructorValue = entry;
-		let defaultValue = undefined;
-		let hasDefault = false;
-
-		if (isArrayEntry) {
-			constructorValue = entry[0];
-			defaultValue = entry[1];
-			hasDefault = entry.length > 1;
-		}
-
-		let value: unknown;
+		const { constructorValue, defaultValue, hasDefault, isOptional } =
+			resolveSchemaEntry(schema[key] as SchemaDefinition);
 
 		if (constructorValue === Boolean) {
-			if (element.hasAttribute(key)) {
-				value = true;
-			} else if (hasDefault) {
-				value = defaultValue;
-			} else {
-				value = false;
-			}
-		} else if (constructorValue === String || constructorValue === Number) {
-			const raw = element.getAttribute(key);
-			if (raw !== null) {
-				value = (constructorValue as StringableValue)(raw);
-				if (constructorValue === Number && Number.isNaN(value)) {
-					throw new Error(
-						`Invalid number value for attribute "${key}": "${raw}"`,
-					);
-				}
-			} else {
-				value = element[key as keyof typeof element] ?? undefined;
-			}
-		} else {
-			value = element[key as keyof typeof element] ?? undefined;
+			result[key] = readBooleanProp(element, key, hasDefault, defaultValue);
+			continue;
 		}
 
-		if (constructorValue === Boolean) {
-			result[key] = value;
-		} else if (value !== undefined) {
+		const value =
+			constructorValue === String || constructorValue === Number
+				? readStringableProp(element, key, constructorValue as StringableValue)
+				: (element[key as keyof typeof element] ?? undefined);
+
+		if (value !== undefined) {
 			result[key] = value;
 		} else if (hasDefault) {
 			result[key] = defaultValue;
-		} else if (isArrayEntry) {
+		} else if (isOptional) {
 			result[key] = undefined;
 		} else {
 			throw new Error(`Missing required prop: "${key}"`);

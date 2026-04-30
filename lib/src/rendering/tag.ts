@@ -9,11 +9,13 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	const newTag = bindingToString(binding.values, context.currentExpressions);
 
 	//we are going to replace the surrounding element with something new. To the browser, it's a series of removals and additions and clears browser states like focus
-	const focusElement = element.contains(
-		(element.getRootNode() as ShadowRoot).activeElement,
-	)
-		? (document.activeElement as HTMLElement)
-		: null;
+	//Resolve detection and capture from the same root: in a shadow root with delegatesFocus,
+	//document.activeElement is the host while root.activeElement is the actual focused inner field —
+	//mixing them refocused the host.
+	const focusRoot = element.getRootNode() as ShadowRoot | Document;
+	const focusedNode = focusRoot.activeElement as HTMLElement | null;
+	const focusElement =
+		focusedNode && element.contains(focusedNode) ? focusedNode : null;
 
 	const newElement = document.createElement(newTag);
 	for (

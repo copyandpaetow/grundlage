@@ -248,18 +248,17 @@ const renderTemplate = (
 	const current = context.currentExpressions[expressionIndex] as HTMLTemplate;
 	const previous = context.previousExpressions[expressionIndex];
 
+	//same template shape: feed the existing instance the new expressions and
+	//swap the reference back into currentExpressions so the next diff sees it
 	if (previous instanceof HTMLTemplate && isSameTemplate(current, previous)) {
-		//if they do, we can update the old one just with new dynamic values
 		previous.update(current.currentExpressions);
-		//to not lose the reference we need to keep it in the currentValeus
 		context.currentExpressions[expressionIndex] = previous;
 		return;
 	}
 
+	//different shape: discard the old DOM and mount the new template fresh
 	deleteNodesBetween(marker);
 	marker.after(current.setup());
-	//otherwise we delete the old dom and render again
-	return;
 };
 
 const renderComment = (
@@ -277,7 +276,8 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 	const binding = context.parsedHTML.bindings[bindingIndex];
 	const marker = context.markers[bindingIndex];
 
-	//only comments can have multiple bindings, normal content only has one
+	//HTML comment slots (e.g. `<!-- ${a}-${b} -->`) concatenate multiple expressions
+	//into a single comment node; regular content slots always hold exactly one expression
 	if (binding.values.length > 1) {
 		renderComment(context, marker, binding.values);
 		return;

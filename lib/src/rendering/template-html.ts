@@ -61,6 +61,10 @@ export class HTMLTemplate {
 		this.dirtyBindings = new Uint8Array(this.parsedHTML.bindings.length);
 		this.markers = this.#findMarkers(context);
 
+		// Tag/content/raw-content bindings are already correct in the SSR markup,
+		// so we skip them. Attribute bindings still need to run because they can
+		// carry behavior that doesn't survive serialization — event listeners and
+		// non-stringable values assigned as JS properties on the element.
 		for (let index = 0; index < this.parsedHTML.bindings.length; index++) {
 			const binding = this.parsedHTML.bindings[index];
 			if (binding.type === BINDING_TYPES.ATTR) {
@@ -115,8 +119,8 @@ export class HTMLTemplate {
 				currentType === "function";
 
 			// Arrays are reconciled per-item inside renderList via hash-based
-			// identity matching. Hashing the whole list here would walk every
-			// item twice per frame;
+			// identity matching, so hashing the whole list here would walk
+			// every item twice per frame. Mark dirty and let renderList decide.
 			if (Array.isArray(currentEntry)) {
 				this.dirtyBindings[this.parsedHTML.expressionToBinding[index]] = 1;
 				continue;
