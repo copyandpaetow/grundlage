@@ -46,11 +46,10 @@ export const hashValue = (value: unknown): number => {
 		return hash;
 	}
 
-	/*
-		looking into complex data structures is costly and not very accurate (can't capture function closures), so we are stuck between stale state or unnecessary re-renderings
-		=> using a cache is a compromise, as long as the reference is stable, we assume it doesn't need re-rendering
-		The downside here is inline event handlers always get reapplied
-	*/
+	//Fallback for class instances, Maps, Sets, etc. Deep-walking them is expensive
+	//and still can't see through closures, so we compromise on identity: a stable
+	//reference hashes the same and is treated as unchanged. Trade-off: inline
+	//arrow functions get a new identity each render and reapply every frame.
 	if (references.has(value)) {
 		return references.get(value)!;
 	}

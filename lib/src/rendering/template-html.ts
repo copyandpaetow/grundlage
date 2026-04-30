@@ -119,8 +119,8 @@ export class HTMLTemplate {
 				currentType === "function";
 
 			// Arrays are reconciled per-item inside renderList via hash-based
-			// identity matching. Hashing the whole list here would walk every
-			// item twice per frame;
+			// identity matching, so hashing the whole list here would walk
+			// every item twice per frame. Mark dirty and let renderList decide.
 			if (Array.isArray(currentEntry)) {
 				this.dirtyBindings[this.parsedHTML.expressionToBinding[index]] = 1;
 				continue;

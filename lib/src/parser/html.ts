@@ -12,25 +12,22 @@ import {
 } from "./types";
 import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util";
 /*
-the idea here is to analyze and parse a tagged template string to give us
+parse a tagged template string into:
 - a document fragment
 - a hash
-- an array of expressions bindings
-- a mapping array of which expression maps to which binding
+- an array of expression bindings
+- a mapping from each expression index to its owning binding
 
-several expressions can be part of one binding like
-<div class="${dynamic1} static ${dynamic1}">
-=> one attribute binding
+Several expressions can share one binding:
+  <div class="${dynamicA} static ${dynamicB}">  -> one attribute binding
 
-They also don't have to be next to each other
-<h${headingLevel}>Hello, ${name}<h${headingLevel}>
-=> one tag binding
-=> one content binding
+The expressions also don't have to be adjacent. The two `${level}` slots below
+share a single tag binding because open and close are paired:
+  <h${level}>Hello, ${name}</h${level}>  -> one tag binding + one content binding
 
-We walk each character and listen for different character combinations to change the state machine.
-Depending on the state we move the last characters since the state change to the dedicated buffer array.
-=> this way we can change and insert parts dynamically while also keeping memory usage low / performance up
-
+We walk character by character through a state machine. On each state change
+we move the captured slice into the buffer array dedicated to that state, so
+dynamic parts can be substituted without intermediate string allocations.
 */
 
 type StateValue = ValueOf<typeof STATE>;
@@ -70,6 +67,7 @@ let charIndex = 0;
 let splitIndex = 0;
 let attributeQuote = "";
 let currentTagName = "";
+let selfClosing = false;
 let activeBinding: Binding | null = null;
 let activeTagBinding: Binding | null = null;
 //tracks every open tag in source order, dynamic or static. A dynamic open pushes its TagBinding;
@@ -107,6 +105,7 @@ const setup = (strings: TemplateStringsArray) => {
 	splitIndex = 0;
 	attributeQuote = "";
 	currentTagName = "";
+	selfClosing = false;
 	activeBinding = null;
 	activeTagBinding = null;
 	openTagBindings.length = 0;
@@ -335,6 +334,12 @@ const flushElement = () => {
 	resultBuffer.push("<");
 	moveArrayContents(elementBuffer, resultBuffer);
 	resultBuffer.push(">");
+	//`<div />` parses as an open tag in HTML5 — without a synthetic close, siblings get adopted as children.
+	//currentTagName is the static tag name, or PLACEHOLDER_TAG ("div") for dynamic tags so updateTag still finds a complete element.
+	if (selfClosing) {
+		resultBuffer.push("</", currentTagName, ">");
+		selfClosing = false;
+	}
 	moveArrayContents(contentBuffer, resultBuffer);
 
 	currentTagName = "";
@@ -352,7 +357,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 			switch (state) {
 				case STATE.TEXT: {
-					//inside an element, we only care for the exit, which is either another tag (e.g. <strong>), the currents tag end (e.g. </div>), or a comment (e.g. <!-- -->)
+					//inside an element, we only care about the exit: a child tag (e.g. <strong>), the current tag's end (e.g. </div>), or a comment (e.g. <!-- -->)
 					if (char !== "<") {
 						continue;
 					}
@@ -417,13 +422,18 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					}
 					continue;
 
-				case STATE.TAG:
+				case STATE.TAG: {
 					//the tag only refers to the name (div, span, etc.) and can be exited by a white space, indicating attributes, or by a closing bracket
 					if (char !== ">" && !isWhitespace(char)) {
 						continue;
 					}
 
-					capture(tagBuffer, splitIndex, charIndex);
+					//`<div/>` (no space): trailing slash is part of the self-close, not the tag name
+					const tagEnd =
+						char === ">" && activeTemplate[charIndex - 1] === "/"
+							? charIndex - 1
+							: charIndex;
+					capture(tagBuffer, splitIndex, tagEnd);
 					splitIndex = charIndex;
 					completeTag();
 
@@ -437,6 +447,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					//special case of a self-closing tag
 					if (activeTemplate[charIndex - 1] === "/") {
 						openTagBindings.pop();
+						selfClosing = true;
 						flushElement();
 						state = STATE.TEXT;
 						splitIndex = charIndex + 1;
@@ -449,6 +460,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					splitIndex = charIndex + 1;
 					continue;
+				}
 
 				case STATE.ELEMENT:
 					//this is a meta state, coordinating tags and attributes, and marks the transition to the elements content
@@ -460,6 +472,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					if (char === ">") {
 						if (activeTemplate[charIndex - 1] === "/") {
 							openTagBindings.pop();
+							selfClosing = true;
 							flushElement();
 							state = STATE.TEXT;
 						} else if (isSpecialElementTag(currentTagName)) {
