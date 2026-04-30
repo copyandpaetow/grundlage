@@ -2,7 +2,7 @@ import { AttributeBinding } from "../parser/types";
 import { BaseComponent } from "../types";
 import { bindingToString } from "../utils/binding-to-string";
 import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
-import { isObject } from "../utils/validators";
+import { isPlainObject } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
 
 // 'o' = 111, 'n' = 110 — char-code check avoids allocating from startsWith.
@@ -15,23 +15,25 @@ export const applyAttributeBinding = (
 	value: unknown,
 	oldValue?: unknown,
 ) => {
+	//Static class/id/data-* attributes never carry function values, so bail before touching the key.
 	const valueIsFunction = typeof value === "function";
 	const oldValueIsFunction = typeof oldValue === "function";
-	if (
-		(valueIsFunction || oldValueIsFunction) &&
-		key.charCodeAt(0) === CHAR_LOWER_O &&
-		key.charCodeAt(1) === CHAR_LOWER_N
-	) {
-		const lowerKey = key.toLowerCase();
-		if (lowerKey in element) {
-			const eventName = lowerKey.slice(2);
-			if (oldValueIsFunction) {
-				element.removeEventListener(eventName, oldValue as EventListener);
+	if (valueIsFunction || oldValueIsFunction) {
+		if (
+			key.charCodeAt(0) === CHAR_LOWER_O &&
+			key.charCodeAt(1) === CHAR_LOWER_N
+		) {
+			const lowerKey = key.toLowerCase();
+			if (lowerKey in element) {
+				const eventName = lowerKey.slice(2);
+				if (oldValueIsFunction) {
+					element.removeEventListener(eventName, oldValue as EventListener);
+				}
+				if (valueIsFunction) {
+					element.addEventListener(eventName, value as EventListener);
+				}
+				return;
 			}
-			if (valueIsFunction) {
-				element.addEventListener(eventName, value as EventListener);
-			}
-			return;
 		}
 	}
 
@@ -69,7 +71,7 @@ const handleExpandableAttribute = (
 		for (let index = 0; index < previous.length; index++) {
 			applyAttributeBinding(element, previous[index], null);
 		}
-	} else if (isObject(previous)) {
+	} else if (isPlainObject(previous)) {
 		for (const name in previous) {
 			applyAttributeBinding(
 				element,
@@ -86,7 +88,7 @@ const handleExpandableAttribute = (
 		for (let index = 0; index < current.length; index++) {
 			applyAttributeBinding(element, current[index], "");
 		}
-	} else if (isObject(current)) {
+	} else if (isPlainObject(current)) {
 		for (const name in current) {
 			applyAttributeBinding(
 				element,

@@ -6,5 +6,6 @@ export const isComment = (node: Node): node is Comment =>
 export const isSameTemplate = (a: HTMLTemplate, b: HTMLTemplate) =>
 	a.parsedHTML.templateHash === b.parsedHTML.templateHash;
 
-export const isObject = (entry: unknown): entry is Object =>
-	entry?.constructor === Object;
+export const isPlainObject = (
+	entry: unknown,
+): entry is Record<string, unknown> => entry?.constructor === Object;

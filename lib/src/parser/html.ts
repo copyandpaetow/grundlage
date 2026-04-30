@@ -10,28 +10,7 @@ import {
 	TagBinding,
 	ValueOf
 } from "./types";
-import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util"; /*
-the idea here is to analyze and parse a tagged template string to give us
-- a document fragment
-- a hash
-- an array of expressions bindings
-- a mapping array of which expression maps to which binding
-
-several expressions can be part of one binding like
-<div class="${dynamic1} static ${dynamic1}">
-=> one attribute binding
-
-They also don't have to be next to each other
-<h${headingLevel}>Hello, ${name}<h${headingLevel}>
-=> one tag binding
-=> one content binding
-
-We walk each character and listen for different character combinations to change the state machine.
-Depending on the state we move the last characters since the state change to the dedicated buffer array.
-=> this way we can change and insert parts dynamically while also keeping memory usage low / performance up
-
-*/
-
+import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util";
 /*
 the idea here is to analyze and parse a tagged template string to give us
 - a document fragment
@@ -93,7 +72,10 @@ let attributeQuote = "";
 let currentTagName = "";
 let activeBinding: Binding | null = null;
 let activeTagBinding: Binding | null = null;
-const openTagBindings: Array<TagBinding> = [];
+//tracks every open tag in source order, dynamic or static. A dynamic open pushes its TagBinding;
+//a static open pushes null. Close tags pop and verify the kind matches — `<${tag}>...</div>` and
+//`<div>...</${tag}>` both throw rather than silently picking the wrong opener via at(-1).
+const openTagBindings: Array<TagBinding | null> = [];
 
 /*
 using the module scope was chose to keep performance high / reduce memory usage as much as possible
@@ -101,6 +83,8 @@ as this is executed early and needs to be fast
 
 if concurrency becomes a requirement, we would need to put this into a class/closure and create a pool of parsers
 
+a thrown exception mid-parse is safe: the next call enters through setup() which resets every buffer
+and state field before reading anything, so leftover state from a failed parse cannot leak into the next one
 */
 const resultBuffer: BufferArray = [];
 const elementBuffer: BufferArray = [];
@@ -211,8 +195,18 @@ const createBinding = () => {
 				relatedAttributes: [],
 				bindingIndex: bindings.length, //set before push so it matches the eventual index
 			} satisfies TagBinding;
-		case STATE.END_TAG:
-			return openTagBindings.at(-1)!;
+		case STATE.END_TAG: {
+			//end tags don't get their own binding — they reuse the matching open tag's binding
+			//so a dynamic `</${tag}>` updates in lockstep with its `<${tag}>`. The caller in the
+			//parse loop relies on this asymmetry and skips the bindings.push() for END_TAG state.
+			const opener = openTagBindings.at(-1);
+			if (!opener) {
+				throw new Error(
+					"Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
+				);
+			}
+			return opener;
+		}
 
 		default:
 			throw new Error(`createBinding called in non-binding state: ${state}`);
@@ -259,18 +253,29 @@ const completeTag = () => {
 		elementBuffer.push(PLACEHOLDER_TAG);
 		resultBuffer.push(createComment());
 		activeTagBinding = activeBinding;
+		openTagBindings.push(activeBinding as TagBinding);
 	} else {
 		currentTagName = tagBuffer[0] as string;
 		moveArrayContents(tagBuffer, elementBuffer);
+		openTagBindings.push(null);
 	}
 	activeBinding = null;
 };
 
 const completeEndTag = () => {
+	const opener = openTagBindings.pop();
 	if (activeBinding) {
+		if (!opener) {
+			throw new Error(
+				"Asymmetric tag: dynamic </${...}> close cannot pair with a static open tag — make the open dynamic too.",
+			);
+		}
 		endTagBuffer.length = 0;
 		endTagBuffer.push(PLACEHOLDER_TAG);
-		openTagBindings.pop();
+	} else if (opener) {
+		throw new Error(
+			"Asymmetric tag: static end tag cannot pair with a dynamic <${...}> open tag — make the close dynamic too.",
+		);
 	}
 	resultBuffer.push("</");
 	moveArrayContents(endTagBuffer, resultBuffer);
@@ -431,6 +436,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					//special case of a self-closing tag
 					if (activeTemplate[charIndex - 1] === "/") {
+						openTagBindings.pop();
 						flushElement();
 						state = STATE.TEXT;
 						splitIndex = charIndex + 1;
@@ -453,6 +459,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					if (char === ">") {
 						if (activeTemplate[charIndex - 1] === "/") {
+							openTagBindings.pop();
 							flushElement();
 							state = STATE.TEXT;
 						} else if (isSpecialElementTag(currentTagName)) {
@@ -551,15 +558,9 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 		if (!activeBinding) {
 			activeBinding = createBinding();
 
-			/*
-             bindings for tags require special handling
-             - the end tag has no binding but the tag binding still needs to know about them
-             - so we store them in a stack to connect them
-            */
-			if (state === STATE.TAG) {
-				openTagBindings.push(activeBinding as TagBinding);
-			}
-
+			//end tags reuse the matching open tag's binding (see createBinding STATE.END_TAG);
+			//all other states get a fresh entry. The push of the open-tag stack happens in completeTag
+			//so dynamic and static opens stay symmetric.
 			if (state !== STATE.END_TAG) {
 				bindings.push(activeBinding);
 			}

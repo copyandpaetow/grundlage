@@ -2,17 +2,22 @@
 
 ## parsing html
 
-We have a html tagged template literal helper function that takes the static templateStringArray and turns it into documentFragment and bindings for each slot.
-Since the templateStringArray is unique, we can cache the result and avoid the parsing cost from string to documentFragment, which is usually one of the bottlenecks.
+We have a html tagged template literal helper function that takes the static templateStringArray and turns it into
+documentFragment and bindings for each slot.
+Since the templateStringArray is unique, we can cache the result and avoid the parsing cost from string to
+documentFragment, which is usually one of the bottlenecks.
 
 ### fragment
 
-the fragment marks the dynamic parts with comment nodes. Most binding types only need one comment node, the content binding needs 2 (to replace everything between on value change).
-Having a comment for every binding "slot" makes it possible to hook up a server rendered version again, without having to re-render the component.
+the fragment marks the dynamic parts with comment nodes. Most binding types only need one comment node, the content
+binding needs 2 (to replace everything between on value change).
+Having a comment for every binding "slot" makes it possible to hook up a server rendered version again, without having
+to re-render the component.
 
 ### bindings
 
-Bindings describe the gaps/holes/slots of the tagged template literal input. There are currently 4 types: tag, attribute, rawContent (style, textArea), and content.
+Bindings describe the gaps/holes/slots of the tagged template literal input. There are currently 4 types: tag,
+attribute, rawContent (style, textArea), and content.
 These bindings have somewhat different shapes what mainly involve arrays with either string content or numbers
 
 ```ts
@@ -27,44 +32,52 @@ html`<div class="${dynamicClass1} static ${dynamicClass2}"></div>`[
 ];
 ```
 
-They than can be combined with the expression array to the final html part (an attribute in this case). Like in the example above, a binding can be made out of more than one dynamic part.
+They than can be combined with the expression array to the final html part (an attribute in this case). Like in the
+example above, a binding can be made out of more than one dynamic part.
 
 ## Runtime
 
 ### setup
 
-In the beginning we walk the fragment to find all relevant comment nodes and read out the encoded data: binding index and relvant expression indices.
-We then take the binding at the encoded index, populate it into its own binding class, and store the same instance on the several expression index positions in a new array.
+In the beginning we walk the fragment to find all relevant comment nodes and read out the encoded data: binding index
+and relvant expression indices.
+We then take the binding at the encoded index, populate it into its own binding class, and store the same instance on
+the several expression index positions in a new array.
 
 ```ts
 
 bindings: [attributeBinding1, attributeBinding1],
-expressions: [dynamicClass1, dynamicClass2]
+    expressions
+:
+[dynamicClass1, dynamicClass2]
 
 ```
 
 ### updating
 
-We compare the last array of expressions with the current one. If one expression changes, we can access the binding at the same index and call its update function
+We compare the last array of expressions with the current one. If one expression changes, we can access the binding at
+the same index and call its update function
 
 ## usage
 
+`render` takes a generator function and optional shadow root options, and returns a custom element constructor.
+Registration with `customElements.define` is left to the caller so the component name lives next to the registration
+site rather than inside the library.
+
 ```ts
+const MyComponent = render(async function* (element) {
+	yield html`<p>...loading</p>`;
 
-	render("component-name", function*(element){
+	const data = await fetch(...);
 
-		yield html`<p> ...loading</p>`
+	yield () => html`
+		<ul>${data.map((entry) => html`
+			<li>${entry}</li>`,
+		)}
+		</ul>`;
 
-		const data = await fetch(...)
+	return () => console.log("cleanup");
+});
 
-		yield () => html`
-			<ul>${data.map(entry => html`
-				<li>${entry}</li>`
-				)}
-			</ul>`
-
-		return () => console.log("cleanup")
-
-	})
-
+customElements.define("component-name", MyComponent);
 ```

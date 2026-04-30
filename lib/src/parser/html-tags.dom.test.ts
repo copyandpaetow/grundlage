@@ -113,4 +113,44 @@ describe("html parser — tag bindings", () => {
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.TAG);
 	});
+
+	test("dynamic open paired with static close throws", () => {
+		const tag = "div";
+		expect(() => html`<${tag}>content</div>`).toThrow(/Asymmetric tag/);
+	});
+
+	test("static open paired with dynamic close throws", () => {
+		const tag = "div";
+		expect(() => html`<div>content</${tag}>`).toThrow(/Asymmetric tag/);
+	});
+
+	test("dynamic close with no matching dynamic open throws", () => {
+		const tag = "div";
+		expect(() => html`</${tag}>`).toThrow(/Asymmetric tag/);
+	});
+
+	test("nested dynamic + static stays balanced", () => {
+		const outer = "section";
+		const template = html`<${outer}><div>text</div></${outer}>`;
+
+		const tagBindings = template.parsedHTML.bindings.filter(
+			(b) => b.type === BINDING_TYPES.TAG,
+		);
+		expect(tagBindings).toHaveLength(1);
+	});
+
+	test("self-closing dynamic tag does not leak into the open-tag stack", () => {
+		const first = "br";
+		const second = "div";
+		// If self-close didn't pop, the second close would resolve to `first` and
+		// the templates would be silently mis-paired.
+		const template = html`<${first} /><${second}>x</${second}>`;
+
+		const tagBindings = template.parsedHTML.bindings.filter(
+			(b) => b.type === BINDING_TYPES.TAG,
+		);
+		expect(tagBindings).toHaveLength(2);
+		// Second tag's close maps back to its own binding, not the first's.
+		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1, 1]);
+	});
 });
