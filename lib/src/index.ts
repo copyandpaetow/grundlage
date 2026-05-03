@@ -3,13 +3,8 @@ import { props as propHelper, Schema } from "./validator/props";
 import { ValueOf } from "./parser/types";
 import { applyAttributeBinding } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
-import {
-	BaseComponent,
-	ComponentConstructor,
-	ComponentOptions,
-	GeneratorFn,
-	TemplateRenderer,
-} from "./types";
+import { BaseComponent, ComponentConstructor, ComponentOptions, GeneratorFn, TemplateRenderer } from "./types";
+import { isGeneratorLike } from "./utils/is-generator";
 
 const defaultOptions: ComponentOptions = {
 	clonable: true,
@@ -31,7 +26,7 @@ const RENDER_MODE = {
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
-export { type ComponentOptions } from "./types";
+export { type ComponentOptions, type BaseComponent } from "./types";
 
 export const render = (
 	componentGenerator: GeneratorFn,
@@ -141,8 +136,14 @@ export const render = (
 
 		#applyYieldedValue(value: unknown): unknown {
 			if (typeof value === "function") {
+				const result = value();
+
+				if (isGeneratorLike(result)) {
+					return this.#step(result, undefined);
+				}
+
 				this.#render = value as TemplateRenderer;
-				return this.#mount(value());
+				return this.#mount(result);
 			} else if (value instanceof HTMLTemplate) {
 				this.#render = () => value;
 				return this.#mount(value);
