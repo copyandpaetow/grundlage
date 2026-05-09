@@ -3,8 +3,22 @@ import { props as propHelper, Schema } from "./validator/props";
 import { ValueOf } from "./parser/types";
 import { applyAttributeBinding } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
-import { BaseComponent, ComponentConstructor, ComponentOptions, GeneratorFn, TemplateRenderer } from "./types";
-import { isGeneratorLike } from "./utils/is-generator";
+import {
+	BaseComponent,
+	ComponentConstructor,
+	ComponentOptions,
+	GeneratorFn,
+	TemplateRenderer,
+} from "./types";
+import { isGeneratorFunction } from "./utils/is-generator";
+import {
+	cancel,
+	drive,
+	Epoch,
+	EPOCH_TYPE,
+	GeneratorEpoch,
+	throwInto,
+} from "./rendering/generator-driver";
 
 const defaultOptions: ComponentOptions = {
 	clonable: true,
@@ -34,9 +48,9 @@ export const render = (
 ): ComponentConstructor => {
 	class BaseElement extends HTMLElement implements BaseComponent {
 		#observer: MutationObserver;
-		#render: TemplateRenderer | null = null;
 		#view: HTMLTemplate | null = null;
-		#cleanup: VoidFunction | null = null;
+		#outer: GeneratorEpoch | null = null;
+		#active: Epoch | null = null;
 		#updateState: ValueOf<typeof UPDATE_STATE> = UPDATE_STATE.IDLE;
 		#renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
 
@@ -50,24 +64,41 @@ export const render = (
 		}
 
 		connectedCallback() {
-			if (this.#render) {
+			if (this.#outer) {
 				//prevents re-rendering everything when this element is moved
 				return;
 			}
 
 			const generator = componentGenerator(this);
-			this.#step(generator, undefined);
+			const outer: GeneratorEpoch = {
+				type: EPOCH_TYPE.GENERATOR,
+				generatorFn: componentGenerator,
+				generator,
+				cleanup: null,
+				done: false,
+			};
+			this.#outer = outer;
 			this.#watchAttributes();
+			drive(
+				outer,
+				generator.next(undefined),
+				this.#handleYield,
+				this.#handleError,
+			);
 		}
 
 		async disconnectedCallback() {
 			//this callback is also called when moving inside of the dom.
 			//By waiting a tick and checking if we are back in the dom, we can avoid false cleanup calls
 			await Promise.resolve();
-			if (!this.isConnected) {
-				this.#observer?.disconnect();
-				this.#render = null;
-				this.#cleanup?.();
+			if (this.isConnected) return;
+			this.#observer?.disconnect();
+			this.#tearDownActive();
+			const outer = this.#outer;
+			if (outer) {
+				cancel(outer);
+				outer.cleanup?.();
+				this.#outer = null;
 			}
 		}
 
@@ -86,94 +117,178 @@ export const render = (
 			this.#observer.observe(this, { attributes: true });
 		}
 
-		#handleError(error: Error) {
-			this.#render = null;
+		#handleYield = (epoch: GeneratorEpoch, value: unknown): unknown => {
+			if (epoch === this.#outer) {
+				return this.#installActiveFromYield(value);
+			}
+			if (epoch === this.#active) {
+				if (value instanceof HTMLTemplate) {
+					this.#commit(value);
+					return this.shadowRoot;
+				}
+				if (typeof value === "function") {
+					if (isGeneratorFunction(value)) {
+						throw new Error(
+							"Inner generators cannot yield generator functions",
+						);
+					}
+					const result = (value as TemplateRenderer)();
+					this.#commit(result);
+					return this.shadowRoot;
+				}
+				return value;
+			}
+			// Stale yield (e.g. late async resumption from a torn-down inner) — drop.
+			return undefined;
+		};
+
+		#handleError = (error: Error) => {
+			const outer = this.#outer;
+			if (!outer || outer.done) {
+				this.#terminal(error);
+				return;
+			}
+
+			const preActive = this.#active;
+			const handled = throwInto(
+				outer,
+				error,
+				this.#handleYield,
+				this.#handleError,
+			);
+
+			if (!handled) {
+				this.#terminal(error);
+				return;
+			}
+
+			// Recursive handleError already terminal-handled and nulled #outer.
+			if (this.#outer === null) return;
+
+			// Outer caught and yielded a recovery: handleYield already replaced
+			// #active. Outer caught and returned: outer.done is now true and
+			// #active still points at the errored inner. Tear it down silently;
+			// #view persists per the error contract.
+			if (outer.done) {
+				outer.cleanup?.();
+				this.#outer = null;
+				if (preActive === this.#active) {
+					this.#tearDownActive();
+				}
+			}
+		};
+
+		#terminal(error: Error) {
+			this.#tearDownActive();
+			const outer = this.#outer;
+			if (outer) {
+				cancel(outer);
+				outer.cleanup?.();
+				this.#outer = null;
+			}
 			console.warn(error);
 			//visualizes the error better than just the warning
-			//TODO: we could think about whether to try to revert to the previous dom?
 			this.shadowRoot!.textContent = `${error}`;
 		}
 
-		//coordinates the generator process in a semi-synchronous way so connectedCallback stays synchronous as well, otherwise we get timing issues with nested components
-		#step(generator: Generator | AsyncGenerator, result: unknown) {
-			while (true) {
-				try {
-					const next = generator.next(result);
-
-					if (next instanceof Promise) {
-						next
-							.then(({ done, value }) => {
-								if (done) {
-									this.#cleanup = typeof value === "function" ? value : null;
-									return;
-								}
-								this.#stepAsync(generator, value);
-							})
-							.catch((error) => this.#handleError(error));
-						return;
-					}
-
-					const { done, value } = next;
-					if (done) {
-						this.#cleanup = typeof value === "function" ? value : null;
-						return;
-					}
-
-					if (value instanceof Promise) {
-						value
-							.then((resolved) => this.#stepAsync(generator, resolved))
-							.catch((error) => this.#handleError(error));
-						return;
-					}
-
-					result = this.#applyYieldedValue(value);
-				} catch (error) {
-					this.#handleError(error as Error);
-					return;
-				}
+		#installActiveFromYield(value: unknown): unknown {
+			if (value instanceof HTMLTemplate) {
+				this.#installStatic(value);
+				return this.shadowRoot;
 			}
-		}
-
-		#applyYieldedValue(value: unknown): unknown {
 			if (typeof value === "function") {
-				const result = value();
-
-				if (isGeneratorLike(result)) {
-					return this.#step(result, undefined);
+				if (isGeneratorFunction(value)) {
+					this.#installGenerator(value as GeneratorFn);
+					return undefined;
 				}
-
-				this.#render = value as TemplateRenderer;
-				return this.#mount(result);
-			} else if (value instanceof HTMLTemplate) {
-				this.#render = () => value;
-				return this.#mount(value);
+				this.#installRenderer(value as TemplateRenderer);
+				return this.shadowRoot;
 			}
+			// Pass-through for non-renderable values (e.g. resolved promise values
+			// arriving via the inner-yield path from an outer position).
 			return value;
 		}
 
-		#stepAsync(generator: Generator | AsyncGenerator, value: unknown) {
-			try {
-				const result = this.#applyYieldedValue(value);
-				this.#step(generator, result);
-			} catch (error) {
-				this.#handleError(error as Error);
-			}
+		#installStatic(template: HTMLTemplate) {
+			this.#tearDownActive();
+			this.#active = { type: EPOCH_TYPE.STATIC };
+			this.#commit(template);
 		}
 
-		#mount(template: HTMLTemplate): ShadowRoot | null {
-			this.#view = template;
-			if (this.#renderMode === RENDER_MODE.CSR) {
-				this.shadowRoot?.replaceChildren(template.setup());
-			} else {
-				this.#view.hydrate(this.shadowRoot!);
-				this.#renderMode = RENDER_MODE.CSR;
+		#installRenderer(renderer: TemplateRenderer) {
+			this.#tearDownActive();
+			this.#active = { type: EPOCH_TYPE.RENDERER, renderer };
+			this.#commit(renderer());
+		}
+
+		#installGenerator(generatorFn: GeneratorFn) {
+			this.#tearDownActive();
+			const generator = generatorFn(this);
+			const epoch: GeneratorEpoch = {
+				type: EPOCH_TYPE.GENERATOR,
+				generatorFn,
+				generator,
+				cleanup: null,
+				done: false,
+			};
+			this.#active = epoch;
+			drive(
+				epoch,
+				generator.next(undefined),
+				this.#handleYield,
+				this.#handleError,
+			);
+		}
+
+		#tearDownActive() {
+			const current = this.#active;
+			if (current?.type === EPOCH_TYPE.GENERATOR) {
+				cancel(current);
+				current.cleanup?.();
 			}
-			return this.shadowRoot;
+			this.#active = null;
+		}
+
+		#restartGenerator(epoch: GeneratorEpoch) {
+			// Order matters: cancel sets done=true so any pending microtasks see
+			// staleness. Run cleanup, then reset state, then drive fresh.
+			cancel(epoch);
+			epoch.cleanup?.();
+			epoch.generator = epoch.generatorFn(this);
+			epoch.cleanup = null;
+			epoch.done = false;
+			drive(
+				epoch,
+				epoch.generator.next(undefined),
+				this.#handleYield,
+				this.#handleError,
+			);
+		}
+
+		#commit(value: unknown) {
+			const template =
+				value instanceof HTMLTemplate ? value : html`${value}`;
+			const previousView = this.#view;
+			if (
+				!previousView ||
+				previousView.parsedHTML.templateHash !==
+					template.parsedHTML.templateHash
+			) {
+				this.#view = template;
+				if (this.#renderMode === RENDER_MODE.CSR) {
+					this.shadowRoot?.replaceChildren(template.setup());
+				} else {
+					template.hydrate(this.shadowRoot!);
+					this.#renderMode = RENDER_MODE.CSR;
+				}
+				return;
+			}
+			previousView.update(template.currentExpressions);
 		}
 
 		async update() {
 			if (
-				!this.#render ||
+				!this.#active ||
 				this.#updateState !== UPDATE_STATE.IDLE ||
 				!this.isConnected
 			) {
@@ -185,22 +300,19 @@ export const render = (
 			this.#updateState = UPDATE_STATE.RENDERING;
 
 			try {
-				let template = this.#render();
-
-				if (!(template instanceof HTMLTemplate)) {
-					template = html`${template}`;
+				const active = this.#active;
+				if (active) {
+					switch (active.type) {
+						case EPOCH_TYPE.STATIC:
+							break;
+						case EPOCH_TYPE.RENDERER:
+							this.#commit(active.renderer());
+							break;
+						case EPOCH_TYPE.GENERATOR:
+							this.#restartGenerator(active);
+							break;
+					}
 				}
-
-				if (
-					!this.#view ||
-					this.#view.parsedHTML.templateHash !==
-						template.parsedHTML.templateHash
-				) {
-					this.#mount(template);
-					this.#updateState = UPDATE_STATE.IDLE;
-					return;
-				}
-				this.#view.update(template.currentExpressions);
 			} catch (error) {
 				this.#handleError(error as Error);
 			}
