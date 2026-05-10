@@ -195,21 +195,26 @@ export const render = (
 			return this;
 		}
 
+		// Install methods evaluate user code first (renderer call, generator
+		// invocation, commit) and only assign #active on success. Keeps the
+		// "an installed #active is renderable" invariant clean: a throw in user
+		// code propagates without leaving a half-installed active behind.
 		#installStatic(template: HTMLTemplate) {
 			this.#tearDownActive();
-			this.#active = { type: EPOCH_TYPE.STATIC };
 			this.#commit(template);
+			this.#active = { type: EPOCH_TYPE.STATIC };
 		}
 
 		#installRenderer(renderer: TemplateRenderer) {
+			const template = renderer(this);
 			this.#tearDownActive();
+			this.#commit(template);
 			this.#active = { type: EPOCH_TYPE.RENDERER, renderer };
-			this.#commit(renderer(this));
 		}
 
 		#installGenerator(generatorFn: GeneratorFn) {
-			this.#tearDownActive();
 			const generator = generatorFn(this);
+			this.#tearDownActive();
 			const epoch: GeneratorEpoch = {
 				type: EPOCH_TYPE.GENERATOR,
 				generatorFn,
@@ -300,8 +305,12 @@ export const render = (
 				}
 			} catch (error) {
 				this.#handleError(error as Error);
+			} finally {
+				// finally so a throw from #handleError (e.g. through throwInto
+				// re-entering user code) cannot leave updateState wedged
+				// non-IDLE, which would make every future update() a no-op.
+				this.#updateState = UPDATE_STATE.IDLE;
 			}
-			this.#updateState = UPDATE_STATE.IDLE;
 		}
 	}
 

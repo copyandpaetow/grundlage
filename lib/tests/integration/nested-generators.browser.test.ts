@@ -818,3 +818,217 @@ describe("inner generator post-yield work and cancellation", () => {
 		element.remove();
 	});
 });
+
+// The website's generator-nesting demo (and any inner async generator with
+// post-yield work) hits this pattern: user calls update() while an inner
+// async generator is parked at an await. Today, #restartGenerator reuses the
+// same epoch object and resets done=false. The cancelled generator's queued
+// return eventually resolves and re-enters drive() on that same epoch — and
+// can mark the freshly restarted epoch done before its second yield lands.
+describe("rapid restart with in-flight inner async work", () => {
+	test("late resolution of cancelled inner await must not silence the restarted generator's later yields", async () => {
+		const tag = uniqueTag("restart-stale-resolution");
+		let resolveOldAwait: (() => void) | null = null;
+		let attempt = 0;
+
+		const ComponentClass = render(function* () {
+			yield async function* () {
+				const id = ++attempt;
+				if (id === 1) {
+					yield () => html`<span>attempt-${id}</span>`;
+					await new Promise<void>((resolve) => {
+						resolveOldAwait = resolve;
+					});
+					// Cancelled before this lands.
+					yield () => html`<span>attempt-${id}-late</span>`;
+				} else {
+					// Second attempt does its own async work AFTER its first
+					// yield. The window between this yield and the second yield
+					// is when the cancelled gen1's queued return can fire.
+					yield () => html`<span>attempt-${id}-first</span>`;
+					await new Promise((resolve) => setTimeout(resolve, 20));
+					yield () => html`<span>attempt-${id}-second</span>`;
+				}
+			};
+		});
+		customElements.define(tag, ComponentClass);
+
+		const element = mount(tag) as InstanceType<typeof ComponentClass>;
+		await sleep();
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"attempt-1",
+		);
+
+		// Restart while gen1 is parked at its await.
+		await element.update();
+		await sleep();
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"attempt-2-first",
+		);
+
+		// Resolve gen1's await: its queued return now drives the shared epoch.
+		// If the bug is present, this flips epoch.done=true on gen2's epoch,
+		// and gen2's next yield (attempt-2-second) is silently dropped.
+		resolveOldAwait?.();
+		await sleep(40);
+
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"attempt-2-second",
+		);
+
+		element.remove();
+	});
+
+	test("multiple stacked restarts: each cancelled generator's late resolution is contained", async () => {
+		// Second-order version of the same bug. After two restarts, two
+		// cancelled generators both have queued returns parked behind awaits
+		// that share a single resolution channel. When they resolve, both fire
+		// drive(epoch, ...) on the current (third) epoch.
+		const tag = uniqueTag("restart-stacked");
+		let resolveAll: Array<() => void> = [];
+		let attempt = 0;
+
+		const ComponentClass = render(function* () {
+			yield async function* () {
+				const id = ++attempt;
+				yield () => html`<span>attempt-${id}-first</span>`;
+				if (id < 3) {
+					await new Promise<void>((resolve) => {
+						resolveAll.push(resolve);
+					});
+					yield () => html`<span>attempt-${id}-late</span>`;
+				} else {
+					await new Promise((resolve) => setTimeout(resolve, 20));
+					yield () => html`<span>attempt-${id}-second</span>`;
+				}
+			};
+		});
+		customElements.define(tag, ComponentClass);
+
+		const element = mount(tag) as InstanceType<typeof ComponentClass>;
+		await sleep();
+		await element.update();
+		await sleep();
+		await element.update();
+		await sleep();
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"attempt-3-first",
+		);
+
+		// Drain the cancelled generators' awaits. Each queued return fires
+		// drive() on the shared epoch — gen3 must survive both.
+		for (const resolve of resolveAll) resolve();
+		await sleep(40);
+
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"attempt-3-second",
+		);
+
+		element.remove();
+	});
+});
+
+// Documents the cleanup-on-cancel contract end-to-end. The website demo
+// (lib/website/src/components/generator-nesting.ts) returns a cleanup that
+// calls controller.abort() — and discovers, on disconnect, that it never
+// runs unless the awaited promise settles first. These tests pin that
+// behavior so a future change is a deliberate one.
+describe("cleanup contract for inner async generators on cancel", () => {
+	test("`return cleanupFn` does NOT run when the inner generator is cancelled mid-await", async () => {
+		const tag = uniqueTag("cleanup-on-cancel");
+		const cleanupSpy = vi.fn();
+		let resolveAwait: (() => void) | null = null;
+
+		customElements.define(
+			tag,
+			render(function* () {
+				yield async function* () {
+					yield () => html`<span>parked</span>`;
+					await new Promise<void>((resolve) => {
+						resolveAwait = resolve;
+					});
+					return cleanupSpy;
+				};
+			}),
+		);
+
+		const element = mount(tag);
+		await sleep();
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"parked",
+		);
+
+		element.remove();
+		await sleep();
+		expect(cleanupSpy).not.toHaveBeenCalled();
+
+		// Even once the await settles, the queued .return() short-circuits past
+		// the explicit `return cleanupFn` line. Cleanup is never captured.
+		resolveAwait?.();
+		await sleep();
+		expect(cleanupSpy).not.toHaveBeenCalled();
+	});
+
+	test("try/finally IS the supported path for cancellation cleanup of post-yield work", async () => {
+		const tag = uniqueTag("finally-on-cancel");
+		const cleanupSpy = vi.fn();
+		let resolveAwait: (() => void) | null = null;
+
+		customElements.define(
+			tag,
+			render(function* () {
+				yield async function* () {
+					yield () => html`<span>parked</span>`;
+					try {
+						await new Promise<void>((resolve) => {
+							resolveAwait = resolve;
+						});
+					} finally {
+						cleanupSpy();
+					}
+				};
+			}),
+		);
+
+		const element = mount(tag);
+		await sleep();
+
+		element.remove();
+		await sleep();
+		// Same constraint as "inner generator finally fires after disconnect once
+		// the pending await settles" above — finally requires the await to
+		// settle for the queued return to drain through it.
+		expect(cleanupSpy).not.toHaveBeenCalled();
+
+		resolveAwait?.();
+		await sleep();
+		expect(cleanupSpy).toHaveBeenCalledTimes(1);
+	});
+
+	test("`return cleanupFn` from a sync inner generator that completes BEFORE disconnect runs on disconnect", async () => {
+		// Counterpart to the cancel-mid-await case: when the inner generator
+		// completes naturally, its cleanup IS captured, and disconnect fires it.
+		// Confirms the surface is consistent: cleanup-via-return only works on
+		// natural completion; cleanup-via-finally works on cancellation too.
+		const tag = uniqueTag("cleanup-natural");
+		const cleanupSpy = vi.fn();
+
+		customElements.define(
+			tag,
+			render(function* () {
+				yield function* () {
+					yield () => html`<span>done</span>`;
+					return cleanupSpy;
+				};
+			}),
+		);
+
+		const element = mount(tag);
+		await sleep();
+		expect(cleanupSpy).not.toHaveBeenCalled();
+
+		element.remove();
+		await sleep();
+		expect(cleanupSpy).toHaveBeenCalledTimes(1);
+	});
+});

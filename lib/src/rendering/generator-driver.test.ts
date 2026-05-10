@@ -415,3 +415,235 @@ describe("cancel", () => {
 		await flush();
 	});
 });
+
+// Reproduces the restart pattern used by index.ts#restartGenerator:
+// cancel the current generator, swap epoch.generator for a fresh one,
+// reset done=false, then drive the new generator on the SAME epoch object.
+// The .then closures captured by drive() during the first run still hold
+// the same epoch reference, so any late resolution from the cancelled
+// generator can still re-enter drive(epoch, ...).
+describe("epoch reuse across restart (regression for stale-resolution bug)", () => {
+	test("late {done:true} from cancelled generator must not mark a freshly restarted epoch done", async () => {
+		let resolveOldAwait: (() => void) | null = null;
+		const oldAwait = new Promise<void>((resolve) => {
+			resolveOldAwait = resolve;
+		});
+
+		const oldGenerator = async function* () {
+			yield "old-first";
+			await oldAwait;
+			yield "old-second";
+		};
+
+		// Park gen at the await: drive yields "old-first", calls handleYield,
+		// then enters the await on the next .next() and parks.
+		const epoch = makeEpoch(oldGenerator);
+		drive(
+			epoch,
+			epoch.generator.next(undefined),
+			() => undefined,
+			() => {},
+		);
+		await flush();
+
+		// Restart pattern (mirrors index.ts#restartGenerator).
+		cancel(epoch);
+		const newYields: unknown[] = [];
+		const newGenerator = async function* () {
+			yield "new-first";
+			await new Promise<void>((resolve) => setTimeout(resolve, 30));
+			yield "new-second";
+		};
+		epoch.generator = newGenerator();
+		epoch.cleanup = null;
+		epoch.done = false;
+
+		drive(
+			epoch,
+			epoch.generator.next(undefined),
+			(_epoch, value) => {
+				newYields.push(value);
+				return undefined;
+			},
+			() => {},
+		);
+		await flush();
+		expect(newYields).toEqual(["new-first"]);
+
+		// Resolve the cancelled generator's await. Its queued return resolves
+		// the .next() promise drive was waiting on with {done: true, value: undefined}.
+		// The captured .then closure calls drive(epoch, ...) on the SAME epoch —
+		// which is now driving the new generator parked at its own await.
+		resolveOldAwait?.();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		// If the bug is present, captureCleanup runs with the stale step,
+		// epoch.done flips to true, and "new-second" never reaches handleYield.
+		expect(newYields).toEqual(["new-first", "new-second"]);
+	});
+
+	test("late {done:false, value} from cancelled generator must not flow into the restarted generator", async () => {
+		// Edge case: the cancelled generator yielded a non-Promise value before
+		// the cancel landed, but the .next() Promise hadn't resolved yet. When
+		// it does resolve, drive sees a yielded value and routes it through
+		// handleYield AND advances the epoch's now-replaced generator.
+		let resolveOldStep: ((step: IteratorResult<unknown>) => void) | null = null;
+		const queuedStep = new Promise<IteratorResult<unknown>>((resolve) => {
+			resolveOldStep = resolve;
+		});
+
+		// Hand-rolled generator-like object so we can control exactly what its
+		// .next() returns. drive() only calls .next/.return/.throw, so this is
+		// sufficient for the test.
+		const oldGenerator = {
+			next: () => queuedStep,
+			return: () => Promise.resolve({ done: true, value: undefined }),
+			throw: (error: unknown) => Promise.reject(error),
+			[Symbol.asyncIterator]() {
+				return this;
+			},
+		} as unknown as AsyncGenerator;
+
+		const epoch: GeneratorEpoch = {
+			type: EPOCH_TYPE.GENERATOR,
+			generatorFn: (() => oldGenerator) as unknown as GeneratorFn,
+			generator: oldGenerator,
+			cleanup: null,
+			done: false,
+		};
+
+		const handleYield = vi.fn().mockReturnValue(undefined);
+
+		drive(epoch, epoch.generator.next(undefined), handleYield, () => {});
+		// Park: queuedStep is unresolved.
+
+		// Restart pattern.
+		cancel(epoch);
+		const newYields: unknown[] = [];
+		epoch.generator = (async function* () {
+			yield "new-first";
+			yield "new-second";
+		})();
+		epoch.cleanup = null;
+		epoch.done = false;
+
+		drive(
+			epoch,
+			epoch.generator.next(undefined),
+			(_epoch, value) => {
+				newYields.push(value);
+				return undefined;
+			},
+			() => {},
+		);
+		await flush();
+		await flush();
+
+		// Now resolve the queued step from the cancelled generator with a value
+		// that LOOKS like a valid yield. With the bug, drive() sees epoch.done=false,
+		// runs handleYield(epoch, "stale-value") on the new run's handler, then
+		// calls epoch.generator.next(...) — advancing the NEW generator with the
+		// echoed result. The new run is corrupted.
+		resolveOldStep?.({ done: false, value: "stale-value" });
+		await flush();
+		await flush();
+
+		expect(newYields).not.toContain("stale-value");
+	});
+});
+
+// The cleanup contract today: epoch.cleanup is only set by captureCleanup,
+// which runs when drive() observes step.done. cancel() invokes
+// generator.return() but does not feed the result back through drive, so
+// any `return cleanupFn` line the user wrote is unreachable when cancel
+// fires before natural completion. These tests pin that behavior so any
+// future change to cleanup-on-cancel is a deliberate decision, not a drift.
+describe("cleanup capture vs cancel — current contract", () => {
+	test("cleanup function from `return cleanupFn` is NOT captured when cancelled mid-await", async () => {
+		const cleanupSpy = vi.fn();
+		let resolveAwait: (() => void) | null = null;
+
+		const epoch = makeEpoch(async function* () {
+			yield "parked";
+			await new Promise<void>((resolve) => {
+				resolveAwait = resolve;
+			});
+			return cleanupSpy;
+		});
+
+		drive(
+			epoch,
+			epoch.generator.next(undefined),
+			() => undefined,
+			() => {},
+		);
+		await flush();
+
+		cancel(epoch);
+
+		// Even after the awaited promise settles, the queued .return() drains
+		// past the explicit `return cleanupSpy` line — the body never reaches it.
+		resolveAwait?.();
+		await flush();
+		await flush();
+
+		expect(epoch.cleanup).toBeNull();
+		expect(cleanupSpy).not.toHaveBeenCalled();
+	});
+
+	test("cleanup function IS captured when the generator completes naturally before cancel", () => {
+		const cleanupSpy = vi.fn();
+		const epoch = makeEpoch(function* () {
+			yield "first";
+			return cleanupSpy;
+		});
+
+		drive(
+			epoch,
+			epoch.generator.next(undefined),
+			() => undefined,
+			() => {},
+		);
+
+		expect(epoch.cleanup).toBe(cleanupSpy);
+
+		// Cancel after natural completion is a no-op for cleanup state.
+		cancel(epoch);
+		expect(epoch.cleanup).toBe(cleanupSpy);
+		expect(cleanupSpy).not.toHaveBeenCalled();
+	});
+
+	test("try/finally is the only path that fires cancellation cleanup mid-await", async () => {
+		const finallySpy = vi.fn();
+		let resolveAwait: (() => void) | null = null;
+
+		const epoch = makeEpoch(async function* () {
+			yield "parked";
+			try {
+				await new Promise<void>((resolve) => {
+					resolveAwait = resolve;
+				});
+			} finally {
+				finallySpy();
+			}
+		});
+
+		drive(
+			epoch,
+			epoch.generator.next(undefined),
+			() => undefined,
+			() => {},
+		);
+		await flush();
+
+		cancel(epoch);
+		// Disconnect alone cannot unblock the pending await — finally has not
+		// run yet. Documents the same constraint as the integration suite.
+		expect(finallySpy).not.toHaveBeenCalled();
+
+		resolveAwait?.();
+		await flush();
+		await flush();
+		expect(finallySpy).toHaveBeenCalledTimes(1);
+	});
+});
