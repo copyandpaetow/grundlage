@@ -15,28 +15,15 @@ import {
 	cancel,
 	drive,
 	Epoch,
-	EPOCH_TYPE,
 	GeneratorEpoch,
 	throwInto,
 } from "./rendering/generator-driver";
-
-const defaultOptions: ComponentOptions = {
-	clonable: true,
-	delegatesFocus: true,
-	mode: "open",
-	serializable: true,
-};
-
-const UPDATE_STATE = {
-	IDLE: 0,
-	SCHEDULED: 1,
-	RENDERING: 2,
-} as const;
-
-const RENDER_MODE = {
-	SSR: 1,
-	CSR: 2,
-} as const;
+import {
+	defaultOptions,
+	EPOCH_TYPE,
+	RENDER_MODE,
+	UPDATE_STATE,
+} from "./utils/constants";
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
@@ -124,7 +111,7 @@ export const render = (
 			if (epoch === this.#active) {
 				if (value instanceof HTMLTemplate) {
 					this.#commit(value);
-					return this.shadowRoot;
+					return this;
 				}
 				if (typeof value === "function") {
 					if (isGeneratorFunction(value)) {
@@ -132,9 +119,9 @@ export const render = (
 							"Inner generators cannot yield generator functions",
 						);
 					}
-					const result = (value as TemplateRenderer)();
+					const result = (value as TemplateRenderer)(this);
 					this.#commit(result);
-					return this.shadowRoot;
+					return this;
 				}
 				return value;
 			}
@@ -194,19 +181,18 @@ export const render = (
 		#installActiveFromYield(value: unknown): unknown {
 			if (value instanceof HTMLTemplate) {
 				this.#installStatic(value);
-				return this.shadowRoot;
-			}
-			if (typeof value === "function") {
+			} else if (typeof value === "function") {
 				if (isGeneratorFunction(value)) {
 					this.#installGenerator(value as GeneratorFn);
-					return undefined;
+				} else {
+					this.#installRenderer(value as TemplateRenderer);
 				}
-				this.#installRenderer(value as TemplateRenderer);
-				return this.shadowRoot;
+			} else {
+				// Pass-through for non-renderable values (e.g. resolved promise
+				// values arriving via the inner-yield path from an outer position).
+				return value;
 			}
-			// Pass-through for non-renderable values (e.g. resolved promise values
-			// arriving via the inner-yield path from an outer position).
-			return value;
+			return this;
 		}
 
 		#installStatic(template: HTMLTemplate) {
@@ -218,7 +204,7 @@ export const render = (
 		#installRenderer(renderer: TemplateRenderer) {
 			this.#tearDownActive();
 			this.#active = { type: EPOCH_TYPE.RENDERER, renderer };
-			this.#commit(renderer());
+			this.#commit(renderer(this));
 		}
 
 		#installGenerator(generatorFn: GeneratorFn) {
@@ -266,8 +252,7 @@ export const render = (
 		}
 
 		#commit(value: unknown) {
-			const template =
-				value instanceof HTMLTemplate ? value : html`${value}`;
+			const template = value instanceof HTMLTemplate ? value : html`${value}`;
 			const previousView = this.#view;
 			if (
 				!previousView ||
@@ -306,7 +291,7 @@ export const render = (
 						case EPOCH_TYPE.STATIC:
 							break;
 						case EPOCH_TYPE.RENDERER:
-							this.#commit(active.renderer());
+							this.#commit(active.renderer(this));
 							break;
 						case EPOCH_TYPE.GENERATOR:
 							this.#restartGenerator(active);

@@ -7,7 +7,7 @@ export interface BaseComponent extends HTMLElement {
 
 export type ComponentOptions = ShadowRootInit;
 
-export type TemplateRenderer = () => HTMLTemplate;
+export type TemplateRenderer = (element: BaseComponent) => HTMLTemplate;
 
 export type GeneratorFn = (
 	element: BaseComponent,

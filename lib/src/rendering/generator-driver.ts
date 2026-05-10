@@ -1,10 +1,5 @@
 import { GeneratorFn, TemplateRenderer } from "../types";
-
-export const EPOCH_TYPE = {
-	STATIC: 0,
-	RENDERER: 1,
-	GENERATOR: 2,
-} as const;
+import { EPOCH_TYPE } from "../utils/constants";
 
 export type StaticEpoch = {
 	type: typeof EPOCH_TYPE.STATIC;

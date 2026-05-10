@@ -10,7 +10,7 @@ customElements.define(
 			host.update();
 		};
 
-		yield function* () {
+		yield async function* () {
 			const controller = new AbortController();
 
 			// Pre-yield: capture current positions (old DOM)

@@ -1,12 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
-import {
-	cancel,
-	drive,
-	EPOCH_TYPE,
-	GeneratorEpoch,
-	throwInto,
-} from "./generator-driver";
+import { cancel, drive, GeneratorEpoch, throwInto } from "./generator-driver";
 import { GeneratorFn } from "../types";
+import { EPOCH_TYPE } from "../utils/constants";
 
 const makeEpoch = (
 	generatorFn: GeneratorFn,
@@ -110,12 +105,7 @@ describe("drive — sync iteration", () => {
 		});
 		epoch.done = true;
 
-		drive(
-			epoch,
-			epoch.generator.next(undefined),
-			handleYield,
-			() => {},
-		);
+		drive(epoch, epoch.generator.next(undefined), handleYield, () => {});
 
 		expect(handleYield).not.toHaveBeenCalled();
 	});
@@ -158,12 +148,7 @@ describe("drive — error paths", () => {
 			throw new Error("inside-generator");
 		});
 
-		drive(
-			epoch,
-			epoch.generator.next(undefined),
-			() => undefined,
-			handleError,
-		);
+		drive(epoch, epoch.generator.next(undefined), () => undefined, handleError);
 
 		expect(epoch.done).toBe(true);
 		expect(handleError).toHaveBeenCalledOnce();
@@ -202,12 +187,7 @@ describe("drive — async generator and yielded promises", () => {
 			yield Promise.resolve("payload");
 		});
 
-		drive(
-			epoch,
-			epoch.generator.next(undefined),
-			handleYieldSpy,
-			() => {},
-		);
+		drive(epoch, epoch.generator.next(undefined), handleYieldSpy, () => {});
 
 		await flush();
 		expect(handleYieldSpy).toHaveBeenCalledOnce();
@@ -221,12 +201,7 @@ describe("drive — async generator and yielded promises", () => {
 			yield Promise.reject(new Error("rejected-yield"));
 		});
 
-		drive(
-			epoch,
-			epoch.generator.next(undefined),
-			() => undefined,
-			handleError,
-		);
+		drive(epoch, epoch.generator.next(undefined), () => undefined, handleError);
 
 		await flush();
 		expect(handleError).toHaveBeenCalledOnce();
@@ -244,12 +219,7 @@ describe("drive — async generator and yielded promises", () => {
 			throw new Error("async-throw");
 		});
 
-		drive(
-			epoch,
-			epoch.generator.next(undefined),
-			() => undefined,
-			handleError,
-		);
+		drive(epoch, epoch.generator.next(undefined), () => undefined, handleError);
 
 		await flush();
 		expect(epoch.done).toBe(true);
@@ -270,12 +240,7 @@ describe("drive — async generator and yielded promises", () => {
 			yield "after-await";
 		});
 
-		drive(
-			epoch,
-			epoch.generator.next(undefined),
-			handleYield,
-			handleError,
-		);
+		drive(epoch, epoch.generator.next(undefined), handleYield, handleError);
 
 		cancel(epoch);
 		resolveStep("late");
