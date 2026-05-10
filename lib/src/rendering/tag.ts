@@ -8,14 +8,13 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	const element = marker.nextElementSibling!;
 	const newTag = bindingToString(binding.values, context.currentExpressions);
 
-	//we are going to replace the surrounding element with something new. To the browser, it's a series of removals and additions and clears browser states like focus
-	//Resolve detection and capture from the same root: in a shadow root with delegatesFocus,
-	//document.activeElement is the host while root.activeElement is the actual focused inner field —
-	//mixing them refocused the host.
-	const focusRoot = element.getRootNode() as ShadowRoot | Document;
-	const focusedNode = focusRoot.activeElement as HTMLElement | null;
-	const focusElement =
-		focusedNode && element.contains(focusedNode) ? focusedNode : null;
+	//we're about to replace the element with a freshly-created one — to the browser that's a remove + insert, which drops focus, selection, and similar live UI state
+	//=> if focus currently lives inside this element we remember it so we can restore it after the swap below
+	const focusElement = element.contains(
+		(element.getRootNode() as ShadowRoot).activeElement,
+	)
+		? (document.activeElement as HTMLElement)
+		: null;
 
 	const newElement = document.createElement(newTag);
 	for (
@@ -27,16 +26,16 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 		newElement.setAttribute(attribute.name, attribute.value);
 	}
 
-	// appendChild adopts the node out of `element`, draining its childNodes
-	// in place — no spread, no iterator, no temporary array.
+	//appendChild adopts the node out of `element` and drains its childNodes in place
+	//=> no spread, no iterator, no temporary array
 	while (element.firstChild) {
 		newElement.appendChild(element.firstChild);
 	}
 	element.replaceWith(newElement);
 	focusElement?.focus();
 
-	//from the binding we know if there are related attributes and mark them as dirty
-	//this is mainly for event listeners
+	//we copied the html attributes onto the new element above, but anything written as a JS property (event listeners via onclick={...}, complex values) does not transfer
+	//=> we mark every attribute binding that lives on this tag as dirty so the next flush re-runs them against the new element
 	const relatedAttributes = binding.relatedAttributes;
 	for (
 		let attributeIndex = 0;

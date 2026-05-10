@@ -37,8 +37,8 @@ type BufferArray = Array<string | number>;
 
 const range = new Range();
 /*
-these elements we need to handle differently as we can't have comment markers in them, so we can only replace them as a whole
-this requires a different marker strategy
+the parser drops a comment marker at every dynamic position so we can find it again later — but these elements either don't render html children (style, script, textarea) or are inert (template), so a comment inside them wouldn't survive as a usable marker
+=> for these we treat the whole element body as a single replaceable chunk and emit one marker before it instead of marking inner positions
 */
 const isSpecialElementTag = (tag: string) =>
 	tag === "style" ||
@@ -47,7 +47,7 @@ const isSpecialElementTag = (tag: string) =>
 	tag === "template";
 const PLACEHOLDER_TAG = "div";
 
-//dense 0..N so the main switch can compile to a jump table
+//we keep the values dense 0..N so the main switch can compile to a jump table
 const STATE = {
 	TEXT: 0,
 	COMMENT: 1,
@@ -74,11 +74,9 @@ let activeTagBinding: Binding | null = null;
 const openTagBindings: Array<TagBinding> = [];
 
 /*
-using the module scope was chose to keep performance high / reduce memory usage as much as possible
-as this is executed early and needs to be fast
-
-if concurrency becomes a requirement, we would need to put this into a class/closure and create a pool of parsers
-
+by keeping the state at module scope we avoid allocating buffers and cursors on every parse
+this is safe because parse() runs fully synchronously, so we can't re-enter it
+if concurrent parsing ever becomes a requirement, we would need to wrap this in a class and pool instances
 */
 const resultBuffer: BufferArray = [];
 const elementBuffer: BufferArray = [];
@@ -187,7 +185,7 @@ const createBinding = () => {
 				values: [],
 				endValues: [],
 				relatedAttributes: [],
-				bindingIndex: bindings.length, //set before push so it matches the eventual index
+				bindingIndex: bindings.length, //we set this before the push so it matches the eventual index
 			} satisfies TagBinding;
 		case STATE.END_TAG:
 			return openTagBindings.at(-1)!;
@@ -209,7 +207,7 @@ const completeComment = () => {
 		const marker = createComment();
 		contentBuffer.push(marker, marker);
 	} else {
-		// static comments: re-wrap with delimiters since they were stripped during capture
+		//for static comments we re-wrap with delimiters since they were stripped during capture
 		contentBuffer.push("<!--");
 		moveArrayContents(commentBuffer, contentBuffer);
 		contentBuffer.push("-->");
@@ -267,8 +265,8 @@ const completeAttribute = () => {
 			(activeBinding as AttributeBinding).values,
 		);
 		resultBuffer.push(createComment());
-		//leading whitespace is pushed as its own single-char entry by the ELEMENT→ATTRIBUTE_KEY transition;
-		//drop it here without allocating a trimmed copy
+		//leading whitespace was pushed as its own single-char entry by the ELEMENT→ATTRIBUTE_KEY transition
+		//=> we can drop it here without allocating a trimmed copy
 		const keys = (activeBinding as AttributeBinding).keys;
 		const firstKey = keys[0];
 		if (
@@ -278,7 +276,8 @@ const completeAttribute = () => {
 		) {
 			keys.shift();
 		}
-		//links attribute bindings to the tag binding. This reduces complexity later on as tag updates need to communicate to attribute updates
+		//replacing a tag means creating a new element and copying attributes over — but JS-property attributes (e.g. event listeners) don't survive that copy
+		//=> we record which attribute bindings live on the surrounding tag so updateTag can mark them dirty and have them re-applied on the new element
 		(activeTagBinding as TagBinding)?.relatedAttributes.push(
 			bindings.length - 1,
 		);
@@ -325,7 +324,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 			switch (state) {
 				case STATE.TEXT: {
-					//inside an element, we only care for the exit, which is either another tag (e.g. <strong>), the currents tag end (e.g. </div>), or a comment (e.g. <!-- -->)
+					//inside an element, we only care for the exit, which is either another tag (e.g. <strong>), the current tag's end (e.g. </div>), or a comment (e.g. <!-- -->)
 					if (char !== "<") {
 						continue;
 					}
@@ -444,14 +443,13 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					state = STATE.ATTRIBUTE_KEY;
 					if (isWhitespace(char)) {
-						//push the whitespace directly as its own buffer entry so downstream capture
-						//starts past it — static attrs still get their separator; dynamic attrs can
-						//drop this single-char entry in completeAttribute without trimming a string
+						//we push the whitespace as its own buffer entry so downstream capture starts past it
+						//=> static attrs still get their separator and dynamic attrs can drop this single-char entry in completeAttribute without trimming a string
 						attributeKeyBuffer.push(char);
 						splitIndex = charIndex + 1;
 					} else {
 						splitIndex = charIndex;
-						charIndex--; //rewind so the attribute starts correctly
+						charIndex--; //we rewind so the attribute starts correctly
 					}
 
 					continue;
@@ -469,19 +467,19 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind for element state management
+						charIndex--; //we rewind for element state management
 						//self-closing tag: "/" before ">" ends the attribute without including the "/"
 					} else if (char === "/" && activeTemplate[charIndex + 1] === ">") {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						completeAttribute();
-						// transition to ELEMENT without rewinding — the next char ">" will be handled there
+						//we transition to ELEMENT without rewinding — the next char ">" will be handled there
 						state = STATE.ELEMENT;
 						//special case if the element ends directly after the boolean attribute
 					} else if (char === ">") {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind for element state management
+						charIndex--; //we rewind for element state management
 					}
 					continue;
 
@@ -500,13 +498,13 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind for element state management
+						charIndex--; //we rewind for element state management
 					} else if (!attributeQuote && char === ">") {
 						//special case if the unquoted attribute is ended by the element end
 						capture(attributeValueBuffer, splitIndex, charIndex);
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind for element state management
+						charIndex--; //we rewind for element state management
 					}
 					continue;
 
@@ -564,6 +562,9 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 	};
 };
 
+//engines hand us the same TemplateStringsArray identity for every call from a given tagged-template literal site
+//=> by keying a WeakMap on it we get a per-call-site parse cache for free
+//and the entry can GC once the call site (e.g. a dynamically loaded module) is unloaded
 const htmlCache = new WeakMap<TemplateStringsArray, ParsedHTML>();
 
 export const html = (

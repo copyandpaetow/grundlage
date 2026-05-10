@@ -2,27 +2,16 @@ import { html } from "./parser/html";
 import { ValueOf } from "./parser/types";
 import { applyAttributeBinding } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
-import {
-	BaseComponent,
-	ComponentConstructor,
-	ComponentGenerator,
-	ComponentOptions,
-	RenderFunction,
-} from "./types";
+import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions, RenderFunction } from "./types";
 import { isGeneratorFunction } from "./utils/is-generator";
 import {
 	advanceGenerator,
 	cancelGenerator,
 	deliverErrorToGenerator,
 	GeneratorTemplateSource,
-	TemplateSource,
+	TemplateSource
 } from "./rendering/generator-stepper";
-import {
-	defaultOptions,
-	RENDER_MODE,
-	TEMPLATE_SOURCE_TYPE,
-	UPDATE_STATE,
-} from "./utils/constants";
+import { defaultOptions, RENDER_MODE, TEMPLATE_SOURCE_TYPE, UPDATE_STATE } from "./utils/constants";
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
@@ -51,7 +40,8 @@ export const render = (
 
 		connectedCallback() {
 			if (this.#componentGenerator) {
-				//prevents re-rendering everything when this element is moved
+				//moving an element in the DOM fires disconnectedCallback then connectedCallback
+				//=> if a generator already exists we bail out so the move doesn't restart the component from scratch
 				return;
 			}
 
@@ -74,7 +64,7 @@ export const render = (
 		}
 
 		async disconnectedCallback() {
-			//this callback is also called when moving inside of the dom.
+			//this callback is also called when moving inside the dom.
 			//By waiting a tick and checking if we are back in the dom, we can avoid false cleanup calls
 			await Promise.resolve();
 			if (this.isConnected) return;
@@ -120,8 +110,8 @@ export const render = (
 				}
 				return value;
 			}
-			// Stale yield (e.g. late async resumption from a torn-down inner) — drop.
-			return undefined;
+			//if we reach this point the yield came from a generator we no longer track (e.g. an async generator that was torn down but later resumes from a pending await)
+			//=> by returning undefined the value never reaches the dom
 		};
 
 		#onError = (error: Error) => {
@@ -134,14 +124,16 @@ export const render = (
 			const previous = this.#activeSource;
 			deliverErrorToGenerator(source, error, this.#onYield, this.#onError);
 
-			// Recursive #onError already abort-handled and nulled #componentGenerator.
+			//deliverErrorToGenerator above can re-enter this same #onError if the error keeps escaping
+			//=> if that recursion has already aborted everything and nulled #componentGenerator, there's nothing left for us to do
 			if (this.#componentGenerator === null) return;
 
-			// componentGenerator caught and yielded a recovery: #onYield already
-			// replaced #activeSource. componentGenerator caught and returned:
-			// source.terminated is now true and #activeSource still points at the
-			// errored inner. Tear it down silently; #renderedTemplate persists per
-			// the error contract.
+			/*
+			otherwise the component generator's try/catch saw the error and reacted in one of two ways:
+			- it yielded a new template (a recovery) => #onYield has already swapped #activeSource over for us
+			- it ran a `return` (or fell off the end), which marks source.terminated and leaves #activeSource pointing at the inner that just errored => we tear that inner down silently
+			the previous frame's dom (#renderedTemplate) stays put either way — that's the error contract we promise users
+			*/
 			if (source.terminated) {
 				source.cleanup?.();
 				this.#componentGenerator = null;
@@ -160,7 +152,7 @@ export const render = (
 				this.#componentGenerator = null;
 			}
 			console.warn(error);
-			//visualizes the error better than just the warning
+			//we also write the error into the shadow root so it's more visible than just the console warning
 			this.shadowRoot!.textContent = `${error}`;
 		}
 
@@ -174,18 +166,17 @@ export const render = (
 					this.#installRenderFunctionSource(value as RenderFunction);
 				}
 			} else {
-				// Pass-through for non-renderable values (e.g. resolved promise
-				// values arriving via the inner-yield path from an outer position).
+				//the outer generator yielded something that isn't a template, render function, or generator
+				//=> we hand the value straight back as the result of its `yield` expression (e.g. the resolved value of a yielded Promise)
 				return value;
 			}
 			return this;
 		}
 
-		// Install methods evaluate user code first (render function call,
-		// generator invocation, render to dom) and only assign #activeSource on
-		// success. Keeps the "an assigned #activeSource is renderable" invariant
-		// clean: a throw in user code propagates without leaving a half-installed
-		// state behind.
+		/*
+		the install methods evaluate user code first (render function call, generator invocation, render to dom) and only assign #activeSource on success
+		=> we keep the "an assigned #activeSource is renderable" invariant clean: a throw in user code propagates without leaving a half-installed state behind
+		*/
 		#installStaticSource(template: HTMLTemplate) {
 			this.#teardownActiveSource();
 			this.#renderToDom(template);
@@ -231,9 +222,9 @@ export const render = (
 		}
 
 		#restartGenerator(source: GeneratorTemplateSource) {
-			// Order matters: cancelGenerator sets terminated=true so any pending
-			// microtasks see staleness. Run cleanup, then reset state, then drive
-			// fresh.
+			//advanceGenerator queues microtasks whenever a generator yields a Promise
+			//=> cancelGenerator first marks terminated=true so any of those pending microtasks bail out instead of resuming the old generator
+			//then we run cleanup, reset the source, and drive a fresh generator
 			cancelGenerator(source);
 			source.cleanup?.();
 			source.generator = source.createGenerator(this);
@@ -297,9 +288,8 @@ export const render = (
 			} catch (error) {
 				this.#onError(error as Error);
 			} finally {
-				// finally so a throw from #onError (e.g. through deliverErrorToGenerator
-				// re-entering user code) cannot leave updateState wedged
-				// non-IDLE, which would make every future update() a no-op.
+				//#onError can re-enter user code (via deliverErrorToGenerator throwing into the generator) and that user code can throw again
+				//=> we reset updateState in finally so a throw on the way out can't leave it stuck non-IDLE, which would make every future update() bail at the guard above
 				this.#updateState = UPDATE_STATE.IDLE;
 			}
 		}

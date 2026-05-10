@@ -18,14 +18,14 @@ const updateByType = {
 export class HTMLTemplate {
 	#hash: number | undefined;
 	parsedHTML: ParsedHTML;
-	//these are tied together by the index position of the individual bindings
+	//markers[i] and dirtyBindings[i] line up with parsedHTML.bindings[i] — same index across all three arrays addresses the same binding
 	markers: Array<Comment>;
 	dirtyBindings: Uint8Array;
-	//these are tied together by the index position of the individual expressions
+	//currentExpressions[i] is the i-th interpolation in the template literal (the i-th `${...}`)
 	currentExpressions: Array<unknown>;
 	previousExpressions = EMPTY_ARRAY;
 
-	// cached per-update; invalidated in update() when expressions change
+	//we cache this per-update and invalidate in update() when expressions change
 	get hash(): number {
 		if (this.#hash === undefined) {
 			const expressions = this.currentExpressions;
@@ -33,6 +33,8 @@ export class HTMLTemplate {
 			for (let index = 0; index < expressions.length; index++) {
 				hash = (Math.imul(hash, 31) + hashValue(expressions[index])) | 0;
 			}
+			//we XOR-mix shape and content so that `tplA(1, 2)` and `tplB(1, 2)` don't collide
+			//a plain add would let a different template with the same expression-fold land on the same hash
 			this.#hash = this.parsedHTML.templateHash ^ Math.imul(hash, 31);
 		}
 		return this.#hash;
@@ -57,14 +59,10 @@ export class HTMLTemplate {
 	}
 
 	hydrate(context: ShadowRoot) {
-		// Zero-initialized by the spec — no explicit fill needed.
+		//Uint8Array is zero-initialized by the spec, so we don't need to fill explicitly
 		this.dirtyBindings = new Uint8Array(this.parsedHTML.bindings.length);
 		this.markers = this.#findMarkers(context);
 
-		// Tag/content/raw-content bindings are already correct in the SSR markup,
-		// so we skip them. Attribute bindings still need to run because they can
-		// carry behavior that doesn't survive serialization — event listeners and
-		// non-stringable values assigned as JS properties on the element.
 		for (let index = 0; index < this.parsedHTML.bindings.length; index++) {
 			const binding = this.parsedHTML.bindings[index];
 			if (binding.type === BINDING_TYPES.ATTR) {
@@ -88,7 +86,8 @@ export class HTMLTemplate {
 				continue;
 			}
 
-			//content nodes are there twice with the same index, so we can filter them here
+			//content bindings emit two markers carrying identical data (one before and one after the binding's content) so the renderer can find the binding's range
+			//=> when we collect markers we only want the first of each pair, so we skip any marker whose data matches the previous one
 			if (lastMarkerData === marker.data) {
 				continue;
 			}
@@ -111,16 +110,16 @@ export class HTMLTemplate {
 
 			if (currentEntry === previousEntry) continue;
 
-			// Strict equality already decided for primitives; only reference
-			// types need hash-based content comparison.
+			//the `===` check above already settled every primitive (a primitive that didn't match by identity also doesn't match by value)
+			//=> the only entries that can still be "equal in content but not in identity" are objects and functions, so only those need the hash-based comparison below
 			const currentType = typeof currentEntry;
 			const needsContentCompare =
 				(currentType === "object" && currentEntry !== null) ||
 				currentType === "function";
 
-			// Arrays are reconciled per-item inside renderList via hash-based
-			// identity matching, so hashing the whole list here would walk
-			// every item twice per frame. Mark dirty and let renderList decide.
+			//arrays are reconciled per-item inside renderList via hash-based identity matching
+			//if we hashed the whole list here we would walk every item only for renderList to walk them again
+			//=> we just mark dirty and let the one place that needs the per-item compare do it
 			if (Array.isArray(currentEntry)) {
 				this.dirtyBindings[this.parsedHTML.expressionToBinding[index]] = 1;
 				continue;
@@ -139,9 +138,8 @@ export class HTMLTemplate {
 			this.dirtyBindings[this.parsedHTML.expressionToBinding[index]] = 1;
 		}
 		this.#flush();
-		// previousExpressions is only read during #flush. Drop the reference so
-		// the prior frame's values (possibly large objects) can be collected
-		// between renders in long-lived idle components.
+		//previousExpressions is only read during #flush
+		//=> we drop the reference so the prior frame's values (possibly large objects) can be collected between renders in long-lived idle components
 		this.previousExpressions = EMPTY_ARRAY;
 	}
 

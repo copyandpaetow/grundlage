@@ -137,11 +137,10 @@ export const cancelGenerator = (source: GeneratorTemplateSource) => {
 	if (source.terminated) return;
 	source.terminated = true;
 	try {
-		// Fires user-level try/finally blocks. For async generators .return()
-		// returns a Promise we deliberately don't await — cancellation is
-		// best-effort and the source is already marked terminated.
+		//calling .return() lets the generator run any try/finally cleanup the user wrote
+		//for async generators .return() returns a Promise — we deliberately don't await it because the source is already marked terminated above, so any later resume will bail in advanceGenerator anyway
 		(source.generator as Generator).return?.(undefined);
 	} catch {
-		// User finally blocks may throw; swallow to keep teardown sequential.
+		//if the user's finally block throws we swallow the error here so the rest of the cancellation chain (other sources, cleanups) still runs
 	}
 };
