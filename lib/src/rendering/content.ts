@@ -8,7 +8,8 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
 	let current = start.nextSibling;
 
 	while (current) {
-		//list markers all have the same data, if we find another comment with the same data as our marker, we found the start of the next entry
+		//each content binding is bracketed by two comments with the same data
+		//=> when we hit another comment carrying `start`'s data we've reached the binding's far edge and can stop
 		const isLastComment =
 			current === end ||
 			(isComment(current) && current.data === (start as Comment).data);
@@ -44,9 +45,8 @@ const removeItemDom = (itemMarker: Comment, listContainerMarker: Comment) => {
 	while (current) {
 		const prev = current.previousSibling as ChildNode | null;
 		current.remove();
-		// Stop at a per-item marker (next item above) or the outer list
-		// container marker — crossing the container marker would delete the
-		// binding's own anchor and corrupt subsequent renders.
+		//we stop at a per-item marker (next item above) or the outer list container marker
+		//if we crossed the container marker we would delete the binding's own anchor and corrupt subsequent renders
 		if (!prev || prev === listContainerMarker || isListMarker(prev)) return;
 		current = prev;
 	}
@@ -84,9 +84,8 @@ const renderList = (
 		Array.isArray(previousValue) ? previousValue : EMPTY_PREVIOUS
 	) as Array<HTMLTemplate>;
 
-	// Walk the current DOM once, collecting per-item markers. The DOM is the
-	// source of truth: if it's shorter than the tracked array (e.g. the slot
-	// was cleared between renders), we treat the tail as absent.
+	//we walk the live DOM once and collect one marker per item that's currently rendered
+	//the DOM is the source of truth here — if it has fewer items than trackedPrevious (e.g. someone cleared the binding's children between renders) we cap collection at what we actually see
 	const previousMarkers: Array<Comment> = [];
 	let sibling: Node | null = marker.nextSibling;
 	while (sibling) {
@@ -101,10 +100,11 @@ const renderList = (
 	}
 	const previousLength = previousMarkers.length;
 
-	// Two-pointer head/tail peel. Hash-equal templates are interchangeable
-	// (hash folds template shape + expression values), so matched ends stay in
-	// place with no DOM work and no bookkeeping allocation. Append, prepend,
-	// pop, shift, and adjacent-swap all resolve entirely in this phase.
+	/*
+	before tackling the harder reconciliation we peel matching templates from both ends inwards
+	hash-equal templates are interchangeable (the hash folds template shape + expression values) so any item we match at the head or tail can stay exactly where it already is in the DOM
+	=> append, prepend, pop, shift, and adjacent-swap all resolve in this phase without touching the DOM
+	*/
 	let headCurrent = 0;
 	let headPrevious = 0;
 	let tailCurrent = current.length - 1;
@@ -129,7 +129,7 @@ const renderList = (
 		tailPrevious--;
 	}
 
-	// Pure removal: current middle is empty, previous middle has leftovers.
+	//if the current middle is empty after the peel, every leftover in the previous middle is a deletion
 	if (headCurrent > tailCurrent) {
 		for (
 			let previousIndex = headPrevious;
@@ -141,7 +141,7 @@ const renderList = (
 		return;
 	}
 
-	// Pure insertion: previous middle exhausted, current middle has new items.
+	//if the previous middle is empty after the peel, every leftover in the current middle is a fresh insertion
 	if (headPrevious > tailPrevious) {
 		let position: ChildNode =
 			headPrevious === 0 ? marker : previousMarkers[headPrevious - 1];
@@ -157,13 +157,15 @@ const renderList = (
 		return;
 	}
 
-	// General middle: hash claim + structural fallback + apply, all fused into
-	// one walk. Fusion changes priority slightly vs. two separate passes — a
-	// structural claim for current[i] can win a slot that a later current[j]
-	// would have hash-matched. Output stays correct (the reused template is
-	// .update()d to current[j]); worst case is one extra .update() call in a
-	// pathological cross-pattern. The head/tail peel above already absorbs the
-	// common "stable ends, changed middle" case where this would matter most.
+	/*
+	otherwise both middles have content, and we need to reconcile them
+	we walk the current middle and try to claim a previous slot for each entry:
+	- first by hash (template shape + expression values match exactly => DOM stays, no .update() needed)
+	- otherwise by parsed shape at the same relative position (DOM stays, we .update() it to the new expression values)
+	- otherwise we insert a fresh item
+	hash and structural claims share the same walk, so a structural claim for current[i] can occasionally take a slot that a later current[j] would have hash-matched
+	=> the output still stays correct (the reused template gets .update()d to current[j]) and the worst case is one extra .update() call in a pathological cross-pattern
+	*/
 	const middleLengthPrevious = tailPrevious - headPrevious + 1;
 	const hashToMiddleIndex = new Map<number, number>();
 	for (let middleIndex = 0; middleIndex < middleLengthPrevious; middleIndex++) {
@@ -220,10 +222,8 @@ const renderList = (
 		current[currentIndex] = reusedTemplate;
 
 		const itemMarker = previousMarkers[headPrevious + claimedMiddleIndex];
-		// Monotonic reuse (the steady state for "same list, values changed")
-		// means the existing DOM is already in place — no need to walk
-		// siblings to verify. Only reach for isAlreadyInPosition/moveItemAfter
-		// when a reorder could have happened.
+		//if our claims have been coming in the same order they appear in the previous middle (the common "same list, values changed" case), the existing DOM is already where we want it
+		//=> we only walk siblings to verify and potentially move when a claim arrives out of order
 		if (claimedMiddleIndex !== expectedMiddleIndex) {
 			if (!isAlreadyInPosition(position, itemMarker)) {
 				moveItemAfter(position, itemMarker);
@@ -248,15 +248,14 @@ const renderTemplate = (
 	const current = context.currentExpressions[expressionIndex] as HTMLTemplate;
 	const previous = context.previousExpressions[expressionIndex];
 
-	//same template shape: feed the existing instance the new expressions and
-	//swap the reference back into currentExpressions so the next diff sees it
 	if (previous instanceof HTMLTemplate && isSameTemplate(current, previous)) {
 		previous.update(current.currentExpressions);
+		//we swap the reused template into currentExpressions so that on the next render
+		//we compare against the template actually attached to the DOM and not the discarded `current`
 		context.currentExpressions[expressionIndex] = previous;
 		return;
 	}
 
-	//different shape: discard the old DOM and mount the new template fresh
 	deleteNodesBetween(marker);
 	marker.after(current.setup());
 };
@@ -276,8 +275,7 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 	const binding = context.parsedHTML.bindings[bindingIndex];
 	const marker = context.markers[bindingIndex];
 
-	//HTML comment slots (e.g. `<!-- ${a}-${b} -->`) concatenate multiple expressions
-	//into a single comment node; regular content slots always hold exactly one expression
+	//only comments can have multiple bindings, normal content only has one
 	if (binding.values.length > 1) {
 		renderComment(context, marker, binding.values);
 		return;

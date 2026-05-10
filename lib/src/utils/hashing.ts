@@ -19,6 +19,8 @@ export const hashValue = (value: unknown): number => {
 	if (typeof value === "string") return stringHash(value);
 	if (typeof value === "number") {
 		if (value === (value | 0)) return value | 0;
+		//we reinterpret the float's 64 bits as two int32s
+		//equal floats share bit patterns, so we can hash equal numbers equally without stringifying
 		floatView[0] = value;
 		return (Math.imul(floatIntView[0], 31) + floatIntView[1]) | 0;
 	}
@@ -36,7 +38,7 @@ export const hashValue = (value: unknown): number => {
 	if (value.constructor === Object) {
 		let hash = 0;
 		for (const name in value) {
-			// name is always a string — skip the typeof dispatch in hashValue.
+			//name is always a string here, so we can skip the typeof dispatch in hashValue
 			hash =
 				(Math.imul(hash, 31) +
 					stringHash(name) +
@@ -46,10 +48,12 @@ export const hashValue = (value: unknown): number => {
 		return hash;
 	}
 
-	//Fallback for class instances, Maps, Sets, etc. Deep-walking them is expensive
-	//and still can't see through closures, so we compromise on identity: a stable
-	//reference hashes the same and is treated as unchanged. Trade-off: inline
-	//arrow functions get a new identity each render and reapply every frame.
+	/*
+	for anything else (Map, Set, class instances, functions, …) we can't cheaply look at the contents — and even if we could, function closures hide state we'd never see
+	walking blindly would be expensive and still inaccurate, so we'd be stuck choosing between stale renders and unnecessary ones
+	=> we hash by reference identity instead: every fresh object gets a unique counter id that we keep in a WeakMap, so as long as the user passes the same reference we report it as unchanged
+	the trade-off: an inline `onClick={() => ...}` is a fresh function on every render, so its hash always differs and the listener gets reapplied each time
+	*/
 	if (references.has(value)) {
 		return references.get(value)!;
 	}

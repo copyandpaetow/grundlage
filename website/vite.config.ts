@@ -21,6 +21,7 @@ export default defineConfig({
 				perf: resolve(__dirname, "pages/perf/index.html"),
 				reorderStress: resolve(__dirname, "pages/reorder-stress/index.html"),
 				mutationStress: resolve(__dirname, "pages/mutation-stress/index.html"),
+				nested: resolve(__dirname, "pages/nesting/index.html"),
 			},
 		},
 	},

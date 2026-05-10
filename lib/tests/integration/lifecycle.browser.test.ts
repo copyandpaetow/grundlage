@@ -262,21 +262,80 @@ describe("component lifecycle", () => {
 		cleanup(element);
 	});
 
-	test("generator receives shadow root from yield", async () => {
+	test("generator receives the host element from yield", async () => {
 		const tag = uniqueTag();
-		let receivedRoot: ShadowRoot | null = null;
+		let receivedHost: HTMLElement | null = null;
 
 		const MyElement = render(function* () {
-			const root = yield () => html`<p>hello</p>`;
-			receivedRoot = root as ShadowRoot;
+			const host = yield () => html`<p>hello</p>`;
+			receivedHost = host as HTMLElement;
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag);
 		await sleep();
 
-		expect(receivedRoot).toBe(element.shadowRoot);
+		expect(receivedHost).toBe(element);
 
+		cleanup(element);
+	});
+
+	test("update() coalesces rapid calls into a single re-render", async () => {
+		const tag = uniqueTag();
+		let renderCount = 0;
+
+		const ComponentClass = render(function* () {
+			yield () => {
+				renderCount++;
+				return html`<span>${renderCount}</span>`;
+			};
+		});
+		customElements.define(tag, ComponentClass);
+
+		const element = mount(tag) as InstanceType<typeof ComponentClass>;
+		await sleep();
+		expect(renderCount).toBe(1);
+
+		// Three sync update() calls should batch into one re-render via the
+		// `await Promise.resolve()` in update(): the first transitions IDLE → SCHEDULED
+		// and the next two short-circuit on the SCHEDULED guard.
+		const first = element.update();
+		const second = element.update();
+		const third = element.update();
+		await Promise.all([first, second, third]);
+		await sleep();
+
+		expect(renderCount).toBe(2);
+		cleanup(element);
+	});
+
+	test("update() is a no-op for a static (non-renderer) yield", async () => {
+		const tag = uniqueTag();
+		let timesGeneratorRan = 0;
+
+		const ComponentClass = render(function* () {
+			timesGeneratorRan++;
+			// A bare HTMLTemplate yield installs a TEMPLATE_SOURCE_TYPE.STATIC source —
+			// update() should do nothing for it (no re-render, no generator restart).
+			yield html`<p>static-content</p>`;
+		});
+		customElements.define(tag, ComponentClass);
+
+		const element = mount(tag) as InstanceType<typeof ComponentClass>;
+		await sleep();
+		expect(timesGeneratorRan).toBe(1);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"static-content",
+		);
+
+		await element.update();
+		await element.update();
+		await sleep();
+
+		expect(timesGeneratorRan).toBe(1);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"static-content",
+		);
 		cleanup(element);
 	});
 

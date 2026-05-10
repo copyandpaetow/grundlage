@@ -12,39 +12,56 @@ npm install grundlage
 
 ### Components as Generators
 
-Components are defined using generator functions. The generator gives you explicit control over the lifecycle: setup runs synchronously up to the first yield, each yield mounts a view, and a function returned from the generator is stored as the cleanup callback. `render` returns a constructor — registration with `customElements.define` is left to the caller.
+Components are defined using generator functions. This gives you explicit control over the component lifecycle: setup runs until you yield a render function, the host element is passed in as the first argument, and the return value is your cleanup.
+
+`render(generator, options?)` returns a custom element constructor — register it with `customElements.define`.
 
 ```javascript
 import { render, html } from "grundlage";
 
-const AsyncComponent = render(async function* (element) {
-	yield html`<p>loading</p>`;
+customElements.define(
+	"async-component",
+	render(async function* (host) {
+		yield html`<p>loading</p>`;
 
-	try {
-		const data = await fetch("...").then((response) => response.json());
-		yield html`<p>name: ${data.name}, age: ${data.age}</p>`;
-	} catch (error) {
-		yield html`<p>error: ${error}</p>`;
-	}
+		try {
+			const data = await fetch("...");
+			yield html`<p>name: ${data.name}, age: ${data.age}</p>`;
+		} catch (error) {
+			yield html`<p>error: ${error}</p>`;
+		}
 
-	return () => {
-		console.log("cleanup");
-	};
-});
-
-customElements.define("async-component", AsyncComponent);
+		return () => {
+			console.log("cleanup");
+		};
+	}),
+);
 ```
 
-#### Yielding a template vs. yielding a function
+Each `yield` evaluates to the host element, so inner generators or render functions can capture it without closing over the outer parameter:
 
-You can yield either an `html` template directly or a function that returns one. The two behave differently when `element.update()` is called:
+```javascript
+render(function* () {
+	const host = yield () => html`<p>hello</p>`;
+	host.addEventListener("click", () => host.update());
+});
+```
 
-- `yield html\`...\`` — mounts the template once. Subsequent `update()` calls re-run with the same captured expressions, so the view stays put. Use this for static views and loading states.
-- `yield () => html\`...\`` — mounts the result and re-invokes the function on every `update()`, picking up fresh expression values. Use this for any view that should react to state changes.
+Yielded inner generators and render functions also receive the host element as their first argument — handy for nested rendering without re-capturing scope.
+
+```javascript
+render(function* (host) {
+	yield function* (innerHost) {
+		// innerHost === host
+		yield html`<p>nested</p>`;
+		return () => console.log("inner cleanup");
+	};
+});
+```
 
 ### Templating
 
-The `html` tagged template literal parses your markup once per template strings array and caches the result. Subsequent renders only update the dynamic parts.
+The `html` tagged template literal parses your markup once and caches the result. Subsequent renders only update the dynamic parts.
 
 ```javascript
 html`<div class="card ${isActive ? "active" : ""}">
@@ -52,6 +69,28 @@ html`<div class="card ${isActive ? "active" : ""}">
 	<p>${description}</p>
 </div>`;
 ```
+
+### props
+
+Managing props on web-components is tedious. As attributes they are always strings and are not that ergonomic to get to. Other types can be saved as
+properties on the element itself, but requires different handling. As a helper, we have a props function that takes an element and an object of Keys and Constructors.
+They will be used for typing and validating the input regardless of attribute or property.
+If the value is missing, a fallback can be provided.
+
+```javascript
+
+render(function* (host) {
+    const result = props(host, {
+        label: String,
+        count: Number,
+        disabled: Boolean,
+        callback: Function,
+        items: Array,
+        missing: [String, "default"],
+    });
+});
+```
+
 
 Supported bindings:
 
@@ -61,53 +100,27 @@ Supported bindings:
 - Event handlers: `<button onClick=${handler}>`
 - Lists: `<ul>${items.map(i => html`<li>${i}</li>`)}</ul>`
 - Nested templates: `<div>${showDetails ? html`<details>...</details>` : null}</div>`
-- Dynamic tags: `<${tagName}>content</${tagName}>` — open and close must both be dynamic
-- Raw content (`style`, `script`, `textarea`, `template`): `<style>${css}</style>`
-
-### Props
-
-Reading inputs on a web component is awkward: attributes are always strings, anything else has to be set as a JS property, and the two paths need different handling. The `props` helper takes the element and a schema of constructors, validates and coerces the input, and gives you a typed object regardless of how the value was passed in.
-
-Each schema entry can take three forms:
-
-- `Constructor` — required, throws if missing
-- `[Constructor]` — optional, resolves to `undefined` if missing
-- `[Constructor, defaultValue]` — optional with a fallback
-
-```javascript
-import { render, html, props } from "grundlage";
-
-const PropsExample = render(function* (element) {
-	const { label, count, disabled, callback, items, missing } = props(element, {
-		label: String,
-		count: Number,
-		disabled: Boolean,
-		callback: Function,
-		items: Array,
-		missing: [String, "default"],
-	});
-
-	yield () => html`<button onClick=${callback} disabled=${disabled}>${label} (${count})</button>`;
-});
-
-customElements.define("props-example", PropsExample);
-```
+- Dynamic tags: `<${tagName}>content</${tagName}>`
+- Raw content (style/script/textarea): `<style>${css}</style>`
 
 ### Reactivity
 
-When you call `element.update()`, Grundlage diffs the new expression array against the previous one and only touches the DOM for entries that actually changed:
+Grundlage uses a hash-based change detection system. When you call `host.update()` on the host element, it compares hashes of each expression to determine what actually changed.
 
-- Primitives are compared by reference (`===`).
-- Objects, functions, and nested `html` templates are compared by a content hash, so structurally equal values don't trigger DOM work.
-- Arrays always re-run their binding; per-item reuse happens inside the list reconciler via hash-based identity matching, so unchanged items keep their nodes.
+This means:
+
+- Primitives are compared by value
+- Arrays and objects are compared by content (shallow)
+- Nested templates are compared by structure and values
+- DOM updates only happen for expressions that changed
 
 ```javascript
-const TodoList = render(function* (element) {
+render(function* (host) {
 	const items = [];
 
 	const add = (text) => {
 		items.push({ id: Date.now(), text });
-		element.update();
+		host.update();
 	};
 
 	yield () => html`
@@ -116,10 +129,4 @@ const TodoList = render(function* (element) {
 		</ul>
 	`;
 });
-
-customElements.define("todo-list", TodoList);
 ```
-
-### Server rendering
-
-Components hydrate an existing shadow root if one is already attached when the constructor runs. On the hydration pass, tag, content, and raw-content bindings are trusted as-is from the server markup; only attribute bindings re-run, so event listeners and non-stringable JS properties get reattached. After the first `update()` the component switches to client-side rendering and behaves normally.

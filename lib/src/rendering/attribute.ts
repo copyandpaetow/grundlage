@@ -5,7 +5,8 @@ import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
 import { isPlainObject } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
 
-// 'o' = 111, 'n' = 110 — char-code check avoids allocating from startsWith.
+//event-handler attributes always start with "on" (onclick, onsubmit, …)
+//=> we sniff the first two char codes ('o' = 111, 'n' = 110) instead of `key.startsWith("on")` so we avoid allocating a substring on every attribute write
 const CHAR_LOWER_O = 111;
 const CHAR_LOWER_N = 110;
 
@@ -44,7 +45,8 @@ export const applyAttributeBinding = (
 
 	if (isStringable(value)) {
 		if (oldValue !== undefined && !isStringable(oldValue)) {
-			// Clean up the JS property that was previously set for a complex value
+			//the previous value was non-stringable, so we wrote it as a JS property on the element (see the else branch below)
+			//=> now that we're switching to a stringable value we need to delete that property, otherwise the JS property would shadow the html attribute we're about to set
 			delete (element as any)[key];
 		}
 		element.setAttribute(key, String(value));
@@ -106,9 +108,13 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
 
 	const isBooleanAttribute = binding.values.length === 0;
+	//"expandable" means the binding is a single expression in attribute-key position with no value half (e.g. `<div ${attrs}>`)
+	//the expression can be an array of names, an object of name/value pairs, or a string name
+	//=> handleExpandableAttribute fans it out into individual attribute writes for us
 	const isExpandable = binding.keys.length === 1;
 
-	//On initial render, the previousExpressions is empty, this way we keep the shape consistent and don't need to check downstream
+	//on the very first render previousExpressions is empty, so any `previousExpressions[index]` lookup downstream would be undefined, and we'd need a special-case branch everywhere
+	//=> we point it at currentExpressions instead, which makes every "did this change" comparison look unchanged — exactly what we want on the initial render
 	const previousExpressions =
 		context.previousExpressions.length > 0
 			? context.previousExpressions

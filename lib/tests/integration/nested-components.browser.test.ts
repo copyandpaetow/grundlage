@@ -1,14 +1,13 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, props, render } from "../../src/index";
 import { HTMLTemplate } from "../../src/rendering/template-html";
-import { BaseComponent, GeneratorFn } from "../../src/types";
+import { BaseComponent, ComponentGenerator } from "../../src/types";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
-const uniqueTag = (prefix: string) =>
-	`test-${prefix}-${tagId++}-${Date.now()}`;
+const uniqueTag = (prefix: string) => `test-${prefix}-${tagId++}-${Date.now()}`;
 
 const mount = (tag: string): HTMLElement => {
 	const element = document.createElement(tag);
@@ -205,8 +204,7 @@ describe("nested components", () => {
 		customElements.define(
 			childTag,
 			render(function* (element) {
-				yield () =>
-					html`<span>${element.getAttribute("value") ?? ""}</span>`;
+				yield () => html`<span>${element.getAttribute("value") ?? ""}</span>`;
 			}),
 		);
 
@@ -215,8 +213,7 @@ describe("nested components", () => {
 			yield () =>
 				html`<ul>
 					${items.map(
-						(item) =>
-							html`<li><${childTag} value=${item}></${childTag}></li>`,
+						(item) => html`<li><${childTag} value=${item}></${childTag}></li>`,
 					)}
 				</ul>`;
 		});
@@ -373,9 +370,10 @@ describe("shared template generator functions", () => {
 	const list = <Item>(
 		items: ReadonlyArray<Item>,
 		row: (item: Item) => HTMLTemplate,
-	): HTMLTemplate => html`<ul>
-		${items.map((item) => html`<li>${row(item)}</li>`)}
-	</ul>`;
+	): HTMLTemplate =>
+		html`<ul>
+			${items.map((item) => html`<li>${row(item)}</li>`)}
+		</ul>`;
 
 	test("same helper produces identical hashes for identical inputs", () => {
 		const first = card("Hi", "World");
@@ -436,9 +434,9 @@ describe("shared template generator functions", () => {
 
 		const stableHeading = element.shadowRoot?.querySelectorAll("h2")[0];
 		expect(stableHeading?.textContent).toBe("alpha");
-		expect(
-			element.shadowRoot?.querySelectorAll("h2")[1]?.textContent,
-		).toBe("beta");
+		expect(element.shadowRoot?.querySelectorAll("h2")[1]?.textContent).toBe(
+			"beta",
+		);
 
 		rows = [
 			{ title: "alpha", body: "one" },
@@ -451,9 +449,9 @@ describe("shared template generator functions", () => {
 		//since its inputs did not change
 		const headingAfter = element.shadowRoot?.querySelectorAll("h2")[0];
 		expect(headingAfter).toBe(stableHeading);
-		expect(
-			element.shadowRoot?.querySelectorAll("p")[1]?.textContent,
-		).toBe("two-updated");
+		expect(element.shadowRoot?.querySelectorAll("p")[1]?.textContent).toBe(
+			"two-updated",
+		);
 
 		element.remove();
 	});
@@ -532,9 +530,13 @@ describe("shared template generator functions", () => {
 		const tag = uniqueTag("shared-multi-site");
 
 		const ComponentClass = render(function* () {
-			yield () => html`<main>
-				${card("first", "one")}${card("second", "two")}${card("third", "three")}
-			</main>`;
+			yield () =>
+				html`<main>
+					${card("first", "one")}${card("second", "two")}${card(
+						"third",
+						"three",
+					)}
+				</main>`;
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -597,7 +599,7 @@ describe("shared template generator functions", () => {
 describe("shared generator functions", () => {
 	test("same generator passed to two render() calls produces independent components", async () => {
 		let mountCount = 0;
-		const counterGenerator: GeneratorFn = function* () {
+		const counterGenerator: ComponentGenerator = function* () {
 			const id = ++mountCount;
 			yield () => html`<span>id-${id}</span>`;
 		};
@@ -620,7 +622,7 @@ describe("shared generator functions", () => {
 
 	test("same generator reused for two instances of the same tag keeps state isolated", async () => {
 		const tag = uniqueTag("shared-gen-isolated");
-		const stateGenerator: GeneratorFn = function* (element) {
+		const stateGenerator: ComponentGenerator = function* (element) {
 			//per-instance state captured in the generator closure
 			let count = 0;
 			element.addEventListener("increment", () => {
@@ -650,7 +652,7 @@ describe("shared generator functions", () => {
 	test("yield* delegates to a shared sub-generator", async () => {
 		//a sub-generator acts like a reusable behavior block — its yields flow
 		//up through the parent generator into the framework's #step.
-		const loadingThenData: GeneratorFn = function* () {
+		const loadingThenData: ComponentGenerator = function* () {
 			yield html`<p>loading</p>`;
 			const data: string = (yield Promise.resolve("ready")) as string;
 			yield () => html`<p>${data}</p>`;
@@ -659,8 +661,8 @@ describe("shared generator functions", () => {
 		const tag = uniqueTag("delegated");
 		customElements.define(
 			tag,
-			render(function* (element) {
-				yield* loadingThenData(element);
+			render(function* (host) {
+				yield* loadingThenData(host);
 			}),
 		);
 
@@ -675,8 +677,7 @@ describe("shared generator functions", () => {
 	test("higher-order generator wraps another generator with extra behavior", async () => {
 		const calls: string[] = [];
 
-		const withLifecycleLog =
-			(name: string, inner: GeneratorFn): GeneratorFn =>
+		const withLifecycleLog = (name: string, inner: ComponentGenerator): ComponentGenerator =>
 			function* (element) {
 				calls.push(`${name}:setup`);
 				yield* inner(element);
@@ -684,7 +685,7 @@ describe("shared generator functions", () => {
 				return () => calls.push(`${name}:cleanup`);
 			};
 
-		const body: GeneratorFn = function* () {
+		const body: ComponentGenerator = function* () {
 			yield () => html`<p>wrapped</p>`;
 		};
 
@@ -790,10 +791,11 @@ describe("framework-parity patterns", () => {
 		customElements.define(
 			tag,
 			render(function* () {
-				yield () => html`<div>
-					<header><slot name="title"></slot></header>
-					<main><slot></slot></main>
-				</div>`;
+				yield () =>
+					html`<div>
+						<header><slot name="title"></slot></header>
+						<main><slot></slot></main>
+					</div>`;
 			}),
 		);
 
@@ -827,17 +829,20 @@ describe("framework-parity patterns", () => {
 				value = (event.target as HTMLInputElement).value;
 				element.update();
 			};
-			yield () => html`<div>
-				<input value=${value} onInput=${onInput} />
-				<output>${value}</output>
-			</div>`;
+			yield () =>
+				html`<div>
+					<input value=${value} onInput=${onInput} />
+					<output>${value}</output>
+				</div>`;
 		});
 		customElements.define(tag, ComponentClass);
 
 		const element = mount(tag);
 		await sleep();
 
-		const input = element.shadowRoot?.querySelector("input") as HTMLInputElement;
+		const input = element.shadowRoot?.querySelector(
+			"input",
+		) as HTMLInputElement;
 		input.value = "typed";
 		input.dispatchEvent(new Event("input", { bubbles: true }));
 		await sleep();
@@ -1022,7 +1027,8 @@ describe("framework-parity patterns", () => {
 			listTag,
 			render(function* (element) {
 				yield () => {
-					const rows = (element as HTMLElement & { items?: string[] }).items ?? [];
+					const rows =
+						(element as HTMLElement & { items?: string[] }).items ?? [];
 					const renderRow =
 						(element as HTMLElement & { row?: RowRenderer }).row ??
 						((item) => html`<li>${item}</li>`);
@@ -1040,8 +1046,7 @@ describe("framework-parity patterns", () => {
 				const items = ["one", "two", "three"];
 				const row: RowRenderer = (item) =>
 					html`<li class="custom">item:${item}</li>`;
-				yield () =>
-					html`<${listTag} items=${items} row=${row}></${listTag}>`;
+				yield () => html`<${listTag} items=${items} row=${row}></${listTag}>`;
 			}),
 		);
 
@@ -1119,7 +1124,9 @@ describe("framework-parity patterns", () => {
 			await sleep();
 
 			const child = element.shadowRoot?.querySelector(childTag) as HTMLElement;
-			const input = child.shadowRoot?.querySelector("input") as HTMLInputElement;
+			const input = child.shadowRoot?.querySelector(
+				"input",
+			) as HTMLInputElement;
 			input.focus();
 			expect(child.shadowRoot?.activeElement).toBe(input);
 
@@ -1139,9 +1146,7 @@ describe("framework-parity patterns", () => {
 	);
 
 	test("error thrown in nested child does not break the parent", async () => {
-		const warnSpy = vi
-			.spyOn(console, "warn")
-			.mockImplementation(() => {});
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
 		const childTag = uniqueTag("err-child");
 		let shouldChildThrow = true;

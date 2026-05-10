@@ -1,47 +1,31 @@
 import { html } from "./parser/html";
-import { props as propHelper, Schema } from "./validator/props";
 import { ValueOf } from "./parser/types";
 import { applyAttributeBinding } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
+import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions, RenderFunction } from "./types";
+import { isGeneratorFunction } from "./utils/is-generator";
 import {
-	BaseComponent,
-	ComponentConstructor,
-	ComponentOptions,
-	GeneratorFn,
-	TemplateRenderer,
-} from "./types";
-
-const defaultOptions: ComponentOptions = {
-	clonable: true,
-	delegatesFocus: true,
-	mode: "open",
-	serializable: true,
-};
-
-const UPDATE_STATE = {
-	IDLE: 0,
-	SCHEDULED: 1,
-	RENDERING: 2,
-} as const;
-
-const RENDER_MODE = {
-	SSR: 1,
-	CSR: 2,
-} as const;
+	advanceGenerator,
+	cancelGenerator,
+	deliverErrorToGenerator,
+	GeneratorTemplateSource,
+	TemplateSource
+} from "./rendering/generator-stepper";
+import { defaultOptions, RENDER_MODE, TEMPLATE_SOURCE_TYPE, UPDATE_STATE } from "./utils/constants";
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
-export { type ComponentOptions } from "./types";
+export { type ComponentOptions, type BaseComponent } from "./types";
 
 export const render = (
-	componentGenerator: GeneratorFn,
+	componentGenerator: ComponentGenerator,
 	options: ComponentOptions = defaultOptions,
 ): ComponentConstructor => {
 	class BaseElement extends HTMLElement implements BaseComponent {
-		#observer: MutationObserver;
-		#render: TemplateRenderer | null = null;
-		#view: HTMLTemplate | null = null;
-		#cleanup: VoidFunction | null = null;
+		#attributeObserver: MutationObserver;
+		#renderedTemplate: HTMLTemplate | null = null;
+		#componentGenerator: GeneratorTemplateSource | null = null;
+		#activeSource: TemplateSource | null = null;
 		#updateState: ValueOf<typeof UPDATE_STATE> = UPDATE_STATE.IDLE;
 		#renderMode: ValueOf<typeof RENDER_MODE> = RENDER_MODE.CSR;
 
@@ -55,24 +39,42 @@ export const render = (
 		}
 
 		connectedCallback() {
-			if (this.#render) {
-				//prevents re-rendering everything when this element is moved
+			if (this.#componentGenerator) {
+				//moving an element in the DOM fires disconnectedCallback then connectedCallback
+				//=> if a generator already exists we bail out so the move doesn't restart the component from scratch
 				return;
 			}
 
 			const generator = componentGenerator(this);
-			this.#step(generator, undefined);
+			const source: GeneratorTemplateSource = {
+				type: TEMPLATE_SOURCE_TYPE.GENERATOR,
+				createGenerator: componentGenerator,
+				generator,
+				cleanup: null,
+				terminated: false,
+			};
+			this.#componentGenerator = source;
 			this.#watchAttributes();
+			advanceGenerator(
+				source,
+				generator.next(undefined),
+				this.#onYield,
+				this.#onError,
+			);
 		}
 
 		async disconnectedCallback() {
-			//this callback is also called when moving inside of the dom.
+			//this callback is also called when moving inside the dom.
 			//By waiting a tick and checking if we are back in the dom, we can avoid false cleanup calls
 			await Promise.resolve();
-			if (!this.isConnected) {
-				this.#observer?.disconnect();
-				this.#render = null;
-				this.#cleanup?.();
+			if (this.isConnected) return;
+			this.#attributeObserver?.disconnect();
+			this.#teardownActiveSource();
+			const source = this.#componentGenerator;
+			if (source) {
+				cancelGenerator(source);
+				source.cleanup?.();
+				this.#componentGenerator = null;
 			}
 		}
 
@@ -81,98 +83,184 @@ export const render = (
 			this.update();
 		}
 
-		props(schema: Schema) {
-			propHelper(this, schema);
-		}
-
 		#watchAttributes() {
-			this.#observer?.disconnect();
-			this.#observer = new MutationObserver(() => this.update());
-			this.#observer.observe(this, { attributes: true });
+			this.#attributeObserver?.disconnect();
+			this.#attributeObserver = new MutationObserver(() => this.update());
+			this.#attributeObserver.observe(this, { attributes: true });
 		}
 
-		#handleError(error: Error) {
-			this.#render = null;
+		#onYield = (source: GeneratorTemplateSource, value: unknown): unknown => {
+			if (source === this.#componentGenerator) {
+				return this.#installSourceFrom(value);
+			}
+			if (source === this.#activeSource) {
+				if (value instanceof HTMLTemplate) {
+					this.#renderToDom(value);
+					return this;
+				}
+				if (typeof value === "function") {
+					if (isGeneratorFunction(value)) {
+						throw new Error(
+							"Inner generators cannot yield generator functions",
+						);
+					}
+					const result = (value as RenderFunction)(this);
+					this.#renderToDom(result);
+					return this;
+				}
+				return value;
+			}
+			//if we reach this point the yield came from a generator we no longer track (e.g. an async generator that was torn down but later resumes from a pending await)
+			//=> by returning undefined the value never reaches the dom
+		};
+
+		#onError = (error: Error) => {
+			const source = this.#componentGenerator;
+			if (!source || source.terminated) {
+				this.#abortAndShowError(error);
+				return;
+			}
+
+			const previous = this.#activeSource;
+			deliverErrorToGenerator(source, error, this.#onYield, this.#onError);
+
+			//deliverErrorToGenerator above can re-enter this same #onError if the error keeps escaping
+			//=> if that recursion has already aborted everything and nulled #componentGenerator, there's nothing left for us to do
+			if (this.#componentGenerator === null) return;
+
+			/*
+			otherwise the component generator's try/catch saw the error and reacted in one of two ways:
+			- it yielded a new template (a recovery) => #onYield has already swapped #activeSource over for us
+			- it ran a `return` (or fell off the end), which marks source.terminated and leaves #activeSource pointing at the inner that just errored => we tear that inner down silently
+			the previous frame's dom (#renderedTemplate) stays put either way — that's the error contract we promise users
+			*/
+			if (source.terminated) {
+				source.cleanup?.();
+				this.#componentGenerator = null;
+				if (previous === this.#activeSource) {
+					this.#teardownActiveSource();
+				}
+			}
+		};
+
+		#abortAndShowError(error: Error) {
+			this.#teardownActiveSource();
+			const source = this.#componentGenerator;
+			if (source) {
+				cancelGenerator(source);
+				source.cleanup?.();
+				this.#componentGenerator = null;
+			}
 			console.warn(error);
-			//visualizes the error better than just the warning
-			//TODO: we could think about whether to try to revert to the previous dom?
+			//we also write the error into the shadow root so it's more visible than just the console warning
 			this.shadowRoot!.textContent = `${error}`;
 		}
 
-		//coordinates the generator process in a semi-synchronous way so connectedCallback stays synchronous as well, otherwise we get timing issues with nested components
-		#step(generator: Generator | AsyncGenerator, result: unknown) {
-			while (true) {
-				try {
-					const next = generator.next(result);
-
-					if (next instanceof Promise) {
-						next
-							.then(({ done, value }) => {
-								if (done) {
-									this.#cleanup = typeof value === "function" ? value : null;
-									return;
-								}
-								this.#stepAsync(generator, value);
-							})
-							.catch((error) => this.#handleError(error));
-						return;
-					}
-
-					const { done, value } = next;
-					if (done) {
-						this.#cleanup = typeof value === "function" ? value : null;
-						return;
-					}
-
-					if (value instanceof Promise) {
-						value
-							.then((resolved) => this.#stepAsync(generator, resolved))
-							.catch((error) => this.#handleError(error));
-						return;
-					}
-
-					result = this.#applyYieldedValue(value);
-				} catch (error) {
-					this.#handleError(error as Error);
-					return;
+		#installSourceFrom(value: unknown): unknown {
+			if (value instanceof HTMLTemplate) {
+				this.#installStaticSource(value);
+			} else if (typeof value === "function") {
+				if (isGeneratorFunction(value)) {
+					this.#installGeneratorSource(value as ComponentGenerator);
+				} else {
+					this.#installRenderFunctionSource(value as RenderFunction);
 				}
-			}
-		}
-
-		#applyYieldedValue(value: unknown): unknown {
-			if (typeof value === "function") {
-				this.#render = value as TemplateRenderer;
-				return this.#mount(value());
-			} else if (value instanceof HTMLTemplate) {
-				this.#render = () => value;
-				return this.#mount(value);
-			}
-			return value;
-		}
-
-		#stepAsync(generator: Generator | AsyncGenerator, value: unknown) {
-			try {
-				const result = this.#applyYieldedValue(value);
-				this.#step(generator, result);
-			} catch (error) {
-				this.#handleError(error as Error);
-			}
-		}
-
-		#mount(template: HTMLTemplate): ShadowRoot | null {
-			this.#view = template;
-			if (this.#renderMode === RENDER_MODE.CSR) {
-				this.shadowRoot?.replaceChildren(template.setup());
 			} else {
-				this.#view.hydrate(this.shadowRoot!);
-				this.#renderMode = RENDER_MODE.CSR;
+				//the outer generator yielded something that isn't a template, render function, or generator
+				//=> we hand the value straight back as the result of its `yield` expression (e.g. the resolved value of a yielded Promise)
+				return value;
 			}
-			return this.shadowRoot;
+			return this;
+		}
+
+		/*
+		the install methods evaluate user code first (render function call, generator invocation, render to dom) and only assign #activeSource on success
+		=> we keep the "an assigned #activeSource is renderable" invariant clean: a throw in user code propagates without leaving a half-installed state behind
+		*/
+		#installStaticSource(template: HTMLTemplate) {
+			this.#teardownActiveSource();
+			this.#renderToDom(template);
+			this.#activeSource = { type: TEMPLATE_SOURCE_TYPE.STATIC };
+		}
+
+		#installRenderFunctionSource(renderFunction: RenderFunction) {
+			const template = renderFunction(this);
+			this.#teardownActiveSource();
+			this.#renderToDom(template);
+			this.#activeSource = {
+				type: TEMPLATE_SOURCE_TYPE.RENDER_FUNCTION,
+				render: renderFunction,
+			};
+		}
+
+		#installGeneratorSource(createGenerator: ComponentGenerator) {
+			const generator = createGenerator(this);
+			this.#teardownActiveSource();
+			const source: GeneratorTemplateSource = {
+				type: TEMPLATE_SOURCE_TYPE.GENERATOR,
+				createGenerator,
+				generator,
+				cleanup: null,
+				terminated: false,
+			};
+			this.#activeSource = source;
+			advanceGenerator(
+				source,
+				generator.next(undefined),
+				this.#onYield,
+				this.#onError,
+			);
+		}
+
+		#teardownActiveSource() {
+			const current = this.#activeSource;
+			if (current?.type === TEMPLATE_SOURCE_TYPE.GENERATOR) {
+				cancelGenerator(current);
+				current.cleanup?.();
+			}
+			this.#activeSource = null;
+		}
+
+		#restartGenerator(source: GeneratorTemplateSource) {
+			//advanceGenerator queues microtasks whenever a generator yields a Promise
+			//=> cancelGenerator first marks terminated=true so any of those pending microtasks bail out instead of resuming the old generator
+			//then we run cleanup, reset the source, and drive a fresh generator
+			cancelGenerator(source);
+			source.cleanup?.();
+			source.generator = source.createGenerator(this);
+			source.cleanup = null;
+			source.terminated = false;
+			advanceGenerator(
+				source,
+				source.generator.next(undefined),
+				this.#onYield,
+				this.#onError,
+			);
+		}
+
+		#renderToDom(value: unknown) {
+			const template = value instanceof HTMLTemplate ? value : html`${value}`;
+			const previousTemplate = this.#renderedTemplate;
+			if (
+				!previousTemplate ||
+				previousTemplate.parsedHTML.templateHash !==
+					template.parsedHTML.templateHash
+			) {
+				this.#renderedTemplate = template;
+				if (this.#renderMode === RENDER_MODE.CSR) {
+					this.shadowRoot?.replaceChildren(template.setup());
+				} else {
+					template.hydrate(this.shadowRoot!);
+					this.#renderMode = RENDER_MODE.CSR;
+				}
+				return;
+			}
+			previousTemplate.update(template.currentExpressions);
 		}
 
 		async update() {
 			if (
-				!this.#render ||
+				!this.#activeSource ||
 				this.#updateState !== UPDATE_STATE.IDLE ||
 				!this.isConnected
 			) {
@@ -184,26 +272,26 @@ export const render = (
 			this.#updateState = UPDATE_STATE.RENDERING;
 
 			try {
-				let template = this.#render();
-
-				if (!(template instanceof HTMLTemplate)) {
-					template = html`${template}`;
+				const active = this.#activeSource;
+				if (active) {
+					switch (active.type) {
+						case TEMPLATE_SOURCE_TYPE.STATIC:
+							break;
+						case TEMPLATE_SOURCE_TYPE.RENDER_FUNCTION:
+							this.#renderToDom(active.render(this));
+							break;
+						case TEMPLATE_SOURCE_TYPE.GENERATOR:
+							this.#restartGenerator(active);
+							break;
+					}
 				}
-
-				if (
-					!this.#view ||
-					this.#view.parsedHTML.templateHash !==
-						template.parsedHTML.templateHash
-				) {
-					this.#mount(template);
-					this.#updateState = UPDATE_STATE.IDLE;
-					return;
-				}
-				this.#view.update(template.currentExpressions);
 			} catch (error) {
-				this.#handleError(error as Error);
+				this.#onError(error as Error);
+			} finally {
+				//#onError can re-enter user code (via deliverErrorToGenerator throwing into the generator) and that user code can throw again
+				//=> we reset updateState in finally so a throw on the way out can't leave it stuck non-IDLE, which would make every future update() bail at the guard above
+				this.#updateState = UPDATE_STATE.IDLE;
 			}
-			this.#updateState = UPDATE_STATE.IDLE;
 		}
 	}
 

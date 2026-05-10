@@ -10,24 +10,26 @@ import {
 	TagBinding,
 	ValueOf
 } from "./types";
-import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util";
-/*
-parse a tagged template string into:
+import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util"; /*
+the idea here is to analyze and parse a tagged template string to give us
 - a document fragment
 - a hash
-- an array of expression bindings
-- a mapping from each expression index to its owning binding
+- an array of expressions bindings
+- a mapping array of which expression maps to which binding
 
-Several expressions can share one binding:
-  <div class="${dynamicA} static ${dynamicB}">  -> one attribute binding
+several expressions can be part of one binding like
+<div class="${dynamic1} static ${dynamic1}">
+=> one attribute binding
 
-The expressions also don't have to be adjacent. The two `${level}` slots below
-share a single tag binding because open and close are paired:
-  <h${level}>Hello, ${name}</h${level}>  -> one tag binding + one content binding
+They also don't have to be next to each other
+<h${headingLevel}>Hello, ${name}<h${headingLevel}>
+=> one tag binding
+=> one content binding
 
-We walk character by character through a state machine. On each state change
-we move the captured slice into the buffer array dedicated to that state, so
-dynamic parts can be substituted without intermediate string allocations.
+We walk each character and listen for different character combinations to change the state machine.
+Depending on the state we move the last characters since the state change to the dedicated buffer array.
+=> this way we can change and insert parts dynamically while also keeping memory usage low / performance up
+
 */
 
 type StateValue = ValueOf<typeof STATE>;
@@ -35,8 +37,8 @@ type BufferArray = Array<string | number>;
 
 const range = new Range();
 /*
-these elements we need to handle differently as we can't have comment markers in them, so we can only replace them as a whole
-this requires a different marker strategy
+the parser drops a comment marker at every dynamic position so we can find it again later — but these elements either don't render html children (style, script, textarea) or are inert (template), so a comment inside them wouldn't survive as a usable marker
+=> for these we treat the whole element body as a single replaceable chunk and emit one marker before it instead of marking inner positions
 */
 const isSpecialElementTag = (tag: string) =>
 	tag === "style" ||
@@ -45,7 +47,7 @@ const isSpecialElementTag = (tag: string) =>
 	tag === "template";
 const PLACEHOLDER_TAG = "div";
 
-//dense 0..N so the main switch can compile to a jump table
+//we keep the values dense 0..N so the main switch can compile to a jump table
 const STATE = {
 	TEXT: 0,
 	COMMENT: 1,
@@ -67,22 +69,14 @@ let charIndex = 0;
 let splitIndex = 0;
 let attributeQuote = "";
 let currentTagName = "";
-let selfClosing = false;
 let activeBinding: Binding | null = null;
 let activeTagBinding: Binding | null = null;
-//tracks every open tag in source order, dynamic or static. A dynamic open pushes its TagBinding;
-//a static open pushes null. Close tags pop and verify the kind matches — `<${tag}>...</div>` and
-//`<div>...</${tag}>` both throw rather than silently picking the wrong opener via at(-1).
-const openTagBindings: Array<TagBinding | null> = [];
+const openTagBindings: Array<TagBinding> = [];
 
 /*
-using the module scope was chose to keep performance high / reduce memory usage as much as possible
-as this is executed early and needs to be fast
-
-if concurrency becomes a requirement, we would need to put this into a class/closure and create a pool of parsers
-
-a thrown exception mid-parse is safe: the next call enters through setup() which resets every buffer
-and state field before reading anything, so leftover state from a failed parse cannot leak into the next one
+by keeping the state at module scope we avoid allocating buffers and cursors on every parse
+this is safe because parse() runs fully synchronously, so we can't re-enter it
+if concurrent parsing ever becomes a requirement, we would need to wrap this in a class and pool instances
 */
 const resultBuffer: BufferArray = [];
 const elementBuffer: BufferArray = [];
@@ -105,7 +99,6 @@ const setup = (strings: TemplateStringsArray) => {
 	splitIndex = 0;
 	attributeQuote = "";
 	currentTagName = "";
-	selfClosing = false;
 	activeBinding = null;
 	activeTagBinding = null;
 	openTagBindings.length = 0;
@@ -192,20 +185,10 @@ const createBinding = () => {
 				values: [],
 				endValues: [],
 				relatedAttributes: [],
-				bindingIndex: bindings.length, //set before push so it matches the eventual index
+				bindingIndex: bindings.length, //we set this before the push so it matches the eventual index
 			} satisfies TagBinding;
-		case STATE.END_TAG: {
-			//end tags don't get their own binding — they reuse the matching open tag's binding
-			//so a dynamic `</${tag}>` updates in lockstep with its `<${tag}>`. The caller in the
-			//parse loop relies on this asymmetry and skips the bindings.push() for END_TAG state.
-			const opener = openTagBindings.at(-1);
-			if (!opener) {
-				throw new Error(
-					"Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
-				);
-			}
-			return opener;
-		}
+		case STATE.END_TAG:
+			return openTagBindings.at(-1)!;
 
 		default:
 			throw new Error(`createBinding called in non-binding state: ${state}`);
@@ -224,7 +207,7 @@ const completeComment = () => {
 		const marker = createComment();
 		contentBuffer.push(marker, marker);
 	} else {
-		// static comments: re-wrap with delimiters since they were stripped during capture
+		//for static comments we re-wrap with delimiters since they were stripped during capture
 		contentBuffer.push("<!--");
 		moveArrayContents(commentBuffer, contentBuffer);
 		contentBuffer.push("-->");
@@ -252,29 +235,18 @@ const completeTag = () => {
 		elementBuffer.push(PLACEHOLDER_TAG);
 		resultBuffer.push(createComment());
 		activeTagBinding = activeBinding;
-		openTagBindings.push(activeBinding as TagBinding);
 	} else {
 		currentTagName = tagBuffer[0] as string;
 		moveArrayContents(tagBuffer, elementBuffer);
-		openTagBindings.push(null);
 	}
 	activeBinding = null;
 };
 
 const completeEndTag = () => {
-	const opener = openTagBindings.pop();
 	if (activeBinding) {
-		if (!opener) {
-			throw new Error(
-				"Asymmetric tag: dynamic </${...}> close cannot pair with a static open tag — make the open dynamic too.",
-			);
-		}
 		endTagBuffer.length = 0;
 		endTagBuffer.push(PLACEHOLDER_TAG);
-	} else if (opener) {
-		throw new Error(
-			"Asymmetric tag: static end tag cannot pair with a dynamic <${...}> open tag — make the close dynamic too.",
-		);
+		openTagBindings.pop();
 	}
 	resultBuffer.push("</");
 	moveArrayContents(endTagBuffer, resultBuffer);
@@ -293,8 +265,8 @@ const completeAttribute = () => {
 			(activeBinding as AttributeBinding).values,
 		);
 		resultBuffer.push(createComment());
-		//leading whitespace is pushed as its own single-char entry by the ELEMENT→ATTRIBUTE_KEY transition;
-		//drop it here without allocating a trimmed copy
+		//leading whitespace was pushed as its own single-char entry by the ELEMENT→ATTRIBUTE_KEY transition
+		//=> we can drop it here without allocating a trimmed copy
 		const keys = (activeBinding as AttributeBinding).keys;
 		const firstKey = keys[0];
 		if (
@@ -304,7 +276,8 @@ const completeAttribute = () => {
 		) {
 			keys.shift();
 		}
-		//links attribute bindings to the tag binding. This reduces complexity later on as tag updates need to communicate to attribute updates
+		//replacing a tag means creating a new element and copying attributes over — but JS-property attributes (e.g. event listeners) don't survive that copy
+		//=> we record which attribute bindings live on the surrounding tag so updateTag can mark them dirty and have them re-applied on the new element
 		(activeTagBinding as TagBinding)?.relatedAttributes.push(
 			bindings.length - 1,
 		);
@@ -334,12 +307,6 @@ const flushElement = () => {
 	resultBuffer.push("<");
 	moveArrayContents(elementBuffer, resultBuffer);
 	resultBuffer.push(">");
-	//`<div />` parses as an open tag in HTML5 — without a synthetic close, siblings get adopted as children.
-	//currentTagName is the static tag name, or PLACEHOLDER_TAG ("div") for dynamic tags so updateTag still finds a complete element.
-	if (selfClosing) {
-		resultBuffer.push("</", currentTagName, ">");
-		selfClosing = false;
-	}
 	moveArrayContents(contentBuffer, resultBuffer);
 
 	currentTagName = "";
@@ -357,7 +324,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 			switch (state) {
 				case STATE.TEXT: {
-					//inside an element, we only care about the exit: a child tag (e.g. <strong>), the current tag's end (e.g. </div>), or a comment (e.g. <!-- -->)
+					//inside an element, we only care for the exit, which is either another tag (e.g. <strong>), the current tag's end (e.g. </div>), or a comment (e.g. <!-- -->)
 					if (char !== "<") {
 						continue;
 					}
@@ -422,18 +389,13 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					}
 					continue;
 
-				case STATE.TAG: {
+				case STATE.TAG:
 					//the tag only refers to the name (div, span, etc.) and can be exited by a white space, indicating attributes, or by a closing bracket
 					if (char !== ">" && !isWhitespace(char)) {
 						continue;
 					}
 
-					//`<div/>` (no space): trailing slash is part of the self-close, not the tag name
-					const tagEnd =
-						char === ">" && activeTemplate[charIndex - 1] === "/"
-							? charIndex - 1
-							: charIndex;
-					capture(tagBuffer, splitIndex, tagEnd);
+					capture(tagBuffer, splitIndex, charIndex);
 					splitIndex = charIndex;
 					completeTag();
 
@@ -446,8 +408,6 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					//special case of a self-closing tag
 					if (activeTemplate[charIndex - 1] === "/") {
-						openTagBindings.pop();
-						selfClosing = true;
 						flushElement();
 						state = STATE.TEXT;
 						splitIndex = charIndex + 1;
@@ -460,7 +420,6 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					splitIndex = charIndex + 1;
 					continue;
-				}
 
 				case STATE.ELEMENT:
 					//this is a meta state, coordinating tags and attributes, and marks the transition to the elements content
@@ -471,8 +430,6 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					if (char === ">") {
 						if (activeTemplate[charIndex - 1] === "/") {
-							openTagBindings.pop();
-							selfClosing = true;
 							flushElement();
 							state = STATE.TEXT;
 						} else if (isSpecialElementTag(currentTagName)) {
@@ -486,14 +443,13 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					state = STATE.ATTRIBUTE_KEY;
 					if (isWhitespace(char)) {
-						//push the whitespace directly as its own buffer entry so downstream capture
-						//starts past it — static attrs still get their separator; dynamic attrs can
-						//drop this single-char entry in completeAttribute without trimming a string
+						//we push the whitespace as its own buffer entry so downstream capture starts past it
+						//=> static attrs still get their separator and dynamic attrs can drop this single-char entry in completeAttribute without trimming a string
 						attributeKeyBuffer.push(char);
 						splitIndex = charIndex + 1;
 					} else {
 						splitIndex = charIndex;
-						charIndex--; //rewind so the attribute starts correctly
+						charIndex--; //we rewind so the attribute starts correctly
 					}
 
 					continue;
@@ -511,19 +467,19 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind for element state management
+						charIndex--; //we rewind for element state management
 						//self-closing tag: "/" before ">" ends the attribute without including the "/"
 					} else if (char === "/" && activeTemplate[charIndex + 1] === ">") {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						completeAttribute();
-						// transition to ELEMENT without rewinding — the next char ">" will be handled there
+						//we transition to ELEMENT without rewinding — the next char ">" will be handled there
 						state = STATE.ELEMENT;
 						//special case if the element ends directly after the boolean attribute
 					} else if (char === ">") {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind for element state management
+						charIndex--; //we rewind for element state management
 					}
 					continue;
 
@@ -542,13 +498,13 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind for element state management
+						charIndex--; //we rewind for element state management
 					} else if (!attributeQuote && char === ">") {
 						//special case if the unquoted attribute is ended by the element end
 						capture(attributeValueBuffer, splitIndex, charIndex);
 						completeAttribute();
 						state = STATE.ELEMENT;
-						charIndex--; // rewind for element state management
+						charIndex--; //we rewind for element state management
 					}
 					continue;
 
@@ -571,9 +527,15 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 		if (!activeBinding) {
 			activeBinding = createBinding();
 
-			//end tags reuse the matching open tag's binding (see createBinding STATE.END_TAG);
-			//all other states get a fresh entry. The push of the open-tag stack happens in completeTag
-			//so dynamic and static opens stay symmetric.
+			/*
+             bindings for tags require special handling
+             - the end tag has no binding but the tag binding still needs to know about them
+             - so we store them in a stack to connect them
+            */
+			if (state === STATE.TAG) {
+				openTagBindings.push(activeBinding as TagBinding);
+			}
+
 			if (state !== STATE.END_TAG) {
 				bindings.push(activeBinding);
 			}
@@ -600,6 +562,9 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 	};
 };
 
+//engines hand us the same TemplateStringsArray identity for every call from a given tagged-template literal site
+//=> by keying a WeakMap on it we get a per-call-site parse cache for free
+//and the entry can GC once the call site (e.g. a dynamically loaded module) is unloaded
 const htmlCache = new WeakMap<TemplateStringsArray, ParsedHTML>();
 
 export const html = (

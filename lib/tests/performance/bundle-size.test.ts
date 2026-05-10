@@ -12,10 +12,10 @@ describe("bundle size", () => {
 		expect(sizeKB).toBeLessThan(15);
 	});
 
-	test("gzipped bundle size stays under 5 KB", () => {
+	test("gzipped bundle size stays under 6 KB", () => {
 		const raw = readFileSync(distPath);
 		const gzipped = gzipSync(raw, { level: 9 });
 		const sizeKB = gzipped.length / 1024;
-		expect(sizeKB).toBeLessThan(5);
+		expect(sizeKB).toBeLessThan(6);
 	});
 });

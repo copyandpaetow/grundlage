@@ -323,10 +323,10 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
-		test("generator receives shadow root from yield during hydration", async () => {
+		test("generator receives the host element from yield during hydration", async () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
-			let receivedRoot: ShadowRoot | null = null;
+			let receivedHost: HTMLElement | null = null;
 
 			const serialized = await serverRender(
 				serverTag,
@@ -343,13 +343,13 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			customElements.define(
 				clientTag,
 				render(function* () {
-					const root = yield () => html`<p>content</p>`;
-					receivedRoot = root as ShadowRoot;
+					const host = yield () => html`<p>content</p>`;
+					receivedHost = host as HTMLElement;
 				}),
 			);
 			await sleep();
 
-			expect(receivedRoot).toBe(element.shadowRoot);
+			expect(receivedHost).toBe(element);
 
 			cleanup(element);
 		});
