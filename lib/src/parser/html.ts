@@ -10,7 +10,8 @@ import {
 	TagBinding,
 	ValueOf
 } from "./types";
-import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util"; /*
+import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util";
+/*
 the idea here is to analyze and parse a tagged template string to give us
 - a document fragment
 - a hash
@@ -69,9 +70,13 @@ let charIndex = 0;
 let splitIndex = 0;
 let attributeQuote = "";
 let currentTagName = "";
+let selfClosing = false;
 let activeBinding: Binding | null = null;
 let activeTagBinding: Binding | null = null;
-const openTagBindings: Array<TagBinding> = [];
+//tracks every open tag in source order, dynamic or static. A dynamic open pushes its TagBinding;
+//a static open pushes null. Close tags pop and verify the kind matches — `<${tag}>...</div>` and
+//`<div>...</${tag}>` both throw rather than silently picking the wrong opener via at(-1).
+const openTagBindings: Array<TagBinding | null> = [];
 
 /*
 by keeping the state at module scope we avoid allocating buffers and cursors on every parse
@@ -99,6 +104,7 @@ const setup = (strings: TemplateStringsArray) => {
 	splitIndex = 0;
 	attributeQuote = "";
 	currentTagName = "";
+	selfClosing = false;
 	activeBinding = null;
 	activeTagBinding = null;
 	openTagBindings.length = 0;
@@ -187,8 +193,18 @@ const createBinding = () => {
 				relatedAttributes: [],
 				bindingIndex: bindings.length, //we set this before the push so it matches the eventual index
 			} satisfies TagBinding;
-		case STATE.END_TAG:
-			return openTagBindings.at(-1)!;
+		case STATE.END_TAG: {
+			//end tags don't get their own binding — they reuse the matching open tag's binding
+			//so a dynamic `</${tag}>` updates in lockstep with its `<${tag}>`. The caller in the
+			//parse loop relies on this asymmetry and skips the bindings.push() for END_TAG state.
+			const opener = openTagBindings.at(-1);
+			if (!opener) {
+				throw new Error(
+					"Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
+				);
+			}
+			return opener;
+		}
 
 		default:
 			throw new Error(`createBinding called in non-binding state: ${state}`);
@@ -235,18 +251,29 @@ const completeTag = () => {
 		elementBuffer.push(PLACEHOLDER_TAG);
 		resultBuffer.push(createComment());
 		activeTagBinding = activeBinding;
+		openTagBindings.push(activeBinding as TagBinding);
 	} else {
 		currentTagName = tagBuffer[0] as string;
 		moveArrayContents(tagBuffer, elementBuffer);
+		openTagBindings.push(null);
 	}
 	activeBinding = null;
 };
 
 const completeEndTag = () => {
+	const opener = openTagBindings.pop();
 	if (activeBinding) {
+		if (!opener) {
+			throw new Error(
+				"Asymmetric tag: dynamic </${...}> close cannot pair with a static open tag — make the open dynamic too.",
+			);
+		}
 		endTagBuffer.length = 0;
 		endTagBuffer.push(PLACEHOLDER_TAG);
-		openTagBindings.pop();
+	} else if (opener) {
+		throw new Error(
+			"Asymmetric tag: static end tag cannot pair with a dynamic <${...}> open tag — make the close dynamic too.",
+		);
 	}
 	resultBuffer.push("</");
 	moveArrayContents(endTagBuffer, resultBuffer);
@@ -307,6 +334,12 @@ const flushElement = () => {
 	resultBuffer.push("<");
 	moveArrayContents(elementBuffer, resultBuffer);
 	resultBuffer.push(">");
+	//`<div />` parses as an open tag in HTML5 — without a synthetic close, siblings get adopted as children.
+	//currentTagName is the static tag name, or PLACEHOLDER_TAG ("div") for dynamic tags so updateTag still finds a complete element.
+	if (selfClosing) {
+		resultBuffer.push("</", currentTagName, ">");
+		selfClosing = false;
+	}
 	moveArrayContents(contentBuffer, resultBuffer);
 
 	currentTagName = "";
@@ -389,13 +422,18 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 					}
 					continue;
 
-				case STATE.TAG:
+				case STATE.TAG: {
 					//the tag only refers to the name (div, span, etc.) and can be exited by a white space, indicating attributes, or by a closing bracket
 					if (char !== ">" && !isWhitespace(char)) {
 						continue;
 					}
 
-					capture(tagBuffer, splitIndex, charIndex);
+					//`<div/>` (no space): trailing slash is part of the self-close, not the tag name
+					const tagEnd =
+						char === ">" && activeTemplate[charIndex - 1] === "/"
+							? charIndex - 1
+							: charIndex;
+					capture(tagBuffer, splitIndex, tagEnd);
 					splitIndex = charIndex;
 					completeTag();
 
@@ -408,6 +446,8 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					//special case of a self-closing tag
 					if (activeTemplate[charIndex - 1] === "/") {
+						openTagBindings.pop();
+						selfClosing = true;
 						flushElement();
 						state = STATE.TEXT;
 						splitIndex = charIndex + 1;
@@ -420,6 +460,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					splitIndex = charIndex + 1;
 					continue;
+				}
 
 				case STATE.ELEMENT:
 					//this is a meta state, coordinating tags and attributes, and marks the transition to the elements content
@@ -430,6 +471,8 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					if (char === ">") {
 						if (activeTemplate[charIndex - 1] === "/") {
+							openTagBindings.pop();
+							selfClosing = true;
 							flushElement();
 							state = STATE.TEXT;
 						} else if (isSpecialElementTag(currentTagName)) {
@@ -527,15 +570,9 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 		if (!activeBinding) {
 			activeBinding = createBinding();
 
-			/*
-             bindings for tags require special handling
-             - the end tag has no binding but the tag binding still needs to know about them
-             - so we store them in a stack to connect them
-            */
-			if (state === STATE.TAG) {
-				openTagBindings.push(activeBinding as TagBinding);
-			}
-
+			//end tags reuse the matching open tag's binding (see createBinding STATE.END_TAG);
+			//all other states get a fresh entry. The push of the open-tag stack happens in completeTag
+			//so dynamic and static opens stay symmetric.
 			if (state !== STATE.END_TAG) {
 				bindings.push(activeBinding);
 			}

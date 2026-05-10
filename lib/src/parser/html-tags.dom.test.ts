@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, expect, test } from "vitest";
 import { html } from "./html";
 import { AttributeBinding, BINDING_TYPES, TagBinding } from "./types";
 
@@ -6,7 +6,7 @@ describe("html parser — tag bindings", () => {
 	test("dynamic tag name", () => {
 		const tag = "div";
 		const template = html`
-            <${tag}>content</${tag}>`;
+			<${tag}>content</${tag}>`;
 
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as TagBinding;
@@ -17,7 +17,7 @@ describe("html parser — tag bindings", () => {
 		const tag = "div";
 		const cls = "red";
 		const template = html`
-            <${tag} class="${cls}">content</${tag}>`;
+			<${tag} class="${cls}">content</${tag}>`;
 
 		const tagBinding = template.parsedHTML.bindings[0] as TagBinding;
 		expect(tagBinding.type).toBe(BINDING_TYPES.TAG);
@@ -27,7 +27,7 @@ describe("html parser — tag bindings", () => {
 	test("dynamic tag end tag maps to same binding as open tag", () => {
 		const tag = "div";
 		const template = html`
-            <${tag}>content</${tag}>`;
+			<${tag}>content</${tag}>`;
 
 		// Open and close tag expressions should map to the same binding
 		expect(template.parsedHTML.expressionToBinding).toEqual([0, 0]);
@@ -46,7 +46,7 @@ describe("html parser — tag bindings", () => {
 		const tag = "div";
 		const cls = "red";
 		const template = html`
-            <${tag} class="${cls}">text</${tag}>`;
+			<${tag} class="${cls}">text</${tag}>`;
 
 		const tagBinding = template.parsedHTML.bindings[0] as TagBinding;
 		expect(tagBinding.type).toBe(BINDING_TYPES.TAG);
@@ -62,7 +62,7 @@ describe("html parser — tag bindings", () => {
 		const cls = "red";
 		const id = "main";
 		const template = html`
-            <${tag} class="${cls}" id="${id}">text</${tag}>`;
+			<${tag} class="${cls}" id="${id}">text</${tag}>`;
 
 		const tagBinding = template.parsedHTML.bindings[0] as TagBinding;
 		expect(tagBinding.type).toBe(BINDING_TYPES.TAG);
@@ -73,7 +73,7 @@ describe("html parser — tag bindings", () => {
 		const tag = "button";
 		const attr = "disabled";
 		const template = html`
-            <${tag} ${attr}>click</${tag}>`;
+			<${tag} ${attr}>click</${tag}>`;
 
 		const tagBinding = template.parsedHTML.bindings[0] as TagBinding;
 		expect(tagBinding.type).toBe(BINDING_TYPES.TAG);
@@ -84,9 +84,9 @@ describe("html parser — tag bindings", () => {
 		const outer = "div";
 		const inner = "span";
 		const template = html`
-            <${outer}>
-                <${inner}>text</${inner}>
-            </${outer}>`;
+			<${outer}>
+				<${inner}>text</${inner}>
+			</${outer}>`;
 
 		const bindings = template.parsedHTML.bindings;
 		expect(bindings.filter((b) => b.type === BINDING_TYPES.TAG)).toHaveLength(
@@ -97,7 +97,7 @@ describe("html parser — tag bindings", () => {
 	test("dynamic tag with no content", () => {
 		const tag = "div";
 		const template = html`
-            <${tag}></${tag}>`;
+			<${tag}></${tag}>`;
 
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as TagBinding;
@@ -107,7 +107,7 @@ describe("html parser — tag bindings", () => {
 	test("dynamic tag with static attributes preserved", () => {
 		const tag = "div";
 		const template = html`
-            <${tag} class="static" id="fixed">text</${tag}>`;
+			<${tag} class="static" id="fixed">text</${tag}>`;
 
 		// Only 1 binding (the tag), static attributes are not bindings
 		expect(template.parsedHTML.bindings).toHaveLength(1);
@@ -140,7 +140,8 @@ describe("html parser — tag bindings", () => {
 	});
 
 	test("static self-closing tag with space produces sibling, not parent", () => {
-		const template = html`<div /><span>after</span>`;
+		const template = html`<div />
+			<span>after</span>`;
 		const fragment = template.parsedHTML.fragment;
 		const div = fragment.querySelector("div")!;
 		const span = fragment.querySelector("span")!;
@@ -151,7 +152,8 @@ describe("html parser — tag bindings", () => {
 	});
 
 	test("static self-closing tag without space produces sibling, not parent", () => {
-		const template = html`<div/><span>after</span>`;
+		const template = html`<div />
+			<span>after</span>`;
 		const fragment = template.parsedHTML.fragment;
 		const div = fragment.querySelector("div")!;
 		const span = fragment.querySelector("span")!;
@@ -162,7 +164,7 @@ describe("html parser — tag bindings", () => {
 	});
 
 	test("static self-closing tag does not include slash in tag name", () => {
-		const template = html`<div/>`;
+		const template = html`<div />`;
 		const fragment = template.parsedHTML.fragment;
 		const div = fragment.querySelector("div")!;
 		expect(div).not.toBeNull();
@@ -170,7 +172,8 @@ describe("html parser — tag bindings", () => {
 	});
 
 	test("static self-closing tag with attributes preserves them", () => {
-		const template = html`<div id="alone" class="solo" /><span>after</span>`;
+		const template = html`<div id="alone" class="solo" />
+			<span>after</span>`;
 		const fragment = template.parsedHTML.fragment;
 		const div = fragment.querySelector("div")!;
 		expect(div.getAttribute("id")).toBe("alone");
@@ -180,7 +183,8 @@ describe("html parser — tag bindings", () => {
 
 	test("static self-closing tag with dynamic attribute keeps related-attribute wiring", () => {
 		const cls = "red";
-		const template = html`<div class="${cls}" /><span>after</span>`;
+		const template = html`<div class="${cls}" />
+			<span>after</span>`;
 		const fragment = template.parsedHTML.fragment;
 		const div = fragment.querySelector("div")!;
 		const span = fragment.querySelector("span")!;

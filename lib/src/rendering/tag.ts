@@ -10,11 +10,10 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 
 	//we're about to replace the element with a freshly-created one — to the browser that's a remove + insert, which drops focus, selection, and similar live UI state
 	//=> if focus currently lives inside this element we remember it so we can restore it after the swap below
-	const focusElement = element.contains(
-		(element.getRootNode() as ShadowRoot).activeElement,
-	)
-		? (document.activeElement as HTMLElement)
-		: null;
+	const focusRoot = element.getRootNode() as ShadowRoot | Document;
+	const focusedNode = focusRoot.activeElement as HTMLElement | null;
+	const focusElement =
+		focusedNode && element.contains(focusedNode) ? focusedNode : null;
 
 	const newElement = document.createElement(newTag);
 	for (
