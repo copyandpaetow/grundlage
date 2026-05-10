@@ -1,0 +1,128 @@
+import { ComponentGenerator, RenderFunction } from "../types";
+import { TEMPLATE_SOURCE_TYPE } from "../utils/constants";
+
+export type StaticTemplateSource = {
+	type: typeof TEMPLATE_SOURCE_TYPE.STATIC;
+};
+
+export type RenderFunctionSource = {
+	type: typeof TEMPLATE_SOURCE_TYPE.RENDER_FUNCTION;
+	render: RenderFunction;
+};
+
+export type GeneratorTemplateSource = {
+	type: typeof TEMPLATE_SOURCE_TYPE.GENERATOR;
+	createGenerator: ComponentGenerator;
+	generator: Generator | AsyncGenerator;
+	cleanup: VoidFunction | null;
+	terminated: boolean;
+};
+
+export type TemplateSource =
+	| StaticTemplateSource
+	| RenderFunctionSource
+	| GeneratorTemplateSource;
+
+export type OnYield = (
+	source: GeneratorTemplateSource,
+	value: unknown,
+) => unknown;
+export type OnError = (error: Error) => void;
+
+const captureCleanup = (source: GeneratorTemplateSource, value: unknown) => {
+	source.terminated = true;
+	if (typeof value === "function") {
+		source.cleanup = value as VoidFunction;
+	}
+};
+
+export const advanceGenerator = (
+	source: GeneratorTemplateSource,
+	step: IteratorResult<unknown> | Promise<IteratorResult<unknown>>,
+	onYield: OnYield,
+	onError: OnError,
+): void => {
+	while (true) {
+		if (source.terminated) return;
+
+		if (step instanceof Promise) {
+			step.then(
+				(resolved) => advanceGenerator(source, resolved, onYield, onError),
+				(error) => {
+					source.terminated = true;
+					onError(error as Error);
+				},
+			);
+			return;
+		}
+
+		if (step.done) {
+			captureCleanup(source, step.value);
+			return;
+		}
+
+		if (step.value instanceof Promise) {
+			step.value.then(
+				(resolved) =>
+					advanceGenerator(
+						source,
+						{ done: false, value: resolved },
+						onYield,
+						onError,
+					),
+				(error) => onError(error as Error),
+			);
+			return;
+		}
+
+		let result: unknown;
+		try {
+			result = onYield(source, step.value);
+		} catch (error) {
+			onError(error as Error);
+			return;
+		}
+
+		try {
+			step = source.generator.next(result);
+		} catch (error) {
+			source.terminated = true;
+			onError(error as Error);
+			return;
+		}
+	}
+};
+
+export const throwIntoGenerator = (
+	source: GeneratorTemplateSource,
+	error: Error,
+	onYield: OnYield,
+	onError: OnError,
+): boolean => {
+	if (source.terminated) return false;
+
+	let step: IteratorResult<unknown> | Promise<IteratorResult<unknown>>;
+	try {
+		step = (source.generator as Generator).throw(error);
+	} catch (uncaught) {
+		source.terminated = true;
+		onError(uncaught as Error);
+		return true;
+	}
+
+	advanceGenerator(source, step, onYield, onError);
+	return true;
+};
+
+export const cancelGenerator = (source: GeneratorTemplateSource) => {
+	if (source.terminated) return;
+	source.terminated = true;
+	try {
+		// Fires user-level try/finally blocks. For async generators .return()
+		// returns a Promise we deliberately don't await — cancellation is
+		// best-effort and the source is already marked terminated.
+		(source.generator as Generator).return?.(undefined);
+	} catch {
+		// User finally blocks may throw; swallow to keep teardown sequential.
+	}
+};

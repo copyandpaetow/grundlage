@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, props, render } from "../../src/index";
 import { HTMLTemplate } from "../../src/rendering/template-html";
-import { BaseComponent, GeneratorFn } from "../../src/types";
+import { BaseComponent, ComponentGenerator } from "../../src/types";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -599,7 +599,7 @@ describe("shared template generator functions", () => {
 describe("shared generator functions", () => {
 	test("same generator passed to two render() calls produces independent components", async () => {
 		let mountCount = 0;
-		const counterGenerator: GeneratorFn = function* () {
+		const counterGenerator: ComponentGenerator = function* () {
 			const id = ++mountCount;
 			yield () => html`<span>id-${id}</span>`;
 		};
@@ -622,7 +622,7 @@ describe("shared generator functions", () => {
 
 	test("same generator reused for two instances of the same tag keeps state isolated", async () => {
 		const tag = uniqueTag("shared-gen-isolated");
-		const stateGenerator: GeneratorFn = function* (element) {
+		const stateGenerator: ComponentGenerator = function* (element) {
 			//per-instance state captured in the generator closure
 			let count = 0;
 			element.addEventListener("increment", () => {
@@ -652,7 +652,7 @@ describe("shared generator functions", () => {
 	test("yield* delegates to a shared sub-generator", async () => {
 		//a sub-generator acts like a reusable behavior block — its yields flow
 		//up through the parent generator into the framework's #step.
-		const loadingThenData: GeneratorFn = function* () {
+		const loadingThenData: ComponentGenerator = function* () {
 			yield html`<p>loading</p>`;
 			const data: string = (yield Promise.resolve("ready")) as string;
 			yield () => html`<p>${data}</p>`;
@@ -677,7 +677,7 @@ describe("shared generator functions", () => {
 	test("higher-order generator wraps another generator with extra behavior", async () => {
 		const calls: string[] = [];
 
-		const withLifecycleLog = (name: string, inner: GeneratorFn): GeneratorFn =>
+		const withLifecycleLog = (name: string, inner: ComponentGenerator): ComponentGenerator =>
 			function* (element) {
 				calls.push(`${name}:setup`);
 				yield* inner(element);
@@ -685,7 +685,7 @@ describe("shared generator functions", () => {
 				return () => calls.push(`${name}:cleanup`);
 			};
 
-		const body: GeneratorFn = function* () {
+		const body: ComponentGenerator = function* () {
 			yield () => html`<p>wrapped</p>`;
 		};
 

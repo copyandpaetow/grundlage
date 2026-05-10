@@ -18,8 +18,8 @@ export const RENDER_MODE = {
 	CSR: 2,
 } as const;
 
-export const EPOCH_TYPE = {
+export const TEMPLATE_SOURCE_TYPE = {
 	STATIC: 0,
-	RENDERER: 1,
+	RENDER_FUNCTION: 1,
 	GENERATOR: 2,
 } as const;

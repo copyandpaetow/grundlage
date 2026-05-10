@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, render } from "../../src/index";
-import { BaseComponent, GeneratorFn } from "../../src/types";
+import { BaseComponent, ComponentGenerator } from "../../src/types";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -245,8 +245,8 @@ describe("inner generator error contracts", () => {
 		// Outer commits a static view first, then installs an inner that
 		// throws. Outer is parked at the inner-install yield when the error
 		// propagates, so its catch fires and it returns a cleanup. Per the
-		// error contract: #view (the static) persists and the captured outer
-		// cleanup runs synchronously inside handleError.
+		// error contract: #mountedTemplate (the static) persists and the captured outer
+		// cleanup runs synchronously inside #onError.
 		customElements.define(
 			tag,
 			render(function* () {
@@ -620,7 +620,7 @@ describe("identity and isolation", () => {
 		// held inside it does not survive an update. Isolation here is about
 		// per-instance shadow roots, not retained inner state.
 		const tag = uniqueTag("isolated");
-		const innerGen: GeneratorFn = function* (element) {
+		const innerGen: ComponentGenerator = function* (element) {
 			yield () => html`<span>${element.getAttribute("label") ?? "?"}</span>`;
 		};
 
@@ -681,8 +681,8 @@ describe("inner generator post-yield work and cancellation", () => {
 		element.remove();
 		await sleep();
 		// Disconnect alone cannot unblock the pending await — finally has not
-		// run yet. This documents the framework's contract: cancel() queues a
-		// return on the async generator but does not abort in-flight awaits.
+		// run yet. This documents the framework's contract: cancelGenerator() queues
+		// a return on the async generator but does not abort in-flight awaits.
 		expect(events).toEqual([]);
 
 		resolveAwait?.();
@@ -822,9 +822,9 @@ describe("inner generator post-yield work and cancellation", () => {
 // The website's generator-nesting demo (and any inner async generator with
 // post-yield work) hits this pattern: user calls update() while an inner
 // async generator is parked at an await. Today, #restartGenerator reuses the
-// same epoch object and resets done=false. The cancelled generator's queued
-// return eventually resolves and re-enters drive() on that same epoch — and
-// can mark the freshly restarted epoch done before its second yield lands.
+// same source object and resets terminated=false. The cancelled generator's queued
+// return eventually resolves and re-enters advanceGenerator() on that same source —
+// and can mark the freshly restarted source terminated before its second yield lands.
 describe("rapid restart with in-flight inner async work", () => {
 	test("late resolution of cancelled inner await must not silence the restarted generator's later yields", async () => {
 		const tag = uniqueTag("restart-stale-resolution");
@@ -866,8 +866,8 @@ describe("rapid restart with in-flight inner async work", () => {
 			"attempt-2-first",
 		);
 
-		// Resolve gen1's await: its queued return now drives the shared epoch.
-		// If the bug is present, this flips epoch.done=true on gen2's epoch,
+		// Resolve gen1's await: its queued return now drives the shared source.
+		// If the bug is present, this flips source.terminated=true on gen2's source,
 		// and gen2's next yield (attempt-2-second) is silently dropped.
 		resolveOldAwait?.();
 		await sleep(40);
@@ -883,7 +883,7 @@ describe("rapid restart with in-flight inner async work", () => {
 		// Second-order version of the same bug. After two restarts, two
 		// cancelled generators both have queued returns parked behind awaits
 		// that share a single resolution channel. When they resolve, both fire
-		// drive(epoch, ...) on the current (third) epoch.
+		// advanceGenerator(source, ...) on the current (third) source.
 		const tag = uniqueTag("restart-stacked");
 		let resolveAll: Array<() => void> = [];
 		let attempt = 0;
@@ -916,7 +916,7 @@ describe("rapid restart with in-flight inner async work", () => {
 		);
 
 		// Drain the cancelled generators' awaits. Each queued return fires
-		// drive() on the shared epoch — gen3 must survive both.
+		// advanceGenerator() on the shared source — gen3 must survive both.
 		for (const resolve of resolveAll) resolve();
 		await sleep(40);
 

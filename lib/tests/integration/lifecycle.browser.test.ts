@@ -315,7 +315,7 @@ describe("component lifecycle", () => {
 
 		const ComponentClass = render(function* () {
 			timesGeneratorRan++;
-			// A bare HTMLTemplate yield installs an EPOCH_TYPE.STATIC active —
+			// A bare HTMLTemplate yield installs a TEMPLATE_SOURCE_TYPE.STATIC source —
 			// update() should do nothing for it (no re-render, no generator restart).
 			yield html`<p>static-content</p>`;
 		});
