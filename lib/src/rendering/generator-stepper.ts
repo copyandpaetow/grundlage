@@ -1,5 +1,5 @@
 import { ComponentGenerator, RenderFunction } from "../types";
-import { TEMPLATE_SOURCE_TYPE } from "../utils/constants";
+import { RECOVERY_ATTEMPT_TYPE, TEMPLATE_SOURCE_TYPE } from "../utils/constants";
 
 export type StaticTemplateSource = {
 	type: typeof TEMPLATE_SOURCE_TYPE.STATIC;
@@ -93,25 +93,44 @@ export const advanceGenerator = (
 	}
 };
 
-export const throwIntoGenerator = (
+type RecoveryAttempt =
+	| {
+			type: typeof RECOVERY_ATTEMPT_TYPE.CAUGHT;
+			step: IteratorResult<unknown> | Promise<IteratorResult<unknown>>;
+	  }
+	| {
+			type: typeof RECOVERY_ATTEMPT_TYPE.UNCAUGHT;
+			error: Error;
+	  };
+
+const tryThrowInto = (
+	source: GeneratorTemplateSource,
+	error: Error,
+): RecoveryAttempt => {
+	try {
+		const step = (source.generator as Generator).throw(error);
+		return { type: RECOVERY_ATTEMPT_TYPE.CAUGHT, step };
+	} catch (uncaught) {
+		return { type: RECOVERY_ATTEMPT_TYPE.UNCAUGHT, error: uncaught as Error };
+	}
+};
+
+export const deliverErrorToGenerator = (
 	source: GeneratorTemplateSource,
 	error: Error,
 	onYield: OnYield,
 	onError: OnError,
-): boolean => {
-	if (source.terminated) return false;
+): void => {
+	if (source.terminated) return;
 
-	let step: IteratorResult<unknown> | Promise<IteratorResult<unknown>>;
-	try {
-		step = (source.generator as Generator).throw(error);
-	} catch (uncaught) {
+	const attempt = tryThrowInto(source, error);
+	if (attempt.type === RECOVERY_ATTEMPT_TYPE.UNCAUGHT) {
 		source.terminated = true;
-		onError(uncaught as Error);
-		return true;
+		onError(attempt.error);
+		return;
 	}
 
-	advanceGenerator(source, step, onYield, onError);
-	return true;
+	advanceGenerator(source, attempt.step, onYield, onError);
 };
 
 export const cancelGenerator = (source: GeneratorTemplateSource) => {

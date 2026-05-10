@@ -23,3 +23,8 @@ export const TEMPLATE_SOURCE_TYPE = {
 	RENDER_FUNCTION: 1,
 	GENERATOR: 2,
 } as const;
+
+export const RECOVERY_ATTEMPT_TYPE = {
+	CAUGHT: 0,
+	UNCAUGHT: 1,
+} as const;

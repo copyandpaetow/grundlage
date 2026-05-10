@@ -13,9 +13,9 @@ import { isGeneratorFunction } from "./utils/is-generator";
 import {
 	advanceGenerator,
 	cancelGenerator,
+	deliverErrorToGenerator,
 	GeneratorTemplateSource,
 	TemplateSource,
-	throwIntoGenerator,
 } from "./rendering/generator-stepper";
 import {
 	defaultOptions,
@@ -132,17 +132,7 @@ export const render = (
 			}
 
 			const previous = this.#activeSource;
-			const handled = throwIntoGenerator(
-				source,
-				error,
-				this.#onYield,
-				this.#onError,
-			);
-
-			if (!handled) {
-				this.#abortAndShowError(error);
-				return;
-			}
+			deliverErrorToGenerator(source, error, this.#onYield, this.#onError);
 
 			// Recursive #onError already abort-handled and nulled #componentGenerator.
 			if (this.#componentGenerator === null) return;
@@ -307,7 +297,7 @@ export const render = (
 			} catch (error) {
 				this.#onError(error as Error);
 			} finally {
-				// finally so a throw from #onError (e.g. through throwIntoGenerator
+				// finally so a throw from #onError (e.g. through deliverErrorToGenerator
 				// re-entering user code) cannot leave updateState wedged
 				// non-IDLE, which would make every future update() a no-op.
 				this.#updateState = UPDATE_STATE.IDLE;

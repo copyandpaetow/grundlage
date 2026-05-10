@@ -1,5 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
-import { advanceGenerator, cancelGenerator, GeneratorTemplateSource, throwIntoGenerator } from "./generator-stepper";
+import {
+	advanceGenerator,
+	cancelGenerator,
+	deliverErrorToGenerator,
+	GeneratorTemplateSource
+} from "./generator-stepper";
 import { ComponentGenerator } from "../types";
 import { TEMPLATE_SOURCE_TYPE } from "../utils/constants";
 
@@ -283,21 +288,19 @@ describe("advanceGenerator — async generator and yielded promises", () => {
 	});
 });
 
-describe("throwIntoGenerator", () => {
-	test("returns false for an already-terminated source", () => {
+describe("deliverErrorToGenerator", () => {
+	test("is a no-op for an already-terminated source", () => {
+		const onError = vi.fn();
+		const onYield = vi.fn();
 		const source = makeSource(function* () {
 			yield 1;
 		});
 		source.terminated = true;
 
-		const handled = throwIntoGenerator(
-			source,
-			new Error("nope"),
-			() => undefined,
-			() => {},
-		);
+		deliverErrorToGenerator(source, new Error("nope"), onYield, onError);
 
-		expect(handled).toBe(false);
+		expect(onError).not.toHaveBeenCalled();
+		expect(onYield).not.toHaveBeenCalled();
 	});
 
 	test("delivers error to a generator that catches and continues", () => {
@@ -316,7 +319,7 @@ describe("throwIntoGenerator", () => {
 		// returns undefined.
 		source.generator.next(undefined);
 
-		const handled = throwIntoGenerator(
+		deliverErrorToGenerator(
 			source,
 			new Error("recover-me"),
 			(_source, value) => {
@@ -326,7 +329,6 @@ describe("throwIntoGenerator", () => {
 			() => {},
 		);
 
-		expect(handled).toBe(true);
 		expect(recovered).toEqual(["recover-me", "after-catch"]);
 	});
 
@@ -338,14 +340,13 @@ describe("throwIntoGenerator", () => {
 
 		source.generator.next(undefined);
 
-		const handled = throwIntoGenerator(
+		deliverErrorToGenerator(
 			source,
 			new Error("uncaught"),
 			() => undefined,
 			onError,
 		);
 
-		expect(handled).toBe(true);
 		expect(source.terminated).toBe(true);
 		expect(onError).toHaveBeenCalledOnce();
 		expect((onError.mock.calls[0][0] as Error).message).toBe("uncaught");
@@ -363,7 +364,7 @@ describe("throwIntoGenerator", () => {
 
 		source.generator.next(undefined);
 
-		throwIntoGenerator(
+		deliverErrorToGenerator(
 			source,
 			new Error("trigger-return"),
 			() => undefined,
