@@ -661,8 +661,8 @@ describe("shared generator functions", () => {
 		const tag = uniqueTag("delegated");
 		customElements.define(
 			tag,
-			render(function* (element) {
-				yield* loadingThenData();
+			render(function* (host) {
+				yield* loadingThenData(host);
 			}),
 		);
 
