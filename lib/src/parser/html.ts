@@ -8,9 +8,14 @@ import {
 	ParsedHTML,
 	RawContentBinding,
 	TagBinding,
-	ValueOf
+	ValueOf,
 } from "./types";
-import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util";
+import {
+	COMMENT_IDENTIFIER,
+	isQuote,
+	isWhitespace,
+	moveArrayContents,
+} from "./html-util";
 /*
 the idea here is to analyze and parse a tagged template string to give us
 - a document fragment

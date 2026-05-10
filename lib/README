@@ -78,19 +78,17 @@ They will be used for typing and validating the input regardless of attribute or
 If the value is missing, a fallback can be provided.
 
 ```javascript
-
 render(function* (host) {
-    const result = props(host, {
-        label: String,
-        count: Number,
-        disabled: Boolean,
-        callback: Function,
-        items: Array,
-        missing: [String, "default"],
-    });
+	const result = props(host, {
+		label: String,
+		count: Number,
+		disabled: Boolean,
+		callback: Function,
+		items: Array,
+		missing: [String, "default"],
+	});
 });
 ```
-
 
 Supported bindings:
 

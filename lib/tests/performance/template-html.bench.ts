@@ -151,9 +151,7 @@ describe("HTMLTemplate.update() — list reconciliation: tail growth", () => {
 
 	const listFor = (source: ReadonlyArray<{ id: number; label: string }>) =>
 		html`<ul>
-			${source.map(
-				(item) => html`<li data-id="${item.id}">${item.label}</li>`,
-			)}
+			${source.map((item) => html`<li data-id="${item.id}">${item.label}</li>`)}
 		</ul>`;
 
 	const template = renderOnce(listFor(items10));
@@ -174,9 +172,7 @@ describe("HTMLTemplate.update() — list reconciliation: head growth", () => {
 
 	const listFor = (source: ReadonlyArray<{ id: number; label: string }>) =>
 		html`<ul>
-			${source.map(
-				(item) => html`<li data-id="${item.id}">${item.label}</li>`,
-			)}
+			${source.map((item) => html`<li data-id="${item.id}">${item.label}</li>`)}
 		</ul>`;
 
 	const template = renderOnce(listFor(items10));
@@ -197,9 +193,7 @@ describe("HTMLTemplate.update() — list reconciliation: reverse", () => {
 
 	const listFor = (source: ReadonlyArray<{ id: number; label: string }>) =>
 		html`<ul>
-			${source.map(
-				(item) => html`<li data-id="${item.id}">${item.label}</li>`,
-			)}
+			${source.map((item) => html`<li data-id="${item.id}">${item.label}</li>`)}
 		</ul>`;
 
 	const template = renderOnce(listFor(itemsAsc));
@@ -221,9 +215,7 @@ describe("HTMLTemplate.update() — list reconciliation: adjacent swap", () => {
 
 	const listFor = (source: ReadonlyArray<{ id: number; label: string }>) =>
 		html`<ul>
-			${source.map(
-				(item) => html`<li data-id="${item.id}">${item.label}</li>`,
-			)}
+			${source.map((item) => html`<li data-id="${item.id}">${item.label}</li>`)}
 		</ul>`;
 
 	const template = renderOnce(listFor(itemsA));
@@ -267,9 +259,7 @@ describe("HTMLTemplate.update() — list reconciliation: shuffle", () => {
 
 	const listFor = (source: ReadonlyArray<{ id: number; label: string }>) =>
 		html`<ul>
-			${source.map(
-				(item) => html`<li data-id="${item.id}">${item.label}</li>`,
-			)}
+			${source.map((item) => html`<li data-id="${item.id}">${item.label}</li>`)}
 		</ul>`;
 
 	const template = renderOnce(listFor(itemsA));
@@ -301,9 +291,7 @@ describe("HTMLTemplate.update() — content slot: template shape swap", () => {
 	bench("alternate <p>${x}</p> <-> <span>${x}</span>", () => {
 		toggle = !toggle;
 		template.update([
-			toggle
-				? html`<span>${"world"}</span>`
-				: html`<p>${"hello"}</p>`,
+			toggle ? html`<span>${"world"}</span>` : html`<p>${"hello"}</p>`,
 		]);
 	});
 });
@@ -321,9 +309,7 @@ describe("HTMLTemplate.update() — content slot: same-shape re-render", () => {
 });
 
 describe("HTMLTemplate.update() — comment slot: multi-expression", () => {
-	const template = renderOnce(
-		html`<div><!-- ${"a"}-${"b"}-${"c"} --></div>`,
-	);
+	const template = renderOnce(html`<div><!-- ${"a"}-${"b"}-${"c"} --></div>`);
 	let counter = 0;
 
 	bench("3-expression comment concat (renderComment path)", () => {

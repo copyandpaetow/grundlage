@@ -3,7 +3,7 @@ import {
 	advanceGenerator,
 	cancelGenerator,
 	deliverErrorToGenerator,
-	GeneratorTemplateSource
+	GeneratorTemplateSource,
 } from "./generator-stepper";
 import { ComponentGenerator } from "../types";
 import { TEMPLATE_SOURCE_TYPE } from "../utils/constants";

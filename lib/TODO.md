@@ -9,7 +9,7 @@
   => eventListeners, focus, scroll positions, animation progress
 - we can diff the attributes created in the case of name-only attributes (array or object) so we only change the ones
   that changed
-    - it might be the case that the browser automatically does that
+  - it might be the case that the browser automatically does that
 
 ## potential features
 

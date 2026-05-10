@@ -2,16 +2,27 @@ import { html } from "./parser/html";
 import { ValueOf } from "./parser/types";
 import { applyAttributeBinding } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
-import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions, RenderFunction } from "./types";
+import {
+	BaseComponent,
+	ComponentConstructor,
+	ComponentGenerator,
+	ComponentOptions,
+	RenderFunction,
+} from "./types";
 import { isGeneratorFunction } from "./utils/is-generator";
 import {
 	advanceGenerator,
 	cancelGenerator,
 	deliverErrorToGenerator,
 	GeneratorTemplateSource,
-	TemplateSource
+	TemplateSource,
 } from "./rendering/generator-stepper";
-import { defaultOptions, RENDER_MODE, TEMPLATE_SOURCE_TYPE, UPDATE_STATE } from "./utils/constants";
+import {
+	defaultOptions,
+	RENDER_MODE,
+	TEMPLATE_SOURCE_TYPE,
+	UPDATE_STATE,
+} from "./utils/constants";
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";

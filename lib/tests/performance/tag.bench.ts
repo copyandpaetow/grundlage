@@ -59,9 +59,7 @@ describe("updateTag — element wrapping static children", () => {
 });
 
 describe("updateTag — element with related dynamic attribute", () => {
-	const template = renderOnce(
-		html`<${"span"} class="${"a"}">x</${"span"}>`,
-	);
+	const template = renderOnce(html`<${"span"} class="${"a"}">x</${"span"}>`);
 	let toggle = false;
 	let counter = 0;
 

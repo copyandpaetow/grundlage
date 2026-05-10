@@ -1,5 +1,8 @@
 import { ComponentGenerator, RenderFunction } from "../types";
-import { RECOVERY_ATTEMPT_TYPE, TEMPLATE_SOURCE_TYPE } from "../utils/constants";
+import {
+	RECOVERY_ATTEMPT_TYPE,
+	TEMPLATE_SOURCE_TYPE,
+} from "../utils/constants";
 
 export type StaticTemplateSource = {
 	type: typeof TEMPLATE_SOURCE_TYPE.STATIC;

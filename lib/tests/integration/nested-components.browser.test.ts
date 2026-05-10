@@ -677,7 +677,10 @@ describe("shared generator functions", () => {
 	test("higher-order generator wraps another generator with extra behavior", async () => {
 		const calls: string[] = [];
 
-		const withLifecycleLog = (name: string, inner: ComponentGenerator): ComponentGenerator =>
+		const withLifecycleLog = (
+			name: string,
+			inner: ComponentGenerator,
+		): ComponentGenerator =>
 			function* (element) {
 				calls.push(`${name}:setup`);
 				yield* inner(element);

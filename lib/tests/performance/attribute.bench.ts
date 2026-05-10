@@ -48,7 +48,7 @@ describe("updateAttribute — dynamic name + dynamic value", () => {
 });
 
 describe("updateAttribute — boolean expandable (single dynamic key)", () => {
-	const template = renderOnce(html`<input ${"disabled"}>`);
+	const template = renderOnce(html`<input ${"disabled"} />`);
 	let toggle = false;
 
 	bench("swap key disabled <-> readonly", () => {
@@ -58,7 +58,7 @@ describe("updateAttribute — boolean expandable (single dynamic key)", () => {
 });
 
 describe("updateAttribute — boolean dynamic-name (concatenated)", () => {
-	const template = renderOnce(html`<input data-${"a"}>`);
+	const template = renderOnce(html`<input data-${"a"} />`);
 	let counter = 0;
 
 	bench("suffix changes every call", () => {
@@ -90,9 +90,7 @@ describe("updateAttribute — expandable object spread", () => {
 });
 
 describe("updateAttribute — event listener swap", () => {
-	const template = renderOnce(
-		html`<button onclick="${() => {}}">x</button>`,
-	);
+	const template = renderOnce(html`<button onclick="${() => {}}">x</button>`);
 
 	bench("function reference replaced every call", () => {
 		template.update([() => {}]);
