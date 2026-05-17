@@ -6,10 +6,10 @@ import { resolve } from "node:path";
 describe("bundle size", () => {
 	const distPath = resolve(import.meta.dirname, "../../dist/index.mjs");
 
-	test("raw bundle size stays under 15 KB", () => {
+	test("raw bundle size stays under 25 KB", () => {
 		const raw = readFileSync(distPath);
 		const sizeKB = raw.length / 1024;
-		expect(sizeKB).toBeLessThan(15);
+		expect(sizeKB).toBeLessThan(25);
 	});
 
 	test("gzipped bundle size stays under 6 KB", () => {

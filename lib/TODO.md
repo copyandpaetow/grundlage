@@ -23,3 +23,11 @@ different step?
 ? Do we need a more precise SSR?
 => Like having a metadata comment that shows the current template hash, and we walk the iterator until we find that
 hash?
+=> return with the first renderable content?
+=> stream the inner content?
+
+? a toplevel template element that mirrors its attributes to the web-component/host element
+=> just for the top level generator function
+=> we would need to adapt the attribute checking of the MO as we write that
+
+? form handling via events?

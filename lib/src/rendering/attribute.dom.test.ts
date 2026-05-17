@@ -77,6 +77,162 @@ describe("applyAttributeBinding - event listeners", () => {
 	});
 });
 
+describe("applyAttributeBinding - exotic event names and CustomEvent payloads", () => {
+	// The `on*` fast path keys on `lowerKey in element`, so any event that lives
+	// on HTMLElement.prototype should bind. These tests pin that contract for the
+	// less-common event surfaces we actually rely on (pointer, wheel, transition,
+	// animation, composition) and verify CustomEvent detail flows through the
+	// listener untouched.
+
+	test.each([
+		["onpointerdown", "pointerdown"],
+		["onpointerup", "pointerup"],
+		["onwheel", "wheel"],
+		["ontransitionend", "transitionend"],
+		["onanimationend", "animationend"],
+		["oncompositionend", "compositionend"],
+		["onfocusin", "focusin"],
+		["oncontextmenu", "contextmenu"],
+	])(
+		"binds %s via addEventListener and fires on %s",
+		(attributeKey, eventName) => {
+			const element = document.createElement("div");
+			// guard: if a future runtime drops one of these from the prototype the
+			// fast path would silently fall through to setAttribute and the test
+			// would still pass the dispatch check via inline handler — assert the
+			// lookup so a regression surfaces here, not somewhere downstream.
+			expect(attributeKey in element).toBe(true);
+
+			const received: Array<Event> = [];
+			const handler = (event: Event) => received.push(event);
+
+			applyAttributeBinding(element, attributeKey, handler);
+			expect(element.hasAttribute(attributeKey)).toBe(false);
+
+			const dispatched = new Event(eventName);
+			element.dispatchEvent(dispatched);
+			expect(received).toEqual([dispatched]);
+		},
+	);
+
+	test("CustomEvent detail reaches a listener bound to a standard event slot", () => {
+		// We don't unwrap the event — the listener gets whatever dispatchEvent
+		// hands us. This pins that contract so callers can safely route typed
+		// payloads through `oninput`, `onchange`, etc.
+		const element = document.createElement("input");
+		const received: Array<{ detail: unknown; type: string }> = [];
+
+		applyAttributeBinding(element, "oninput", (event: Event) => {
+			received.push({
+				detail: (event as CustomEvent<{ value: number }>).detail,
+				type: event.type,
+			});
+		});
+
+		element.dispatchEvent(new CustomEvent("input", { detail: { value: 42 } }));
+		expect(received).toEqual([{ detail: { value: 42 }, type: "input" }]);
+	});
+
+	test("bubbling CustomEvent dispatched on a child fires a listener on the parent", () => {
+		// Listener registration must not swallow the bubbling phase — events
+		// dispatched on a descendant should still reach the ancestor that owns
+		// the `on*` binding.
+		const parent = document.createElement("section");
+		const child = document.createElement("button");
+		parent.appendChild(child);
+
+		const received: Array<string> = [];
+		applyAttributeBinding(parent, "onclick", () => received.push("parent"));
+
+		child.dispatchEvent(new CustomEvent("click", { bubbles: true }));
+		expect(received).toEqual(["parent"]);
+	});
+
+	test("swapping an exotic listener detaches the old one and attaches the new", () => {
+		// Same swap semantics as onclick, just on a different event surface —
+		// regression guard so the removeEventListener call uses the same
+		// (lowercased) event name as the original addEventListener.
+		const element = document.createElement("div");
+		const received: Array<string> = [];
+		const firstHandler = () => received.push("first");
+		const secondHandler = () => received.push("second");
+
+		applyAttributeBinding(element, "onpointerdown", firstHandler);
+		applyAttributeBinding(
+			element,
+			"onpointerdown",
+			secondHandler,
+			firstHandler,
+		);
+
+		element.dispatchEvent(new Event("pointerdown"));
+		expect(received).toEqual(["second"]);
+	});
+
+	test("detaches an exotic listener when the new value is null", () => {
+		const element = document.createElement("div");
+		const received: Array<Event> = [];
+		const handler = (event: Event) => received.push(event);
+
+		applyAttributeBinding(element, "ontransitionend", handler);
+		applyAttributeBinding(element, "ontransitionend", null, handler);
+
+		element.dispatchEvent(new Event("transitionend"));
+		expect(received).toEqual([]);
+	});
+
+	test("listener bound via mixed-case key still fires on the canonical event", () => {
+		// Authoring style varies (onPointerDown, ONWHEEL); the lowercase lookup
+		// must match the prototype property and the underlying event name must
+		// still be the lowercased remainder.
+		const element = document.createElement("div");
+		const received: Array<string> = [];
+
+		applyAttributeBinding(element, "onPointerDown", (event: Event) =>
+			received.push(event.type),
+		);
+
+		element.dispatchEvent(new Event("pointerdown"));
+		expect(received).toEqual(["pointerdown"]);
+	});
+
+	test("custom event name with no matching prototype property lands as a JS property, not via addEventListener", () => {
+		// `onmycustomevent` isn't on HTMLElement.prototype, so the fast path's
+		// `lowerKey in element` guard is false. A function value should fall
+		// through to property assignment — what the runtime later does with that
+		// property on dispatch is its business, but the binding itself must not
+		// have called addEventListener.
+		const element = document.createElement("div");
+		expect("onmycustomevent" in element).toBe(false);
+
+		const handler = () => {};
+		const addSpy = vi.spyOn(element, "addEventListener");
+
+		applyAttributeBinding(element, "onmycustomevent", handler);
+
+		expect(addSpy).not.toHaveBeenCalled();
+		expect(
+			(element as unknown as { onmycustomevent: unknown }).onmycustomevent,
+		).toBe(handler);
+		expect(element.hasAttribute("onmycustomevent")).toBe(false);
+	});
+
+	test("removes the listener via null even when only oldValue is a function", () => {
+		// On the very first call, value is null but oldValue is a function —
+		// the entry guard at attribute.ts:20-22 still has to enter the on* branch
+		// so removeEventListener fires for the orphaned handler.
+		const element = document.createElement("div");
+		const received: Array<Event> = [];
+		const handler = (event: Event) => received.push(event);
+
+		element.addEventListener("wheel", handler);
+		applyAttributeBinding(element, "onwheel", null, handler);
+
+		element.dispatchEvent(new Event("wheel"));
+		expect(received).toEqual([]);
+	});
+});
+
 describe("applyAttributeBinding - removal", () => {
 	test.each([
 		["null", null],
