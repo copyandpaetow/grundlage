@@ -156,6 +156,41 @@ describe("html parser — void and self-closing elements", () => {
 		expect(template.parsedHTML.bindings).toHaveLength(2);
 		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1]);
 	});
+
+	test("self-closes a tag when the slash sits flush against the name", () => {
+		// `<br/>` (no space) takes the STATE.TAG self-close branch in the parser
+		// (html.ts:454-459) — distinct from the space-prefixed `<br />` form which
+		// transitions through STATE.ELEMENT. Both forms must produce a sibling,
+		// not a parent that adopts the next element.
+		const template = html`<br/><span>after</span>`;
+		const fragment = template.parsedHTML.fragment;
+		const br = fragment.querySelector("br")!;
+		const span = fragment.querySelector("span")!;
+		expect(br).not.toBeNull();
+		expect(span).not.toBeNull();
+		expect(br.contains(span)).toBe(false);
+		expect(br.children).toHaveLength(0);
+	});
+
+	test("static comment inside a template is preserved alongside a dynamic binding", () => {
+		// template-html.ts:#findMarkers skips comments that don't carry the
+		// binding-marker prefix (html-util.ts COMMENT_IDENTIFIER). A static
+		// HTML comment in the template should travel through the tree walker
+		// untouched, with the dynamic binding still resolving normally.
+		const template = html`<div><!-- author note -->${"payload"}</div>`;
+		const div = template.parsedHTML.fragment.querySelector("div")!;
+
+		const commentNodes: Array<Comment> = [];
+		for (const child of div.childNodes) {
+			if (child.nodeType === Node.COMMENT_NODE) {
+				commentNodes.push(child as Comment);
+			}
+		}
+		// Two marker comments (start/end of the content binding) plus the
+		// preserved author note — three comment nodes total.
+		expect(commentNodes).toHaveLength(3);
+		expect(commentNodes.some((c) => c.data === " author note ")).toBe(true);
+	});
 });
 
 describe("html parser — fragment structure", () => {

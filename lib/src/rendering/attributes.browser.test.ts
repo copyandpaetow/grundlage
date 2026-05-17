@@ -929,4 +929,101 @@ describe("attribute updates", () => {
 
 		cleanup(element);
 	});
+
+	test("expandable expression resolves a primitive string to a boolean attribute", async () => {
+		// The expandable path has three shapes: array, plain object, and a single
+		// primitive string. The string case is the fallback at attribute.ts:85-86 /
+		// 101-102 — `<button ${name}>` where `name` is just `"disabled"` should
+		// land as a boolean attribute, and renaming should remove the old one.
+		const tag = uniqueTag();
+		let attribute: string = "disabled";
+
+		const MyElement = render(function* () {
+			yield () => html`<button ${attribute}>click</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const button = element.shadowRoot?.querySelector("button")!;
+		expect(button.hasAttribute("disabled")).toBe(true);
+		expect(button.getAttribute("disabled")).toBe("");
+
+		attribute = "hidden";
+		await element.update();
+		await sleep();
+
+		expect(button.hasAttribute("disabled")).toBe(false);
+		expect(button.hasAttribute("hidden")).toBe(true);
+
+		cleanup(element);
+	});
+
+	test("expandable switches from primitive string to array and back", async () => {
+		// A regression guard for the expandable dispatcher: the string fallback
+		// must hand off to the array branch (and vice versa) without leaving the
+		// previous attribute(s) behind.
+		const tag = uniqueTag();
+		let attributes: string | Array<string> = "disabled";
+
+		const MyElement = render(function* () {
+			yield () => html`<button ${attributes}>click</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const button = element.shadowRoot?.querySelector("button")!;
+		expect(button.hasAttribute("disabled")).toBe(true);
+
+		attributes = ["hidden", "autofocus"];
+		await element.update();
+		await sleep();
+
+		expect(button.hasAttribute("disabled")).toBe(false);
+		expect(button.hasAttribute("hidden")).toBe(true);
+		expect(button.hasAttribute("autofocus")).toBe(true);
+
+		attributes = "readonly";
+		await element.update();
+		await sleep();
+
+		expect(button.hasAttribute("hidden")).toBe(false);
+		expect(button.hasAttribute("autofocus")).toBe(false);
+		expect(button.hasAttribute("readonly")).toBe(true);
+
+		cleanup(element);
+	});
+
+	test("boolean attribute with multi-part dynamic key", async () => {
+		// updateAttribute's isBooleanAttribute && !isExpandable branch
+		// (attribute.ts:143-147): the binding has multiple key fragments and no
+		// value half — `<div data-${suffix}>` with no `="..."`. The old key must
+		// be removed when the suffix flips.
+		const tag = uniqueTag();
+		let suffix = "ready";
+
+		const MyElement = render(function* () {
+			yield () => html`<div data-${suffix}>text</div>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.hasAttribute("data-ready")).toBe(true);
+		expect(div.getAttribute("data-ready")).toBe("");
+
+		suffix = "open";
+		await element.update();
+		await sleep();
+
+		expect(div.hasAttribute("data-ready")).toBe(false);
+		expect(div.hasAttribute("data-open")).toBe(true);
+
+		cleanup(element);
+	});
 });

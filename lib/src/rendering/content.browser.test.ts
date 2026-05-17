@@ -1400,4 +1400,75 @@ describe("content updates", () => {
 
 		cleanup(element);
 	});
+
+	test("wraps primitive list items in templates without forcing the caller to call html`` themselves", async () => {
+		// content.ts toTemplateList (line 31) lifts each non-template entry into
+		// `html\`${entry}\``. Callers that map straight to strings or numbers
+		// should still render, and updates that change a primitive in place
+		// must update the corresponding text without disturbing siblings.
+		const tag = uniqueTag();
+		let items: Array<string | number> = ["alpha", 2, "gamma"];
+
+		const MyElement = render(function* () {
+			yield () => html`<ul>${items}</ul>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("alpha");
+		expect(element.shadowRoot?.textContent).toContain("2");
+		expect(element.shadowRoot?.textContent).toContain("gamma");
+
+		items = ["alpha", 99, "gamma"];
+		await element.update();
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("99");
+		expect(element.shadowRoot?.textContent).not.toContain(" 2 ");
+
+		cleanup(element);
+	});
+
+	test("static HTML comments in the template survive a render pass", async () => {
+		// template-html.ts:#findMarkers walks every comment but only treats those
+		// carrying the binding-marker prefix as markers (line 86). Static author
+		// comments must pass through the tree walker untouched and not be picked
+		// up as markers — if they were, the binding indices would shift and the
+		// content binding below would lose its anchors.
+		const tag = uniqueTag();
+		let label = "first";
+
+		const MyElement = render(function* () {
+			yield () =>
+				html`<section><!-- author note -->${label}</section>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const section = element.shadowRoot?.querySelector("section")!;
+		expect(section.textContent).toContain("first");
+
+		const commentDataValues: Array<string> = [];
+		for (const child of section.childNodes) {
+			if (child.nodeType === Node.COMMENT_NODE) {
+				commentDataValues.push((child as Comment).data);
+			}
+		}
+		expect(commentDataValues).toContain(" author note ");
+
+		label = "second";
+		await element.update();
+		await sleep();
+
+		// The binding still resolves to the correct text after update — proves
+		// the static comment didn't get treated as an extra marker and shift the
+		// content binding's start/end anchors.
+		expect(section.textContent).toContain("second");
+
+		cleanup(element);
+	});
 });
