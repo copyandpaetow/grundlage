@@ -39,9 +39,11 @@ describe("html parser — raw content bindings", () => {
 		);
 	});
 
-	test("dynamic content inside template element", () => {
+	test("dynamic content inside non-root template element", () => {
+		//root templates get host-element treatment (their content becomes the fragment children);
+		//=> to keep raw-content treatment we wrap the template so it isn't the root
 		const content = "<p>slot</p>";
-		const template = html` <template>${content}</template>`;
+		const template = html` <div><template>${content}</template></div>`;
 
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		expect(template.parsedHTML.bindings[0].type).toBe(

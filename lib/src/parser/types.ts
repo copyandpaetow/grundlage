@@ -42,4 +42,6 @@ export type ParsedHTML = {
 	bindings: Array<Binding>;
 	fragment: DocumentFragment;
 	templateHash: number;
+	hostBindingOffset: number;
+	hostStaticAttributes: Array<[string, string]>;
 };

@@ -8,14 +8,29 @@ import {
 	ParsedHTML,
 	RawContentBinding,
 	TagBinding,
-	ValueOf,
+	ValueOf
 } from "./types";
-import {
-	COMMENT_IDENTIFIER,
-	isQuote,
-	isWhitespace,
-	moveArrayContents,
-} from "./html-util";
+import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util"; /*
+the idea here is to analyze and parse a tagged template string to give us
+- a document fragment
+- a hash
+- an array of expressions bindings
+- a mapping array of which expression maps to which binding
+
+several expressions can be part of one binding like
+<div class="${dynamic1} static ${dynamic1}">
+=> one attribute binding
+
+They also don't have to be next to each other
+<h${headingLevel}>Hello, ${name}<h${headingLevel}>
+=> one tag binding
+=> one content binding
+
+We walk each character and listen for different character combinations to change the state machine.
+Depending on the state we move the last characters since the state change to the dedicated buffer array.
+=> this way we can change and insert parts dynamically while also keeping memory usage low / performance up
+
+*/
 /*
 the idea here is to analyze and parse a tagged template string to give us
 - a document fragment
@@ -42,16 +57,29 @@ type StateValue = ValueOf<typeof STATE>;
 type BufferArray = Array<string | number>;
 
 const range = new Range();
+const PLACEHOLDER_TAG = "div";
+const TEMPLATE_TAG = "template";
+const SCRIPT_TAG = "script";
+const TEXTAREA_TAG = "textarea";
+const STYLE_TAG = "style";
+const EMPTY_ARRAY = [] as Array<[string, string]>;
+
+//Our parser cant see ahead, so html`<template></template><div></div>` would initially look like a root template
+//this boolean is not reset in setup()
+let forceNoRootTemplate = false;
 /*
 the parser drops a comment marker at every dynamic position so we can find it again later — but these elements either don't render html children (style, script, textarea) or are inert (template), so a comment inside them wouldn't survive as a usable marker
 => for these we treat the whole element body as a single replaceable chunk and emit one marker before it instead of marking inner positions
 */
-const isSpecialElementTag = (tag: string) =>
-	tag === "style" ||
-	tag === "script" ||
-	tag === "textarea" ||
-	tag === "template";
-const PLACEHOLDER_TAG = "div";
+const isSpecialElementTag = (tag: string) => {
+	if (tag === TEMPLATE_TAG) {
+		//if there is a template element as single root, we allow it, and it gets the normal element treatment
+		//UNLESS in certain cases. Our parser cant see ahead, so html`<template></template><div></div>` would initially look like a root template
+		return forceNoRootTemplate || !isRootTemplate;
+	}
+
+	return tag === STYLE_TAG || tag === TEXTAREA_TAG || tag === SCRIPT_TAG;
+};
 
 //we keep the values dense 0..N so the main switch can compile to a jump table
 const STATE = {
@@ -73,11 +101,14 @@ let index = 0;
 let activeTemplate = "";
 let charIndex = 0;
 let splitIndex = 0;
+let hostBindingOffset = 0;
 let attributeQuote = "";
 let currentTagName = "";
 let selfClosing = false;
 let activeBinding: Binding | null = null;
 let activeTagBinding: Binding | null = null;
+let isRootTemplate = false;
+let hasOpenedAnyTag = false;
 //tracks every open tag in source order, dynamic or static. A dynamic open pushes its TagBinding;
 //a static open pushes null. Close tags pop and verify the kind matches — `<${tag}>...</div>` and
 //`<div>...</${tag}>` both throw rather than silently picking the wrong opener via at(-1).
@@ -107,11 +138,14 @@ const setup = (strings: TemplateStringsArray) => {
 	activeTemplate = templates[index];
 	charIndex = 0;
 	splitIndex = 0;
+	hostBindingOffset = 0;
 	attributeQuote = "";
 	currentTagName = "";
 	selfClosing = false;
 	activeBinding = null;
 	activeTagBinding = null;
+	isRootTemplate = false;
+	hasOpenedAnyTag = false;
 	openTagBindings.length = 0;
 	resultBuffer.length = 0;
 	elementBuffer.length = 0;
@@ -250,6 +284,9 @@ const completeSpecialContent = () => {
 };
 
 const completeTag = () => {
+	const isFirstTag = !hasOpenedAnyTag;
+	hasOpenedAnyTag = true;
+
 	if (activeBinding) {
 		currentTagName = PLACEHOLDER_TAG;
 		moveArrayContents(tagBuffer, (activeBinding as TagBinding).values);
@@ -261,6 +298,10 @@ const completeTag = () => {
 		currentTagName = tagBuffer[0] as string;
 		moveArrayContents(tagBuffer, elementBuffer);
 		openTagBindings.push(null);
+
+		isRootTemplate = forceNoRootTemplate
+			? false
+			: isFirstTag && currentTagName === TEMPLATE_TAG;
 	}
 	activeBinding = null;
 };
@@ -296,7 +337,14 @@ const completeAttribute = () => {
 			attributeValueBuffer,
 			(activeBinding as AttributeBinding).values,
 		);
-		resultBuffer.push(createComment());
+
+		//attributes on the root template don't need a comment marker but we need to know how many bindings we have on it
+		if (isRootTemplate) {
+			hostBindingOffset++;
+		} else {
+			resultBuffer.push(createComment());
+		}
+
 		//leading whitespace was pushed as its own single-char entry by the ELEMENT→ATTRIBUTE_KEY transition
 		//=> we can drop it here without allocating a trimmed copy
 		const keys = (activeBinding as AttributeBinding).keys;
@@ -591,21 +639,58 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 		updateBinding();
 	}
-
+	if (state === STATE.TEXT && splitIndex < activeTemplate.length) {
+		capture(contentBuffer, splitIndex, activeTemplate.length);
+	}
 	flushElement();
 
 	const result = resultBuffer.join("");
+	const fragment = range.createContextualFragment(result);
+	const firstChild = fragment.firstElementChild;
+	const firstElementIsTemplate = firstChild?.localName === TEMPLATE_TAG;
+	let hostStaticAttributes = EMPTY_ARRAY;
+
+	if (firstElementIsTemplate && !forceNoRootTemplate) {
+		let isRoot = true;
+
+		for (const node of fragment.childNodes) {
+			if (node === firstChild) continue;
+			if (node.nodeType === 8) continue;
+			if (node.nodeType === 3 && !node.nodeValue?.trimStart()) continue;
+			isRoot = false;
+			break;
+		}
+
+		if (!isRoot) {
+			forceNoRootTemplate = true;
+			return parse(strings);
+		}
+
+		const attrNames = firstChild.attributes;
+		if (attrNames.length) {
+			hostStaticAttributes = [];
+			for (const attrName of attrNames) {
+				hostStaticAttributes.push([attrName.name, attrName.value]);
+			}
+		}
+
+		firstChild.replaceWith((firstChild as HTMLTemplateElement).content);
+	} else {
+		forceNoRootTemplate = false;
+	}
 
 	return {
 		expressionToBinding,
 		bindings,
-		fragment: range.createContextualFragment(result),
+		fragment,
 		templateHash: stringHash(result),
+		hostBindingOffset,
+		hostStaticAttributes,
 	};
 };
 
 //engines hand us the same TemplateStringsArray identity for every call from a given tagged-template literal site
-//=> by keying a WeakMap on it we get a per-call-site parse cache for free
+//=> by keying a WeakMap on it, we get a per-call-site parse cache for free
 //and the entry can GC once the call site (e.g. a dynamically loaded module) is unloaded
 const htmlCache = new WeakMap<TemplateStringsArray, ParsedHTML>();
 
