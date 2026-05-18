@@ -346,6 +346,32 @@ describe("html parser — root template misdetection and reparse", () => {
 		expect(cleanWithDyn.hostBindingOffset).toBe(1);
 	});
 
+	test("dynamic outer tag is never recognized as a root template", () => {
+		//even when the runtime tag name is "template", the open tag is dynamic so
+		//the parser emits PLACEHOLDER_TAG ("div") into the fragment — the host-template
+		//path keys off the literal tag name, so this must stay an inner TAG binding
+		const tag = "template";
+		const parsed = html`<${tag}><p>hi</p></${tag}>`.parsedHTML;
+
+		expect(parsed.hostBindingOffset).toBe(0);
+		expect(parsed.hostStaticAttributes).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING_TYPES.TAG);
+		expect(parsed.fragment.querySelector("template")).toBeNull();
+	});
+
+	test("dynamic outer tag with dynamic attribute does not produce host bindings", () => {
+		const tag = "template";
+		const id = "x";
+		const parsed = html`<${tag} id="${id}"></${tag}>`.parsedHTML;
+
+		expect(parsed.hostBindingOffset).toBe(0);
+		expect(parsed.hostStaticAttributes).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(2);
+		expect(parsed.bindings[0].type).toBe(BINDING_TYPES.TAG);
+		expect(parsed.bindings[1].type).toBe(BINDING_TYPES.ATTR);
+	});
+
 	test("non-template literal after a misdetection does not inherit state", () => {
 		html`<template></template><div></div>`.parsedHTML;
 
@@ -387,5 +413,21 @@ describe("html parser — root template nested cases", () => {
 		expect(parsed.hostStaticAttributes).toEqual([["id", "host"]]);
 		expect(parsed.bindings).toHaveLength(1);
 		expect(parsed.bindings[0].type).toBe(BINDING_TYPES.ATTR);
+	});
+
+	test("dynamic inner tag with dynamic attribute does not count as host", () => {
+		//a dynamic open tag inside the root template is still an inner element —
+		//its attributes belong to the inner tag, not the host. without this,
+		//isRootTemplate leaks from the host into the dynamic inner open.
+		const tag = "section";
+		const cls = "a";
+		const parsed = html`<template id="host"><${tag} class="${cls}">x</${tag}></template>`
+			.parsedHTML;
+
+		expect(parsed.hostBindingOffset).toBe(0);
+		expect(parsed.hostStaticAttributes).toEqual([["id", "host"]]);
+		expect(parsed.bindings).toHaveLength(2);
+		expect(parsed.bindings[0].type).toBe(BINDING_TYPES.TAG);
+		expect(parsed.bindings[1].type).toBe(BINDING_TYPES.ATTR);
 	});
 });

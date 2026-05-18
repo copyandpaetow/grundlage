@@ -10,27 +10,13 @@ import {
 	TagBinding,
 	ValueOf
 } from "./types";
-import { COMMENT_IDENTIFIER, isQuote, isWhitespace, moveArrayContents } from "./html-util"; /*
-the idea here is to analyze and parse a tagged template string to give us
-- a document fragment
-- a hash
-- an array of expressions bindings
-- a mapping array of which expression maps to which binding
+import {
+	COMMENT_IDENTIFIER,
+	isQuote,
+	isWhitespace,
+	moveArrayContents,
+} from "./html-util";
 
-several expressions can be part of one binding like
-<div class="${dynamic1} static ${dynamic1}">
-=> one attribute binding
-
-They also don't have to be next to each other
-<h${headingLevel}>Hello, ${name}<h${headingLevel}>
-=> one tag binding
-=> one content binding
-
-We walk each character and listen for different character combinations to change the state machine.
-Depending on the state we move the last characters since the state change to the dedicated buffer array.
-=> this way we can change and insert parts dynamically while also keeping memory usage low / performance up
-
-*/
 /*
 the idea here is to analyze and parse a tagged template string to give us
 - a document fragment
@@ -50,7 +36,6 @@ They also don't have to be next to each other
 We walk each character and listen for different character combinations to change the state machine.
 Depending on the state we move the last characters since the state change to the dedicated buffer array.
 => this way we can change and insert parts dynamically while also keeping memory usage low / performance up
-
 */
 
 type StateValue = ValueOf<typeof STATE>;
@@ -106,7 +91,6 @@ let attributeQuote = "";
 let currentTagName = "";
 let selfClosing = false;
 let activeBinding: Binding | null = null;
-let activeTagBinding: Binding | null = null;
 let isRootTemplate = false;
 let hasOpenedAnyTag = false;
 //tracks every open tag in source order, dynamic or static. A dynamic open pushes its TagBinding;
@@ -143,7 +127,6 @@ const setup = (strings: TemplateStringsArray) => {
 	currentTagName = "";
 	selfClosing = false;
 	activeBinding = null;
-	activeTagBinding = null;
 	isRootTemplate = false;
 	hasOpenedAnyTag = false;
 	openTagBindings.length = 0;
@@ -292,17 +275,17 @@ const completeTag = () => {
 		moveArrayContents(tagBuffer, (activeBinding as TagBinding).values);
 		elementBuffer.push(PLACEHOLDER_TAG);
 		resultBuffer.push(createComment());
-		activeTagBinding = activeBinding;
 		openTagBindings.push(activeBinding as TagBinding);
 	} else {
 		currentTagName = tagBuffer[0] as string;
 		moveArrayContents(tagBuffer, elementBuffer);
 		openTagBindings.push(null);
-
-		isRootTemplate = forceNoRootTemplate
-			? false
-			: isFirstTag && currentTagName === TEMPLATE_TAG;
 	}
+
+	//a dynamic open uses PLACEHOLDER_TAG ("div"), so this naturally rules out
+	//dynamic tags as root templates without an extra check
+	isRootTemplate =
+		!forceNoRootTemplate && isFirstTag && currentTagName === TEMPLATE_TAG;
 	activeBinding = null;
 };
 
@@ -358,7 +341,8 @@ const completeAttribute = () => {
 		}
 		//replacing a tag means creating a new element and copying attributes over — but JS-property attributes (e.g. event listeners) don't survive that copy
 		//=> we record which attribute bindings live on the surrounding tag so updateTag can mark them dirty and have them re-applied on the new element
-		(activeTagBinding as TagBinding)?.relatedAttributes.push(
+		//the stack-top is the matching dynamic open (or null for a static open / empty stack), so the optional chain handles all three cases without an extra flag
+		openTagBindings[openTagBindings.length - 1]?.relatedAttributes.push(
 			bindings.length - 1,
 		);
 	} else {
@@ -374,12 +358,9 @@ const completeAttribute = () => {
 };
 
 const flushElement = () => {
-	activeTagBinding = null;
-
 	if (elementBuffer.length === 0) {
 		if (contentBuffer.length > 0) {
 			moveArrayContents(contentBuffer, resultBuffer);
-			contentBuffer.length = 0;
 		}
 		return;
 	}
