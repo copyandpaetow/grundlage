@@ -49,9 +49,6 @@ const TEXTAREA_TAG = "textarea";
 const STYLE_TAG = "style";
 const EMPTY_ARRAY = [] as Array<[string, string]>;
 
-//Our parser cant see ahead, so html`<template></template><div></div>` would initially look like a root template
-//this boolean is not reset in setup()
-let forceNoRootTemplate = false;
 /*
 the parser drops a comment marker at every dynamic position so we can find it again later — but these elements either don't render html children (style, script, textarea) or are inert (template), so a comment inside them wouldn't survive as a usable marker
 => for these we treat the whole element body as a single replaceable chunk and emit one marker before it instead of marking inner positions
@@ -59,7 +56,7 @@ the parser drops a comment marker at every dynamic position so we can find it ag
 const isSpecialElementTag = (tag: string) => {
 	if (tag === TEMPLATE_TAG) {
 		//if there is a template element as single root, we allow it, and it gets the normal element treatment
-		//UNLESS in certain cases. Our parser cant see ahead, so html`<template></template><div></div>` would initially look like a root template
+		//UNLESS in certain cases. Our parser cant see ahead, so html`<template></template><div></div>` would initially look like a root template — the post-parse check then sets forceNoRootTemplate and reparses
 		return forceNoRootTemplate || !isRootTemplate;
 	}
 
@@ -93,6 +90,8 @@ let selfClosing = false;
 let activeBinding: Binding | null = null;
 let isRootTemplate = false;
 let hasOpenedAnyTag = false;
+//set per-parse from the parse() parameter; reset in setup() so a thrown parse can't leak state to the next call
+let forceNoRootTemplate = false;
 //tracks every open tag in source order, dynamic or static. A dynamic open pushes its TagBinding;
 //a static open pushes null. Close tags pop and verify the kind matches — `<${tag}>...</div>` and
 //`<div>...</${tag}>` both throw rather than silently picking the wrong opener via at(-1).
@@ -113,7 +112,7 @@ const attributeKeyBuffer: BufferArray = [];
 const attributeValueBuffer: BufferArray = [];
 const rawContentBuffer: BufferArray = [];
 
-const setup = (strings: TemplateStringsArray) => {
+const setup = (strings: TemplateStringsArray, force: boolean) => {
 	state = STATE.TEXT;
 	bindings = [];
 	expressionToBinding = [];
@@ -129,6 +128,7 @@ const setup = (strings: TemplateStringsArray) => {
 	activeBinding = null;
 	isRootTemplate = false;
 	hasOpenedAnyTag = false;
+	forceNoRootTemplate = force;
 	openTagBindings.length = 0;
 	resultBuffer.length = 0;
 	elementBuffer.length = 0;
@@ -215,18 +215,6 @@ const createBinding = () => {
 				relatedAttributes: [],
 				bindingIndex: bindings.length, //we set this before the push so it matches the eventual index
 			} satisfies TagBinding;
-		case STATE.END_TAG: {
-			//end tags don't get their own binding — they reuse the matching open tag's binding
-			//so a dynamic `</${tag}>` updates in lockstep with its `<${tag}>`. The caller in the
-			//parse loop relies on this asymmetry and skips the bindings.push() for END_TAG state.
-			const opener = openTagBindings.at(-1);
-			if (!opener) {
-				throw new Error(
-					"Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
-				);
-			}
-			return opener;
-		}
 
 		default:
 			throw new Error(`createBinding called in non-binding state: ${state}`);
@@ -328,24 +316,15 @@ const completeAttribute = () => {
 			resultBuffer.push(createComment());
 		}
 
-		//leading whitespace was pushed as its own single-char entry by the ELEMENT→ATTRIBUTE_KEY transition
-		//=> we can drop it here without allocating a trimmed copy
-		const keys = (activeBinding as AttributeBinding).keys;
-		const firstKey = keys[0];
-		if (
-			typeof firstKey === "string" &&
-			firstKey.length === 1 &&
-			isWhitespace(firstKey)
-		) {
-			keys.shift();
-		}
 		//replacing a tag means creating a new element and copying attributes over — but JS-property attributes (e.g. event listeners) don't survive that copy
 		//=> we record which attribute bindings live on the surrounding tag so updateTag can mark them dirty and have them re-applied on the new element
 		//the stack-top is the matching dynamic open (or null for a static open / empty stack), so the optional chain handles all three cases without an extra flag
 		openTagBindings[openTagBindings.length - 1]?.relatedAttributes.push(
 			bindings.length - 1,
 		);
-	} else {
+	} else if (attributeKeyBuffer.length) {
+		//a static attr needs a single-space separator from the preceding tag name or attr — we add it here instead of preserving the source whitespace, which avoids the extra push/shift dance for the dynamic case
+		elementBuffer.push(" ");
 		moveArrayContents(attributeKeyBuffer, elementBuffer);
 		if (attributeValueBuffer.length) {
 			elementBuffer.push("=", "'");
@@ -379,8 +358,11 @@ const flushElement = () => {
 	currentTagName = "";
 };
 
-const parse = (strings: TemplateStringsArray): ParsedHTML => {
-	setup(strings);
+const parse = (
+	strings: TemplateStringsArray,
+	force = false,
+): ParsedHTML => {
+	setup(strings, force);
 
 	for (index = 0; index < templates.length; index++) {
 		activeTemplate = templates[index];
@@ -520,9 +502,7 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 					state = STATE.ATTRIBUTE_KEY;
 					if (isWhitespace(char)) {
-						//we push the whitespace as its own buffer entry so downstream capture starts past it
-						//=> static attrs still get their separator and dynamic attrs can drop this single-char entry in completeAttribute without trimming a string
-						attributeKeyBuffer.push(char);
+						//completeAttribute adds the separator for static attrs, so we just skip past the source whitespace
 						splitIndex = charIndex + 1;
 					} else {
 						splitIndex = charIndex;
@@ -601,21 +581,24 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 			break;
 		}
 
-		if (!activeBinding) {
-			activeBinding = createBinding();
-
-			//end tags reuse the matching open tag's binding (see createBinding STATE.END_TAG);
-			//all other states get a fresh entry. The push of the open-tag stack happens in completeTag
-			//so dynamic and static opens stay symmetric.
-			if (state !== STATE.END_TAG) {
+		if (state === STATE.END_TAG) {
+			//end tags reuse the matching open tag's binding so a dynamic `</${tag}>` updates in lockstep with its `<${tag}>`
+			if (!activeBinding) {
+				const opener = openTagBindings[openTagBindings.length - 1];
+				if (!opener) {
+					throw new Error(
+						"Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
+					);
+				}
+				activeBinding = opener;
+			}
+			expressionToBinding.push((activeBinding as TagBinding).bindingIndex);
+		} else {
+			if (!activeBinding) {
+				activeBinding = createBinding();
 				bindings.push(activeBinding);
 			}
-		}
-
-		if (state !== STATE.END_TAG) {
 			expressionToBinding.push(bindings.length - 1);
-		} else {
-			expressionToBinding.push((activeBinding as TagBinding).bindingIndex);
 		}
 
 		updateBinding();
@@ -633,8 +616,10 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 
 	if (firstElementIsTemplate && !forceNoRootTemplate) {
 		let isRoot = true;
+		const siblings = fragment.childNodes;
 
-		for (const node of fragment.childNodes) {
+		for (let siblingIndex = 0; siblingIndex < siblings.length; siblingIndex++) {
+			const node = siblings[siblingIndex];
 			if (node === firstChild) continue;
 			if (node.nodeType === 8) continue;
 			if (node.nodeType === 3 && !node.nodeValue?.trimStart()) continue;
@@ -642,22 +627,22 @@ const parse = (strings: TemplateStringsArray): ParsedHTML => {
 			break;
 		}
 
-		if (!isRoot) {
-			forceNoRootTemplate = true;
-			return parse(strings);
-		}
+		if (!isRoot) return parse(strings, true);
 
 		const attrNames = firstChild.attributes;
 		if (attrNames.length) {
 			hostStaticAttributes = [];
-			for (const attrName of attrNames) {
+			for (
+				let attrIndex = 0;
+				attrIndex < attrNames.length;
+				attrIndex++
+			) {
+				const attrName = attrNames[attrIndex];
 				hostStaticAttributes.push([attrName.name, attrName.value]);
 			}
 		}
 
 		firstChild.replaceWith((firstChild as HTMLTemplateElement).content);
-	} else {
-		forceNoRootTemplate = false;
 	}
 
 	return {
