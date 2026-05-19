@@ -10,12 +10,7 @@ import {
 	TagBinding,
 	ValueOf
 } from "./types";
-import {
-	COMMENT_IDENTIFIER,
-	isQuote,
-	isWhitespace,
-	moveArrayContents,
-} from "./html-util";
+import { CHAR_CODE, COMMENT_IDENTIFIER, isQuoteCode, isWhitespaceCode, moveArrayContents } from "./html-util";
 
 /*
 the idea here is to analyze and parse a tagged template string to give us
@@ -84,7 +79,7 @@ let activeTemplate = "";
 let charIndex = 0;
 let splitIndex = 0;
 let hostBindingOffset = 0;
-let attributeQuote = "";
+let attributeQuoteCode = 0;
 let currentTagName = "";
 let selfClosing = false;
 let activeBinding: Binding | null = null;
@@ -122,7 +117,7 @@ const setup = (strings: TemplateStringsArray, force: boolean) => {
 	charIndex = 0;
 	splitIndex = 0;
 	hostBindingOffset = 0;
-	attributeQuote = "";
+	attributeQuoteCode = 0;
 	currentTagName = "";
 	selfClosing = false;
 	activeBinding = null;
@@ -333,7 +328,7 @@ const completeAttribute = () => {
 		}
 	}
 	activeBinding = null;
-	attributeQuote = "";
+	attributeQuoteCode = 0;
 };
 
 const flushElement = () => {
@@ -358,32 +353,32 @@ const flushElement = () => {
 	currentTagName = "";
 };
 
-const parse = (
-	strings: TemplateStringsArray,
-	force = false,
-): ParsedHTML => {
+const parse = (strings: TemplateStringsArray, force = false): ParsedHTML => {
 	setup(strings, force);
 
 	for (index = 0; index < templates.length; index++) {
 		activeTemplate = templates[index];
 		splitIndex = 0; //always points to the start of the uncaptured portion of activeTemplate
+		//caching the length keeps the loop bound as a simple int compare and dodges a property load per char
+		const templateLength = activeTemplate.length;
 
-		for (charIndex = 0; charIndex < activeTemplate.length; charIndex++) {
-			const char = activeTemplate[charIndex];
+		for (charIndex = 0; charIndex < templateLength; charIndex++) {
+			//we read the char as a numeric code so peeks and compares stay in integer land
+			const code = activeTemplate.charCodeAt(charIndex);
 
 			switch (state) {
 				case STATE.TEXT: {
 					//inside an element, we only care for the exit, which is either another tag (e.g. <strong>), the current tag's end (e.g. </div>), or a comment (e.g. <!-- -->)
-					if (char !== "<") {
+					if (code !== CHAR_CODE.LESS_THAN) {
 						continue;
 					}
 					capture(contentBuffer, splitIndex, charIndex);
 					splitIndex = charIndex + 1;
 
-					const nextChar = activeTemplate[charIndex + 1];
+					const nextCode = activeTemplate.charCodeAt(charIndex + 1);
 
 					//comment
-					if (nextChar === "!") {
+					if (nextCode === CHAR_CODE.BANG) {
 						state = STATE.COMMENT;
 						splitIndex = charIndex + 4; // skip past "<!--"
 						charIndex += 2; // advance past "<!"
@@ -391,7 +386,7 @@ const parse = (
 					}
 
 					//end tag
-					if (nextChar === "/") {
+					if (nextCode === CHAR_CODE.SLASH) {
 						state = STATE.END_TAG;
 						splitIndex = charIndex + 2;
 						charIndex++;
@@ -408,9 +403,9 @@ const parse = (
 				case STATE.COMMENT:
 					//inside a comment we can only exit when the comment is ended by -->
 					if (
-						char !== ">" ||
-						activeTemplate[charIndex - 1] !== "-" ||
-						activeTemplate[charIndex - 2] !== "-"
+						code !== CHAR_CODE.GREATER_THAN ||
+						activeTemplate.charCodeAt(charIndex - 1) !== CHAR_CODE.DASH ||
+						activeTemplate.charCodeAt(charIndex - 2) !== CHAR_CODE.DASH
 					) {
 						continue;
 					}
@@ -424,7 +419,10 @@ const parse = (
 
 				case STATE.RAW_CONTENT:
 					//here we also only care for the exit of the current element
-					if (char !== "<" || activeTemplate[charIndex + 1] !== "/") {
+					if (
+						code !== CHAR_CODE.LESS_THAN ||
+						activeTemplate.charCodeAt(charIndex + 1) !== CHAR_CODE.SLASH
+					) {
 						continue;
 					}
 
@@ -440,13 +438,14 @@ const parse = (
 
 				case STATE.TAG: {
 					//the tag only refers to the name (div, span, etc.) and can be exited by a white space, indicating attributes, or by a closing bracket
-					if (char !== ">" && !isWhitespace(char)) {
+					if (code !== CHAR_CODE.GREATER_THAN && !isWhitespaceCode(code)) {
 						continue;
 					}
 
 					//`<div/>` (no space): trailing slash is part of the self-close, not the tag name
 					const tagEnd =
-						char === ">" && activeTemplate[charIndex - 1] === "/"
+						code === CHAR_CODE.GREATER_THAN &&
+						activeTemplate.charCodeAt(charIndex - 1) === CHAR_CODE.SLASH
 							? charIndex - 1
 							: charIndex;
 					capture(tagBuffer, splitIndex, tagEnd);
@@ -454,14 +453,14 @@ const parse = (
 					completeTag();
 
 					//white space means attributes
-					if (char !== ">") {
+					if (code !== CHAR_CODE.GREATER_THAN) {
 						state = STATE.ELEMENT;
 						charIndex--; // we rewind the counter so the overarching element state can handle the white space, otherwise we would need more transitions here
 						continue;
 					}
 
 					//special case of a self-closing tag
-					if (activeTemplate[charIndex - 1] === "/") {
+					if (activeTemplate.charCodeAt(charIndex - 1) === CHAR_CODE.SLASH) {
 						openTagBindings.pop();
 						selfClosing = true;
 						flushElement();
@@ -480,13 +479,13 @@ const parse = (
 
 				case STATE.ELEMENT:
 					//this is a meta state, coordinating tags and attributes, and marks the transition to the elements content
-					if (char === "<") {
+					if (code === CHAR_CODE.LESS_THAN) {
 						state = STATE.TAG;
 						continue;
 					}
 
-					if (char === ">") {
-						if (activeTemplate[charIndex - 1] === "/") {
+					if (code === CHAR_CODE.GREATER_THAN) {
+						if (activeTemplate.charCodeAt(charIndex - 1) === CHAR_CODE.SLASH) {
 							openTagBindings.pop();
 							selfClosing = true;
 							flushElement();
@@ -501,7 +500,7 @@ const parse = (
 					}
 
 					state = STATE.ATTRIBUTE_KEY;
-					if (isWhitespace(char)) {
+					if (isWhitespaceCode(code)) {
 						//completeAttribute adds the separator for static attrs, so we just skip past the source whitespace
 						splitIndex = charIndex + 1;
 					} else {
@@ -514,25 +513,28 @@ const parse = (
 				case STATE.ATTRIBUTE_KEY:
 					//there are different types of attributes - boolean attributes and attributes with a value
 					//if we find an equal sign it's a value attribute
-					if (char === "=") {
+					if (code === CHAR_CODE.EQUALS) {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						splitIndex = charIndex + 1;
 						state = STATE.ATTRIBUTE_VALUE;
 						//a white space marks the end of the current attribute and we move back to the element
-					} else if (isWhitespace(char)) {
+					} else if (isWhitespaceCode(code)) {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
 						charIndex--; //we rewind for element state management
 						//self-closing tag: "/" before ">" ends the attribute without including the "/"
-					} else if (char === "/" && activeTemplate[charIndex + 1] === ">") {
+					} else if (
+						code === CHAR_CODE.SLASH &&
+						activeTemplate.charCodeAt(charIndex + 1) === CHAR_CODE.GREATER_THAN
+					) {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						completeAttribute();
 						//we transition to ELEMENT without rewinding — the next char ">" will be handled there
 						state = STATE.ELEMENT;
 						//special case if the element ends directly after the boolean attribute
-					} else if (char === ">") {
+					} else if (code === CHAR_CODE.GREATER_THAN) {
 						capture(attributeKeyBuffer, splitIndex, charIndex);
 						completeAttribute();
 						state = STATE.ELEMENT;
@@ -542,21 +544,21 @@ const parse = (
 
 				case STATE.ATTRIBUTE_VALUE:
 					//here we need to check if we have a quoting char to detect the end of the attribute, either " or ' or a whitespace
-					if (!attributeQuote && isQuote(char)) {
-						attributeQuote = char;
+					if (!attributeQuoteCode && isQuoteCode(code)) {
+						attributeQuoteCode = code;
 						splitIndex = charIndex + 1;
-					} else if (attributeQuote && char === attributeQuote) {
+					} else if (attributeQuoteCode && code === attributeQuoteCode) {
 						capture(attributeValueBuffer, splitIndex, charIndex);
 						splitIndex = charIndex + 1;
 						completeAttribute();
 						state = STATE.ELEMENT;
-					} else if (!attributeQuote && isWhitespace(char)) {
+					} else if (!attributeQuoteCode && isWhitespaceCode(code)) {
 						capture(attributeValueBuffer, splitIndex, charIndex);
 						splitIndex = charIndex;
 						completeAttribute();
 						state = STATE.ELEMENT;
 						charIndex--; //we rewind for element state management
-					} else if (!attributeQuote && char === ">") {
+					} else if (!attributeQuoteCode && code === CHAR_CODE.GREATER_THAN) {
 						//special case if the unquoted attribute is ended by the element end
 						capture(attributeValueBuffer, splitIndex, charIndex);
 						completeAttribute();
@@ -566,7 +568,7 @@ const parse = (
 					continue;
 
 				case STATE.END_TAG:
-					if (char === ">") {
+					if (code === CHAR_CODE.GREATER_THAN) {
 						capture(endTagBuffer, splitIndex, charIndex);
 						splitIndex = charIndex + 1;
 						flushElement();
@@ -632,11 +634,7 @@ const parse = (
 		const attrNames = firstChild.attributes;
 		if (attrNames.length) {
 			hostStaticAttributes = [];
-			for (
-				let attrIndex = 0;
-				attrIndex < attrNames.length;
-				attrIndex++
-			) {
+			for (let attrIndex = 0; attrIndex < attrNames.length; attrIndex++) {
 				const attrName = attrNames[attrIndex];
 				hostStaticAttributes.push([attrName.name, attrName.value]);
 			}
@@ -664,8 +662,10 @@ export const html = (
 	tokens: TemplateStringsArray,
 	...dynamicValues: Array<unknown>
 ): HTMLTemplate => {
-	if (!htmlCache.has(tokens)) {
-		htmlCache.set(tokens, parse(tokens));
+	let parsed = htmlCache.get(tokens);
+	if (!parsed) {
+		parsed = parse(tokens);
+		htmlCache.set(tokens, parsed);
 	}
-	return new HTMLTemplate(htmlCache.get(tokens)!, dynamicValues);
+	return new HTMLTemplate(parsed, dynamicValues);
 };
