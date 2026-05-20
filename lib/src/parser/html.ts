@@ -42,8 +42,6 @@ const TEMPLATE_TAG = "template";
 const SCRIPT_TAG = "script";
 const TEXTAREA_TAG = "textarea";
 const STYLE_TAG = "style";
-const EMPTY_ARRAY = [] as Array<[string, string]>;
-
 /*
 the parser drops a comment marker at every dynamic position so we can find it again later — but these elements either don't render html children (style, script, textarea) or are inert (template), so a comment inside them wouldn't survive as a usable marker
 => for these we treat the whole element body as a single replaceable chunk and emit one marker before it instead of marking inner positions
@@ -318,13 +316,27 @@ const completeAttribute = () => {
 			bindings.length - 1,
 		);
 	} else if (attributeKeyBuffer.length) {
-		//a static attr needs a single-space separator from the preceding tag name or attr — we add it here instead of preserving the source whitespace, which avoids the extra push/shift dance for the dynamic case
-		elementBuffer.push(" ");
-		moveArrayContents(attributeKeyBuffer, elementBuffer);
-		if (attributeValueBuffer.length) {
-			elementBuffer.push("=", "'");
-			moveArrayContents(attributeValueBuffer, elementBuffer);
-			elementBuffer.push("'");
+		if (isRootTemplate) {
+			//static host attrs lower into AttributeBindings so they ride the same target/dirty machinery as everything else
+			//no expression slot means update() never marks them dirty — zero per-update cost — and the renderer treats them uniformly with dynamic host bindings
+			const staticBinding: AttributeBinding = {
+				type: BINDING_TYPES.ATTR,
+				keys: [],
+				values: [],
+			};
+			moveArrayContents(attributeKeyBuffer, staticBinding.keys);
+			moveArrayContents(attributeValueBuffer, staticBinding.values);
+			bindings.push(staticBinding);
+			hostBindingOffset++;
+		} else {
+			//a static attr needs a single-space separator from the preceding tag name or attr — we add it here instead of preserving the source whitespace, which avoids the extra push/shift dance for the dynamic case
+			elementBuffer.push(" ");
+			moveArrayContents(attributeKeyBuffer, elementBuffer);
+			if (attributeValueBuffer.length) {
+				elementBuffer.push("=", "'");
+				moveArrayContents(attributeValueBuffer, elementBuffer);
+				elementBuffer.push("'");
+			}
 		}
 	}
 	activeBinding = null;
@@ -614,7 +626,6 @@ const parse = (strings: TemplateStringsArray, force = false): ParsedHTML => {
 	const fragment = range.createContextualFragment(result);
 	const firstChild = fragment.firstElementChild;
 	const firstElementIsTemplate = firstChild?.localName === TEMPLATE_TAG;
-	let hostStaticAttributes = EMPTY_ARRAY;
 
 	if (firstElementIsTemplate && !forceNoRootTemplate) {
 		let isRoot = true;
@@ -631,15 +642,6 @@ const parse = (strings: TemplateStringsArray, force = false): ParsedHTML => {
 
 		if (!isRoot) return parse(strings, true);
 
-		const attrNames = firstChild.attributes;
-		if (attrNames.length) {
-			hostStaticAttributes = [];
-			for (let attrIndex = 0; attrIndex < attrNames.length; attrIndex++) {
-				const attrName = attrNames[attrIndex];
-				hostStaticAttributes.push([attrName.name, attrName.value]);
-			}
-		}
-
 		firstChild.replaceWith((firstChild as HTMLTemplateElement).content);
 	}
 
@@ -649,7 +651,6 @@ const parse = (strings: TemplateStringsArray, force = false): ParsedHTML => {
 		fragment,
 		templateHash: stringHash(result),
 		hostBindingOffset,
-		hostStaticAttributes,
 	};
 };
 

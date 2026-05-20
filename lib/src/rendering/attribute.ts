@@ -104,14 +104,16 @@ const handleExpandableAttribute = (
 };
 
 export const updateAttribute = (context: HTMLTemplate, index: number) => {
-	const element = context.markers[index].nextElementSibling!;
+	const element = context.targets[index] as Element;
 	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
 
 	const isBooleanAttribute = binding.values.length === 0;
 	//"expandable" means the binding is a single expression in attribute-key position with no value half (e.g. `<div ${attrs}>`)
 	//the expression can be an array of names, an object of name/value pairs, or a string name
 	//=> handleExpandableAttribute fans it out into individual attribute writes for us
-	const isExpandable = binding.keys.length === 1;
+	//we also require the key to be an expression (number) so a literal boolean attr (e.g. `<template hidden>`, now lowered into a binding) doesn't take this branch — its single string key is a static name, not an expandable expression
+	const isExpandable =
+		binding.keys.length === 1 && typeof binding.keys[0] === "number";
 
 	//on the very first render previousExpressions is empty, so any `previousExpressions[index]` lookup downstream would be undefined, and we'd need a special-case branch everywhere
 	//=> we point it at currentExpressions instead, which makes every "did this change" comparison look unchanged — exactly what we want on the initial render

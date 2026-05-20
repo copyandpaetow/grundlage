@@ -5,6 +5,7 @@ import { updateAttribute } from "./attribute";
 import { updateContent } from "./content";
 import { updateRawContent } from "./raw-content";
 import { updateTag } from "./tag";
+import { BaseComponent } from "../types";
 
 const EMPTY_ARRAY: Array<unknown> = [] as const;
 
@@ -18,12 +19,18 @@ const updateByType = {
 export class HTMLTemplate {
 	#hash: number | undefined;
 	parsedHTML: ParsedHTML;
-	//markers[i] and dirtyBindings[i] line up with parsedHTML.bindings[i] — same index across all three arrays addresses the same binding
-	markers: Array<Comment>;
+	//targets[bindingIndex] lines up with parsedHTML.bindings[bindingIndex] and dirtyBindings[bindingIndex]
+	//for ATTR/TAG/RAW_CONTENT bindings we pre-resolve the Element at setup so the hot path doesn't walk the DOM
+	//for CONTENT bindings we store the leading Comment marker — the binding still needs it as a range anchor
+	//host bindings (first hostBindingOffset entries) resolve straight to the host element, no marker required
+	targets: Array<Element | Comment>;
 	dirtyBindings: Uint8Array;
-	//currentExpressions[i] is the i-th interpolation in the template literal (the i-th `${...}`)
+	//currentExpressions[expressionIndex] is the expressionIndex-th interpolation in the template literal (the expressionIndex-th `${...}`)
 	currentExpressions: Array<unknown>;
 	previousExpressions = EMPTY_ARRAY;
+	//we keep the host on the instance so a nested template (rendered inside a content binding) can thread it into its own setup
+	//without it, list items or yielded templates would lose access to the surrounding component when they have their own root-template host bindings
+	host: BaseComponent | null = null;
 
 	//we cache this per-update and invalidate in update() when expressions change
 	get hash(): number {
@@ -45,24 +52,28 @@ export class HTMLTemplate {
 		this.currentExpressions = expressions;
 	}
 
-	setup(): DocumentFragment {
+	setup(host: BaseComponent | null = null): DocumentFragment {
 		const bindingCount = this.parsedHTML.bindings.length;
 		this.dirtyBindings = new Uint8Array(bindingCount).fill(1);
+		this.host = host;
 		const fragment = this.parsedHTML.fragment.cloneNode(
 			true,
 		) as DocumentFragment;
 
-		this.markers = this.#findMarkers(fragment);
+		this.targets = this.#findTargets(fragment, host);
 		this.#flush();
 
 		return fragment;
 	}
 
-	hydrate(context: ShadowRoot) {
+	hydrate(host: BaseComponent) {
 		//Uint8Array is zero-initialized by the spec, so we don't need to fill explicitly
 		this.dirtyBindings = new Uint8Array(this.parsedHTML.bindings.length);
-		this.markers = this.#findMarkers(context);
+		this.host = host;
+		this.targets = this.#findTargets(host.shadowRoot!, host);
 
+		//SSR already wrote child elements and their static attrs into the DOM, but the host element's attrs were never serialized — they live in bindings now
+		//=> we re-apply every ATTR binding on hydrate so host bindings (and any dynamic child attrs) land on the right element with the current expression values
 		for (let index = 0; index < this.parsedHTML.bindings.length; index++) {
 			const binding = this.parsedHTML.bindings[index];
 			if (binding.type === BINDING_TYPES.ATTR) {
@@ -71,14 +82,32 @@ export class HTMLTemplate {
 		}
 	}
 
-	#findMarkers(parent: DocumentFragment | ShadowRoot) {
-		const markers = [];
+	#findTargets(
+		parent: DocumentFragment | ShadowRoot,
+		host: BaseComponent | null,
+	): Array<Element | Comment> {
+		//pushing `host` into the host slots without a host would store `undefined` and only surface when updateAttribute later crashes on a missing element
+		//=> we fail fast with a message that names the actual misuse (a root template was rendered somewhere without a component to attach to)
+		if (this.parsedHTML.hostBindingOffset > 0 && !host) {
+			throw new Error(
+				"Root template host bindings need a component host — a template with <template ...> attributes can only be rendered as a component's top-level output, not nested inside content.",
+			);
+		}
+		//host bindings come first in `bindings`, so we pre-fill that many entries with the host before walking the DOM for child markers
+		const hostBindingOffset = this.parsedHTML.hostBindingOffset;
+		const bindings = this.parsedHTML.bindings;
+		const targets: Array<Element | Comment> = [];
+		for (let hostIndex = 0; hostIndex < hostBindingOffset; hostIndex++) {
+			targets.push(host!);
+		}
+
 		const treeWalker = document.createTreeWalker(
 			parent,
 			NodeFilter.SHOW_COMMENT,
 		);
 
 		let lastMarkerData = "";
+		let bindingIndex = hostBindingOffset;
 		while (treeWalker.nextNode()) {
 			const marker = treeWalker.currentNode as Comment;
 
@@ -92,10 +121,16 @@ export class HTMLTemplate {
 				continue;
 			}
 			lastMarkerData = marker.data;
-			markers.push(marker);
+
+			//ATTR/TAG/RAW_CONTENT just need the element the marker precedes; resolving once at setup spares the per-update .nextElementSibling read
+			//CONTENT keeps the marker itself because the binding walks forward to its matching close marker to scope its work
+			const type = bindings[bindingIndex++].type;
+			targets.push(
+				type === BINDING_TYPES.CONTENT ? marker : marker.nextElementSibling!,
+			);
 		}
 
-		return markers;
+		return targets;
 	}
 
 	update(expressions: Array<unknown>) {

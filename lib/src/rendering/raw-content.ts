@@ -2,10 +2,10 @@ import { bindingToString } from "../utils/binding-to-string";
 import { HTMLTemplate } from "./template-html";
 
 export const updateRawContent = (context: HTMLTemplate, index: number) => {
-	const marker = context.markers[index];
+	const element = context.targets[index] as Element;
 	const binding = context.parsedHTML.bindings[index];
 
-	marker.nextElementSibling!.textContent = bindingToString(
+	element.textContent = bindingToString(
 		binding.values,
 		context.currentExpressions,
 	);

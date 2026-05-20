@@ -3,9 +3,8 @@ import { bindingToString } from "../utils/binding-to-string";
 import { HTMLTemplate } from "./template-html";
 
 export const updateTag = (context: HTMLTemplate, index: number) => {
-	const marker = context.markers[index];
 	const binding = context.parsedHTML.bindings[index] as TagBinding;
-	const element = marker.nextElementSibling!;
+	const element = context.targets[index] as Element;
 	const newTag = bindingToString(binding.values, context.currentExpressions);
 
 	//we're about to replace the element with a freshly-created one — to the browser that's a remove + insert, which drops focus, selection, and similar live UI state
@@ -33,6 +32,10 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	element.replaceWith(newElement);
 	focusElement?.focus();
 
+	//the targets array is pre-resolved at setup, so a tag swap invalidates the old element reference for this slot and for every attribute binding that lives on the tag
+	//=> we point all of them at the freshly-created element before marking the related attrs dirty so the next flush writes against the new node
+	context.targets[index] = newElement;
+
 	//we copied the html attributes onto the new element above, but anything written as a JS property (event listeners via onclick={...}, complex values) does not transfer
 	//=> we mark every attribute binding that lives on this tag as dirty so the next flush re-runs them against the new element
 	const relatedAttributes = binding.relatedAttributes;
@@ -41,6 +44,8 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 		attributeIndex < relatedAttributes.length;
 		attributeIndex++
 	) {
-		context.dirtyBindings[relatedAttributes[attributeIndex]] = 1;
+		const relatedIndex = relatedAttributes[attributeIndex];
+		context.targets[relatedIndex] = newElement;
+		context.dirtyBindings[relatedIndex] = 1;
 	}
 };

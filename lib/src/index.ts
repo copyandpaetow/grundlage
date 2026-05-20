@@ -259,9 +259,9 @@ export const render = (
 			) {
 				this.#renderedTemplate = template;
 				if (this.#renderMode === RENDER_MODE.CSR) {
-					this.shadowRoot?.replaceChildren(template.setup());
+					this.shadowRoot?.replaceChildren(template.setup(this));
 				} else {
-					template.hydrate(this.shadowRoot!);
+					template.hydrate(this);
 					this.#renderMode = RENDER_MODE.CSR;
 				}
 				return;
