@@ -43,7 +43,9 @@ Depending on the state we move the last characters since the state change to the
 type StateValue = ValueOf<typeof STATE>;
 type BufferArray = Array<string | number>;
 
-const range = new Range();
+//a <template> element parses its innerHTML under the "in template" insertion mode, which correctly handles table-related tags (<tr>, <td>, <tbody>, …)
+//=> using a default Range here would anchor parsing to <body>, where those tags are a parse error and get silently dropped
+const parserHost = document.createElement("template");
 const PLACEHOLDER_TAG = "div";
 const TEMPLATE_TAG = "template";
 const SCRIPT_TAG = "script";
@@ -663,7 +665,13 @@ const parse = (strings: TemplateStringsArray, force = false): ParsedHTML => {
 	flushElement();
 
 	const result = resultBuffer.join("");
-	const fragment = range.createContextualFragment(result);
+	parserHost.innerHTML = result;
+	//the cached ParsedHTML must own its own fragment because the next parse will overwrite parserHost.content
+	//=> we move the parsed children into a fresh fragment one at a time (append takes ownership), which is cheaper than cloning and avoids allocating a snapshot array
+	const fragment = document.createDocumentFragment();
+	while (parserHost.content.firstChild) {
+		fragment.append(parserHost.content.firstChild);
+	}
 	const firstChild = fragment.firstElementChild;
 	const firstElementIsTemplate = firstChild?.localName === TEMPLATE_TAG;
 

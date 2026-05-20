@@ -22,6 +22,7 @@ export default defineConfig({
 				reorderStress: resolve(__dirname, "pages/reorder-stress/index.html"),
 				mutationStress: resolve(__dirname, "pages/mutation-stress/index.html"),
 				nested: resolve(__dirname, "pages/nesting/index.html"),
+				krausest: resolve(__dirname, "pages/krausest/index.html"),
 			},
 		},
 	},

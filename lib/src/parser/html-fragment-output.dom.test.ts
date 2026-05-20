@@ -118,4 +118,19 @@ describe("html parser — fragment output: complex structure", () => {
 		expect(paragraphs[0].textContent).toBe("one");
 		expect(paragraphs[1].textContent).toBe("two");
 	});
+
+	//the HTML5 parser drops table-related tags (<tr>, <td>, <tbody>, etc.) when the parsing context is
+	//<body> — which is what happens with a default Range — so a row template would lose its <tr> before
+	//the renderer ever sees it, and the next attribute binding's nextElementSibling would be null
+	test("row template preserves <tr> and <td> elements in the fragment", () => {
+		const identifier = 1;
+		const label = "row";
+		const template = html`<tr data-key="${identifier}" class="${""}">
+			<td>${identifier}</td>
+			<td>${label}</td>
+		</tr>`;
+		const row = template.parsedHTML.fragment.querySelector("tr");
+		expect(row).not.toBeNull();
+		expect(row!.querySelectorAll("td")).toHaveLength(2);
+	});
 });
