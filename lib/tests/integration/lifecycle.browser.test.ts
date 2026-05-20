@@ -359,3 +359,169 @@ describe("component lifecycle", () => {
 		cleanup(element);
 	});
 });
+
+describe.skipIf("happyDOM" in globalThis)("deferred custom-element upgrade", () => {
+	//the realistic SSR / lazy-define scenario: createElement and DOM insertion happen before customElements.define, then the upgrade fires retroactively
+	//we want to make sure constructor + connectedCallback run in the right order and that rendering proceeds normally without a separate code path
+	//happy-dom does not implement retroactive upgrade — these tests only run against the real-browser project
+	let tagId = 0;
+	const uniqueTag = () => `test-upgrade-${tagId++}-${Date.now()}`;
+
+	const sleep = (duration = 0) =>
+		new Promise((resolve) => setTimeout(resolve, duration));
+
+	test("element created and inserted before define is upgraded and renders", async () => {
+		const tag = uniqueTag();
+
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+
+		//before upgrade: no shadowRoot, no rendered content
+		expect(element.shadowRoot).toBeNull();
+
+		const MyElement = render(function* () {
+			yield () => html`<p>upgraded</p>`;
+		});
+		customElements.define(tag, MyElement);
+
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"upgraded",
+		);
+
+		element.remove();
+	});
+
+	test("attributes set before upgrade are visible to the generator on first render", async () => {
+		//setAttribute before upgrade is fine because the MutationObserver only attaches in connectedCallback (post-upgrade)
+		//=> the first render reads the attribute through getAttribute as if it had always been there
+		const tag = uniqueTag();
+
+		const element = document.createElement(tag);
+		element.setAttribute("data-label", "pre-define");
+		document.body.appendChild(element);
+
+		const MyElement = render(function* (host) {
+			yield () =>
+				html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
+		});
+		customElements.define(tag, MyElement);
+
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"pre-define",
+		);
+
+		element.remove();
+	});
+
+	test("update() called before define is a no-op and does not throw post-upgrade", async () => {
+		//if the user grabs the element via createElement and calls a method that doesn't exist yet (because the class hasn't been defined), the call should be ignored quietly
+		//after define the element upgrades and renders fresh — the prior call should not have broken anything
+		const tag = uniqueTag();
+
+		const element = document.createElement(tag) as HTMLElement & {
+			update?: () => Promise<void>;
+		};
+		document.body.appendChild(element);
+
+		//no .update() yet — the prototype has not been swapped in
+		expect(element.update).toBeUndefined();
+
+		const MyElement = render(function* () {
+			yield () => html`<p>after</p>`;
+		});
+		customElements.define(tag, MyElement);
+
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
+		//now update() is on the prototype
+		await (element as InstanceType<typeof MyElement>).update();
+		await sleep();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
+
+		element.remove();
+	});
+});
+
+describe("MutationObserver and update() interleaving", () => {
+	//the renderer batches updates through UPDATE_STATE: IDLE → SCHEDULED → RENDERING → IDLE
+	//we have separate tests for "MO triggers re-render" and "update() coalesces", but nothing pins what happens when both arrive in the same task
+	//these tests pin the contract: setAttribute on the host inside an update flush does not cause an extra render to land, because the MO callback observes UPDATE_STATE != IDLE and bails
+	let tagId = 0;
+	const uniqueTag = () => `test-observer-race-${tagId++}-${Date.now()}`;
+
+	const sleep = (duration = 0) =>
+		new Promise((resolve) => setTimeout(resolve, duration));
+
+	const mount = (tag: string): HTMLElement => {
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+		return element;
+	};
+
+	test("setAttribute fired while a sync update() is mid-flight does not double-render", async () => {
+		//we trigger a render via update() and inside that render we observe whether a same-tick setAttribute (queued in user code right before update()) caused a second pass
+		//the contract we pin: a MutationObserver callback firing while UPDATE_STATE !== IDLE bails (index.ts:240-245), so the queued attribute mutation does not cause a duplicate render in the same task
+		const tag = uniqueTag();
+		let renderCount = 0;
+
+		const MyElement = render(function* (host) {
+			yield () => {
+				renderCount++;
+				return html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
+			};
+		});
+		customElements.define(tag, MyElement);
+
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+		expect(renderCount).toBe(1);
+
+		//both lines are sync — the MutationObserver microtask is queued; update() then transitions IDLE → SCHEDULED in the same task
+		element.setAttribute("data-label", "racy");
+		element.update();
+		await sleep(50);
+
+		//we accept one extra render: either the MO microtask runs first (and update()'s SCHEDULED guard absorbs the second request), or update() runs first (and the MO callback sees SCHEDULED and bails)
+		//either ordering yields a single re-render, not two
+		expect(renderCount).toBe(2);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
+			"racy",
+		);
+
+		element.remove();
+	});
+
+	test("setAttribute outside any active render still triggers exactly one re-render", async () => {
+		//this is the lower bound: an attribute mutation arriving with the renderer fully idle must produce exactly one re-render (not zero, not multiple)
+		//paired with the test above, the two pin both ends of the coalescing contract: idle-mutation = one render; mutation-during-update = one render
+		const tag = uniqueTag();
+		let renderCount = 0;
+
+		const MyElement = render(function* (host) {
+			yield () => {
+				renderCount++;
+				return html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
+			};
+		});
+		customElements.define(tag, MyElement);
+
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+		expect(renderCount).toBe(1);
+
+		element.setAttribute("data-label", "settled");
+		await sleep(50);
+
+		expect(renderCount).toBe(2);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
+			"settled",
+		);
+
+		element.remove();
+	});
+});

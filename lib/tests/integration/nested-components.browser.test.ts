@@ -1066,6 +1066,90 @@ describe("framework-parity patterns", () => {
 		element.remove();
 	});
 
+	test("slot fallback shows when no light children are present, then hides on projection", async () => {
+		//`<slot>fallback</slot>` is a standard web-component idiom: the fallback renders only when nothing is slotted
+		//we don't do anything special for it, but a regression that broke slot child layout would surface here
+		const tag = uniqueTag("slot-fallback");
+		customElements.define(
+			tag,
+			render(function* () {
+				yield () =>
+					html`<section><slot><em>nothing-here</em></slot></section>`;
+			}),
+		);
+
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+		await sleep();
+
+		const slot = element.shadowRoot?.querySelector("slot") as HTMLSlotElement;
+		//no light children → fallback is the slot's effective content
+		expect(slot.assignedNodes().length).toBe(0);
+		const fallback = slot.querySelector("em");
+		expect(fallback?.textContent).toBe("nothing-here");
+
+		const projected = document.createElement("span");
+		projected.textContent = "real-content";
+		element.appendChild(projected);
+		await sleep();
+
+		expect(slot.assignedNodes()).toContain(projected);
+		//the fallback element is still in the shadow DOM but it is not the slot's flat-tree contribution any more
+		//we verify projection took over by reading assignedNodes (which excludes fallback when something is assigned)
+		expect(slot.assignedNodes().some((node) => node === fallback)).toBe(false);
+
+		projected.remove();
+		await sleep();
+
+		expect(slot.assignedNodes().length).toBe(0);
+		//fallback element survives removal of the projected node and the slot reverts to it
+		expect(slot.querySelector("em")?.textContent).toBe("nothing-here");
+
+		element.remove();
+	});
+
+	test("named slot fallback only shows when its named light child is absent", async () => {
+		//named slots compose with default slots; the fallback for `slot[name=title]` is independent of whether the default slot has children
+		const tag = uniqueTag("slot-named-fallback");
+		customElements.define(
+			tag,
+			render(function* () {
+				yield () => html`
+					<header>
+						<slot name="title"><h1>default-title</h1></slot>
+					</header>
+					<main>
+						<slot></slot>
+					</main>
+				`;
+			}),
+		);
+
+		const element = document.createElement(tag);
+		const body = document.createElement("p");
+		body.textContent = "body-content";
+		element.appendChild(body);
+		document.body.appendChild(element);
+		await sleep();
+
+		const titleSlot = element.shadowRoot?.querySelector(
+			'slot[name="title"]',
+		) as HTMLSlotElement;
+		//default-slot has the <p>, but title-slot has nothing assigned and falls back
+		expect(titleSlot.assignedNodes().length).toBe(0);
+		expect(titleSlot.querySelector("h1")?.textContent).toBe("default-title");
+
+		const customTitle = document.createElement("h2");
+		customTitle.setAttribute("slot", "title");
+		customTitle.textContent = "custom-title";
+		element.appendChild(customTitle);
+		await sleep();
+
+		expect(titleSlot.assignedNodes()).toContain(customTitle);
+
+		element.remove();
+	});
+
 	test("slot re-projects children added or removed after first render", async () => {
 		const tag = uniqueTag("slot-reproject");
 		customElements.define(

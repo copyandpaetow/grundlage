@@ -337,3 +337,45 @@ describe("applyAttributeBinding - non-stringable values", () => {
 		expect(updateSpy).not.toHaveBeenCalled();
 	});
 });
+
+describe("applyAttributeBinding - stringable to non-stringable transition", () => {
+	//we previously wrote the stringable value as a real attribute (line 49 in attribute.ts); now the new value is non-stringable, so the code assigns to the JS property
+	//=> nothing removes the prior attribute, which means a child custom element reading `getAttribute("config")` after the transition still sees the stale stringified previous value
+	//these tests document the current behavior so the user can decide whether the missing removeAttribute call is intentional or a latent bug
+	test("the JS property reflects the new non-stringable value", () => {
+		const element = document.createElement("div");
+		const payload = { nested: 1 };
+
+		applyAttributeBinding(element, "config", "previous-string");
+		applyAttributeBinding(element, "config", payload, "previous-string");
+
+		expect((element as unknown as { config: unknown }).config).toBe(payload);
+	});
+
+	test("the prior stringable attribute remains on the element after the transition", () => {
+		//this is the asymmetric half: the matching non-stringable → stringable transition does `delete element[key]` to remove the property (covered by the existing "transition from non-stringable oldValue to stringable value" test).
+		//going the other direction leaves the attribute behind. If this surprises a future caller, the fix is a `removeAttribute(key)` in the else branch of attribute.ts before the property assignment.
+		const element = document.createElement("div");
+
+		applyAttributeBinding(element, "config", "previous-string");
+		expect(element.getAttribute("config")).toBe("previous-string");
+
+		applyAttributeBinding(element, "config", { nested: 1 }, "previous-string");
+		expect(element.getAttribute("config")).toBe("previous-string");
+	});
+
+	test("update() still fires on the property-assignment branch after the transition", () => {
+		//the update() trigger should still run for the non-stringable side even when there was a prior stringable value
+		const element = document.createElement("div") as HTMLDivElement & {
+			update?: () => void;
+		};
+		const updateSpy = vi.fn();
+		element.update = updateSpy;
+
+		applyAttributeBinding(element, "config", "before");
+		expect(updateSpy).not.toHaveBeenCalled();
+
+		applyAttributeBinding(element, "config", { x: 1 }, "before");
+		expect(updateSpy).toHaveBeenCalledTimes(1);
+	});
+});

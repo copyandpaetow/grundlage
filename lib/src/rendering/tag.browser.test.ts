@@ -209,6 +209,103 @@ describe("tag updates", () => {
 		cleanup(element);
 	});
 
+	test("tag swap concurrent with attribute change lands new values on the new element", async () => {
+		//tag.ts replaces the element and re-points every related-attribute target at the new element, then marks them dirty for the next flush
+		//if the dirty-mark order were wrong, the new element would still carry the old value or the old element would receive the new value (visible only via DOM observation)
+		const tag = uniqueTag();
+		let tagName = "div";
+		let label = "first";
+
+		const MyElement = render(function* () {
+			yield () => html`
+                <${tagName} data-label="${label}">content</${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		expect(
+			element.shadowRoot?.querySelector("div")?.getAttribute("data-label"),
+		).toBe("first");
+
+		tagName = "section";
+		label = "second";
+		await element.update();
+		await sleep();
+
+		const section = element.shadowRoot?.querySelector("section")!;
+		expect(section).not.toBeNull();
+		expect(section.getAttribute("data-label")).toBe("second");
+		expect(element.shadowRoot?.querySelector("div")).toBeNull();
+
+		cleanup(element);
+	});
+
+	test("tag swap with concurrent content change updates the inner text on the new element", async () => {
+		//the content binding sits inside the dynamic tag — when the tag rewraps, the parser keeps the comment markers inside, so updateContent should still find its anchor on the new element's child list
+		const tag = uniqueTag();
+		let tagName = "div";
+		let text = "before";
+
+		const MyElement = render(function* () {
+			yield () => html`
+                <${tagName}>${text}</${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain(
+			"before",
+		);
+
+		tagName = "article";
+		text = "after";
+		await element.update();
+		await sleep();
+
+		const article = element.shadowRoot?.querySelector("article")!;
+		expect(article).not.toBeNull();
+		expect(article.textContent).toContain("after");
+
+		cleanup(element);
+	});
+
+	test("event handler set as a JS property is reattached after a concurrent tag swap", async () => {
+		//JS property bindings (the on* fast path) do not transfer when we copy attributes from the old element to the new one
+		//=> tag.ts marks every related-attribute binding dirty so the next flush re-installs the listener on the new element
+		//if dirty bookkeeping were off, the new element would render but never receive clicks
+		const tag = uniqueTag();
+		let tagName = "button";
+		const clicks: string[] = [];
+		let handler = () => clicks.push("first");
+
+		const MyElement = render(function* () {
+			yield () =>
+				html`
+                    <${tagName} onclick="${handler}">click me</${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		element.shadowRoot?.querySelector("button")?.click();
+		expect(clicks).toEqual(["first"]);
+
+		tagName = "div";
+		handler = () => clicks.push("second");
+		await element.update();
+		await sleep();
+
+		element.shadowRoot?.querySelector("div")?.click();
+		expect(clicks).toEqual(["first", "second"]);
+
+		cleanup(element);
+	});
+
 	test("switches between multiple tag names", async () => {
 		const tag = uniqueTag();
 		let tagName = "h1";
