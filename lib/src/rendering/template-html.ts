@@ -1,7 +1,11 @@
 import { COMMENT_IDENTIFIER } from "../parser/html-util";
-import { BINDING_TYPES, ParsedHTML } from "../parser/types";
+import {
+	AttributeBinding,
+	BINDING_TYPES,
+	ParsedHTML,
+} from "../parser/types";
 import { hashValue } from "../utils/hashing";
-import { updateAttribute } from "./attribute";
+import { removeAttributeBinding, updateAttribute } from "./attribute";
 import { updateContent } from "./content";
 import { updateRawContent } from "./raw-content";
 import { updateTag } from "./tag";
@@ -64,6 +68,20 @@ export class HTMLTemplate {
 		this.#flush();
 
 		return fragment;
+	}
+
+	//called by the renderer when we're about to swap to a different template
+	//host bindings live on the component element itself, so they don't get cleared by replaceChildren — we have to walk this template's host bindings and remove whatever names they last applied before the new template runs setup()
+	clearHostAttributes(host: BaseComponent) {
+		const hostBindingOffset = this.parsedHTML.hostBindingOffset;
+		const bindings = this.parsedHTML.bindings;
+		for (let index = 0; index < hostBindingOffset; index++) {
+			removeAttributeBinding(
+				host,
+				bindings[index] as AttributeBinding,
+				this.currentExpressions,
+			);
+		}
 	}
 
 	hydrate(host: BaseComponent) {

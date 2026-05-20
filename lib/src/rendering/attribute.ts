@@ -60,32 +60,64 @@ export const applyAttributeBinding = (
 	}
 };
 
+//"expandable" means the binding is a single expression in attribute-key position with no value half (e.g. `<div ${attrs}>`)
+//=> the expression can be an array of names, an object of name/value pairs, or a string name
+const isExpandableBinding = (binding: AttributeBinding) =>
+	binding.values.length === 0 &&
+	binding.keys.length === 1 &&
+	typeof binding.keys[0] === "number";
+
+//removes every attribute name this binding represents under the given expressions snapshot
+//we want one place that knows how each binding form (static, multi-part dynamic, expandable array/object/string, boolean) maps to attribute names so the apply path and the cleanup paths can't drift
+export const removeAttributeBinding = (
+	element: Element,
+	binding: AttributeBinding,
+	expressions: Array<unknown>,
+) => {
+	if (isExpandableBinding(binding)) {
+		const value = expressions[binding.keys[0] as number];
+		if (Array.isArray(value)) {
+			for (let index = 0; index < value.length; index++) {
+				applyAttributeBinding(element, value[index], null);
+			}
+		} else if (isPlainObject(value)) {
+			for (const name in value) {
+				applyAttributeBinding(
+					element,
+					name,
+					null,
+					value[name as keyof typeof value],
+				);
+			}
+		} else if (value) {
+			applyAttributeBinding(element, assertPrimitiveString(value), null);
+		}
+		return;
+	}
+
+	const isStaticName =
+		binding.keys.length === 1 && typeof binding.keys[0] === "string";
+	const name = isStaticName
+		? (binding.keys[0] as string)
+		: bindingToString(binding.keys, expressions);
+
+	const previousExpression =
+		binding.values.length === 1 && typeof binding.values[0] === "number"
+			? expressions[binding.values[0] as number]
+			: undefined;
+
+	applyAttributeBinding(element, name, null, previousExpression);
+};
+
 const handleExpandableAttribute = (
 	context: HTMLTemplate,
 	element: Element,
-	index: number,
+	binding: AttributeBinding,
 	previousExpressions: Array<unknown>,
 ) => {
-	const current = context.currentExpressions[index];
-	const previous = previousExpressions[index];
+	removeAttributeBinding(element, binding, previousExpressions);
 
-	if (Array.isArray(previous)) {
-		for (let index = 0; index < previous.length; index++) {
-			applyAttributeBinding(element, previous[index], null);
-		}
-	} else if (isPlainObject(previous)) {
-		for (const name in previous) {
-			applyAttributeBinding(
-				element,
-				name,
-				null,
-				previous[name as keyof typeof previous],
-			);
-		}
-	} else if (previous) {
-		applyAttributeBinding(element, assertPrimitiveString(previous), null);
-	}
-
+	const current = context.currentExpressions[binding.keys[0] as number];
 	if (Array.isArray(current)) {
 		for (let index = 0; index < current.length; index++) {
 			applyAttributeBinding(element, current[index], "");
@@ -95,7 +127,7 @@ const handleExpandableAttribute = (
 			applyAttributeBinding(
 				element,
 				name,
-				current[name as keyof typeof previous],
+				current[name as keyof typeof current],
 			);
 		}
 	} else if (current) {
@@ -108,12 +140,6 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
 
 	const isBooleanAttribute = binding.values.length === 0;
-	//"expandable" means the binding is a single expression in attribute-key position with no value half (e.g. `<div ${attrs}>`)
-	//the expression can be an array of names, an object of name/value pairs, or a string name
-	//=> handleExpandableAttribute fans it out into individual attribute writes for us
-	//we also require the key to be an expression (number) so a literal boolean attr (e.g. `<template hidden>`, now lowered into a binding) doesn't take this branch — its single string key is a static name, not an expandable expression
-	const isExpandable =
-		binding.keys.length === 1 && typeof binding.keys[0] === "number";
 
 	//on the very first render previousExpressions is empty, so any `previousExpressions[index]` lookup downstream would be undefined, and we'd need a special-case branch everywhere
 	//=> we point it at currentExpressions instead, which makes every "did this change" comparison look unchanged — exactly what we want on the initial render
@@ -122,13 +148,8 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 			? context.previousExpressions
 			: context.currentExpressions;
 
-	if (isBooleanAttribute && isExpandable) {
-		handleExpandableAttribute(
-			context,
-			element,
-			binding.keys[0] as number,
-			previousExpressions,
-		);
+	if (isBooleanAttribute && isExpandableBinding(binding)) {
+		handleExpandableAttribute(context, element, binding, previousExpressions);
 		return;
 	}
 
@@ -143,7 +164,7 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 
 	if (isBooleanAttribute) {
 		if (!isStaticName) {
-			applyAttributeBinding(element, previousName, null);
+			removeAttributeBinding(element, binding, previousExpressions);
 		}
 		applyAttributeBinding(element, currentName, "");
 		return;
@@ -161,7 +182,7 @@ export const updateAttribute = (context: HTMLTemplate, index: number) => {
 		: bindingToString(binding.values, context.currentExpressions);
 
 	if (previousName !== currentName) {
-		applyAttributeBinding(element, previousName, null, previousExpression);
+		removeAttributeBinding(element, binding, previousExpressions);
 	}
 
 	applyAttributeBinding(element, currentName, currentValue, previousExpression);

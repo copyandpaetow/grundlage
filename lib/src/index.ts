@@ -257,6 +257,9 @@ export const render = (
 				previousTemplate.parsedHTML.templateHash !==
 					template.parsedHTML.templateHash
 			) {
+				//host bindings write to the component element itself, so replaceChildren below won't clear them
+				//=> the previous template knows which host attribute names it applied (and how to remove them across every binding form); we delegate cleanup before letting setup() write the new template's host attrs
+				previousTemplate?.clearHostAttributes(this);
 				this.#renderedTemplate = template;
 				if (this.#renderMode === RENDER_MODE.CSR) {
 					this.shadowRoot?.replaceChildren(template.setup(this));
