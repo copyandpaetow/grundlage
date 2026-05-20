@@ -226,12 +226,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template class="card"><p>a</p></template>`
-						: html`<template id="hero"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template class="card"><p>a</p></template>`
+					: html`<template id="hero"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -254,12 +252,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template class="card" role="dialog" data-kind="x"><p>a</p></template>`
-						: html`<template aria-label="other"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template class="card" role="dialog" data-kind="x"><p>a</p></template>`
+					: html`<template aria-label="other"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -287,12 +283,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template class="card"><p>a</p></template>`
-						: html`<template class="hero"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template class="card"><p>a</p></template>`
+					: html`<template class="hero"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -315,12 +309,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const dynamicId = "first";
 		const dynamicRole = "alertdialog";
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template id="${dynamicId}"><p>a</p></template>`
-						: html`<template role="${dynamicRole}"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template id="${dynamicId}"><p>a</p></template>`
+					: html`<template role="${dynamicRole}"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -343,12 +335,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let showRoot = true;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showRoot
-						? html`<template class="card" role="dialog"><p>a</p></template>`
-						: html`<div>plain</div>`;
-			}
+			yield () =>
+				showRoot
+					? html`<template class="card" role="dialog"><p>a</p></template>`
+					: html`<div>plain</div>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -371,12 +361,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let showRoot = false;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showRoot
-						? html`<template class="card" role="dialog"><p>a</p></template>`
-						: html`<div>plain</div>`;
-			}
+			yield () =>
+				showRoot
+					? html`<template class="card" role="dialog"><p>a</p></template>`
+					: html`<div>plain</div>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -400,12 +388,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const firstAttrs: Record<string, string> = { id: "first", role: "dialog" };
 		const secondAttrs: Record<string, string> = { "aria-label": "other" };
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template ${firstAttrs}><p>a</p></template>`
-						: html`<template ${secondAttrs}><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template ${firstAttrs}><p>a</p></template>`
+					: html`<template ${secondAttrs}><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -429,12 +415,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template hidden><p>a</p></template>`
-						: html`<template class="visible"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template hidden><p>a</p></template>`
+					: html`<template class="visible"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -458,12 +442,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const firstAttrs = ["hidden", "inert"];
 		const secondAttrs = ["draggable"];
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template ${firstAttrs}><p>a</p></template>`
-						: html`<template ${secondAttrs}><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template ${firstAttrs}><p>a</p></template>`
+					: html`<template ${secondAttrs}><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -490,12 +472,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const firstAttr = "hidden";
 		const secondAttr = "inert";
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template ${firstAttr}><p>a</p></template>`
-						: html`<template ${secondAttr}><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template ${firstAttr}><p>a</p></template>`
+					: html`<template ${secondAttr}><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -519,12 +499,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const prefix = "data";
 		const suffix = "key";
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template ${prefix}-${suffix}="value"><p>a</p></template>`
-						: html`<template aria-label="other"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template ${prefix}-${suffix}="value"><p>a</p></template>`
+					: html`<template aria-label="other"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -547,12 +525,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		let showFirst = true;
 		const flagName = "hidden";
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template ${flagName}><p>a</p></template>`
-						: html`<template class="ready"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template ${flagName}><p>a</p></template>`
+					: html`<template class="ready"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -579,12 +555,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const suffix = "kind";
 		const expandable: Record<string, string> = { role: "dialog", tabindex: "0" };
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template class="card" hidden id="${dynamicId}" ${prefix}-${suffix}="x" ${expandable}><p>a</p></template>`
-						: html`<template aria-label="other"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template class="card" hidden id="${dynamicId}" ${prefix}-${suffix}="x" ${expandable}><p>a</p></template>`
+					: html`<template aria-label="other"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -617,13 +591,11 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let stage = 0;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () => {
-					if (stage === 0) return html`<template class="a"><p>a</p></template>`;
-					if (stage === 1) return html`<template role="b"><p>b</p></template>`;
-					return html`<template aria-label="c"><p>c</p></template>`;
-				};
-			}
+			yield () => {
+				if (stage === 0) return html`<template class="a"><p>a</p></template>`;
+				if (stage === 1) return html`<template role="b"><p>b</p></template>`;
+				return html`<template aria-label="c"><p>c</p></template>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -651,12 +623,10 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					showFirst
-						? html`<template class="card" role="dialog"><p>a</p></template>`
-						: html`<template aria-label="other"><p>b</p></template>`;
-			}
+			yield () =>
+				showFirst
+					? html`<template class="card" role="dialog"><p>a</p></template>`
+					: html`<template aria-label="other"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -687,11 +657,9 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		let showFirst = true;
 		const MyElement = render(function* () {
 			yield function* () {
-				while (true) {
-					yield showFirst
-						? html`<template class="card"><p>a</p></template>`
-						: html`<template id="hero"><p>b</p></template>`;
-				}
+				yield showFirst
+					? html`<template class="card"><p>a</p></template>`
+					: html`<template id="hero"><p>b</p></template>`;
 			};
 		});
 		customElements.define(tag, MyElement);
@@ -730,9 +698,7 @@ describe("root-template host attribute updates within a single template (refacto
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = { id: "first", role: "dialog" };
 		const MyElement = render(function* () {
-			while (true) {
-				yield () => html`<template ${attrs}><p>hi</p></template>`;
-			}
+			yield () => html`<template ${attrs}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -755,9 +721,7 @@ describe("root-template host attribute updates within a single template (refacto
 		const tag = uniqueTag();
 		let attrs: Array<string> = ["hidden", "inert"];
 		const MyElement = render(function* () {
-			while (true) {
-				yield () => html`<template ${attrs}><p>hi</p></template>`;
-			}
+			yield () => html`<template ${attrs}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -781,10 +745,8 @@ describe("root-template host attribute updates within a single template (refacto
 		let prefix = "data";
 		let suffix = "key";
 		const MyElement = render(function* () {
-			while (true) {
-				yield () =>
-					html`<template ${prefix}-${suffix}="value"><p>hi</p></template>`;
-			}
+			yield () =>
+				html`<template ${prefix}-${suffix}="value"><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -807,9 +769,7 @@ describe("root-template host attribute updates within a single template (refacto
 		const tag = uniqueTag();
 		let name = "hidden";
 		const MyElement = render(function* () {
-			while (true) {
-				yield () => html`<template ${name}><p>hi</p></template>`;
-			}
+			yield () => html`<template ${name}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -831,9 +791,7 @@ describe("root-template host attribute updates within a single template (refacto
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = { id: "first", role: "dialog", "data-x": "y" };
 		const MyElement = render(function* () {
-			while (true) {
-				yield () => html`<template ${attrs}><p>hi</p></template>`;
-			}
+			yield () => html`<template ${attrs}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -875,12 +833,10 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		const tag = uniqueTag();
 		let renderCount = 0;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () => {
-					renderCount++;
-					return html`<template class="card" role="dialog"><p>hi</p></template>`;
-				};
-			}
+			yield () => {
+				renderCount++;
+				return html`<template class="card" role="dialog"><p>hi</p></template>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -897,12 +853,10 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		const tag = uniqueTag();
 		let renderCount = 0;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () => {
-					renderCount++;
-					return html`<template id="${"hero"}" role="${"dialog"}"><p>hi</p></template>`;
-				};
-			}
+			yield () => {
+				renderCount++;
+				return html`<template id="${"hero"}" role="${"dialog"}"><p>hi</p></template>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -918,14 +872,12 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		let renderCount = 0;
 		let showFirst = true;
 		const MyElement = render(function* () {
-			while (true) {
-				yield () => {
-					renderCount++;
-					return showFirst
-						? html`<template class="card"><p>a</p></template>`
-						: html`<template id="hero"><p>b</p></template>`;
-				};
-			}
+			yield () => {
+				renderCount++;
+				return showFirst
+					? html`<template class="card"><p>a</p></template>`
+					: html`<template id="hero"><p>b</p></template>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -949,12 +901,10 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		const tag = uniqueTag();
 		let renderCount = 0;
 		const MyElement = render(function* (host) {
-			while (true) {
-				yield () => {
-					renderCount++;
-					return html`<template class="card"><p>${host.getAttribute("data-label") ?? "none"}</p></template>`;
-				};
-			}
+			yield () => {
+				renderCount++;
+				return html`<template class="card"><p>${host.getAttribute("data-label") ?? "none"}</p></template>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
