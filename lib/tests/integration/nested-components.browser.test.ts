@@ -1074,7 +1074,9 @@ describe("framework-parity patterns", () => {
 			tag,
 			render(function* () {
 				yield () =>
-					html`<section><slot><em>nothing-here</em></slot></section>`;
+					html`<section>
+						<slot><em>nothing-here</em></slot>
+					</section>`;
 			}),
 		);
 

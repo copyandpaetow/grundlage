@@ -21,8 +21,7 @@ describe("root-template host attributes", () => {
 	test("static host attribute lands on the component element", async () => {
 		const tag = uniqueTag();
 		const MyElement = render(function* () {
-			yield () =>
-				html`<template class="card"><p>hi</p></template>`;
+			yield () => html`<template class="card"><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -75,7 +74,9 @@ describe("root-template host attributes", () => {
 		let dynamicId = "first";
 		const MyElement = render(function* () {
 			yield () =>
-				html`<template class="card" id="${dynamicId}" role="region"><p>hi</p></template>`;
+				html`<template class="card" id="${dynamicId}" role="region"
+					><p>hi</p></template
+				>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -159,8 +160,7 @@ describe("root-template host attributes", () => {
 	test("host attribute does not leak into the shadow DOM", async () => {
 		const tag = uniqueTag();
 		const MyElement = render(function* () {
-			yield () =>
-				html`<template class="card"><p>hi</p></template>`;
+			yield () => html`<template class="card"><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -183,9 +183,9 @@ describe("root-template host attributes", () => {
 		await sleep();
 
 		expect(element.getAttribute("class")).toBe("host-cls");
-		expect(
-			element.shadowRoot?.querySelector("p")?.getAttribute("class"),
-		).toBe("inner-cls");
+		expect(element.shadowRoot?.querySelector("p")?.getAttribute("class")).toBe(
+			"inner-cls",
+		);
 
 		cleanup(element);
 	});
@@ -254,7 +254,9 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const MyElement = render(function* () {
 			yield () =>
 				showFirst
-					? html`<template class="card" role="dialog" data-kind="x"><p>a</p></template>`
+					? html`<template class="card" role="dialog" data-kind="x"
+							><p>a</p></template
+						>`
 					: html`<template aria-label="other"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -553,11 +555,21 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const dynamicId = "alpha";
 		const prefix = "data";
 		const suffix = "kind";
-		const expandable: Record<string, string> = { role: "dialog", tabindex: "0" };
+		const expandable: Record<string, string> = {
+			role: "dialog",
+			tabindex: "0",
+		};
 		const MyElement = render(function* () {
 			yield () =>
 				showFirst
-					? html`<template class="card" hidden id="${dynamicId}" ${prefix}-${suffix}="x" ${expandable}><p>a</p></template>`
+					? html`<template
+							class="card"
+							hidden
+							id="${dynamicId}"
+							${prefix}-${suffix}="x"
+							${expandable}
+							><p>a</p></template
+						>`
 					: html`<template aria-label="other"><p>b</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -789,7 +801,11 @@ describe("root-template host attribute updates within a single template (refacto
 
 	test("expandable object swapped to an empty object clears every previous key", async () => {
 		const tag = uniqueTag();
-		let attrs: Record<string, string> = { id: "first", role: "dialog", "data-x": "y" };
+		let attrs: Record<string, string> = {
+			id: "first",
+			role: "dialog",
+			"data-x": "y",
+		};
 		const MyElement = render(function* () {
 			yield () => html`<template ${attrs}><p>hi</p></template>`;
 		});
@@ -855,7 +871,9 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		const MyElement = render(function* () {
 			yield () => {
 				renderCount++;
-				return html`<template id="${"hero"}" role="${"dialog"}"><p>hi</p></template>`;
+				return html`<template id="${"hero"}" role="${"dialog"}"
+					><p>hi</p></template
+				>`;
 			};
 		});
 		customElements.define(tag, MyElement);
@@ -903,7 +921,9 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		const MyElement = render(function* (host) {
 			yield () => {
 				renderCount++;
-				return html`<template class="card"><p>${host.getAttribute("data-label") ?? "none"}</p></template>`;
+				return html`<template class="card"
+					><p>${host.getAttribute("data-label") ?? "none"}</p></template
+				>`;
 			};
 		});
 		customElements.define(tag, MyElement);

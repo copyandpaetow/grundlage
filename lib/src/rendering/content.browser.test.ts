@@ -1410,7 +1410,10 @@ describe("content updates", () => {
 		let items: Array<string | number> = ["alpha", 2, "gamma"];
 
 		const MyElement = render(function* () {
-			yield () => html`<ul>${items}</ul>`;
+			yield () =>
+				html`<ul>
+					${items}
+				</ul>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -1441,8 +1444,7 @@ describe("content updates", () => {
 		let label = "first";
 
 		const MyElement = render(function* () {
-			yield () =>
-				html`<section><!-- author note -->${label}</section>`;
+			yield () => html`<section><!-- author note -->${label}</section>`;
 		});
 
 		customElements.define(tag, MyElement);

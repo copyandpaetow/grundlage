@@ -1,9 +1,5 @@
 import { COMMENT_IDENTIFIER } from "../parser/html-util";
-import {
-	AttributeBinding,
-	BINDING_TYPES,
-	ParsedHTML,
-} from "../parser/types";
+import { AttributeBinding, BINDING_TYPES, ParsedHTML } from "../parser/types";
 import { hashValue } from "../utils/hashing";
 import { removeAttributeBinding, updateAttribute } from "./attribute";
 import { updateContent } from "./content";

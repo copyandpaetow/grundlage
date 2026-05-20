@@ -47,7 +47,7 @@ shadow DOM, and any attributes on the wrapper — static or dynamic — are appl
 ```ts
 html`<template class="card" id="${dynamicId}">
 	<p>${content}</p>
-</template>`
+</template>`;
 ```
 
 Both `class` and `id` lower into the bindings array as attribute bindings — static attrs get literal string keys/values,

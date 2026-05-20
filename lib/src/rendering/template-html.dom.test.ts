@@ -59,9 +59,13 @@ describe("HTMLTemplate.setup — host binding requirement", () => {
 	//template-html.ts:91-95 fails fast when a root-template carries host bindings but no host is supplied
 	//without this check the host slot would be filled with `undefined` and crash later in updateAttribute on a missing element
 	test("throws a descriptive error when a root template needs a host but none is provided", () => {
-		const template = html`<template id="${"missing-host"}"><p>hi</p></template>`;
+		const template = html`<template id="${"missing-host"}"
+			><p>hi</p></template
+		>`;
 		expect(template.parsedHTML.hostBindingOffset).toBeGreaterThan(0);
-		expect(() => template.setup(null)).toThrow(/host bindings need a component host/);
+		expect(() => template.setup(null)).toThrow(
+			/host bindings need a component host/,
+		);
 	});
 
 	test("does not throw for a template without host bindings even when host is null", () => {
@@ -111,13 +115,13 @@ describe("HTMLTemplate.hydrate — re-applies only ATTR bindings", () => {
 
 	const hydrateAs = (template: HTMLTemplate, host: HTMLElement) => {
 		//hydrate's signature requires a BaseComponent — it only reads host.shadowRoot, so a cast is enough for this unit test
-		template.hydrate(
-			host as unknown as Parameters<typeof template.hydrate>[0],
-		);
+		template.hydrate(host as unknown as Parameters<typeof template.hydrate>[0]);
 	};
 
 	test("ATTR binding on a child element is re-applied on hydrate", () => {
-		const serverTemplate = html`<div><span class="${"server-class"}"></span></div>`;
+		const serverTemplate = html`<div>
+			<span class="${"server-class"}"></span>
+		</div>`;
 		const { host, shadowRoot } = buildHydratedHost(serverTemplate);
 		expect(shadowRoot.querySelector("span")?.getAttribute("class")).toBe(
 			"server-class",
@@ -126,7 +130,9 @@ describe("HTMLTemplate.hydrate — re-applies only ATTR bindings", () => {
 		//we mutate the live attribute to a sentinel so we can prove hydrate overwrote it (rather than the prior value happening to match the new expression)
 		shadowRoot.querySelector("span")!.setAttribute("class", "stale-from-dom");
 
-		const clientTemplate = html`<div><span class="${"client-class"}"></span></div>`;
+		const clientTemplate = html`<div>
+			<span class="${"client-class"}"></span>
+		</div>`;
 		hydrateAs(clientTemplate, host);
 
 		expect(shadowRoot.querySelector("span")?.getAttribute("class")).toBe(

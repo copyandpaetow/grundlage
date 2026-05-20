@@ -360,92 +360,95 @@ describe("component lifecycle", () => {
 	});
 });
 
-describe.skipIf("happyDOM" in globalThis)("deferred custom-element upgrade", () => {
-	//the realistic SSR / lazy-define scenario: createElement and DOM insertion happen before customElements.define, then the upgrade fires retroactively
-	//we want to make sure constructor + connectedCallback run in the right order and that rendering proceeds normally without a separate code path
-	//happy-dom does not implement retroactive upgrade — these tests only run against the real-browser project
-	let tagId = 0;
-	const uniqueTag = () => `test-upgrade-${tagId++}-${Date.now()}`;
+describe.skipIf("happyDOM" in globalThis)(
+	"deferred custom-element upgrade",
+	() => {
+		//the realistic SSR / lazy-define scenario: createElement and DOM insertion happen before customElements.define, then the upgrade fires retroactively
+		//we want to make sure constructor + connectedCallback run in the right order and that rendering proceeds normally without a separate code path
+		//happy-dom does not implement retroactive upgrade — these tests only run against the real-browser project
+		let tagId = 0;
+		const uniqueTag = () => `test-upgrade-${tagId++}-${Date.now()}`;
 
-	const sleep = (duration = 0) =>
-		new Promise((resolve) => setTimeout(resolve, duration));
+		const sleep = (duration = 0) =>
+			new Promise((resolve) => setTimeout(resolve, duration));
 
-	test("element created and inserted before define is upgraded and renders", async () => {
-		const tag = uniqueTag();
+		test("element created and inserted before define is upgraded and renders", async () => {
+			const tag = uniqueTag();
 
-		const element = document.createElement(tag);
-		document.body.appendChild(element);
+			const element = document.createElement(tag);
+			document.body.appendChild(element);
 
-		//before upgrade: no shadowRoot, no rendered content
-		expect(element.shadowRoot).toBeNull();
+			//before upgrade: no shadowRoot, no rendered content
+			expect(element.shadowRoot).toBeNull();
 
-		const MyElement = render(function* () {
-			yield () => html`<p>upgraded</p>`;
+			const MyElement = render(function* () {
+				yield () => html`<p>upgraded</p>`;
+			});
+			customElements.define(tag, MyElement);
+
+			await sleep();
+
+			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+				"upgraded",
+			);
+
+			element.remove();
 		});
-		customElements.define(tag, MyElement);
 
-		await sleep();
+		test("attributes set before upgrade are visible to the generator on first render", async () => {
+			//setAttribute before upgrade is fine because the MutationObserver only attaches in connectedCallback (post-upgrade)
+			//=> the first render reads the attribute through getAttribute as if it had always been there
+			const tag = uniqueTag();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"upgraded",
-		);
+			const element = document.createElement(tag);
+			element.setAttribute("data-label", "pre-define");
+			document.body.appendChild(element);
 
-		element.remove();
-	});
+			const MyElement = render(function* (host) {
+				yield () =>
+					html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
+			});
+			customElements.define(tag, MyElement);
 
-	test("attributes set before upgrade are visible to the generator on first render", async () => {
-		//setAttribute before upgrade is fine because the MutationObserver only attaches in connectedCallback (post-upgrade)
-		//=> the first render reads the attribute through getAttribute as if it had always been there
-		const tag = uniqueTag();
+			await sleep();
 
-		const element = document.createElement(tag);
-		element.setAttribute("data-label", "pre-define");
-		document.body.appendChild(element);
+			expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+				"pre-define",
+			);
 
-		const MyElement = render(function* (host) {
-			yield () =>
-				html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
+			element.remove();
 		});
-		customElements.define(tag, MyElement);
 
-		await sleep();
+		test("update() called before define is a no-op and does not throw post-upgrade", async () => {
+			//if the user grabs the element via createElement and calls a method that doesn't exist yet (because the class hasn't been defined), the call should be ignored quietly
+			//after define the element upgrades and renders fresh — the prior call should not have broken anything
+			const tag = uniqueTag();
 
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"pre-define",
-		);
+			const element = document.createElement(tag) as HTMLElement & {
+				update?: () => Promise<void>;
+			};
+			document.body.appendChild(element);
 
-		element.remove();
-	});
+			//no .update() yet — the prototype has not been swapped in
+			expect(element.update).toBeUndefined();
 
-	test("update() called before define is a no-op and does not throw post-upgrade", async () => {
-		//if the user grabs the element via createElement and calls a method that doesn't exist yet (because the class hasn't been defined), the call should be ignored quietly
-		//after define the element upgrades and renders fresh — the prior call should not have broken anything
-		const tag = uniqueTag();
+			const MyElement = render(function* () {
+				yield () => html`<p>after</p>`;
+			});
+			customElements.define(tag, MyElement);
 
-		const element = document.createElement(tag) as HTMLElement & {
-			update?: () => Promise<void>;
-		};
-		document.body.appendChild(element);
+			await sleep();
 
-		//no .update() yet — the prototype has not been swapped in
-		expect(element.update).toBeUndefined();
+			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
+			//now update() is on the prototype
+			await (element as InstanceType<typeof MyElement>).update();
+			await sleep();
+			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
 
-		const MyElement = render(function* () {
-			yield () => html`<p>after</p>`;
+			element.remove();
 		});
-		customElements.define(tag, MyElement);
-
-		await sleep();
-
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
-		//now update() is on the prototype
-		await (element as InstanceType<typeof MyElement>).update();
-		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
-
-		element.remove();
-	});
-});
+	},
+);
 
 describe("MutationObserver and update() interleaving", () => {
 	//the renderer batches updates through UPDATE_STATE: IDLE → SCHEDULED → RENDERING → IDLE

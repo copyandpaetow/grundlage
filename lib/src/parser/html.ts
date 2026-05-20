@@ -2,15 +2,22 @@ import { stringHash } from "../utils/hashing";
 import { HTMLTemplate } from "../rendering/template-html";
 import {
 	AttributeBinding,
+	ATTRIBUTE_SHAPE,
 	Binding,
 	BINDING_TYPES,
 	ContentBinding,
 	ParsedHTML,
 	RawContentBinding,
 	TagBinding,
-	ValueOf
+	ValueOf,
 } from "./types";
-import { CHAR_CODE, COMMENT_IDENTIFIER, isQuoteCode, isWhitespaceCode, moveArrayContents } from "./html-util";
+import {
+	CHAR_CODE,
+	COMMENT_IDENTIFIER,
+	isQuoteCode,
+	isWhitespaceCode,
+	moveArrayContents,
+} from "./html-util";
 
 /*
 the idea here is to analyze and parse a tagged template string to give us
@@ -184,8 +191,10 @@ const createBinding = () => {
 	switch (state) {
 		case STATE.ATTRIBUTE_KEY:
 		case STATE.ATTRIBUTE_VALUE:
+			//shape is finalized in completeAttribute once both keys and values are populated; we initialize with STATIC so the object's hidden class is stable from the start
 			return {
 				type: BINDING_TYPES.ATTR,
+				shape: ATTRIBUTE_SHAPE.STATIC,
 				values: [],
 				keys: [],
 			} satisfies AttributeBinding;
@@ -291,16 +300,45 @@ const completeEndTag = () => {
 	activeBinding = null;
 };
 
+//classifies an attribute binding into one of the ATTRIBUTE_SHAPE constants so updateAttribute / removeAttributeBinding can dispatch through a shape table without re-probing keys/values per flush
+const classifyAttributeShape = (
+	binding: AttributeBinding,
+): ValueOf<typeof ATTRIBUTE_SHAPE> => {
+	const keys = binding.keys;
+	const values = binding.values;
+	//a dynamic segment list either contains an expression slot (number) or has been split across multiple captures (length > 1) — both cases require concatenation at render time
+	const dynamicName = keys.length > 1 || typeof keys[0] === "number";
+
+	if (values.length === 0) {
+		if (!dynamicName) return ATTRIBUTE_SHAPE.STATIC;
+		return keys.length === 1
+			? ATTRIBUTE_SHAPE.EXPANDABLE
+			: ATTRIBUTE_SHAPE.DYNAMIC_NAME_BOOLEAN;
+	}
+
+	const singleDynamicValue =
+		values.length === 1 && typeof values[0] === "number";
+
+	if (dynamicName) {
+		return singleDynamicValue
+			? ATTRIBUTE_SHAPE.DYNAMIC_NAME_SINGLE_VALUE
+			: ATTRIBUTE_SHAPE.DYNAMIC_NAME_MULTI_VALUE;
+	}
+
+	if (singleDynamicValue) return ATTRIBUTE_SHAPE.STATIC_NAME_SINGLE_VALUE;
+
+	//static name + non-single-dynamic value: a single literal string (STATIC) or a concatenated form with at least one expression
+	return values.length === 1
+		? ATTRIBUTE_SHAPE.STATIC
+		: ATTRIBUTE_SHAPE.STATIC_NAME_MULTI_VALUE;
+};
+
 const completeAttribute = () => {
 	if (activeBinding) {
-		moveArrayContents(
-			attributeKeyBuffer,
-			(activeBinding as AttributeBinding).keys,
-		);
-		moveArrayContents(
-			attributeValueBuffer,
-			(activeBinding as AttributeBinding).values,
-		);
+		const attributeBinding = activeBinding as AttributeBinding;
+		moveArrayContents(attributeKeyBuffer, attributeBinding.keys);
+		moveArrayContents(attributeValueBuffer, attributeBinding.values);
+		attributeBinding.shape = classifyAttributeShape(attributeBinding);
 
 		//attributes on the root template don't need a comment marker but we need to know how many bindings we have on it
 		if (isRootTemplate) {
@@ -321,11 +359,13 @@ const completeAttribute = () => {
 			//no expression slot means update() never marks them dirty — zero per-update cost — and the renderer treats them uniformly with dynamic host bindings
 			const staticBinding: AttributeBinding = {
 				type: BINDING_TYPES.ATTR,
+				shape: ATTRIBUTE_SHAPE.STATIC,
 				keys: [],
 				values: [],
 			};
 			moveArrayContents(attributeKeyBuffer, staticBinding.keys);
 			moveArrayContents(attributeValueBuffer, staticBinding.values);
+			staticBinding.shape = classifyAttributeShape(staticBinding);
 			bindings.push(staticBinding);
 			hostBindingOffset++;
 		} else {

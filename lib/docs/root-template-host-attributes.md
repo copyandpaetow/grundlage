@@ -124,7 +124,7 @@ bindings that target the host.
 
 - `#renderToDom` brackets the `MutationObserver` around any render that could
   touch the host (`touchesHost = current.hostBindingOffset > 0 ||
-  previous.hostBindingOffset > 0`). Disconnecting empties the observer's
+previous.hostBindingOffset > 0`). Disconnecting empties the observer's
   record queue per spec, so framework-driven host writes inside this
   synchronous block never queue a redundant `update()`. The bracket is
   synchronous, so no user code runs in the gap and no legitimate user
