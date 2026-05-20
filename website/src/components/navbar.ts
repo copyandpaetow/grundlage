@@ -16,6 +16,7 @@ customElements.define(
 				<a href="/grundlage/pages/reorder-stress/">reorder stress</a>
 				<a href="/grundlage/pages/mutation-stress/">mutation stress</a>
 				<a href="/grundlage/pages/nesting/">nesting</a>
+				<a href="/grundlage/pages/krausest/">krausest</a>
 			</nav>
 		`;
 	}),

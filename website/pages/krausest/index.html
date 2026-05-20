@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - Krausest bench</title>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
+		<main>
+			<h1>krausest bench</h1>
+			<p>
+				Runs the canonical js-framework-benchmark operation suite (create,
+				replace, partial update, select, swap, remove, append, clear) against
+				the current renderer. Median over N samples, with one warmup pass and
+				a double-rAF gate so each measurement includes layout + paint.
+			</p>
+			<p>
+				Save a baseline before you optimize — the
+				<em>vs baseline</em> column then flags any op that drifts more than
+				2% from the saved median. Suite results are also logged as JSON to
+				the console for stashing in <code>bench/</code>.
+			</p>
+			<krausest-bench samples="10"></krausest-bench>
+		</main>
+	</body>
+</html>

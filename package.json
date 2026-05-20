@@ -12,6 +12,8 @@
 		"test:browser": "vitest --project browser",
 		"test:ci": "vitest run",
 		"test:bench": "vitest bench",
+		"bench:baseline": "vitest bench --run --outputJson=bench/baseline.json",
+		"bench:compare": "vitest bench --run --compare=bench/baseline.json",
 		"test:coverage": "vitest run --coverage",
 		"format:check": "prettier --check .",
 		"format:fix": "prettier --write .",
