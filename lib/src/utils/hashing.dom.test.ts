@@ -120,4 +120,55 @@ describe("hashValue - reference types", () => {
 		const instance = new Foo();
 		expect(hashValue(instance)).toBe(hashValue(instance));
 	});
+
+	test("two fresh class instances get distinct counter ids", () => {
+		//the WeakMap fallback path hands out monotonically increasing counter ids — two distinct objects must never collide
+		//we keep this test separate from the function case so a regression that only hits one branch surfaces here, not in the function test where lambda identity already differs
+		class Foo {}
+		const firstInstance = new Foo();
+		const secondInstance = new Foo();
+		expect(hashValue(firstInstance)).not.toBe(hashValue(secondInstance));
+	});
+
+	test("same Map instance hashes equal across reads", () => {
+		const map = new Map<string, number>([["a", 1]]);
+		expect(hashValue(map)).toBe(hashValue(map));
+	});
+
+	test("two fresh Map instances with identical contents get distinct ids", () => {
+		//Maps and Sets are deliberately opaque to the content-walking branch (they fail `constructor === Object` and `Array.isArray`)
+		//=> they end up in the reference-identity branch and must each get their own counter id
+		const first = new Map<string, number>([["a", 1]]);
+		const second = new Map<string, number>([["a", 1]]);
+		expect(hashValue(first)).not.toBe(hashValue(second));
+	});
+
+	test("same Set instance hashes equal across reads", () => {
+		const set = new Set(["a"]);
+		expect(hashValue(set)).toBe(hashValue(set));
+	});
+
+	test("two fresh Set instances with identical contents get distinct ids", () => {
+		const first = new Set(["a"]);
+		const second = new Set(["a"]);
+		expect(hashValue(first)).not.toBe(hashValue(second));
+	});
+});
+
+describe("hashValue - prototype-less objects", () => {
+	//`Object.create(null)` is a real object literal in disguise — it has no `.constructor`, so the `value.constructor === Object` guard in hashValue is `undefined === Object` which is false
+	//=> these objects fall through to the WeakMap reference branch. We pin that contract here so a future change (e.g. switching to a tag check) makes an intentional decision about prototype-less objects.
+	test("hashes the same reference equally across calls", () => {
+		const plain = Object.create(null) as Record<string, unknown>;
+		plain.value = 1;
+		expect(hashValue(plain)).toBe(hashValue(plain));
+	});
+
+	test("two structurally identical prototype-less objects get distinct hashes", () => {
+		const first = Object.create(null) as Record<string, unknown>;
+		first.value = 1;
+		const second = Object.create(null) as Record<string, unknown>;
+		second.value = 1;
+		expect(hashValue(first)).not.toBe(hashValue(second));
+	});
 });

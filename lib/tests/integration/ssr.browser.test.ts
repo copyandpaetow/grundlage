@@ -354,6 +354,69 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
+		test("hydrate leaves server CONTENT in place even when client's first render carries a different value", async () => {
+			//the hydrate path (template-html.ts:69-83) re-applies ATTR bindings only — CONTENT bindings are left alone so we don't overwrite the server text
+			//we pin that contract here so a future change that decides to also flush CONTENT on hydrate becomes a deliberate decision, not a drift
+			//the test deliberately uses two unrelated component classes with hardcoded text so server and client disagree on the value; the DOM after hydrate must match the server, not the client
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const ServerComponent = render(function* () {
+				yield () => html`<p>${"server-value"}</p>`;
+			});
+			const serialized = await serverRender(serverTag, ServerComponent);
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+
+			const ClientComponent = render(function* () {
+				yield () => html`<p>${"client-value"}</p>`;
+			});
+			const element = hydrateFromHTML(clientHTML);
+			customElements.define(clientTag, ClientComponent);
+			await sleep();
+
+			//hydration kept the server text untouched even though the client wanted a different value
+			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+				"server-value",
+			);
+
+			//note we deliberately don't follow up with update() here — both client renders carry the same hardcoded expression, so update() sees current === previous and won't flush
+			//the "responds to update() after hydration" test (above) already covers the post-hydrate refresh path with a closure value that actually changes
+
+			cleanup(element);
+		});
+
+		test("hydrate refreshes a host attribute when the client renders a different value", async () => {
+			//host (root template) attrs are the one binding category hydrate WILL re-write — they live as bindings only, never serialized into the shadow root
+			//we set up a server class that emits host class="server-class" and a client class that emits "client-class"; after hydrate the host should carry the client value
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const ServerComponent = render(function* () {
+				yield () =>
+					html`<template class="${"server-class"}"><p>hi</p></template>`;
+			});
+			const serialized = await serverRender(serverTag, ServerComponent);
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+
+			const ClientComponent = render(function* () {
+				yield () =>
+					html`<template class="${"client-class"}"><p>hi</p></template>`;
+			});
+			const element = hydrateFromHTML(clientHTML);
+			customElements.define(clientTag, ClientComponent);
+			await sleep();
+
+			expect(element.getAttribute("class")).toBe("client-class");
+
+			cleanup(element);
+		});
+
 		test("template switching works after hydration", async () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();

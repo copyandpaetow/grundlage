@@ -1,4 +1,4 @@
-import { AttributeBinding } from "../parser/types";
+import { AttributeBinding, ATTRIBUTE_SHAPE } from "../parser/types";
 import { BaseComponent } from "../types";
 import { bindingToString } from "../utils/binding-to-string";
 import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
@@ -60,42 +60,151 @@ export const applyAttributeBinding = (
 	}
 };
 
-const handleExpandableAttribute = (
-	context: HTMLTemplate,
+//the spread/cleanup half of EXPANDABLE bindings lives here so both updateExpandable and removeAttributeBinding share one definition of "what names does this binding currently own"
+const removeExpandable = (
 	element: Element,
-	index: number,
-	previousExpressions: Array<unknown>,
+	binding: AttributeBinding,
+	expressions: Array<unknown>,
 ) => {
-	const current = context.currentExpressions[index];
-	const previous = previousExpressions[index];
-
-	if (Array.isArray(previous)) {
-		for (let index = 0; index < previous.length; index++) {
-			applyAttributeBinding(element, previous[index], null);
+	const value = expressions[binding.keys[0] as number];
+	if (Array.isArray(value)) {
+		for (let index = 0; index < value.length; index++) {
+			applyAttributeBinding(element, value[index], null);
 		}
-	} else if (isPlainObject(previous)) {
-		for (const name in previous) {
+	} else if (isPlainObject(value)) {
+		for (const name in value) {
 			applyAttributeBinding(
 				element,
 				name,
 				null,
-				previous[name as keyof typeof previous],
+				value[name as keyof typeof value],
 			);
 		}
-	} else if (previous) {
-		applyAttributeBinding(element, assertPrimitiveString(previous), null);
+	} else if (value) {
+		applyAttributeBinding(element, assertPrimitiveString(value), null);
 	}
+};
 
+//on the very first render previousExpressions is empty, so any `previousExpressions[index]` lookup would be undefined; aliasing to current keeps every "did this change" comparison guaranteed-equal — exactly what we want on initial render
+const resolvePreviousExpressions = (context: HTMLTemplate) =>
+	context.previousExpressions.length > 0
+		? context.previousExpressions
+		: context.currentExpressions;
+
+const updateStatic = (context: HTMLTemplate, index: number) => {
+	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
+	const element = context.targets[index] as Element;
+	const value =
+		binding.values.length === 0 ? "" : (binding.values[0] as string);
+	applyAttributeBinding(element, binding.keys[0] as string, value);
+};
+
+const updateStaticNameSingleValue = (context: HTMLTemplate, index: number) => {
+	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
+	const element = context.targets[index] as Element;
+	const expressionIndex = binding.values[0] as number;
+	const previousExpression =
+		context.previousExpressions.length > 0
+			? context.previousExpressions[expressionIndex]
+			: undefined;
+	applyAttributeBinding(
+		element,
+		binding.keys[0] as string,
+		context.currentExpressions[expressionIndex],
+		previousExpression,
+	);
+};
+
+const updateStaticNameMultiValue = (context: HTMLTemplate, index: number) => {
+	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
+	const element = context.targets[index] as Element;
+	applyAttributeBinding(
+		element,
+		binding.keys[0] as string,
+		bindingToString(binding.values, context.currentExpressions),
+	);
+};
+
+const updateDynamicNameBoolean = (context: HTMLTemplate, index: number) => {
+	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
+	const element = context.targets[index] as Element;
+	const currentName = bindingToString(binding.keys, context.currentExpressions);
+	//on initial render the previous name equals the current name by construction, so we only spend a second bindingToString allocation on real updates
+	if (context.previousExpressions.length > 0) {
+		const previousName = bindingToString(
+			binding.keys,
+			context.previousExpressions,
+		);
+		if (previousName !== currentName) {
+			element.removeAttribute(previousName);
+		}
+	}
+	applyAttributeBinding(element, currentName, "");
+};
+
+const updateDynamicNameSingleValue = (context: HTMLTemplate, index: number) => {
+	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
+	const element = context.targets[index] as Element;
+	const expressionIndex = binding.values[0] as number;
+	const currentName = bindingToString(binding.keys, context.currentExpressions);
+	const hasPrevious = context.previousExpressions.length > 0;
+	const previousExpression = hasPrevious
+		? context.previousExpressions[expressionIndex]
+		: undefined;
+	if (hasPrevious) {
+		const previousName = bindingToString(
+			binding.keys,
+			context.previousExpressions,
+		);
+		if (previousName !== currentName) {
+			//pass previousExpression as oldValue so the event-listener / property cleanup path inside applyAttributeBinding still runs against the right name
+			applyAttributeBinding(element, previousName, null, previousExpression);
+		}
+	}
+	applyAttributeBinding(
+		element,
+		currentName,
+		context.currentExpressions[expressionIndex],
+		previousExpression,
+	);
+};
+
+const updateDynamicNameMultiValue = (context: HTMLTemplate, index: number) => {
+	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
+	const element = context.targets[index] as Element;
+	const currentName = bindingToString(binding.keys, context.currentExpressions);
+	if (context.previousExpressions.length > 0) {
+		const previousName = bindingToString(
+			binding.keys,
+			context.previousExpressions,
+		);
+		if (previousName !== currentName) {
+			element.removeAttribute(previousName);
+		}
+	}
+	applyAttributeBinding(
+		element,
+		currentName,
+		bindingToString(binding.values, context.currentExpressions),
+	);
+};
+
+const updateExpandable = (context: HTMLTemplate, index: number) => {
+	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
+	const element = context.targets[index] as Element;
+	removeExpandable(element, binding, resolvePreviousExpressions(context));
+
+	const current = context.currentExpressions[binding.keys[0] as number];
 	if (Array.isArray(current)) {
-		for (let index = 0; index < current.length; index++) {
-			applyAttributeBinding(element, current[index], "");
+		for (let arrayIndex = 0; arrayIndex < current.length; arrayIndex++) {
+			applyAttributeBinding(element, current[arrayIndex], "");
 		}
 	} else if (isPlainObject(current)) {
 		for (const name in current) {
 			applyAttributeBinding(
 				element,
 				name,
-				current[name as keyof typeof previous],
+				current[name as keyof typeof current],
 			);
 		}
 	} else if (current) {
@@ -104,63 +213,70 @@ const handleExpandableAttribute = (
 };
 
 export const updateAttribute = (context: HTMLTemplate, index: number) => {
-	const element = context.markers[index].nextElementSibling!;
 	const binding = context.parsedHTML.bindings[index] as AttributeBinding;
-
-	const isBooleanAttribute = binding.values.length === 0;
-	//"expandable" means the binding is a single expression in attribute-key position with no value half (e.g. `<div ${attrs}>`)
-	//the expression can be an array of names, an object of name/value pairs, or a string name
-	//=> handleExpandableAttribute fans it out into individual attribute writes for us
-	const isExpandable = binding.keys.length === 1;
-
-	//on the very first render previousExpressions is empty, so any `previousExpressions[index]` lookup downstream would be undefined, and we'd need a special-case branch everywhere
-	//=> we point it at currentExpressions instead, which makes every "did this change" comparison look unchanged — exactly what we want on the initial render
-	const previousExpressions =
-		context.previousExpressions.length > 0
-			? context.previousExpressions
-			: context.currentExpressions;
-
-	if (isBooleanAttribute && isExpandable) {
-		handleExpandableAttribute(
-			context,
-			element,
-			binding.keys[0] as number,
-			previousExpressions,
-		);
-		return;
+	switch (binding.shape) {
+		case ATTRIBUTE_SHAPE.STATIC:
+			updateStatic(context, index);
+			return;
+		case ATTRIBUTE_SHAPE.STATIC_NAME_SINGLE_VALUE:
+			updateStaticNameSingleValue(context, index);
+			return;
+		case ATTRIBUTE_SHAPE.STATIC_NAME_MULTI_VALUE:
+			updateStaticNameMultiValue(context, index);
+			return;
+		case ATTRIBUTE_SHAPE.DYNAMIC_NAME_BOOLEAN:
+			updateDynamicNameBoolean(context, index);
+			return;
+		case ATTRIBUTE_SHAPE.DYNAMIC_NAME_SINGLE_VALUE:
+			updateDynamicNameSingleValue(context, index);
+			return;
+		case ATTRIBUTE_SHAPE.DYNAMIC_NAME_MULTI_VALUE:
+			updateDynamicNameMultiValue(context, index);
+			return;
+		case ATTRIBUTE_SHAPE.EXPANDABLE:
+			updateExpandable(context, index);
+			return;
 	}
+};
 
-	const isStaticName =
-		binding.keys.length === 1 && typeof binding.keys[0] === "string";
-	const currentName = isStaticName
-		? (binding.keys[0] as string)
-		: bindingToString(binding.keys, context.currentExpressions);
-	const previousName = isStaticName
-		? currentName
-		: bindingToString(binding.keys, previousExpressions);
-
-	if (isBooleanAttribute) {
-		if (!isStaticName) {
-			applyAttributeBinding(element, previousName, null);
-		}
-		applyAttributeBinding(element, currentName, "");
-		return;
+//removes every attribute name this binding represents under the given expressions snapshot
+//keeping the per-shape removal logic alongside the apply logic above guarantees the cleanup and apply paths can't drift on what names a binding owns
+export const removeAttributeBinding = (
+	element: Element,
+	binding: AttributeBinding,
+	expressions: Array<unknown>,
+) => {
+	switch (binding.shape) {
+		case ATTRIBUTE_SHAPE.STATIC:
+		case ATTRIBUTE_SHAPE.STATIC_NAME_MULTI_VALUE:
+			applyAttributeBinding(element, binding.keys[0] as string, null);
+			return;
+		case ATTRIBUTE_SHAPE.STATIC_NAME_SINGLE_VALUE:
+			applyAttributeBinding(
+				element,
+				binding.keys[0] as string,
+				null,
+				expressions[binding.values[0] as number],
+			);
+			return;
+		case ATTRIBUTE_SHAPE.DYNAMIC_NAME_BOOLEAN:
+		case ATTRIBUTE_SHAPE.DYNAMIC_NAME_MULTI_VALUE:
+			applyAttributeBinding(
+				element,
+				bindingToString(binding.keys, expressions),
+				null,
+			);
+			return;
+		case ATTRIBUTE_SHAPE.DYNAMIC_NAME_SINGLE_VALUE:
+			applyAttributeBinding(
+				element,
+				bindingToString(binding.keys, expressions),
+				null,
+				expressions[binding.values[0] as number],
+			);
+			return;
+		case ATTRIBUTE_SHAPE.EXPANDABLE:
+			removeExpandable(element, binding, expressions);
+			return;
 	}
-
-	const isSingleExpression =
-		binding.values.length === 1 && typeof binding.values[0] === "number";
-
-	const previousExpression = isSingleExpression
-		? previousExpressions[binding.values[0] as number]
-		: undefined;
-
-	const currentValue: unknown = isSingleExpression
-		? context.currentExpressions[binding.values[0] as number]
-		: bindingToString(binding.values, context.currentExpressions);
-
-	if (previousName !== currentName) {
-		applyAttributeBinding(element, previousName, null, previousExpression);
-	}
-
-	applyAttributeBinding(element, currentName, currentValue, previousExpression);
 };

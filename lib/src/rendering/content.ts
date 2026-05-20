@@ -151,7 +151,7 @@ const renderList = (
 			currentIndex++
 		) {
 			const listItemMarker = new Comment(LIST_IDENTIFIER);
-			position.after(current[currentIndex].setup(), listItemMarker);
+			position.after(current[currentIndex].setup(null), listItemMarker);
 			position = listItemMarker;
 		}
 		return;
@@ -163,8 +163,8 @@ const renderList = (
 	- first by hash (template shape + expression values match exactly => DOM stays, no .update() needed)
 	- otherwise by parsed shape at the same relative position (DOM stays, we .update() it to the new expression values)
 	- otherwise we insert a fresh item
-	hash and structural claims share the same walk, so a structural claim for current[i] can occasionally take a slot that a later current[j] would have hash-matched
-	=> the output still stays correct (the reused template gets .update()d to current[j]) and the worst case is one extra .update() call in a pathological cross-pattern
+	hash and structural claims share the same walk, so a structural claim for current[earlyIndex] can occasionally take a slot that a later current[laterIndex] would have hash-matched
+	=> the output still stays correct (the reused template gets .update()d to current[laterIndex]) and the worst case is one extra .update() call in a pathological cross-pattern
 	*/
 	const middleLengthPrevious = tailPrevious - headPrevious + 1;
 	const hashToMiddleIndex = new Map<number, number>();
@@ -209,7 +209,7 @@ const renderList = (
 
 		if (claimedMiddleIndex === undefined) {
 			const listItemMarker = new Comment(LIST_IDENTIFIER);
-			position.after(template.setup(), listItemMarker);
+			position.after(template.setup(null), listItemMarker);
 			position = listItemMarker;
 			continue;
 		}
@@ -257,7 +257,7 @@ const renderTemplate = (
 	}
 
 	deleteNodesBetween(marker);
-	marker.after(current.setup());
+	marker.after(current.setup(null));
 };
 
 const renderComment = (
@@ -273,7 +273,7 @@ const renderComment = (
 
 export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 	const binding = context.parsedHTML.bindings[bindingIndex];
-	const marker = context.markers[bindingIndex];
+	const marker = context.targets[bindingIndex] as Comment;
 
 	//only comments can have multiple bindings, normal content only has one
 	if (binding.values.length > 1) {

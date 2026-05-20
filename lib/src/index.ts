@@ -2,27 +2,16 @@ import { html } from "./parser/html";
 import { ValueOf } from "./parser/types";
 import { applyAttributeBinding } from "./rendering/attribute";
 import { HTMLTemplate } from "./rendering/template-html";
-import {
-	BaseComponent,
-	ComponentConstructor,
-	ComponentGenerator,
-	ComponentOptions,
-	RenderFunction,
-} from "./types";
+import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions, RenderFunction } from "./types";
 import { isGeneratorFunction } from "./utils/is-generator";
 import {
 	advanceGenerator,
 	cancelGenerator,
 	deliverErrorToGenerator,
 	GeneratorTemplateSource,
-	TemplateSource,
+	TemplateSource
 } from "./rendering/generator-stepper";
-import {
-	defaultOptions,
-	RENDER_MODE,
-	TEMPLATE_SOURCE_TYPE,
-	UPDATE_STATE,
-} from "./utils/constants";
+import { defaultOptions, RENDER_MODE, TEMPLATE_SOURCE_TYPE, UPDATE_STATE } from "./utils/constants";
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
@@ -252,21 +241,40 @@ export const render = (
 		#renderToDom(value: unknown) {
 			const template = value instanceof HTMLTemplate ? value : html`${value}`;
 			const previousTemplate = this.#renderedTemplate;
-			if (
-				!previousTemplate ||
-				previousTemplate.parsedHTML.templateHash !==
-					template.parsedHTML.templateHash
-			) {
-				this.#renderedTemplate = template;
-				if (this.#renderMode === RENDER_MODE.CSR) {
-					this.shadowRoot?.replaceChildren(template.setup());
-				} else {
-					template.hydrate(this.shadowRoot!);
-					this.#renderMode = RENDER_MODE.CSR;
+
+			//host attributes are the only writes the framework makes against `this` — anything else lands inside the shadow root, which the observer doesn't watch
+			//=> we only bracket the observer when this render could write to the host (either swap-time cleanup from previous, or new host bindings from current); components without root templates pay nothing
+			const touchesHost =
+				template.parsedHTML.hostBindingOffset > 0 ||
+				(previousTemplate?.parsedHTML.hostBindingOffset ?? 0) > 0;
+
+			//disconnecting empties the record queue per spec, so framework-driven host writes during this synchronous block never generate MutationRecords
+			//the bracket scope is purely synchronous, so no user code can run in the gap and lose a legitimate mutation
+			if (touchesHost) this.#attributeObserver.disconnect();
+			try {
+				if (
+					!previousTemplate ||
+					previousTemplate.parsedHTML.templateHash !==
+						template.parsedHTML.templateHash
+				) {
+					//host bindings write to the component element itself, so replaceChildren below won't clear them
+					//=> the previous template knows which host attribute names it applied (and how to remove them across every binding form); we delegate cleanup before letting setup() write the new template's host attrs
+					previousTemplate?.clearHostAttributes(this);
+					this.#renderedTemplate = template;
+					if (this.#renderMode === RENDER_MODE.CSR) {
+						this.shadowRoot?.replaceChildren(template.setup(this));
+					} else {
+						template.hydrate(this);
+						this.#renderMode = RENDER_MODE.CSR;
+					}
+					return;
 				}
-				return;
+				previousTemplate.update(template.currentExpressions);
+			} finally {
+				if (touchesHost) {
+					this.#attributeObserver.observe(this, { attributes: true });
+				}
 			}
-			previousTemplate.update(template.currentExpressions);
 		}
 
 		async update() {

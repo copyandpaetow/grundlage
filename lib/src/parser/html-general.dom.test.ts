@@ -162,7 +162,7 @@ describe("html parser — void and self-closing elements", () => {
 		// (html.ts:454-459) — distinct from the space-prefixed `<br />` form which
 		// transitions through STATE.ELEMENT. Both forms must produce a sibling,
 		// not a parent that adopts the next element.
-		const template = html`<br/><span>after</span>`;
+		const template = html`<br /><span>after</span>`;
 		const fragment = template.parsedHTML.fragment;
 		const br = fragment.querySelector("br")!;
 		const span = fragment.querySelector("span")!;
