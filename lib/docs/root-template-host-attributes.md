@@ -55,6 +55,14 @@ Mixed static + dynamic attributes coexist and preserve source order.
 Nested templates inside the root template are treated as raw content (the same
 as elsewhere in the parser); they do not become host bindings.
 
+## Top-level only
+
+Root templates are a top-level feature of a component's render output. A
+`<template ...>` with attributes that ends up inside another template's
+`${...}` content — or as a list item — throws at setup. Without that gate,
+nested root templates would silently target the outer component's host
+element, with no cleanup when the parent content binding swapped them out.
+
 ## What is not a root template
 
 Detection is deliberately narrow. The parser only treats a `<template>` as the
@@ -110,9 +118,11 @@ bindings that target the host.
   with the host element, then walks the fragment for child markers as usual.
   Host bindings share the binding/target/dirty arrays with everything else —
   no parallel storage.
-- A template with `hostBindingOffset > 0` but no host throws at setup, naming
-  the actual misuse (a root template rendered as nested content has no host
-  to attach to).
+- A template with `hostBindingOffset > 0` but no host throws at setup. The
+  component's `#renderToDom` passes itself as the host, but every other call
+  site — list items, `${...}` content, anything routed through
+  `content.ts` — calls `setup(null)`. A nested `<template ...>` with
+  attributes therefore fails fast with a message naming the misuse.
 - `clearHostAttributes(host)` walks the leading host bindings and calls
   `removeAttributeBinding` for each, so when the renderer swaps to a
   structurally different template (different `templateHash`), it can wipe the

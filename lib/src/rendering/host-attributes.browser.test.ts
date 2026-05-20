@@ -944,3 +944,59 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		cleanup(element);
 	});
 });
+
+describe("root-template host attributes are rejected when nested inside content", () => {
+	//root templates are a top-level-only feature; a `<template ...>` with attributes that ends up inside a parent's ${...} content has no well-defined host
+	//if we silently threaded the outer host into nested setups, list items and yielded sub-templates could clobber each other's host attrs and leave stale attrs on swap
+	//the contract is: nested root templates throw at setup
+	let tagId = 0;
+	const uniqueTag = () => `test-host-nested-${tagId++}-${Date.now()}`;
+
+	const mount = (tag: string): HTMLElement => {
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+		return element;
+	};
+
+	const cleanup = (element: HTMLElement) => {
+		element.remove();
+	};
+
+	test("a root template inside a parent's content surfaces the error to the user", async () => {
+		const tag = uniqueTag();
+		const MyElement = render(function* () {
+			yield () =>
+				html`<div>${html`<template class="leak"><p>x</p></template>`}</div>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		//#renderToDom doesn't catch synchronous setup throws on mount — the parser cache means subsequent users see the same failure
+		expect(element.shadowRoot?.textContent).toMatch(
+			/top level of a component's render output/,
+		);
+		expect(element.hasAttribute("class")).toBe(false);
+
+		cleanup(element);
+	});
+
+	test("a root template inside a list item also throws", async () => {
+		const tag = uniqueTag();
+		const MyElement = render(function* () {
+			yield () =>
+				html`<ul>
+					${[html`<template class="leak"><p>x</p></template>`]}
+				</ul>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toMatch(
+			/top level of a component's render output/,
+		);
+
+		cleanup(element);
+	});
+});

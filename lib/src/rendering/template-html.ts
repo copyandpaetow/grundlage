@@ -28,9 +28,6 @@ export class HTMLTemplate {
 	//currentExpressions[expressionIndex] is the expressionIndex-th interpolation in the template literal (the expressionIndex-th `${...}`)
 	currentExpressions: Array<unknown>;
 	previousExpressions = EMPTY_ARRAY;
-	//we keep the host on the instance so a nested template (rendered inside a content binding) can thread it into its own setup
-	//without it, list items or yielded templates would lose access to the surrounding component when they have their own root-template host bindings
-	host: BaseComponent | null = null;
 
 	//we cache this per-update and invalidate in update() when expressions change
 	get hash(): number {
@@ -55,7 +52,6 @@ export class HTMLTemplate {
 	setup(host: BaseComponent | null = null): DocumentFragment {
 		const bindingCount = this.parsedHTML.bindings.length;
 		this.dirtyBindings = new Uint8Array(bindingCount).fill(1);
-		this.host = host;
 		const fragment = this.parsedHTML.fragment.cloneNode(
 			true,
 		) as DocumentFragment;
@@ -83,7 +79,6 @@ export class HTMLTemplate {
 	hydrate(host: BaseComponent) {
 		//Uint8Array is zero-initialized by the spec, so we don't need to fill explicitly
 		this.dirtyBindings = new Uint8Array(this.parsedHTML.bindings.length);
-		this.host = host;
 		this.targets = this.#findTargets(host.shadowRoot!, host);
 
 		//SSR already wrote child elements and their static attrs into the DOM, but the host element's attrs were never serialized — they live in bindings now
@@ -100,11 +95,11 @@ export class HTMLTemplate {
 		parent: DocumentFragment | ShadowRoot,
 		host: BaseComponent | null,
 	): Array<Element | Comment> {
-		//pushing `host` into the host slots without a host would store `undefined` and only surface when updateAttribute later crashes on a missing element
-		//=> we fail fast with a message that names the actual misuse (a root template was rendered somewhere without a component to attach to)
+		//host is only threaded in from #renderToDom (the component's top-level render call); content.ts passes null when setting up nested templates
+		//=> a nested literal that happens to be a root template (<template ...> with attributes) lands here with host=null and we reject it with a message naming the actual misuse
 		if (this.parsedHTML.hostBindingOffset > 0 && !host) {
 			throw new Error(
-				"Root template host bindings need a component host — a template with <template ...> attributes can only be rendered as a component's top-level output, not nested inside content.",
+				"Root template host bindings are only allowed at the top level of a component's render output — `<template ...>` with attributes cannot be used inside ${...} content, list items, or any nested template position.",
 			);
 		}
 		//host bindings come first in `bindings`, so we pre-fill that many entries with the host before walking the DOM for child markers

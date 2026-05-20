@@ -151,7 +151,7 @@ const renderList = (
 			currentIndex++
 		) {
 			const listItemMarker = new Comment(LIST_IDENTIFIER);
-			position.after(current[currentIndex].setup(context.host), listItemMarker);
+			position.after(current[currentIndex].setup(null), listItemMarker);
 			position = listItemMarker;
 		}
 		return;
@@ -209,7 +209,7 @@ const renderList = (
 
 		if (claimedMiddleIndex === undefined) {
 			const listItemMarker = new Comment(LIST_IDENTIFIER);
-			position.after(template.setup(context.host), listItemMarker);
+			position.after(template.setup(null), listItemMarker);
 			position = listItemMarker;
 			continue;
 		}
@@ -257,7 +257,7 @@ const renderTemplate = (
 	}
 
 	deleteNodesBetween(marker);
-	marker.after(current.setup(context.host));
+	marker.after(current.setup(null));
 };
 
 const renderComment = (

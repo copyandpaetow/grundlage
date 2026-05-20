@@ -56,7 +56,7 @@ describe("HTMLTemplate.update — previousExpressions reset", () => {
 });
 
 describe("HTMLTemplate.setup — host binding requirement", () => {
-	//template-html.ts:91-95 fails fast when a root-template carries host bindings but no host is supplied
+	//findTargets fails fast when a root-template carries host bindings but no host is supplied
 	//without this check the host slot would be filled with `undefined` and crash later in updateAttribute on a missing element
 	test("throws a descriptive error when a root template needs a host but none is provided", () => {
 		const template = html`<template id="${"missing-host"}"
@@ -64,7 +64,7 @@ describe("HTMLTemplate.setup — host binding requirement", () => {
 		>`;
 		expect(template.parsedHTML.hostBindingOffset).toBeGreaterThan(0);
 		expect(() => template.setup(null)).toThrow(
-			/host bindings need a component host/,
+			/top level of a component's render output/,
 		);
 	});
 
@@ -72,6 +72,30 @@ describe("HTMLTemplate.setup — host binding requirement", () => {
 		const template = html`<p>${"x"}</p>`;
 		expect(template.parsedHTML.hostBindingOffset).toBe(0);
 		expect(() => template.setup(null)).not.toThrow();
+	});
+
+	test("rejects a root template that is interpolated into a parent's content", () => {
+		//the parent renders fine on its own, but the nested root template has host bindings
+		//and content.ts calls setup(null) so findTargets has to throw
+		const inner = html`<template class="leak"><p>x</p></template>`;
+		expect(inner.parsedHTML.hostBindingOffset).toBeGreaterThan(0);
+
+		const host = document.createElement("div");
+		host.attachShadow({ mode: "open" });
+		const outer = html`<div>${inner}</div>`;
+		expect(() => outer.setup(host as any)).toThrow(
+			/top level of a component's render output/,
+		);
+	});
+
+	test("rejects a root template that appears as a list item", () => {
+		const items = [html`<template class="leak"><p>x</p></template>`];
+		const host = document.createElement("div");
+		host.attachShadow({ mode: "open" });
+		const outer = html`<ul>${items}</ul>`;
+		expect(() => outer.setup(host as any)).toThrow(
+			/top level of a component's render output/,
+		);
 	});
 });
 
