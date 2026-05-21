@@ -1,5 +1,6 @@
-import { bench, describe } from "vitest";
+import { describe } from "vitest";
 import { stringHash, hashValue } from "../../src/utils/hashing";
+import { bench } from "./bench-options";
 
 describe("stringHash", () => {
 	bench("short string (10 chars)", () => {

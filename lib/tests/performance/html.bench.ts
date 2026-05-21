@@ -1,5 +1,6 @@
-import { bench, describe } from "vitest";
+import { describe } from "vitest";
 import { html } from "../../src/parser/html";
+import { bench } from "./bench-options";
 
 describe("html tagged template - parsing (cold)", () => {
 	/*
