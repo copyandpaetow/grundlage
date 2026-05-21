@@ -113,6 +113,43 @@ describe("updateAttribute — expandable object spread", () => {
 	});
 });
 
+/*
+phase-2 path: expandable object spread where keys overlap between renders but one value changes
+=> the diff in updateExpandable threads previous values as oldValue, so applyAttributeBinding's identity short-circuit no-ops the unchanged "class" entry and only "id" reaches setAttribute
+=> compared to the prior blind remove-all + apply-all this saves 1 removeAttribute + 1 setAttribute per iteration (2 of the 4 DOM hops collapse to nothing)
+*/
+describe("updateAttribute — expandable object spread, partial value change", () => {
+	const template = renderOnce(html`<div ${{ class: "a", id: "b" }}></div>`);
+	const callA = [{ class: "stable", id: "first" }];
+	const callB = [{ class: "stable", id: "second" }];
+	let toggle = false;
+
+	bench("2-key object, one value stable + one flipping", () => {
+		toggle = !toggle;
+		template.update(toggle ? callB : callA);
+	});
+});
+
+/*
+phase-2 path: expandable object spread carrying a stable event handler alongside a flipping class
+=> diff sees onclick: handler === handler and the identity short-circuit skips the removeEventListener + addEventListener pair entirely
+=> the prior code did detach+reattach every iteration on the same function reference, which is the most expensive DOM op in the expandable surface
+*/
+describe("updateAttribute — expandable object spread, stable handler", () => {
+	const stableHandler = () => {};
+	const template = renderOnce(
+		html`<button ${{ onclick: stableHandler, class: "a" }}>x</button>`,
+	);
+	const callA = [{ onclick: stableHandler, class: "btn" }];
+	const callB = [{ onclick: stableHandler, class: "btn-active" }];
+	let toggle = false;
+
+	bench("stable onclick + flipping class (listener stays attached)", () => {
+		toggle = !toggle;
+		template.update(toggle ? callB : callA);
+	});
+});
+
 describe("updateAttribute — event listener swap", () => {
 	const template = renderOnce(html`<button onclick="${() => {}}">x</button>`);
 	//each entry has its own [handler] wrapper so update() never sees the same expressions array twice in a row — the swap path still fires every iteration, we just don't pay for fresh allocation
