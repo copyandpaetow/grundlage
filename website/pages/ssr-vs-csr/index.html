@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<link rel="stylesheet" type="text/css" href="./styles.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - SSR vs CSR</title>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
+
+		<main>
+			<h1>SSR vs CSR</h1>
+			<p>
+				Same component, same async fetch, same first-yield template. The
+				difference is whether the lib's server pass already painted the result
+				into the HTML before this page reached your browser.
+			</p>
+
+			<button class="reload-button" type="button" onclick="location.reload()">
+				reload to repeat
+			</button>
+
+			<div class="contrast-grid">
+				<section>
+					<h3>CSR (no server pass)</h3>
+					<p>
+						The host element is empty in the HTML. The browser parses it, the
+						generator runs, the await fires, then the first yield writes the
+						card. You see an empty dashed box for the duration of the fetch.
+					</p>
+					<demo-loader data-label="CSR" data-delay-ms="1200"></demo-loader>
+				</section>
+
+				<section>
+					<h3>SSR (first-yield prerendered)</h3>
+					<p>
+						A vite plugin (see <code>vite.config.ts</code>) ran the lib in
+						server mode at transform time. The
+						<code>&lt;template shadowrootmode&gt;</code> with the first-yield
+						content is already in the response — instant paint, no flash. On
+						hydration the client generator's matching yield wires bindings
+						without overwriting the server text.
+					</p>
+					<!--ssr-prerender:demo-loader-->
+					<demo-loader
+						data-label="SSR"
+						data-delay-ms="1200"
+						data-ssr
+					></demo-loader>
+				</section>
+			</div>
+		</main>
+	</body>
+</html>
