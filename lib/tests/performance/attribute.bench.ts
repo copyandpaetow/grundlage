@@ -173,3 +173,63 @@ describe("updateAttribute — complex (non-stringable) property", () => {
 		template.update([{ x: counter }]);
 	});
 });
+
+/*
+Tier 1.3 in PERFORMANCE.md — updateExpandable currently calls removeExpandable (strips every previous name) then re-adds every current name. for a 10-key spread where the key sets differ by one key, we do 20 attribute writes when 2 would suffice (one removeAttribute for the dropped key, one setAttribute for the new one).
+the values for the 9 stable keys are identical strings across both shapes, so a future name-diff change would short-circuit them entirely and this bench would drop by ~90%.
+the existing partial-value-change bench above measures the path where the key set is stable and one value flips — that case the diff also helps, but the savings ceiling is smaller (4 ops → 2 ops). Together the two benches bracket what the optimization gains across the realistic shapes.
+*/
+describe("updateAttribute — expandable object spread, 10-key set, key flipping", () => {
+	const setA: Record<string, string> = {
+		a: "0",
+		b: "0",
+		c: "0",
+		d: "0",
+		e: "0",
+		f: "0",
+		g: "0",
+		h: "0",
+		i: "0",
+		j: "0",
+	};
+	const setB: Record<string, string> = {
+		a: "0",
+		b: "0",
+		c: "0",
+		d: "0",
+		e: "0",
+		f: "0",
+		g: "0",
+		h: "0",
+		i: "0",
+		k: "0",
+	};
+	const template = renderOnce(html`<div ${setA}></div>`);
+	let toggle = false;
+
+	bench("10-key spread, one key swapped (j <-> k), nine stable", () => {
+		toggle = !toggle;
+		template.update([toggle ? setB : setA]);
+	});
+});
+
+/*
+PERFORMANCE.md Tier 1.4 + Tier 2.7 share one diagnostic shape: a multi-expression attribute that lives on a swapped tag.
+
+Tier 1.4 — updateTag copies every attribute onto the new element via setAttribute, then dirty-marks the binding so the dirty flush rewrites it. the binding's attribute ends up written twice per swap.
+Tier 2.7 — bindingToString rebuilds an identical "a b c" string on every dirty flush because none of the binding's own expressions changed. a "did my expression indices change against previousExpressions" guard would skip the rebuild and the second setAttribute.
+
+so either fix alone moves this bench; a fix for both moves it hardest. the sibling bench "updateTag — element with related dynamic attribute" in tag.bench.ts changes the attribute's value too, so it can't separate this case from the legitimate-rewrite case — this bench keeps the attribute expressions stable on purpose.
+*/
+describe("updateAttribute — tag swap with stable multi-part attr (Tier 1.4 + 2.7)", () => {
+	const template = renderOnce(
+		html`<${"span"} class="${"a"} ${"b"} ${"c"}">x</${"span"}>`,
+	);
+	let toggle = false;
+
+	bench("tag flips span <-> div, class expressions stay (a, b, c)", () => {
+		toggle = !toggle;
+		const tag = toggle ? "div" : "span";
+		template.update([tag, "a", "b", "c", tag]);
+	});
+});
