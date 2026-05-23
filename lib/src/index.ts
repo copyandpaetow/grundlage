@@ -12,16 +12,13 @@ import {
 	TemplateSource
 } from "./rendering/generator-stepper";
 import { defaultOptions, RENDER_MODE, TEMPLATE_SOURCE_TYPE, UPDATE_STATE } from "./utils/constants";
+import { flushHostPayload } from "./load-data";
+import { isServer } from "./utils/is-server";
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
 export { type ComponentOptions, type BaseComponent } from "./types";
-
-//`typeof window === "undefined"` is the node/SSR signal — the prerender plugin polyfills `document` etc. but never `window`
-//`__grundlage_ssr__` is the explicit opt-in for environments that DO have `window` but want server semantics (in-browser SSR tests)
-const isServerEnvironment = () =>
-	typeof window === "undefined" ||
-	(globalThis as { __grundlage_ssr__?: boolean }).__grundlage_ssr__ === true;
+export { loadData, type LoadDataOptions } from "./load-data";
 
 export const render = (
 	componentGenerator: ComponentGenerator,
@@ -61,7 +58,7 @@ export const render = (
 			};
 			this.#componentGenerator = source;
 			//on the server we render once and cancel — no observer needed; #renderToDom guards its disconnect/observe with optional chaining to match
-			if (!isServerEnvironment()) this.#watchAttributes();
+			if (!isServer()) this.#watchAttributes();
 			advanceGenerator(
 				source,
 				generator.next(undefined),
@@ -248,7 +245,7 @@ export const render = (
 		#renderToDom(value: unknown) {
 			const template = value instanceof HTMLTemplate ? value : html`${value}`;
 			const previousTemplate = this.#renderedTemplate;
-			const onServer = isServerEnvironment();
+			const onServer = isServer();
 
 			//bracket the observer only when this render could write to the host (swap cleanup or new host bindings); components without root templates pay nothing
 			//on the server the observer was never installed, so `touchesHost` short-circuits to false
@@ -277,18 +274,7 @@ export const render = (
 						this.#renderMode = RENDER_MODE.CSR;
 					}
 
-					//server contract: first renderable yield is the snapshot — cancel both the active inner source and the outer component generator
-					//we discard the cleanup return value: server context is throwaway, and user finally blocks under happy-dom can touch browser-only APIs that aren't polyfilled
-					if (onServer) {
-						if (
-							this.#activeSource?.type === TEMPLATE_SOURCE_TYPE.GENERATOR
-						) {
-							cancelGenerator(this.#activeSource);
-						}
-						if (this.#componentGenerator) {
-							cancelGenerator(this.#componentGenerator);
-						}
-					}
+					if (onServer) this.#finalizeServerRender();
 					return;
 				}
 				previousTemplate.update(template.currentExpressions);
@@ -299,10 +285,22 @@ export const render = (
 			}
 		}
 
+		//server contract: first renderable yield is the snapshot — flush any collected loadData payload onto the shadow root, then cancel both the active inner source and the outer component generator
+		//we discard the cleanup return value: server context is throwaway, and user finally blocks under happy-dom can touch browser-only APIs that aren't polyfilled
+		#finalizeServerRender() {
+			flushHostPayload(this);
+			if (this.#activeSource?.type === TEMPLATE_SOURCE_TYPE.GENERATOR) {
+				cancelGenerator(this.#activeSource);
+			}
+			if (this.#componentGenerator) {
+				cancelGenerator(this.#componentGenerator);
+			}
+		}
+
 		async update() {
 			//on the server the first yield is final; without this guard the cached RENDER_FUNCTION source would re-run, and a user microtask scheduling update() from inside the render fn would loop forever
 			if (
-				isServerEnvironment() ||
+				isServer() ||
 				!this.#activeSource ||
 				this.#updateState !== UPDATE_STATE.IDLE ||
 				!this.isConnected

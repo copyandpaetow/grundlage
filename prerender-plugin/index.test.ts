@@ -11,6 +11,8 @@ const TAGS = {
 	customSentinel: "ssr-custom-sentinel",
 	unmarked: "ssr-unmarked",
 	noSentinel: "ssr-no-sentinel",
+	loadDataSingle: "ssr-load-data-single",
+	loadDataShared: "ssr-load-data-shared",
 } as const;
 
 //lazy import: the happy-dom polyfill (set up before loaders are awaited) must be in place when parser/html.ts runs its module-load createElement
@@ -20,6 +22,29 @@ const ensureDefined = (): Promise<void> => {
 	if (definedPromise) return definedPromise;
 	definedPromise = (async () => {
 		const { html, render } = await import("../lib/src");
+		const { loadData } = await import("../lib/src/load-data");
+
+		customElements.define(
+			TAGS.loadDataSingle,
+			render(async function* (host) {
+				const value = await loadData(host, () =>
+					Promise.resolve({ name: "Ada" }),
+				);
+				yield () => html`<p>${value.name}</p>`;
+			}),
+		);
+
+		customElements.define(
+			TAGS.loadDataShared,
+			render(async function* (host) {
+				const id = host.getAttribute("data-id") ?? "?";
+				//per-host serialization — each instance gets its own data-ssr script in its shadow root
+				const value = await loadData(host, () =>
+					Promise.resolve(`payload-${id}`),
+				);
+				yield () => html`<p>${id}:${value}</p>`;
+			}),
+		);
 
 		customElements.define(
 			TAGS.simple,
@@ -224,5 +249,44 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 
 		expect(output).toContain("ssr");
 		expect(output).toContain("no-sentinel-rendered");
+	});
+});
+
+describe("prerender plugin: loadData payload injection", () => {
+	test("loadData call on the server emits a per-host data-ssr script inside the declarative shadow root", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.loadDataSingle} ssr></${TAGS.loadDataSingle}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		//declarative shadow root carries the payload — no global window.__ssrData any more
+		expect(output).not.toContain("__ssrData");
+		expect(output).toContain("shadowrootmode");
+		expect(output).toContain(`<script type="application/json" data-ssr="">{"name":"Ada"}</script>`);
+		//the resolved value also lands in the SSR'd markup itself
+		expect(output).toContain("Ada");
+	});
+
+	test("two hosts get independent per-host payloads — no cross-host dedupe", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body>
+			<${TAGS.loadDataShared} ssr data-id="alpha"></${TAGS.loadDataShared}>
+			<${TAGS.loadDataShared} ssr data-id="beta"></${TAGS.loadDataShared}>
+		</body></html>`;
+		const output = await runTransform(plugin, input);
+
+		//each host has its own data-ssr script, with its own serialized value
+		expect(output).toContain(`>"payload-alpha"</script>`);
+		expect(output).toContain(`>"payload-beta"</script>`);
+		const scriptMatches = output.match(/data-ssr=""/g) ?? [];
+		expect(scriptMatches.length).toBe(2);
+	});
+
+	test("a page with no loadData calls gets no data-ssr scripts", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.simple} ssr></${TAGS.simple}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).not.toContain("data-ssr");
+		expect(output).not.toContain("__ssrData");
 	});
 });

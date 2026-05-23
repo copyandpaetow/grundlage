@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, loadData, render } from "../../../lib/src";
 
 //deterministic so server and client compute the same payload; in a real app the server fetch would land in the SSR HTML and the client would skip the loading state
 const fetchUser = (delayMilliseconds: number) =>
@@ -18,7 +18,8 @@ customElements.define(
 			10,
 		);
 		const startedAt = performance.now();
-		const user = await fetchUser(delayMilliseconds);
+		//per-host scope — the server writes a <script data-ssr> into this host's shadow root and the client replays it from there
+		const user = await loadData(host, () => fetchUser(delayMilliseconds));
 		const elapsedMilliseconds = Math.round(performance.now() - startedAt);
 
 		//closure state — click runs through update(), which re-invokes the render fn; smallest possible "hydration wired things up" signal

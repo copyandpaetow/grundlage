@@ -54,16 +54,23 @@ final yield. That broke two things:
 
 ## Detecting the server
 
-Two signals; either one flips the lib into server mode:
+Two signals; either flips the lib into server mode (`utils/is-server.ts`):
 
 - **`typeof window === "undefined"`** — node/SSR. The prerender plugin
-  polyfills `document`, `customElements`, etc. but never assigns `window`.
+  polyfills `document`, `customElements`, etc. onto `globalThis` but
+  deliberately never assigns `window`.
 - **`globalThis.__grundlage_ssr__ === true`** — explicit opt-in for
-  environments that *do* have `window` but want server semantics (in-browser
-  SSR tests, tooling that runs happy-dom in the browser).
+  environments that *do* have `window` but want server semantics. This
+  exists so the in-browser SSR test (`ssr.browser.test.ts`) can exercise
+  the serialization + hydration round-trip end-to-end in a real browser —
+  which is the only place we get early signal on Declarative-Shadow-DOM
+  serialization regressions.
 
-The check is read at each call site, not cached, so tests can flip the flag
-between `serverRender` calls without state leaking.
+Both `index.ts` and `load-data.ts` call the same `isServer()` helper, so
+the flag flips every code path consistently — the bug where `loadData`
+ignored `__grundlage_ssr__` is gone. The check is read at each call site,
+not cached, so tests can toggle the flag between mounts without state
+leaking.
 
 ## What server mode does
 
@@ -91,15 +98,86 @@ between `serverRender` calls without state leaking.
 - **User `finally` runs** — `cancelGenerator` calls `.return()`; the cleanup
   *return value* is intentionally discarded.
 
+## Data sharing: `loadData`
+
+The first yield often depends on data fetched before that yield. We don't want
+the client to refetch what the server already resolved, but we also don't want
+a JS-side cache surviving hydration. `loadData` wraps a fetcher so the server's
+resolved value rides along in the serialized HTML and the client replays it
+from there.
+
+```javascript
+import { render, html, loadData } from "grundlage";
+
+customElements.define(
+	"user-card",
+	render(async function* (host) {
+		const user = await loadData(host, () => fetchUser());
+		yield () => html`<strong>${user.name}</strong>`;
+	}),
+);
+```
+
+### Server path
+
+`loadData` calls the fetcher, buffers `{ key, value }` on the host element
+under a Symbol-keyed property, and returns the value to the generator.
+When the first renderable yield fires, `#finalizeServerRender` calls
+`flushHostPayload`, which drains the buffer into one
+`<script type="application/json" data-ssr>` per entry, appended to the host's
+shadow root.
+
+The buffer hangs off the host itself (not a `WeakMap`) so collect and flush
+are one pointer read instead of a hash lookup. `flushHostPayload` clears the
+field before returning, so the collected array becomes unreachable as soon as
+the snapshot is taken.
+
+### Client path
+
+The same `loadData` call walks the host's shadow root for the next matching
+`<script data-ssr>`, parses its JSON, removes the script, and returns the
+value wrapped in `Promise.resolve`. When the scripts run out — or none was
+emitted — the call falls through to the real fetcher. **The DOM is the queue;
+no JS-side cache survives hydration.**
+
+### Keys
+
+`loadData(host, fetcher)` is positional: the next unkeyed script wins.
+For refactor-stable reads, pass a key:
+
+```javascript
+const user = await loadData(host, fetchUser, "user");
+const posts = await loadData(host, fetchPosts, { key: "posts" });
+```
+
+Keyed reads only consume scripts carrying the matching `data-key`; unkeyed
+reads only consume scripts without `data-key`. The two queues are independent
+— reordering one doesn't shift the other.
+
+### Escape hatches
+
+- `{ skipSsr: true }` bypasses the replay and always calls the fetcher
+  (forced revalidation).
+- A host with no `shadowRoot` (bare elements in tests) makes `flushHostPayload`
+  a no-op so it's safe to call unconditionally.
+
+### Security
+
+Every collected value is JSON-stringified and then every `<` is rewritten
+as the JSON escape `<` before the text lands in the inline script.
+A payload containing `</script>` cannot terminate the script context, and
+`JSON.parse` decodes the escape on the client.
+
 ## How it works
 
 ### Component (`lib/src/index.ts`)
 
-`connectedCallback` gates the observer allocation behind
-`!isServerEnvironment()`. `#renderToDom` reads `onServer` once, folds
-`!onServer` into `touchesHost`, and after writing the first template calls
-`cancelGenerator` on the active inner (if it's a generator) and on the outer
-component generator. `update()` early-returns under the same check.
+`connectedCallback` gates the observer allocation behind `!isServer()`.
+`#renderToDom` reads `onServer` once, folds `!onServer` into `touchesHost`,
+and then delegates to `#finalizeServerRender` — which flushes the
+collected `loadData` payload and calls `cancelGenerator` on the active
+inner (if it's a generator) and on the outer component generator.
+`update()` early-returns under the same check.
 
 ### Generator stepper (unchanged)
 
