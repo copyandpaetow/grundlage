@@ -12,10 +12,13 @@ import {
 	TemplateSource
 } from "./rendering/generator-stepper";
 import { defaultOptions, RENDER_MODE, TEMPLATE_SOURCE_TYPE, UPDATE_STATE } from "./utils/constants";
+import { flushHostPayload } from "./load-data";
+import { isServer } from "./utils/is-server";
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
 export { type ComponentOptions, type BaseComponent } from "./types";
+export { loadData, type LoadDataOptions } from "./load-data";
 
 export const render = (
 	componentGenerator: ComponentGenerator,
@@ -54,7 +57,8 @@ export const render = (
 				terminated: false,
 			};
 			this.#componentGenerator = source;
-			this.#watchAttributes();
+			//on the server we render once and cancel — no observer needed; #renderToDom guards its disconnect/observe with optional chaining to match
+			if (!isServer()) this.#watchAttributes();
 			advanceGenerator(
 				source,
 				generator.next(undefined),
@@ -241,16 +245,18 @@ export const render = (
 		#renderToDom(value: unknown) {
 			const template = value instanceof HTMLTemplate ? value : html`${value}`;
 			const previousTemplate = this.#renderedTemplate;
+			const onServer = isServer();
 
-			//host attributes are the only writes the framework makes against `this` — anything else lands inside the shadow root, which the observer doesn't watch
-			//=> we only bracket the observer when this render could write to the host (either swap-time cleanup from previous, or new host bindings from current); components without root templates pay nothing
+			//bracket the observer only when this render could write to the host (swap cleanup or new host bindings); components without root templates pay nothing
+			//on the server the observer was never installed, so `touchesHost` short-circuits to false
 			const touchesHost =
-				template.parsedHTML.hostBindingOffset > 0 ||
-				(previousTemplate?.parsedHTML.hostBindingOffset ?? 0) > 0;
+				!onServer &&
+				(template.parsedHTML.hostBindingOffset > 0 ||
+					(previousTemplate?.parsedHTML.hostBindingOffset ?? 0) > 0);
 
 			//disconnecting empties the record queue per spec, so framework-driven host writes during this synchronous block never generate MutationRecords
 			//the bracket scope is purely synchronous, so no user code can run in the gap and lose a legitimate mutation
-			if (touchesHost) this.#attributeObserver.disconnect();
+			if (touchesHost) this.#attributeObserver?.disconnect();
 			try {
 				if (
 					!previousTemplate ||
@@ -267,18 +273,34 @@ export const render = (
 						template.hydrate(this);
 						this.#renderMode = RENDER_MODE.CSR;
 					}
+
+					if (onServer) this.#finalizeServerRender();
 					return;
 				}
 				previousTemplate.update(template.currentExpressions);
 			} finally {
 				if (touchesHost) {
-					this.#attributeObserver.observe(this, { attributes: true });
+					this.#attributeObserver?.observe(this, { attributes: true });
 				}
 			}
 		}
 
+		//server contract: first renderable yield is the snapshot — flush any collected loadData payload onto the shadow root, then cancel both the active inner source and the outer component generator
+		//we discard the cleanup return value: server context is throwaway, and user finally blocks under happy-dom can touch browser-only APIs that aren't polyfilled
+		#finalizeServerRender() {
+			flushHostPayload(this);
+			if (this.#activeSource?.type === TEMPLATE_SOURCE_TYPE.GENERATOR) {
+				cancelGenerator(this.#activeSource);
+			}
+			if (this.#componentGenerator) {
+				cancelGenerator(this.#componentGenerator);
+			}
+		}
+
 		async update() {
+			//on the server the first yield is final; without this guard the cached RENDER_FUNCTION source would re-run, and a user microtask scheduling update() from inside the render fn would loop forever
 			if (
+				isServer() ||
 				!this.#activeSource ||
 				this.#updateState !== UPDATE_STATE.IDLE ||
 				!this.isConnected

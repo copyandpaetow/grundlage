@@ -54,6 +54,17 @@ export default defineConfig({
 					},
 				},
 			},
+			{
+				root: "./prerender-plugin",
+				test: {
+					name: "prerender-plugin",
+					include: ["**/*.test.ts"],
+					environment: "node",
+					benchmark: {
+						include: [],
+					},
+				},
+			},
 		],
 	},
 });

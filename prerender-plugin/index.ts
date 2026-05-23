@@ -1,89 +1,60 @@
-import { render } from "./ssr-render";
-const webComponentRegex = () =>
-	/<([a-z]+-[a-z0-9-]+)(?:\s+[^>]*)?(?:>[\s\S]*?<\/\1>|\/?>)/gi;
+import type { Plugin } from "vite";
+import { renderHost } from "./ssr-render";
 
-const prerender = async (html: string) => {
-	if (!webComponentRegex().test(html)) return html;
+export interface PrerenderOptions {
+	/** Tag-name → dynamic import of the module that registers the custom element. */
+	components: Record<string, () => Promise<unknown>>;
+	/** Attribute on a registered element that opts that instance into prerender. Default: `ssr`. */
+	sentinelAttribute?: string;
+	/** How long to wait for the first-yield shadow content to land. */
+	pollTimeoutMs?: number;
+}
 
-	const matches = [...html.matchAll(webComponentRegex())];
+const escapeRegex = (value: string) =>
+	value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-	let newHTML = html;
+export const prerenderWebcomponents = (
+	options: PrerenderOptions,
+): Plugin => {
+	const sentinelAttribute = options.sentinelAttribute ?? "ssr";
+	const componentLoaders = Object.values(options.components);
+	const tagNames = Object.keys(options.components);
 
-	for await (const match of matches) {
-		const [fullMatch, tagName, attributes] = match;
+	//two passes (tag match, then sentinel check) instead of one combined regex — clearer and the sentinel check runs only on tag hits
+	const tagUnion = tagNames.map(escapeRegex).join("|");
+	const tagPattern = new RegExp(
+		`<(${tagUnion})([^>]*)>\\s*</\\1>`,
+		"g",
+	);
+	//lookahead on `[\s=/>]|$` keeps `ssr` standalone — `data-ssr` and `ssrcheck` don't match
+	const sentinelPattern = new RegExp(
+		`\\s${escapeRegex(sentinelAttribute)}(?=[\\s=/>]|$)`,
+	);
 
-		const withMinimalHtml = `
-        <!doctype html>
-        <html>
-          <body>
-              ${fullMatch}
-          </body>
-        </html>`;
-
-		const rendered = await render(withMinimalHtml, [
-			() => import("../website/src/app"),
-		]);
-
-		//console.log(rendered);
-
-		newHTML = html.replace(fullMatch, rendered);
-	}
-
-	//console.log(newHTML);
-	return newHTML;
-};
-
-export const prerenderWebcomponents = () => {
 	return {
 		name: "prerender-webcomponents",
+		async transformIndexHtml(html) {
+			//string-includes pre-check skips both the regex and the happy-dom setup for unrelated pages
+			if (!tagNames.some((tag) => html.includes(`<${tag}`))) return html;
 
-		async transformIndexHtml(html: string) {
-			const result = await prerender(html);
-			// console.log({ result });
-			return result;
-		},
+			const candidates = [...html.matchAll(tagPattern)];
+			if (candidates.length === 0) return html;
 
-		async transform(code, id) {
-			// if (!id.endsWith(".html")) return null;
+			let output = html;
+			//sequential — renderHost shares a single polyfilled document; concurrent mounts would leak hosts into each other's serialized output
+			for (const match of candidates) {
+				const attributeString = match[2] ?? "";
+				if (!sentinelPattern.test(attributeString)) continue;
+				const rendered = await renderHost(
+					match[1],
+					attributeString,
+					componentLoaders,
+					options.pollTimeoutMs,
+				);
+				output = output.replace(match[0], rendered);
+			}
 
-			// Check if file contains any custom elements from your library
-			//   const customElementRegex =
-			//     /<([a-z][\w]*-[\w-]*)([^>]*)>([\s\S]*?)<\/\1>|<([a-z][\w]*-[\w-]*)([^>]*?)\/>/g;
-
-			//   if (!customElementRegex.test(code)) return null;
-
-			// Find all custom elements and pre-render them
-			let transformedCode = code;
-			//   const matches = [...code.matchAll(customElementRegex)];
-
-			//   for (const match of matches) {
-			//     const [fullMatch, tagName, attributes] = match;
-
-			//     // Check if this is one of your components
-			//     if (isYourComponent(tagName)) {
-			//       // Create HTML to render
-			//       const htmlToRender = `<${tagName}${attributes}></${tagName}>`;
-
-			//       // Import needed component
-			//       const componentPath = resolveComponentPath(tagName);
-
-			//       // Replace with pre-rendered HTML in the frontmatter
-			//       transformedCode = transformedCode.replace(
-			//         fullMatch,
-			//         `{() => {
-			//             const html = await import('${componentPath}').then(mod => {
-			//               return render(\`${htmlToRender}\`, [() => import('${componentPath}')]);
-			//             });
-			//             return <Fragment set:html={html} />;
-			//           }()}`
-			//       );
-			//     }
-			//   }
-
-			return {
-				code: transformedCode,
-				map: null, // You might want to provide a source map
-			};
+			return output;
 		},
 	};
 };

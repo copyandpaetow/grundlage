@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { prerenderWebcomponents } from "../prerender-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -23,9 +24,15 @@ export default defineConfig({
 				mutationStress: resolve(__dirname, "pages/mutation-stress/index.html"),
 				nested: resolve(__dirname, "pages/nesting/index.html"),
 				krausest: resolve(__dirname, "pages/krausest/index.html"),
+				ssrVsCsr: resolve(__dirname, "pages/ssr-vs-csr/index.html"),
 			},
 		},
 	},
-	// plugins: [prerenderWebcomponents()],
-	// site: "https://copyandpaetow.github.io",
+	plugins: [
+		prerenderWebcomponents({
+			components: {
+				"demo-loader": () => import("./src/components/ssr-demo-loader"),
+			},
+		}),
+	],
 });
