@@ -19,6 +19,16 @@
 				difference is whether the lib's server pass already painted the result
 				into the HTML before this page reached your browser.
 			</p>
+			<p>
+				The click counter on each card is the reactivity probe: local state in
+				the render function's closure, every click runs through
+				<code>host.update()</code>. Note that the button only becomes
+				interactive once the <em>client's</em> generator reaches the same first
+				yield — which means waiting through its own copy of the fetch. SSR
+				saves the paint, not the time-to-interactive. Moving heavy work behind
+				the first yield is an authoring decision; the library can't shortcut
+				an await the generator hasn't passed yet.
+			</p>
 
 			<button class="reload-button" type="button" onclick="location.reload()">
 				reload to repeat
@@ -45,11 +55,10 @@
 						hydration the client generator's matching yield wires bindings
 						without overwriting the server text.
 					</p>
-					<!--ssr-prerender:demo-loader-->
 					<demo-loader
+						ssr
 						data-label="SSR"
 						data-delay-ms="1200"
-						data-ssr
 					></demo-loader>
 				</section>
 			</div>

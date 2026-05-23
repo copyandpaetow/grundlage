@@ -22,6 +22,10 @@ customElements.define(
 		const user = await fetchUser(delayMilliseconds);
 		const elapsedMilliseconds = Math.round(performance.now() - startedAt);
 
+		//click counter lives in the closure of the generator's render function — update() re-invokes that render function with the new value, which is the smallest possible "hydration wired things up" signal
+		//on the server addEventListener still runs but the cancel happens right after the first yield, so the listener never has a chance to fire
+		let clickCount = 0;
+
 		//single renderable yield: the SSR pass stops here with the data already resolved, so the prerendered HTML carries the populated card
 		//on the client this same yield runs again; if the SSR shadow root is present, the hydrate path leaves CONTENT bindings alone and the server-fetched text stays put
 		yield () => html`
@@ -34,6 +38,16 @@ customElements.define(
 					<dd>${user.team}</dd>
 				</dl>
 				<small>fetched in ${elapsedMilliseconds} ms</small>
+				<button
+					type="button"
+					class="reactivity-probe"
+					onclick="${() => {
+						clickCount++;
+						host.update();
+					}}"
+				>
+					clicked ${clickCount} ${clickCount === 1 ? "time" : "times"}
+				</button>
 			</article>
 		`;
 	}),
