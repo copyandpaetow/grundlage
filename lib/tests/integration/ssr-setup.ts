@@ -1,8 +1,7 @@
 import { Window } from "happy-dom";
 
-//side-effect-only module: applies happy-dom DOM globals to `globalThis` before any importer touches `document`
-//mirrors prerender-plugin/ssr-render.ts so the SSR tests run against the same surface the plugin produces in real builds
-//crucially, `window` is NOT assigned — the lib uses `typeof window === "undefined"` as the server signal, and we want that to stay true here
+//side-effect-only: applies happy-dom globals to globalThis before any importer touches `document`
+//`window` is deliberately NOT assigned — `typeof window === "undefined"` is the lib's server signal and must stay true
 
 const happyWindow = new Window();
 

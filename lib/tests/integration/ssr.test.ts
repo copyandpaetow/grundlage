@@ -1,4 +1,4 @@
-//side-effect-only import must come first so the lib's parser/html.ts (which runs `document.createElement` at module load) sees a polyfilled `document`
+//must come first — parser/html.ts runs `document.createElement` at module load
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -18,7 +18,7 @@ const mount = async (
 		typeof ComponentClass
 	>;
 	document.body.appendChild(element);
-	//flush microtasks so synchronous generators reach their first yield (and any user-side `await Promise.resolve()` settles)
+	//let synchronous generators reach their first yield
 	await flushMicrotasks();
 	return element;
 };
@@ -35,7 +35,6 @@ const track = <T extends HTMLElement>(element: T): T => {
 
 describe("SSR: server stops at first renderable yield", () => {
 	test("the server-environment check fires in this node test process", () => {
-		//sanity: `window` is unset in node and we don't polyfill it, so the lib should be in server mode here
 		expect(typeof window).toBe("undefined");
 	});
 
@@ -75,8 +74,7 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 
 	test("outer generator yielding a static template renders and stops", async () => {
-		//the static-template install path is shaped differently from the render-function path (no .call(host) step)
-		//=> we cover it explicitly so a future refactor can't quietly skip the cancel in this branch
+		//static-template install is a different code path from render-fn — pin the cancel here so a refactor can't quietly skip it
 		const tag = uniqueTag();
 		let postYieldRan = false;
 
@@ -134,8 +132,7 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 
 	test("async work BEFORE the first yield resolves, then the first yield renders", async () => {
-		//generators commonly do `const data = yield fetch(...)` before their first renderable
-		//=> SSR has to wait for that await to settle (we can't skip it — the first template depends on it)
+		//the first template depends on the await — SSR can't skip it
 		const tag = uniqueTag();
 		let postYieldRan = false;
 
@@ -146,7 +143,6 @@ describe("SSR: server stops at first renderable yield", () => {
 		});
 
 		const element = track(await mount(tag, Component));
-		//two awaits because the Promise resolution + the subsequent yield each cross a microtask boundary
 		await flushMicrotasks();
 
 		expect(element.shadowRoot!.textContent).toContain("from-server");
@@ -169,8 +165,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		element.setAttribute("data-label", "updated");
 		await flushMicrotasks();
 
-		//if the observer were installed, setAttribute would have triggered update() → another render
-		//on the server we skip the observer entirely, so renderCount stays at 1
+		//no observer on the server → setAttribute can't trigger update()
 		expect(renderCount).toBe(1);
 		expect(element.shadowRoot!.textContent).toContain("none");
 	});
@@ -190,16 +185,13 @@ describe("SSR: server stops at first renderable yield", () => {
 		await (element as unknown as { update: () => Promise<void> }).update();
 		await flushMicrotasks();
 
-		//update() short-circuits on the `isServerEnvironment()` guard at the top — it never reaches the switch, so the cached active source is never re-rendered
-		//practically: no new render, the DOM still shows the first-yield count
 		expect(renderCount).toBe(initialCount);
 		expect(element.shadowRoot!.textContent).toContain(String(initialCount));
 	});
 
 	test("update() called from inside the first-yield render function does not re-invoke it (infinite-loop guard)", async () => {
-		//without the `isServerEnvironment()` guard inside update(), a render function that schedules `host.update()` would run forever on the server:
-		//RENDER_FUNCTION source caches a ref to the render fn → update() reaches the switch → calls render(this) again → render fn schedules another update → repeat
-		//=> we count the render-fn invocations specifically (not generator iterations — those are already bounded by the cancel) to pin the guard against regression
+		//without the server guard in update(), the cached RENDER_FUNCTION source would re-run the render fn → which schedules another update → forever
+		//we count render-fn calls (generator iterations are bounded by the cancel)
 		const tag = uniqueTag();
 		let renderFunctionCalls = 0;
 
@@ -212,7 +204,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		});
 
 		track(await mount(tag, Component));
-		//two extra flushes give a hypothetical loop room to run before we assert; if the guard breaks, the test process hangs (which surfaces as a vitest timeout)
+		//extra flushes give a broken guard room to loop before we assert (the test would then hang to vitest timeout)
 		await flushMicrotasks();
 		await flushMicrotasks();
 
@@ -220,8 +212,7 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 
 	test("setProperty on the server applies the attribute but does not trigger a re-render", async () => {
-		//setProperty's two halves split across the server boundary: applyAttributeBinding writes to the host (still needed), update() is gated (must be a no-op)
-		//=> we verify both halves: the attribute lands, but the cached active source is not stepped
+		//two halves split across the boundary: applyAttributeBinding still writes (matters for serialization), update() is gated
 		const tag = uniqueTag();
 		let renderCount = 0;
 
@@ -239,13 +230,12 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		expect(element.getAttribute("data-value")).toBe("after");
 		expect(renderCount).toBe(1);
-		//the shadow root still reflects the first-yield evaluation ("missing"), because update never re-ran
+		//shadow still reflects the first-yield evaluation — update never re-ran
 		expect(element.shadowRoot!.textContent).toContain("missing");
 	});
 
 	test("disconnect after SSR does not throw despite the never-allocated MutationObserver", async () => {
-		//the disconnectedCallback path runs `this.#attributeObserver?.disconnect()` — the optional chaining is the safety net for the server path where the observer was never assigned
-		//=> calling .remove() on a freshly server-rendered element must complete cleanly, otherwise teardown of a serialization batch would throw mid-flight
+		//optional chaining in disconnectedCallback is the safety net; a throw here would break serialization-batch teardown
 		const tag = uniqueTag();
 
 		const Component = render(function* () {
@@ -253,16 +243,16 @@ describe("SSR: server stops at first renderable yield", () => {
 		});
 
 		const element = await mount(tag, Component);
-		//we deliberately don't track() — we're driving disconnect by hand
+		//don't track() — we're driving disconnect by hand
 		expect(() => element.remove()).not.toThrow();
-		//disconnectedCallback awaits one microtask before doing teardown; let it land
+		//disconnectedCallback awaits one microtask before teardown
 		await flushMicrotasks();
 		await flushMicrotasks();
 	});
 
 	test("rejecting Promise before the first renderable yield surfaces the error and stops the generator", async () => {
-		//error path on the server: a yielded rejecting Promise routes through advanceGenerator → onError → deliverErrorToGenerator → (uncaught) → onError again → #abortAndShowError
-		//=> the error is written into the shadow root and the post-yield body does not run; we silence console.warn because #abortAndShowError logs the error and we don't want that in test output
+		//error routes through advanceGenerator → onError → #abortAndShowError, which writes into the shadow root
+		//silence console.warn because #abortAndShowError logs it
 		const tag = uniqueTag();
 		let postYieldRan = false;
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -284,8 +274,7 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 
 	test("user finally block runs on server (cancelGenerator calls .return())", async () => {
-		//cancelGenerator(.return()) is what runs the user's try/finally
-		//=> the contract is: server-side cleanup IS observed by the generator, even though we don't capture the returned cleanup function
+		//contract: server-side cleanup IS observed by the generator, even though we discard the returned cleanup function
 		const tag = uniqueTag();
 		let finallyRan = false;
 		let cleanupReturnInvoked = false;
@@ -295,7 +284,7 @@ describe("SSR: server stops at first renderable yield", () => {
 				yield () => html`<p>guarded</p>`;
 			} finally {
 				finallyRan = true;
-				//if the lib ever DID capture this cleanup return value on server, this side-effect would land at component teardown — we leave it dormant and only assert finallyRan
+				//if the lib ever started capturing this on server, the side-effect would land at teardown — dormant probe
 				return () => {
 					cleanupReturnInvoked = true;
 				};
@@ -305,8 +294,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		track(await mount(tag, Component));
 
 		expect(finallyRan).toBe(true);
-		//we don't call .remove() to test disconnect; the finally already ran via the cancel path
-		//cleanupReturnInvoked stays false because cancelGenerator discards the .return() result — that's the intentional server behavior
+		//cancelGenerator discards the .return() result — intentional on the server
 		expect(cleanupReturnInvoked).toBe(false);
 	});
 
@@ -340,8 +328,7 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 
 	test("getHTML produces declarative shadow DOM with the first-yield content", async () => {
-		//the prerender plugin reads from document.body.getHTML({ serializableShadowRoots: true })
-		//=> we verify the same call path produces a <template shadowrootmode=...> wrapper carrying the first-yield content and nothing past it
+		//mirrors the call path the plugin uses in production builds
 		const tag = uniqueTag();
 
 		const Component = render(function* () {
@@ -350,7 +337,6 @@ describe("SSR: server stops at first renderable yield", () => {
 		});
 
 		track(await mount(tag, Component));
-		//the prerender plugin reads from `document.body.getHTML(...)` (see prerender-plugin/ssr-render.ts), not from the element directly — we mirror that call to match the real pipeline
 		const serialized = (
 			document.body as unknown as {
 				getHTML(options: { serializableShadowRoots: boolean }): string;
@@ -364,8 +350,7 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 
 	test("host (root template) attributes from the first yield reach the host element", async () => {
-		//root templates write attributes onto the host itself, not into the shadow root
-		//=> SSR must still apply them once before serialization — `getHTML` includes the host's outer tag with its attributes
+		//root-template attrs live on the host, not the shadow root — SSR must apply them once before getHTML serializes
 		const tag = uniqueTag();
 
 		const Component = render(function* () {
@@ -381,8 +366,7 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 
 	test("expressions in the first-yield template evaluate against the closure at yield time", async () => {
-		//if SSR ever drifted toward "render the template only after closing the generator" the expression would re-bind to the post-mutation value
-		//=> we pin that the expression evaluated at yield time is the one that lands in the DOM
+		//if SSR ever drifted to "render after closing the generator" the expression would re-bind to the post-mutation value
 		const tag = uniqueTag();
 		let value = "before";
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { prerenderWebcomponents } from "./index";
 
-//unique-ish tags per scenario so multiple plugin instances in the same file can register without colliding on the shared `customElements` registry
+//unique-ish tags per scenario so plugin instances don't collide on the shared customElements registry
 const TAGS = {
 	simple: "ssr-simple",
 	withAttrs: "ssr-with-attrs",
@@ -13,8 +13,8 @@ const TAGS = {
 	noSentinel: "ssr-no-sentinel",
 } as const;
 
-//loaders import the lib lazily so the happy-dom polyfill (assigned by setupHappyDom before loaders are awaited) is in place when `parser/html.ts` runs its module-load `document.createElement("template")`
-//one shared idempotent definer keeps the lib import to a single side-effect across all loaders
+//lazy import: the happy-dom polyfill (set up before loaders are awaited) must be in place when parser/html.ts runs its module-load createElement
+//one shared idempotent definer keeps the lib import to a single side-effect
 let definedPromise: Promise<void> | null = null;
 const ensureDefined = (): Promise<void> => {
 	if (definedPromise) return definedPromise;
@@ -93,7 +93,7 @@ const buildPlugin = (sentinel?: string) =>
 		sentinelAttribute: sentinel,
 	});
 
-//small wrapper to invoke the transformIndexHtml hook regardless of whether vite exposes it as a function or `{ handler }`
+//handles both shapes vite exposes for transformIndexHtml — function or `{ handler }`
 const runTransform = async (
 	plugin: ReturnType<typeof prerenderWebcomponents>,
 	html: string,
@@ -123,10 +123,8 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 		const plugin = buildPlugin();
 		const input = `<html><body><${TAGS.unmarked}></${TAGS.unmarked}></body></html>`;
 		const output = await runTransform(plugin, input);
-		//no shadow root template should be injected
 		expect(output).not.toContain("shadowrootmode");
 		expect(output).not.toContain("unmarked-rendered");
-		//the original element should still be present verbatim
 		expect(output).toContain(`<${TAGS.unmarked}></${TAGS.unmarked}>`);
 	});
 
@@ -137,7 +135,6 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 
 		expect(output).toContain("shadowrootmode");
 		expect(output).toContain("simple-first");
-		//first-yield only — second yield must not appear
 		expect(output).not.toContain("simple-second");
 	});
 
@@ -146,10 +143,10 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 		const input = `<html><body><${TAGS.withAttrs} ssr data-label="hello"></${TAGS.withAttrs}></body></html>`;
 		const output = await runTransform(plugin, input);
 
-		//the literal `hello` appears in the prerendered shadow content (split from the `label=` text by the lib's content-binding marker comments — that's why we check the value, not the raw `label=hello` slice)
+		//`hello` is split from `label=` by content-binding marker comments, so we check the value rather than the raw `label=hello` slice
 		expect(output).toContain("hello");
 		expect(output).toContain(`data-label="hello"`);
-		//the shadow root template proves the prerender happened, not just attribute pass-through
+		//shadowrootmode proves the prerender happened, not just attribute pass-through
 		expect(output).toContain("shadowrootmode");
 	});
 
@@ -162,7 +159,7 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 	});
 
 	test("attribute names that contain the sentinel as a substring do not trigger SSR", async () => {
-		//`data-ssr` and `nossr` and `ssrcheck` should NOT match the sentinel — only a standalone `ssr` attribute
+		//`data-ssr`, `nossr`, `ssrcheck` must NOT match — only a standalone `ssr`
 		const plugin = buildPlugin();
 		const input = `<html><body>
 			<${TAGS.falsePositive} data-ssr></${TAGS.falsePositive}>
@@ -185,7 +182,6 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 
 		expect(output).toContain(">alpha<");
 		expect(output).toContain(">beta<");
-		//each instance gets its own shadow root template
 		const shadowMatches = output.match(/shadowrootmode/g) ?? [];
 		expect(shadowMatches.length).toBe(2);
 	});
@@ -199,7 +195,7 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 		const output = await runTransform(plugin, input);
 
 		expect(output).toContain(">server<");
-		//the client-only instance survives but does NOT get its content inlined
+		//the client-only instance survives but its content is not inlined
 		expect(output).not.toContain(">client<");
 		expect(output).toContain(`data-id="client"`);
 		const shadowMatches = output.match(/shadowrootmode/g) ?? [];
@@ -214,14 +210,14 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 		</body></html>`;
 		const output = await runTransform(plugin, input);
 
-		//the `prerender` instance is rendered, the `ssr` one is not (because the plugin instance was built with a different sentinel)
+		//`prerender` renders; `ssr` does not (plugin was built with a different sentinel)
 		const shadowMatches = output.match(/shadowrootmode/g) ?? [];
 		expect(shadowMatches.length).toBe(1);
 		expect(output).toContain("custom-rendered");
 	});
 
 	test("sentinel attribute survives serialization onto the host", async () => {
-		//the sentinel doubles as the hydrate-side signal; if it didn't make it back out, client code couldn't branch on it
+		//the sentinel doubles as the hydrate-side signal — client code branches on host.hasAttribute("ssr")
 		const plugin = buildPlugin();
 		const input = `<html><body><${TAGS.noSentinel} ssr></${TAGS.noSentinel}></body></html>`;
 		const output = await runTransform(plugin, input);

@@ -1,10 +1,9 @@
 # SSR: first-yield rendering
 
-When grundlage runs on the server, a component renders **exactly once** — at
-the first renderable yield of its outer generator — and then both the inner
-source and the outer component generator are cancelled. The shadow root is
-serialized in that state and shipped to the browser as declarative shadow
-DOM; the client picks up at hydrate and drives every subsequent frame.
+On the server a component renders **once** — at the first renderable yield of
+its outer generator — and then both the inner source and the outer generator
+are cancelled. The shadow root is serialized as declarative shadow DOM; the
+client picks up at hydrate.
 
 ```javascript
 import { render, html } from "grundlage";
@@ -27,216 +26,118 @@ customElements.define(
 );
 ```
 
-The prerender plugin mounts the element under a happy-dom polyfill, waits
-for the shadow root to fill, and emits
+The prerender plugin mounts the element under a happy-dom polyfill, waits for
+the shadow root to fill, and emits
 
 ```html
 <demo-loader>
-	<template
-		shadowrootmode="open"
-		shadowrootclonable
-		shadowrootdelegatesfocus
-		shadowrootserializable
-	>
+	<template shadowrootmode="open" shadowrootclonable
+		shadowrootdelegatesfocus shadowrootserializable>
 		<article class="card">…</article>
 	</template>
 </demo-loader>
 ```
 
-into the static HTML. When the browser parses that page the shadow root is
-already attached, and the client's first yield re-runs against the hydrate
-path instead of `replaceChildren`.
+into the static HTML.
 
 ## Why
 
-Before this change, the SSR path drove the generator to completion and
-serialized whatever the final yield produced. That was wrong for two
-reasons:
+The previous SSR path drove the generator to completion and serialized the
+final yield. That broke two things:
 
-- **Generators model time, not state.** A loader that yields "loading…"
-  then "loaded" should ship the loading frame as the SSR snapshot only when
-  the data really isn't available server-side. The natural unit of "the
-  server's frame" is the first renderable yield — the same yield the
-  client will start from.
-- **Components ran longer than they needed to.** Subsequent yields, timers,
-  microtask chains, and any post-yield body all executed against a throwaway
-  context. Worst-case, a render function that schedules its own `update()`
-  would spin forever during the SSR pass.
-
-First-yield rendering pins the contract: server = first renderable frame,
-client = everything after that frame.
+- **Generators model time, not state.** "loading → loaded" must ship the
+  loading frame when the data really isn't available server-side. The natural
+  unit of "the server's frame" is the first renderable yield — the same yield
+  the client starts from.
+- **Components ran longer than they needed to.** Post-yield bodies, timers,
+  and self-scheduling `update()`s all executed against a throwaway context.
 
 ## Detecting the server
 
 Two signals; either one flips the lib into server mode:
 
-- **`typeof window === "undefined"`** — the universal node/SSR signal. The
-  prerender plugin polyfills `document`, `customElements`, `HTMLElement`,
-  `MutationObserver`, etc. onto `globalThis`, but **never** assigns
-  `window`. The check therefore stays true under the plugin and false in
-  every real browser.
-- **`globalThis.__grundlage_ssr__ === true`** — an explicit opt-in for
-  environments that *do* have `window` but want server semantics. The
-  in-browser SSR tests (`ssr.browser.test.ts`) and any tooling that wires
-  up a happy-dom `Window` for unrelated reasons can set this flag to drive
-  the same code path.
+- **`typeof window === "undefined"`** — node/SSR. The prerender plugin
+  polyfills `document`, `customElements`, etc. but never assigns `window`.
+- **`globalThis.__grundlage_ssr__ === true`** — explicit opt-in for
+  environments that *do* have `window` but want server semantics (in-browser
+  SSR tests, tooling that runs happy-dom in the browser).
 
-`isServerEnvironment()` is read at the call site each time, not cached, so
-the in-browser tests can flip the flag around individual `serverRender`
-calls without stale state leaking between tests.
+The check is read at each call site, not cached, so tests can flip the flag
+between `serverRender` calls without state leaking.
 
 ## What server mode does
 
-- **No `MutationObserver`.** `connectedCallback` skips
-  `#watchAttributes()`. The field stays `undefined`; every later read of
-  `this.#attributeObserver` uses optional chaining so disconnect, observe,
-  and teardown all no-op cleanly.
-- **`touchesHost` short-circuits to false** in `#renderToDom`. There's no
-  observer to bracket around the host write, so the disconnect/observe
-  pair would be dead work.
-- **Cancel after the first paint.** Once the first template lands in the
-  shadow root via `setup(this)`, `#renderToDom` cancels the active inner
-  source (if it's a generator) and the outer component generator. Both
-  generators run their `.return()` — user `try/finally` blocks observe the
-  cancel.
-- **`update()` is a no-op.** Even after the cancel, the cached
-  `RENDER_FUNCTION` source still holds a live reference to the render
-  function. A user microtask scheduled inside that render fn would re-enter
-  `update()` and loop forever; the early-return in `update()` is the gate.
-- **`setProperty` splits across the boundary.** The
-  `applyAttributeBinding` half still runs (the attribute lands on the
-  host, which matters for serialization), but the subsequent `update()`
-  bails at the server guard.
+- **No `MutationObserver`** — `connectedCallback` skips `#watchAttributes()`;
+  every later read uses optional chaining.
+- **`touchesHost` short-circuits to false** in `#renderToDom` — no observer
+  to bracket.
+- **Cancel after the first paint** — once `setup(this)` lands, the active
+  inner source and the outer component generator are both `.return()`ed.
+- **`update()` is a no-op** — the cached `RENDER_FUNCTION` source still holds
+  a live render fn; without the guard a user microtask that calls
+  `host.update()` would loop forever.
+- **`setProperty` splits across the boundary** — the attribute write still
+  lands on the host (matters for serialization); the subsequent `update()`
+  bails.
 
-## What server mode does *not* change
+## What server mode preserves
 
-- **Host (root template) attributes** are applied normally during the
-  first yield's `setup`, so the prerender plugin's serializer captures
-  them on the host element.
-- **Pre-yield async work** runs to completion. A generator that does
-  `const data = yield fetch(...)` before its first renderable still waits
-  on the promise — that yielded promise *is* the chain leading to the
-  first renderable yield.
-- **Error path is intact.** A rejecting pre-yield promise still routes
-  through `advanceGenerator → onError → #abortAndShowError`, which writes
-  the error into the shadow root. That message ends up in the serialized
-  HTML.
-- **Two components on the same page stop independently.** The cancel
-  targets `this.#componentGenerator` / `this.#activeSource` per element.
+- **Host attributes** apply during the first yield's `setup`, so they make it
+  onto the serialized outer tag.
+- **Pre-yield async work** runs — a generator that awaits a fetch before its
+  first renderable still waits.
+- **Error path** — a rejecting pre-yield promise routes through
+  `#abortAndShowError`, which writes the message into the shadow root.
+- **User `finally` runs** — `cancelGenerator` calls `.return()`; the cleanup
+  *return value* is intentionally discarded.
 
 ## How it works
 
 ### Component (`lib/src/index.ts`)
 
-- `connectedCallback` gates the observer allocation behind
-  `!isServerEnvironment()`. The generator still starts, the yield pump
-  still runs — only the observer is skipped.
-- `#renderToDom` computes `onServer = isServerEnvironment()` once per
-  render. The host-bracket calculation folds `!onServer` into
-  `touchesHost`. After writing the first template, if `onServer` is true,
-  it calls `cancelGenerator` on the active inner source (when it's a
-  generator) and on the outer component generator.
-- The cancel does *not* capture the cleanup return value. The server
-  context is throwaway, and calling user `finally` blocks under
-  happy-dom can touch browser-only APIs that aren't polyfilled — we let
-  `cancelGenerator` swallow any throw and move on.
-- `update()` returns early when `isServerEnvironment()` is true, before
-  reading `#activeSource` or scheduling the microtask batch.
-- `disconnectedCallback` uses `this.#attributeObserver?.disconnect()`,
-  matching the server path where the field was never assigned.
+`connectedCallback` gates the observer allocation behind
+`!isServerEnvironment()`. `#renderToDom` reads `onServer` once, folds
+`!onServer` into `touchesHost`, and after writing the first template calls
+`cancelGenerator` on the active inner (if it's a generator) and on the outer
+component generator. `update()` early-returns under the same check.
 
 ### Generator stepper (unchanged)
 
-`cancelGenerator` sets `source.terminated = true` and calls `.return()`
-on the generator. `advanceGenerator`'s loop checks `terminated` at the
-top of each iteration and unwinds without calling `next()` again, so any
-pending microtasks for yielded promises bail out instead of resuming the
-old generator. The first-yield cancel rides this existing machinery —
-nothing in the stepper needed to change.
+`cancelGenerator` sets `terminated = true` and calls `.return()`.
+`advanceGenerator`'s loop checks `terminated` at the top of each iteration —
+any pending microtasks for yielded promises bail out instead of resuming.
 
-### Prerender plugin (`website/vite.config.ts`)
+### Prerender plugin (`prerender-plugin/`)
 
-- The plugin only processes instances of registered tags that carry an
-  opt-in sentinel attribute (default `ssr`), e.g.
-  `<demo-loader ssr data-label="…"></demo-loader>`. Unmarked instances,
-  unrelated pages, and unrelated custom elements (e.g. `<nav-bar>`) stay
-  untouched. The sentinel survives serialization, so hydrate-side code can
-  branch on `host.hasAttribute("ssr")` if it needs the same signal.
-- happy-dom globals are assigned to `globalThis` lazily on the first
-  matching page, and **`window` is deliberately not assigned** — that's
-  what keeps `typeof window === "undefined"` true inside the lib.
-- The plugin creates the host element, copies attributes from the
-  authored `<demo-loader …>` tag, appends it to `document.body`, and
-  **polls** until the shadow root has children. Polling beats a fixed
-  sleep because async-before-first-yield generators settle whenever their
-  await chain finishes — workload-dependent.
-- happy-dom 20.x does not honour `serializableShadowRoots` in `getHTML`,
-  so the plugin hand-rolls the declarative shadow DOM wrapper. The flags
-  on the emitted `<template>` (`shadowrootmode="open"`,
-  `shadowrootclonable`, `shadowrootdelegatesfocus`,
-  `shadowrootserializable`) mirror the lib's `attachShadow` defaults so
-  the browser reconstructs the shadow with matching ownership semantics.
-
-### In-browser SSR tests (`lib/tests/integration/ssr.browser.test.ts`)
-
-- `serverRender` flips `globalThis.__grundlage_ssr__ = true` for the
-  duration of the call, mounts the element, polls
-  `waitForShadowContent`, serializes via `getHTML({
-  serializableShadowRoots: true })`, removes the element, and clears the
-  flag in a `finally`.
-- Host attributes are re-emitted around the serialized shadow content
-  because `getHTML` returns shadow content only — without that the hydrate
-  side never sees the root-template attributes.
-
-### Node SSR tests (`lib/tests/integration/ssr.test.ts`)
-
-- `ssr-setup.ts` is a side-effect-only module that assigns happy-dom
-  globals onto `globalThis` (again without `window`). It must be the
-  first import — `parser/html.ts` runs `document.createElement` at module
-  load.
-- These tests exercise the same code path the plugin uses in production
-  builds, so they pin the contract end-to-end without needing a browser.
+- Processes only registered tags carrying an opt-in sentinel attribute
+  (`ssr` by default). Unmarked instances and unrelated tags stay untouched.
+- happy-dom globals get assigned to `globalThis` lazily on the first matching
+  page; `window` is deliberately not assigned.
+- Polls for shadow content rather than sleeping — async-before-yield
+  generators settle on workload-dependent timing.
+- Hand-rolls the declarative shadow DOM wrapper because happy-dom 20.x
+  doesn't honour `serializableShadowRoots` in `getHTML`. The emitted flags
+  mirror the lib's `attachShadow` defaults.
 
 ## Behavioural guarantees (pinned by tests)
 
-- **First-yield only** — synchronous generators with multiple yields
-  render only the first; later yields and post-yield body do not execute.
-- **Render function called exactly once** — even when that render function
-  schedules `host.update()` from a microtask. Without the `update()` guard
-  this would loop forever.
-- **Nested generator descent** — when the outer generator yields an inner
-  generator function, SSR steps into the inner and stops at *its* first
-  yield.
-- **Async-before-yield resolves** — a generator that awaits before its
-  first renderable yield gets the resolved value; the first renderable
-  yield then renders normally.
-- **Error before yield** — a rejecting yielded promise writes the error
-  into the shadow root via `#abortAndShowError`; the post-yield body does
-  not run.
-- **`user finally` runs** — `cancelGenerator` calls `.return()`, so
-  `try/finally` around the first yield executes. The cleanup *return
-  value* is intentionally discarded on the server.
-- **`setProperty` halves** — the attribute is written to the host; the
-  re-render is suppressed by the `update()` guard.
-- **Disconnect after SSR is safe** — `disconnectedCallback` runs
-  `this.#attributeObserver?.disconnect()` cleanly even though the
-  observer was never allocated.
-- **Host (root template) attributes land on the host** during the first
-  yield, so `getHTML` captures them on the outer tag.
-- **Expression closure** — expressions in the first-yield template
-  evaluate against the closure at yield time, not against any later
-  mutation of those variables.
-- **Per-element independence** — two components on the same page each
-  stop at their own first yield.
-- **Serialization shape** — `document.body.getHTML({
-  serializableShadowRoots: true })` produces a `<template
-  shadowrootmode=…>` wrapper carrying the first-yield content and nothing
-  past it.
+- First yield only; post-yield body does not execute.
+- Render function called exactly once, even if it schedules `update()`.
+- Nested generators descend; the inner's first yield is the snapshot.
+- Async-before-yield resolves before the snapshot is taken.
+- Errors before yield land in the shadow root via `#abortAndShowError`.
+- `user finally` runs; its return value is discarded.
+- `setProperty` writes the attribute; re-render is suppressed.
+- Disconnect after SSR is safe (observer was never allocated).
+- Host attributes land on the host for serialization.
+- Expressions evaluate at yield time, not after later mutation.
+- Two components on the same page each stop at their own first yield.
+- `getHTML({ serializableShadowRoots: true })` produces a
+  `<template shadowrootmode=…>` carrying the first-yield content only.
 
 ## Tests
 
-- Node SSR contract (no browser, happy-dom polyfill only):
-  `lib/tests/integration/ssr.test.ts`
+- Node SSR contract: `lib/tests/integration/ssr.test.ts`
 - In-browser SSR + hydrate round-trip:
-  `lib/tests/integration/ssr.browser.test.ts` (the
-  `first renderable yield: SSR stops, client resumes` describe block).
+  `lib/tests/integration/ssr.browser.test.ts`
+- Plugin integration: `prerender-plugin/index.test.ts`

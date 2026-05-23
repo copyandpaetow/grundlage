@@ -17,8 +17,8 @@ export { html } from "./parser/html";
 export { props } from "./validator/props";
 export { type ComponentOptions, type BaseComponent } from "./types";
 
-//`typeof window === "undefined"` is the universal node/SSR signal — the prerender plugin only polyfills `document`, `customElements`, etc., never `window`, so this stays true on the server
-//`globalThis.__grundlage_ssr__` is the explicit opt-in for environments that do have `window` but want server semantics (browser-based tests of the SSR path, or any plugin that sets up a happy-dom window for its own reasons)
+//`typeof window === "undefined"` is the node/SSR signal — the prerender plugin polyfills `document` etc. but never `window`
+//`__grundlage_ssr__` is the explicit opt-in for environments that DO have `window` but want server semantics (in-browser SSR tests)
 const isServerEnvironment = () =>
 	typeof window === "undefined" ||
 	(globalThis as { __grundlage_ssr__?: boolean }).__grundlage_ssr__ === true;
@@ -60,8 +60,7 @@ export const render = (
 				terminated: false,
 			};
 			this.#componentGenerator = source;
-			//on the server we render exactly once and then cancel — no attribute mutation observer needed (the host element has no live attribute updates between SSR-stop and serialisation)
-			//=> skip the MutationObserver allocation and the observe() call; #renderToDom guards its disconnect/observe with optional chaining to match
+			//on the server we render once and cancel — no observer needed; #renderToDom guards its disconnect/observe with optional chaining to match
 			if (!isServerEnvironment()) this.#watchAttributes();
 			advanceGenerator(
 				source,
@@ -251,9 +250,8 @@ export const render = (
 			const previousTemplate = this.#renderedTemplate;
 			const onServer = isServerEnvironment();
 
-			//host attributes are the only writes the framework makes against `this` — anything else lands inside the shadow root, which the observer doesn't watch
-			//=> we only bracket the observer when this render could write to the host (either swap-time cleanup from previous, or new host bindings from current); components without root templates pay nothing
-			//on the server we never installed an observer (see connectedCallback), so the bracket scope is dead work — short-circuit `touchesHost` to false to skip it entirely
+			//bracket the observer only when this render could write to the host (swap cleanup or new host bindings); components without root templates pay nothing
+			//on the server the observer was never installed, so `touchesHost` short-circuits to false
 			const touchesHost =
 				!onServer &&
 				(template.parsedHTML.hostBindingOffset > 0 ||
@@ -279,10 +277,8 @@ export const render = (
 						this.#renderMode = RENDER_MODE.CSR;
 					}
 
-					//server contract: the first renderable yield is the SSR snapshot — everything past it is the client's job to drive
-					//=> after writing the first template into the shadow root we cancel both the inner (active) source and the outer component generator
-					//cancelGenerator sets `terminated=true` and runs `.return()` on the user's generator; advanceGenerator's loop checks `terminated` at the top of every iteration and unwinds without calling any further `next()`
-					//we do NOT capture the cleanup return value here (server context is throwaway; calling user finally blocks under happy-dom can touch browser-only APIs that aren't polyfilled, and cancelGenerator already swallows any throw)
+					//server contract: first renderable yield is the snapshot — cancel both the active inner source and the outer component generator
+					//we discard the cleanup return value: server context is throwaway, and user finally blocks under happy-dom can touch browser-only APIs that aren't polyfilled
 					if (onServer) {
 						if (
 							this.#activeSource?.type === TEMPLATE_SOURCE_TYPE.GENERATOR
@@ -304,8 +300,7 @@ export const render = (
 		}
 
 		async update() {
-			//on the server the first renderable yield is final; subsequent update() calls — whether from user code (e.g. a microtask scheduled inside the render fn) or from setProperty — must be no-ops
-			//=> without this guard, calling update() after the SSR-cancel would re-invoke the cached active source (RENDER_FUNCTION held a live ref to the render fn) and any user microtask that schedules another update from inside that render fn becomes an infinite loop
+			//on the server the first yield is final; without this guard the cached RENDER_FUNCTION source would re-run, and a user microtask scheduling update() from inside the render fn would loop forever
 			if (
 				isServerEnvironment() ||
 				!this.#activeSource ||

@@ -1,7 +1,7 @@
 import type { Window as HappyWindow } from "happy-dom";
 
-//one-time happy-dom polyfill onto globalThis; window is deliberately not assigned so the lib's `typeof window === "undefined"` server check stays true
-//we cache the promise (not a bool) so concurrent first calls during a build all wait on the same import
+//one-time happy-dom polyfill onto globalThis; `window` is deliberately not assigned so `typeof window === "undefined"` stays true
+//we cache the promise (not a bool) so concurrent first calls all wait on the same import
 let setupPromise: Promise<void> | null = null;
 
 const setupHappyDom = (
@@ -40,14 +40,12 @@ const parseAttributes = (rawAttributes: string): Array<[string, string]> => {
 };
 
 /**
- * Mounts `<tagName ...rawAttributes></tagName>` under the polyfilled document,
- * waits for the first-yield shadow content, and returns the host's serialized
- * outer HTML (with declarative shadow DOM `<template>` carrying whatever
- * `attachShadow` flags the component used).
+ * Mounts the host under happy-dom, waits for first-yield content, returns
+ * serialized declarative-shadow-DOM HTML.
  *
- * Serialization goes through `document.body.getHTML(...)` because happy-dom's
- * `Element.getHTML` only walks child nodes — the shadow-root `<template>`
- * wrapper is emitted in the parent's ELEMENT_NODE branch of the serializer.
+ * Serializes via `document.body.getHTML(...)` because happy-dom's
+ * `Element.getHTML` only walks children — the `<template>` wrapper is
+ * emitted in the parent's ELEMENT_NODE branch.
  */
 export const renderHost = async (
 	tagName: string,
@@ -64,7 +62,7 @@ export const renderHost = async (
 	}
 	documentRef.body.appendChild(host);
 
-	//poll for first-yield content; async-before-yield generators settle on their own await chain, so a fixed sleep would either over- or under-wait
+	//poll rather than sleep — async-before-yield settle times are workload-dependent
 	const deadline = Date.now() + pollTimeoutMs;
 	while (Date.now() < deadline) {
 		if (host.shadowRoot && host.shadowRoot.childNodes.length > 0) break;

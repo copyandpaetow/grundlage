@@ -1,7 +1,6 @@
 import { html, render } from "../../../lib/src";
 
-//deterministic so server and client compute the same payload — hydration matches and nothing has to be re-fetched at runtime
-//(in a real app the server-rendered HTML would carry whatever the server fetch returned; the client gets to skip the loading state because the data is already painted)
+//deterministic so server and client compute the same payload; in a real app the server fetch would land in the SSR HTML and the client would skip the loading state
 const fetchUser = (delayMilliseconds: number) =>
 	new Promise<{ name: string; team: string }>((resolve) => {
 		setTimeout(
@@ -22,12 +21,10 @@ customElements.define(
 		const user = await fetchUser(delayMilliseconds);
 		const elapsedMilliseconds = Math.round(performance.now() - startedAt);
 
-		//click counter lives in the closure of the generator's render function — update() re-invokes that render function with the new value, which is the smallest possible "hydration wired things up" signal
-		//on the server addEventListener still runs but the cancel happens right after the first yield, so the listener never has a chance to fire
+		//closure state — click runs through update(), which re-invokes the render fn; smallest possible "hydration wired things up" signal
 		let clickCount = 0;
 
-		//single renderable yield: the SSR pass stops here with the data already resolved, so the prerendered HTML carries the populated card
-		//on the client this same yield runs again; if the SSR shadow root is present, the hydrate path leaves CONTENT bindings alone and the server-fetched text stays put
+		//single renderable yield: the SSR pass stops here with data resolved; on the client the same yield re-runs and hydrate leaves the server text in place
 		yield () => html`
 			<article class="card">
 				<header><strong>${label}</strong></header>

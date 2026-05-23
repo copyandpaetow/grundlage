@@ -15,7 +15,7 @@
 	margin-block-start: 0;
 }
 
-/* the loader host gets a stable footprint so the empty CSR slot is visibly empty (not just zero-height collapsed) */
+/* stable footprint so the empty CSR slot is visibly empty, not collapsed */
 demo-loader {
 	display: block;
 	min-height: 8rem;

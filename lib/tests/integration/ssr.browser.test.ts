@@ -4,8 +4,7 @@ import { html, render } from "../../src/index";
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
-//resolve as soon as the SSR pass has written its first-yield content into the shadow root
-//replaces a fixed `sleep(20)` so async-before-first-yield generators that take longer than the magic number can't silently flake to an empty serialization
+//resolve as soon as the first-yield content lands; a fixed sleep would silently flake on slower async-before-yield generators
 const waitForShadowContent = async (
 	element: HTMLElement,
 	timeoutMs = 200,
@@ -27,13 +26,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 	};
 
 	/**
-	 * Renders a component into the DOM under the lib's SSR contract
-	 * (`globalThis.__grundlage_ssr__ = true` flips the lib into server mode so
-	 * it cancels both generator sources after the first renderable yield),
-	 * serializes the shadow root, removes the element, and unsets the flag.
-	 *
-	 * The returned string is the declarative-shadow-DOM HTML the SSR plugin
-	 * would emit — i.e. the first-yield snapshot, not the generator's terminal state.
+	 * Flips `__grundlage_ssr__`, mounts, polls for first-yield content,
+	 * serializes, removes the element, clears the flag.
+	 * Returns the declarative-shadow-DOM HTML the plugin would emit.
 	 */
 	const serverRender = async (
 		tag: string,
@@ -44,15 +39,15 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			customElements.define(tag, ComponentClass);
 			const element = document.createElement(tag);
 			document.body.appendChild(element);
-			//poll for the first-yield content rather than guessing a sleep duration — async-before-first-yield generators settle whenever the await chain finishes, which is workload-dependent
+			//poll rather than sleep — async-before-yield settle times are workload-dependent
 			await waitForShadowContent(element);
-			//host attributes (root templates) land on the element itself, not the shadow root — getHTML returns shadow content only, so we have to re-emit the host's attributes around it or the hydrate side will never see them
+			//host attrs land on the element itself; getHTML returns shadow content only, so we re-emit them around it
 			const hostAttrs = Array.from(element.attributes)
 				.map((attribute) => ` ${attribute.name}="${attribute.value}"`)
 				.join("");
 			const serialized = element.getHTML({ serializableShadowRoots: true });
 			element.remove();
-			//let the prior element's async disconnectedCallback body drain before returning — otherwise the next test's customElements.define can race against the prior element's teardown
+			//let the async disconnectedCallback drain so the next test's customElements.define can't race teardown
 			await sleep();
 			return `<${tag}${hostAttrs}>${serialized}</${tag}>`;
 		} finally {
@@ -61,9 +56,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 	};
 
 	/**
-	 * Takes serialized outer HTML (from serverRender) and mounts it into the document
-	 * via innerHTML, simulating a browser parsing declarative shadow DOM from the server response.
-	 * The custom element class must NOT be defined yet at this point.
+	 * Mounts serialized SSR HTML via setHTMLUnsafe — simulates the browser
+	 * parsing declarative shadow DOM. The custom element class must NOT be
+	 * defined yet at this point.
 	 */
 	const hydrateFromHTML = (serializedHTML: string): HTMLElement => {
 		const wrapper = document.createElement("div");
@@ -180,8 +175,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 	describe("hydration", () => {
 		describe("first renderable yield: SSR stops, client resumes", () => {
 			test("server emits the first-yield content, not the generator's terminal state", async () => {
-				//the contract for the new SSR mode: we stop at the first renderable yield, regardless of what the generator would have produced if allowed to run to completion
-				//=> a "loading → loaded" generator must serialize the loading frame
+				//a "loading → loaded" generator must serialize the loading frame
 				const serverTag = uniqueTag();
 				let yieldCount = 0;
 
@@ -203,8 +197,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("client resumes from first yield: hydrates loading state, then renders subsequent yields", async () => {
-				//roundtrip: SSR emits "loading" → client mounts that HTML → client's generator yields "loading" (hydrates against SSR DOM) → user-driven update() advances to "loaded"
-				//=> tests the full SSR-stop + client-resume contract end to end
+				//roundtrip: SSR emits "loading" → client hydrates → user update() advances to "loaded"
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				let phase: "loading" | "loaded" = "loading";
@@ -225,7 +218,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 				customElements.define(clientTag, makeComponent());
 				await sleep();
-				//immediately after hydration the DOM still carries the server's loading text — the client's first yield matched and was used to wire bindings, not to overwrite content
+				//hydrate wires bindings without overwriting the server text
 				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 					"loading",
 				);
@@ -243,9 +236,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("comment markers survive serialization → setHTMLUnsafe → hydrate", async () => {
-				//hydrate() finds bindings by walking comment nodes with COMMENT_IDENTIFIER (template-html.ts)
-				//=> if the serialization pipeline ever strips comments, the hydrated targets array goes empty and every update misfires silently
-				//we verify by checking that a post-hydrate update actually changes the DOM (which requires the markers to have been preserved)
+				//hydrate() walks COMMENT_IDENTIFIER markers — if serialization strips them, every update silently misfires
+				//proof-by-effect: a post-hydrate update must change the DOM
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				let counter = 0;
@@ -256,7 +248,6 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					});
 
 				const serialized = await serverRender(serverTag, makeComponent());
-				//the serialized output must contain at least one HTML comment marker for the binding system to anchor against
 				expect(serialized).toMatch(/<!--/);
 
 				const clientHTML = serialized.replace(
@@ -281,8 +272,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("server skipping post-yield code does not affect the client (which sees a fresh run)", async () => {
-				//side-effects placed after the first yield should fire on the client even though they were skipped on the server
-				//=> demonstrates that the SSR-stop only affects the server pass; the client generator gets to run normally
+				//SSR-stop only affects the server pass; the client generator runs normally
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				let clientPostYieldRan = false;
@@ -296,7 +286,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				await serverRender(serverTag, ServerComponent);
 				expect(serverPostYieldRan).toBe(false);
 
-				//we cannot reuse the same closure for the client because its `serverPostYieldRan` was already proven false above; use a separate factory and a separate flag
+				//separate factory + flag so we can prove the client ran its own post-yield body
 				const ClientComponent = render(function* () {
 					yield () => html`<p>shared</p>`;
 					clientPostYieldRan = true;
@@ -318,8 +308,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("nested generator: server stops at INNER's first yield, client hydrates against it", async () => {
-				//mirrors the node-env nested-generator test but in the real browser, so we also verify the serialized output reflects the inner's first yield
-				//the client component MUST be single-yield: the contract is "server stops, client matches the SSR DOM and waits"; if the client kept yielding (different templateHash each time), #renderToDom would swap the DOM via replaceChildren on the next yield and the hydrate would be wasted work — that's the opposite of what we're testing
+				//client MUST be single-yield: a second yield with a different templateHash would replaceChildren and waste the hydrate
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				let innerSecondYielded = false;
@@ -351,7 +340,6 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				customElements.define(clientTag, ClientComponent);
 				await sleep();
 
-				//hydration matched on inner-first; nothing else has happened yet so the DOM still reads inner-first
 				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 					"inner-first",
 				);
@@ -360,8 +348,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("host attribute mismatch: server's first-yield value is overwritten by the client's first-yield value", async () => {
-				// root-template (host) attrs are the one binding category hydrate WILL re-write, even on the matching first yield (template-html.ts hydrate() re-applies all ATTR bindings)
-				// => server says class="server-class", client's first yield says class="client-class" → after hydrate the host reads "client-class"
+				//hydrate re-applies ATTR bindings — host attrs are the one category where the client value wins
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 
@@ -390,7 +377,6 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("server with async-before-first-yield: SSR awaits then emits the data-loaded frame", async () => {
-				//generators commonly fetch before yielding; the server still has to wait for that fetch, then stop at the first renderable
 				const serverTag = uniqueTag();
 				let postYieldRan = false;
 
@@ -408,9 +394,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("update() scheduled from inside the first-yield render fn does not re-invoke it (infinite-loop guard)", async () => {
-				//without the `isServerEnvironment()` guard at the top of update(), a render fn that schedules `host.update()` would loop forever on the server:
-				//RENDER_FUNCTION source caches the fn → update() reaches the switch → calls render(this) again → render fn schedules another update → repeat
-				//=> we count render-fn invocations specifically (counting yields would also pass with a broken guard, since the cancel still stops the generator), and assert the second yield never lands
+				//RENDER_FUNCTION source caches the fn — a broken guard would loop forever
+				//count render-fn calls specifically; yields alone would pass even with a broken guard because the cancel still stops the generator
 				const serverTag = uniqueTag();
 				let renderFunctionCalls = 0;
 				let secondYieldRan = false;
@@ -433,8 +418,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("client mount without server-side flag runs the generator normally", async () => {
-				//paranoia check: verify the flag we toggle in serverRender does not leak into the client mount path
-				//if the unset in the `finally` block ever broke, the client's component would also stop at first yield → update() couldn't advance it
+				//paranoia: if the flag unset in serverRender's finally ever broke, the client would stop at first yield too
 				const clientTag = uniqueTag();
 				let firstYield = true;
 
@@ -667,9 +651,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		});
 
 		test("hydrate leaves server CONTENT in place even when client's first render carries a different value", async () => {
-			//the hydrate path (template-html.ts:69-83) re-applies ATTR bindings only — CONTENT bindings are left alone so we don't overwrite the server text
-			//we pin that contract here so a future change that decides to also flush CONTENT on hydrate becomes a deliberate decision, not a drift
-			//the test deliberately uses two unrelated component classes with hardcoded text so server and client disagree on the value; the DOM after hydrate must match the server, not the client
+			//hydrate re-applies ATTR bindings only — CONTENT is left alone so we don't overwrite the server text
+			//two unrelated classes with hardcoded text so server/client disagree; the DOM must match the server
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
@@ -689,20 +672,18 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			customElements.define(clientTag, ClientComponent);
 			await sleep();
 
-			//hydration kept the server text untouched even though the client wanted a different value
 			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 				"server-value",
 			);
 
-			//note we deliberately don't follow up with update() here — both client renders carry the same hardcoded expression, so update() sees current === previous and won't flush
-			//the "responds to update() after hydration" test (above) already covers the post-hydrate refresh path with a closure value that actually changes
+			//no update() follow-up here — both renders carry the same hardcoded expression, so update would see current === previous and skip
+			//"responds to update() after hydration" above covers the actual refresh path
 
 			cleanup(element);
 		});
 
 		test("hydrate refreshes a host attribute when the client renders a different value", async () => {
-			//host (root template) attrs are the one binding category hydrate WILL re-write — they live as bindings only, never serialized into the shadow root
-			//we set up a server class that emits host class="server-class" and a client class that emits "client-class"; after hydrate the host should carry the client value
+			//host attrs aren't serialized into the shadow root; hydrate re-applies all ATTR bindings, so the client value wins
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 

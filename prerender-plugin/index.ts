@@ -20,14 +20,13 @@ export const prerenderWebcomponents = (
 	const componentLoaders = Object.values(options.components);
 	const tagNames = Object.keys(options.components);
 
-	//compile both patterns once per plugin instance
-	//we keep the tag-match and the sentinel-presence checks separate: a single combined regex with optional surrounding attributes is hard to read and easy to break — two passes are clearer and the attribute-string check runs only on tag matches
+	//two passes (tag match, then sentinel check) instead of one combined regex — clearer and the sentinel check runs only on tag hits
 	const tagUnion = tagNames.map(escapeRegex).join("|");
 	const tagPattern = new RegExp(
 		`<(${tagUnion})([^>]*)>\\s*</\\1>`,
 		"g",
 	);
-	//lookahead on `[\s=/>]` (or end-of-string when the sentinel is the last attribute) makes `ssr` a standalone attribute name — `data-ssr` (no leading space) and `ssrcheck` (no terminator) won't match
+	//lookahead on `[\s=/>]|$` keeps `ssr` standalone — `data-ssr` and `ssrcheck` don't match
 	const sentinelPattern = new RegExp(
 		`\\s${escapeRegex(sentinelAttribute)}(?=[\\s=/>]|$)`,
 	);
@@ -35,14 +34,14 @@ export const prerenderWebcomponents = (
 	return {
 		name: "prerender-webcomponents",
 		async transformIndexHtml(html) {
-			//string-includes pre-check avoids running the regex on pages that don't use any registered tag (and skips the happy-dom polyfill setup entirely for those pages)
+			//string-includes pre-check skips both the regex and the happy-dom setup for unrelated pages
 			if (!tagNames.some((tag) => html.includes(`<${tag}`))) return html;
 
 			const candidates = [...html.matchAll(tagPattern)];
 			if (candidates.length === 0) return html;
 
 			let output = html;
-			//sequential rather than parallel because renderHost serializes `document.body.getHTML(...)` and shares a single polyfilled document — concurrent mounts would leak each other's hosts into the serialized output
+			//sequential — renderHost shares a single polyfilled document; concurrent mounts would leak hosts into each other's serialized output
 			for (const match of candidates) {
 				const attributeString = match[2] ?? "";
 				if (!sentinelPattern.test(attributeString)) continue;
