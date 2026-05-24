@@ -1,5 +1,5 @@
 import { html } from "../parser/html";
-import { flushHostPayload } from "../load-data";
+import { flushHostPayload } from "../loader/load-data";
 import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/is-generator";
 import {
@@ -12,7 +12,7 @@ import {
 	installStaticSource,
 	RenderCallback,
 	SourceHandle,
-	YieldHandler,
+	YieldHandler
 } from "./sources";
 import { HTMLTemplate } from "./template-html";
 import { RUNTIME_KIND } from "../utils/constants";

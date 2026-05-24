@@ -26,7 +26,7 @@ import {
 export { html } from "./parser/html";
 export { props } from "./validator/props";
 export { type ComponentOptions, type BaseComponent } from "./types";
-export { loadData, type LoadDataOptions } from "./load-data";
+export { loadData, type LoadDataOptions } from "./loader/load-data";
 
 export const render = (
 	componentGenerator: ComponentGenerator,
