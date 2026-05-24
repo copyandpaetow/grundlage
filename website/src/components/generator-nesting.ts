@@ -15,7 +15,7 @@ customElements.define(
 
 			// Pre-yield: capture current positions (old DOM)
 			const positions = new Map();
-			for (const child of host.shadowRoot.querySelectorAll("li")) {
+			for (const child of host.shadowRoot!.querySelectorAll("li")) {
 				positions.set(child.dataset.id, child.getBoundingClientRect());
 			}
 
@@ -27,7 +27,7 @@ customElements.define(
 			`;
 
 			// Post-yield: measure new positions, animate the delta
-			for (const child of host.shadowRoot.querySelectorAll("li")) {
+			for (const child of host.shadowRoot!.querySelectorAll("li")) {
 				const before = positions.get(child.dataset.id);
 				if (!before) continue;
 				const after = child.getBoundingClientRect();

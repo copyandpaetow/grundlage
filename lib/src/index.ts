@@ -1,5 +1,10 @@
 import { applyAttributeBinding } from "./rendering/attribute";
-import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions } from "./types";
+import {
+	BaseComponent,
+	ComponentConstructor,
+	ComponentGenerator,
+	ComponentOptions,
+} from "./types";
 import { defaultOptions, RUNTIME_KIND, UPDATE_STATE } from "./utils/constants";
 import { isServer } from "./utils/is-server";
 import {
@@ -7,7 +12,7 @@ import {
 	reportSSRError,
 	SSRRuntime,
 	startSSRRoot,
-	teardownSSRRuntime
+	teardownSSRRuntime,
 } from "./rendering/ssr-runtime";
 import {
 	createCSRRuntime,
@@ -15,7 +20,7 @@ import {
 	dispatchCSRUpdate,
 	reportCSRError,
 	startCSRRoot,
-	teardownCSRRuntime
+	teardownCSRRuntime,
 } from "./rendering/csr-runtime";
 import { FormBase } from "./forms/form-base";
 
