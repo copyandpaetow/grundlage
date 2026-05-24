@@ -3,10 +3,10 @@ import { html } from "../parser/html";
 import { BINDING_TYPES } from "../parser/types";
 import { HTMLTemplate } from "./template-html";
 
-describe("HTMLTemplate.hash — cache invalidation", () => {
+describe("HTMLTemplate.hash: cache invalidation", () => {
 	//the renderer relies on `hash` being lazy (only computed when read) and invalidated on update()
 	//if we forgot to clear #hash, list diffing would compare against the prior frame and reuse the wrong template
-	//update() touches dirtyBindings, which is only allocated by setup() — so every test that calls update() needs setup() first, mirroring the production path
+	//update() touches dirtyBindings, which is only allocated by setup(), so every test that calls update() needs setup() first, mirroring the production path
 	test("returns a new value after update() with different expressions", () => {
 		const template = html`<p>${"a"}</p>`;
 		template.setup(null);
@@ -18,7 +18,7 @@ describe("HTMLTemplate.hash — cache invalidation", () => {
 	test("matches a freshly built template carrying the same updated expressions", () => {
 		//we update one template in place and compare its hash against a fresh template parsed from the SAME tagged-template literal site with the same values
 		//=> if the cache invalidation is correct, the two hashes must agree (template shape × expression fold is identical)
-		//the helper exists so both `html` calls reach the parser cache via the same TemplateStringsArray identity — calling html`...` at two different source positions would parse to two different ParsedHTML with different templateHash and break the comparison
+		//the helper exists so both `html` calls reach the parser cache via the same TemplateStringsArray identity; calling html`...` at two different source positions would parse to two different ParsedHTML with different templateHash and break the comparison
 		const makeParagraph = (value: string) => html`<p>${value}</p>`;
 		const template = makeParagraph("a");
 		template.setup(null);
@@ -35,8 +35,8 @@ describe("HTMLTemplate.hash — cache invalidation", () => {
 	});
 });
 
-describe("HTMLTemplate.update — previousExpressions reset", () => {
-	//the comment on template-html.ts:30 promises previousExpressions is dropped after #flush so the prior frame's values (possibly large objects) can be collected
+describe("HTMLTemplate.update: previousExpressions reset", () => {
+	//the comment on HTMLTemplate.update promises previousExpressions is dropped after #flush so the prior frame's values (possibly large objects) can be collected
 	//=> we pin that invariant here so a future refactor can't accidentally retain a reference and leak between renders
 	test("drops previousExpressions to a zero-length array after update()", () => {
 		const template = html`<p>${"a"}</p>`;
@@ -55,7 +55,7 @@ describe("HTMLTemplate.update — previousExpressions reset", () => {
 	});
 });
 
-describe("HTMLTemplate.setup — host binding requirement", () => {
+describe("HTMLTemplate.setup: host binding requirement", () => {
 	//findTargets fails fast when a root-template carries host bindings but no host is supplied
 	//without this check the host slot would be filled with `undefined` and crash later in updateAttribute on a missing element
 	test("throws a descriptive error when a root template needs a host but none is provided", () => {
@@ -99,7 +99,7 @@ describe("HTMLTemplate.setup — host binding requirement", () => {
 	});
 });
 
-describe("HTMLTemplate.setup — fragment + target wiring", () => {
+describe("HTMLTemplate.setup: fragment + target wiring", () => {
 	test("produces a DocumentFragment with the parsed shape", () => {
 		const template = html`<section><p>${"hi"}</p></section>`;
 		const fragment = template.setup(null);
@@ -122,9 +122,9 @@ describe("HTMLTemplate.setup — fragment + target wiring", () => {
 	});
 });
 
-describe("HTMLTemplate.hydrate — re-applies only ATTR bindings", () => {
-	//hydrate is run on the live shadow DOM that SSR already wrote — child elements and their static attrs are there, but host attrs only exist as bindings
-	//=> only ATTR bindings re-run (template-html.ts:77-83). Content stays put so we don't double-write the server text. We pin both halves here.
+describe("HTMLTemplate.hydrate: re-applies only ATTR bindings", () => {
+	//hydrate is run on the live shadow DOM that SSR already wrote; child elements and their static attrs are there, but host attrs only exist as bindings
+	//=> only ATTR bindings re-run (see HTMLTemplate.hydrate). Content stays put so we don't double-write the server text. We pin both halves here.
 
 	//we use setup() to lay down real binding markers in a host's shadow root, then we run hydrate() on a fresh template with different expressions
 	//=> the test exercises the actual parser-produced marker shape and does not depend on internal comment-data formatting
@@ -138,7 +138,7 @@ describe("HTMLTemplate.hydrate — re-applies only ATTR bindings", () => {
 	};
 
 	const hydrateAs = (template: HTMLTemplate, host: HTMLElement) => {
-		//hydrate's signature requires a BaseComponent — it only reads host.shadowRoot, so a cast is enough for this unit test
+		//hydrate's signature requires a BaseComponent; it only reads host.shadowRoot, so a cast is enough for this unit test
 		template.hydrate(host as unknown as Parameters<typeof template.hydrate>[0]);
 	};
 
@@ -177,7 +177,7 @@ describe("HTMLTemplate.hydrate — re-applies only ATTR bindings", () => {
 		const clientTemplate = html`<p>${"client-text"}</p>`;
 		hydrateAs(clientTemplate, host);
 
-		//same text node identity, same data — CONTENT was skipped
+		//same text node identity, same data; CONTENT was skipped
 		const paragraphAfter = shadowRoot.querySelector("p")!;
 		const textAfter = Array.from(paragraphAfter.childNodes).find(
 			(node) => node.nodeType === Node.TEXT_NODE,
@@ -200,7 +200,7 @@ describe("HTMLTemplate.hydrate — re-applies only ATTR bindings", () => {
 	});
 });
 
-describe("HTMLTemplate.update — dirty-binding bookkeeping", () => {
+describe("HTMLTemplate.update: dirty-binding bookkeeping", () => {
 	//we read dirtyBindings right after setup to confirm flush cleared every slot
 	//then we update with the same primitive values and assert the bookkeeping array stays clear (no spurious dirty marks for unchanged primitives)
 	test("after setup() every dirty bit is cleared", () => {
@@ -232,7 +232,7 @@ describe("HTMLTemplate.update — dirty-binding bookkeeping", () => {
 	});
 });
 
-describe("HTMLTemplate constructor — initial state", () => {
+describe("HTMLTemplate constructor: initial state", () => {
 	test("captures the parsed template and current expressions", () => {
 		const template = html`<p>${"a"}</p>`;
 		expect(template.currentExpressions).toEqual(["a"]);

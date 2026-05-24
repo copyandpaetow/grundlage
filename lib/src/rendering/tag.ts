@@ -7,7 +7,7 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	const element = context.targets[index] as Element;
 	const newTag = bindingToString(binding.values, context.currentExpressions);
 
-	//we're about to replace the element with a freshly-created one — to the browser that's a remove + insert, which drops focus, selection, and similar live UI state
+	//we're about to replace the element with a freshly-created one. to the browser that's a remove + insert, which drops focus, selection, and similar live UI state
 	//=> if focus currently lives inside this element we remember it so we can restore it after the swap below
 	const focusRoot = element.getRootNode() as ShadowRoot | Document;
 	const focusedNode = focusRoot.activeElement as HTMLElement | null;

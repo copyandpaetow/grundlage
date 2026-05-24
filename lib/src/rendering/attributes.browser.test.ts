@@ -932,8 +932,8 @@ describe("attribute updates", () => {
 
 	test("expandable expression resolves a primitive string to a boolean attribute", async () => {
 		// The expandable path has three shapes: array, plain object, and a single
-		// primitive string. The string case is the fallback at attribute.ts:85-86 /
-		// 101-102 — `<button ${name}>` where `name` is just `"disabled"` should
+		// primitive string. The string case is the fallback in updateExpandable /
+		// removeExpandable. `<button ${name}>` where `name` is just `"disabled"` should
 		// land as a boolean attribute, and renaming should remove the old one.
 		const tag = uniqueTag();
 		let attribute: string = "disabled";
@@ -998,9 +998,9 @@ describe("attribute updates", () => {
 	});
 
 	test("boolean attribute with multi-part dynamic key", async () => {
-		// updateAttribute's isBooleanAttribute && !isExpandable branch
-		// (attribute.ts:143-147): the binding has multiple key fragments and no
-		// value half — `<div data-${suffix}>` with no `="..."`. The old key must
+		// updateAttribute's DYNAMIC_NAME_BOOLEAN shape (updateDynamicNameBoolean):
+		// the binding has multiple key fragments and no
+		// value half. `<div data-${suffix}>` with no `="..."`. The old key must
 		// be removed when the suffix flips.
 		const tag = uniqueTag();
 		let suffix = "ready";

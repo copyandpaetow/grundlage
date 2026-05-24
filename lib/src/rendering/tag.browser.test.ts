@@ -243,7 +243,7 @@ describe("tag updates", () => {
 	});
 
 	test("tag swap with concurrent content change updates the inner text on the new element", async () => {
-		//the content binding sits inside the dynamic tag — when the tag rewraps, the parser keeps the comment markers inside, so updateContent should still find its anchor on the new element's child list
+		//the content binding sits inside the dynamic tag; when the tag rewraps, the parser keeps the comment markers inside, so updateContent should still find its anchor on the new element's child list
 		const tag = uniqueTag();
 		let tagName = "div";
 		let text = "before";

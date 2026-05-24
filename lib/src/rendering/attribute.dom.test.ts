@@ -9,7 +9,7 @@ describe("applyAttributeBinding - event listeners", () => {
 
 		applyAttributeBinding(element, "onclick", handler);
 
-		// addEventListener path — the attribute itself must NOT be set.
+		// addEventListener path: the attribute itself must NOT be set.
 		expect(element.hasAttribute("onclick")).toBe(false);
 
 		element.click();
@@ -99,7 +99,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 			const element = document.createElement("div");
 			// guard: if a future runtime drops one of these from the prototype the
 			// fast path would silently fall through to setAttribute and the test
-			// would still pass the dispatch check via inline handler — assert the
+			// would still pass the dispatch check via inline handler, so assert the
 			// lookup so a regression surfaces here, not somewhere downstream.
 			expect(attributeKey in element).toBe(true);
 
@@ -116,7 +116,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 	);
 
 	test("CustomEvent detail reaches a listener bound to a standard event slot", () => {
-		// We don't unwrap the event — the listener gets whatever dispatchEvent
+		// We don't unwrap the event; the listener gets whatever dispatchEvent
 		// hands us. This pins that contract so callers can safely route typed
 		// payloads through `oninput`, `onchange`, etc.
 		const element = document.createElement("input");
@@ -134,7 +134,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 	});
 
 	test("bubbling CustomEvent dispatched on a child fires a listener on the parent", () => {
-		// Listener registration must not swallow the bubbling phase — events
+		// Listener registration must not swallow the bubbling phase; events
 		// dispatched on a descendant should still reach the ancestor that owns
 		// the `on*` binding.
 		const parent = document.createElement("section");
@@ -149,7 +149,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 	});
 
 	test("swapping an exotic listener detaches the old one and attaches the new", () => {
-		// Same swap semantics as onclick, just on a different event surface —
+		// Same swap semantics as onclick, just on a different event surface.
 		// regression guard so the removeEventListener call uses the same
 		// (lowercased) event name as the original addEventListener.
 		const element = document.createElement("div");
@@ -199,7 +199,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 	test("custom event name with no matching prototype property lands as a JS property, not via addEventListener", () => {
 		// `onmycustomevent` isn't on HTMLElement.prototype, so the fast path's
 		// `lowerKey in element` guard is false. A function value should fall
-		// through to property assignment — what the runtime later does with that
+		// through to property assignment; what the runtime later does with that
 		// property on dispatch is its business, but the binding itself must not
 		// have called addEventListener.
 		const element = document.createElement("div");
@@ -218,8 +218,8 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 	});
 
 	test("removes the listener via null even when only oldValue is a function", () => {
-		// On the very first call, value is null but oldValue is a function —
-		// the entry guard at attribute.ts:20-22 still has to enter the on* branch
+		// On the very first call, value is null but oldValue is a function, so
+		// the entry guard in applyAttributeBinding still has to enter the on* branch
 		// so removeEventListener fires for the orphaned handler.
 		const element = document.createElement("div");
 		const received: Array<Event> = [];
@@ -276,7 +276,7 @@ describe("applyAttributeBinding - stringable values", () => {
 	});
 
 	test("transition from non-stringable oldValue to stringable value clears the JS property", () => {
-		// attribute.ts:43-48 — the JS property previously set for a complex
+		// The JS property previously set for a complex
 		// value must be deleted so the attribute side becomes the source of
 		// truth. Without this, the element keeps a stale property reference.
 		const element = document.createElement("div");
@@ -310,7 +310,7 @@ describe("applyAttributeBinding - non-stringable values", () => {
 	});
 
 	test("calls update() when the receiver exposes one (custom-element handoff)", () => {
-		// attribute.ts:52-55 — when the target has an update() method, we trigger
+		// When the target has an update() method, we trigger
 		// it so a custom element can react to the new property. This is the
 		// component-to-component data flow path.
 		const element = document.createElement("div") as HTMLDivElement & {
@@ -325,7 +325,7 @@ describe("applyAttributeBinding - non-stringable values", () => {
 
 	test("does not call update() for stringable values", () => {
 		// The update() trigger lives only on the property-assignment branch.
-		// Plain attribute writes must not fire it — otherwise every attribute
+		// Plain attribute writes must not fire it; otherwise every attribute
 		// flip on a child component would cause it to re-render twice.
 		const element = document.createElement("div") as HTMLDivElement & {
 			update?: () => void;

@@ -54,6 +54,7 @@ export const applyAttributeBinding = (
 		// @ts-expect-error - dynamic property assignment for complex (non-stringable) values passed via template bindings
 		element[key] = value;
 
+		//writing a complex value as a property is how we pass props into a child component. if it exposes update(), nudge it to re-render against the new value
 		if ("update" in element) {
 			(element as BaseComponent).update();
 		}
@@ -85,7 +86,7 @@ const removeExpandable = (
 	}
 };
 
-//on the very first render previousExpressions is empty, so any `previousExpressions[index]` lookup would be undefined; aliasing to current keeps every "did this change" comparison guaranteed-equal — exactly what we want on initial render
+//on the very first render previousExpressions is empty. aliasing to current makes the upcoming removeExpandable call a no-op against a freshly-cloned element (every removeAttribute / removeEventListener targets something that was never set) without a separate "skip cleanup on first render" branch
 const resolvePreviousExpressions = (context: HTMLTemplate) =>
 	context.previousExpressions.length > 0
 		? context.previousExpressions

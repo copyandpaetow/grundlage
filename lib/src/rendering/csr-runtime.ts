@@ -27,7 +27,7 @@ a component has two layers running at once:
 
 re-rendering on update() targets the CURRENT source: render-function calls re-fire, generators restart from scratch. the root never re-runs.
 
-errors from the current source bubble UP to the root for try/catch recovery — if the root catches and yields a new producer, we install it; if the root falls through, we tear down the component (`abortAndShowError`)
+errors from the current source bubble UP to the root for try/catch recovery. if the root catches and yields a new producer, we install it; if the root falls through, we tear down the component (`abortAndShowError`)
 */
 
 export interface CSRRuntime {
@@ -38,12 +38,12 @@ export interface CSRRuntime {
 	renderedTemplate: HTMLTemplate | null;
 	rootHandle: SourceHandle | null;
 	//we keep both the create function AND the handle: handle is for cancel/throwInto, createCurrent is for re-invoking on update (generator restart, render-fn re-call)
-	//both go null together when the current source is "frozen" (static) or empty — that's the dispatchUpdate no-op signal
+	//createCurrent is null when the current source is frozen (a static template) or not yet installed. that null is dispatchCSRUpdate's no-op signal; the paired currentHandle is FINISHED_HANDLE for static, null before the first install
 	createCurrent: ComponentGenerator | RenderFunction | null;
 	currentIsGenerator: boolean;
 	currentHandle: SourceHandle | null;
 	updateState: ValueOf<typeof UPDATE_STATE>;
-	//true on the very first render after construction when an SSR shadow root was already attached — flips false after the hydrate pass
+	//true on the very first render after construction when an SSR shadow root was already attached. flips false after the hydrate pass
 	hydratePending: boolean;
 }
 
@@ -66,12 +66,12 @@ export const startCSRRoot = (
 	runtime: CSRRuntime,
 	createGenerator: ComponentGenerator,
 ): void => {
-	//assign BEFORE driving. a synchronous yield or error during the first step calls back into runtime code (handleRootYield, currentError) that reads runtime.rootHandle — leaving the assignment until after beginHandle would race
+	//assign BEFORE driving. a synchronous yield or error during the first step calls back into runtime code (handleRootYield, reportCSRError) that reads runtime.rootHandle. leaving the assignment until after beginHandle would race
 	runtime.rootHandle = createRootHandle(
 		runtime,
 		runtime.host,
 		handleRootYield,
-		abortError,
+		abortAndShowError,
 		createGenerator,
 	);
 	beginHandle(runtime.rootHandle);
@@ -90,6 +90,7 @@ export const teardownCSRRuntime = (runtime: CSRRuntime): void => {
 export const dispatchCSRUpdate = (runtime: CSRRuntime): void => {
 	const createCurrent = runtime.createCurrent;
 	if (createCurrent === null) return;
+	//handleRootYield always sets createCurrent and currentHandle together, so a non-null createCurrent guarantees a non-null currentHandle
 	cancelHandle(runtime.currentHandle!);
 	if (runtime.currentIsGenerator) {
 		runtime.currentHandle = createGeneratorHandle(
@@ -129,7 +130,7 @@ const handleRootYield: YieldHandler = (rootHandle, value) => {
 			const createGenerator = value as ComponentGenerator;
 			runtime.createCurrent = createGenerator;
 			runtime.currentIsGenerator = true;
-			//same create-then-begin split as startCSRRoot: any synchronous error in the inner gen calls currentError, which reads runtime.currentHandle to snapshot it. assign first so the snapshot is valid
+			//same create-then-begin split as startCSRRoot: any synchronous error in the inner gen calls reportCSRError, which reads runtime.currentHandle to snapshot it. assign first so the snapshot is valid
 			runtime.currentHandle = createGeneratorHandle(
 				runtime,
 				runtime.host,
@@ -154,13 +155,7 @@ const handleRootYield: YieldHandler = (rootHandle, value) => {
 	return value;
 };
 
-//RenderCallback for current sources — module-level so installs don't allocate a closure per component
-//=> the handle param is unused on the client: CSR doesn't tear down on render, it patches in place or replaces children
-const renderTemplate: RenderCallback = (context, _handle, template) => {
-	renderToDom(context as CSRRuntime, template);
-};
-
-//ErrorCallback for the current source — bubble the error up to the root for try/catch recovery
+//ErrorCallback for the current source. bubble the error up to the root for try/catch recovery
 export const reportCSRError: ErrorCallback = (context, error) => {
 	const runtime = context as CSRRuntime;
 	const rootHandle = runtime.rootHandle;
@@ -180,8 +175,8 @@ export const reportCSRError: ErrorCallback = (context, error) => {
 		/*
 		root caught the error and either returned cleanly or fell through. clean up:
 		- root handle gets cancelled so any captured cleanup fires
-		- if the root didn't install a new current (handleRootYield would have swapped it), the erroring current is still pointing at the dead producer — kill it too
-		the previously-rendered DOM (renderedTemplate) stays put either way — that's the error contract we promise users
+		- if the root didn't install a new current (handleRootYield would have swapped it), the erroring current is still pointing at the dead producer; kill it too
+		the previously-rendered DOM (renderedTemplate) stays put either way. that's the error contract we promise users
 		*/
 		cancelHandle(runtime.rootHandle);
 		runtime.rootHandle = null;
@@ -193,12 +188,9 @@ export const reportCSRError: ErrorCallback = (context, error) => {
 	}
 };
 
-//ErrorCallback for the root source — uncaught at the top of the stack, nowhere left to bubble
-const abortError: ErrorCallback = (context, error) => {
-	abortAndShowError(context as CSRRuntime, error);
-};
-
-const abortAndShowError = (runtime: CSRRuntime, error: Error): void => {
+//ErrorCallback for the root source. uncaught at the top of the stack, nowhere left to bubble. also the abort path reportCSRError falls back to when the root is gone
+const abortAndShowError: ErrorCallback = (context, error) => {
+	const runtime = context as CSRRuntime;
 	if (runtime.currentHandle !== null) cancelHandle(runtime.currentHandle);
 	if (runtime.rootHandle !== null) cancelHandle(runtime.rootHandle);
 	runtime.currentHandle = null;
@@ -209,7 +201,10 @@ const abortAndShowError = (runtime: CSRRuntime, error: Error): void => {
 	runtime.host.shadowRoot!.textContent = `${error}`;
 };
 
-const renderToDom = (runtime: CSRRuntime, value: unknown): void => {
+//RenderCallback for current sources. module-level so installs don't allocate a closure per component
+//=> the handle param is unused on the client: CSR doesn't tear down on render, it patches in place or replaces children
+const renderTemplate: RenderCallback = (context, _handle, value) => {
+	const runtime = context as CSRRuntime;
 	const template = value instanceof HTMLTemplate ? value : html`${value}`;
 	const previousTemplate = runtime.renderedTemplate;
 
@@ -239,8 +234,8 @@ const renderToDom = (runtime: CSRRuntime, value: unknown): void => {
 			template.hydrate(runtime.host);
 			runtime.hydratePending = false;
 		} else {
-			//host attributes from the previous template don't get cleared by replaceChildren (they're on the host, not in the subtree) — clean them up before setup writes the new template's host attrs
-			//optional chaining on shadowRoot covers `mode: "closed"` — the read returns null in closed mode, so we skip the write rather than crash
+			//host attributes from the previous template don't get cleared by replaceChildren (they're on the host, not in the subtree). clean them up before setup writes the new template's host attrs
+			//optional chaining on shadowRoot covers `mode: "closed"`. the read returns null in closed mode, so we skip the write rather than crash
 			previousTemplate?.clearHostAttributes(runtime.host);
 			runtime.host.shadowRoot?.replaceChildren(template.setup(runtime.host));
 		}
