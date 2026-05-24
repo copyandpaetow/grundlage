@@ -1,5 +1,5 @@
 import { html } from "../parser/html";
-import { flushHostPayload } from "../loader/load-data";
+import { flushHostPayload } from "../loader/load";
 import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/is-generator";
 import {
@@ -102,7 +102,7 @@ const handleRootYield: YieldHandler = (rootHandle, value) => {
 	return runtime.host;
 };
 
-//one-shot RenderCallback. paint into the shadow root, drain the loadData buffer, mark the in-flight current source finished so its step loop unwinds
+//one-shot RenderCallback. paint into the shadow root, drain the load() buffer, mark the in-flight current source finished so its step loop unwinds
 //=> the rootHandle gets cancelled by handleRootYield after the install returns (it has the rootHandle reference even when runtime.rootHandle is still null)
 //=> further calls (e.g. a sync generator yielding multiple templates in one tick) short-circuit on `done`
 const renderOnce: RenderCallback = (context, handle, value) => {

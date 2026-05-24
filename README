@@ -8,6 +8,8 @@ A small, zero-dependency library for building web components with tagged templat
 npm install grundlage
 ```
 
+> Pointing an AI coding agent at this library? See [`llms.txt`](./lib/llms.txt) — a compact, complete API reference written for agents. It also ships inside the npm package.
+
 ## Concepts
 
 ### Components as Generators
@@ -101,6 +103,26 @@ Supported bindings:
 - Dynamic tags: `<${tagName}>content</${tagName}>`
 - Raw content (style/script/textarea): `<style>${css}</style>`
 
+### Host attributes
+
+When the outermost element of a component's render output is a `<template>`, its attributes are applied to the host element itself and the wrapper is unwrapped — its children become the shadow DOM. This is how a component sets its own `class`, `id`, `role`, or event handlers from the inside.
+
+```javascript
+render(function* (host) {
+	yield () => html`
+		<template class="card" role="${role}" on-form-reset=${reset}>
+			<p>content</p>
+		</template>
+	`;
+});
+```
+
+- Static, dynamic, boolean, and multi-part attributes all work and update between renders.
+- Spread an object to fan out many attributes at once: `<template ${attributes}>`.
+- Event handlers bind here too (e.g. the `on-form-*` handlers above).
+- Attributes from a previous render are removed when the next render drops them.
+- The `<template>` must be the top-level element — nesting one inside content throws.
+
 ### Reactivity
 
 Grundlage uses a hash-based change detection system. When you call `host.update()` on the host element, it compares hashes of each expression to determine what actually changed.
@@ -127,4 +149,40 @@ render(function* (host) {
 		</ul>
 	`;
 });
+```
+
+### Data loading
+
+`load(host, fetcher, options?)` fetches what a component needs before its first render. During SSR the fetcher runs and its result is serialized into the markup; on the client that result is replayed once during hydration, then the fetcher runs as normal. A string in place of options is shorthand for `{ key }`.
+
+```javascript
+render(async function* (host) {
+	const user = await load(host, () => fetch("/api/user").then((r) => r.json()));
+	yield html`<p>${user.name}</p>`;
+});
+```
+
+Options: `key` names the load so a keyed read ignores unkeyed scripts (survives refactors); `skipSsr` always calls the fetcher and ignores any replay.
+
+### Form-associated components
+
+Pass `{ formAssociated: true }` so the component participates in forms. The host gains `internals` — the `ElementInternals` from `attachInternals()` (`null` on the server). The four form lifecycle callbacks are re-dispatched as events on the host: `form-associated`, `form-disabled`, `form-reset`, `form-state-restore`. Listen imperatively with `host.addEventListener`, or declaratively via the matching `on-form-reset=${handler}` host attribute.
+
+```javascript
+customElements.define(
+	"text-field",
+	render(
+		function* (host) {
+			host.internals.setFormValue("");
+			host.addEventListener("form-reset", () =>
+				host.internals.setFormValue(""),
+			);
+			yield () =>
+				html`<input
+					onInput=${(event) => host.internals.setFormValue(event.target.value)}
+				/>`;
+		},
+		{ formAssociated: true },
+	),
+);
 ```

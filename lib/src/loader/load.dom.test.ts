@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { flushHostPayload, loadData } from "./load-data";
+import { flushHostPayload, load } from "./load";
 
-//happy-dom env — `window` is defined here, so loadData takes the client path
+//happy-dom env — `window` is defined here, so load takes the client path
 //these tests cover the DOM-as-queue behavior plus the round-trip via flushHostPayload
 
 const createHostWithShadow = (): HTMLElement => {
@@ -32,8 +32,8 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		host.shadowRoot!.prepend(fragment);
 
 		const fetcher = vi.fn(() => Promise.resolve({ name: "fallback" }));
-		const a = await loadData(host, fetcher);
-		const b = await loadData(host, fetcher);
+		const a = await load(host, fetcher);
+		const b = await load(host, fetcher);
 
 		expect(a).toEqual({ name: "Ada" });
 		expect(b).toEqual({ name: "Lin" });
@@ -44,7 +44,7 @@ describe("client replay reads scripts from the host's shadow root", () => {
 	test("falls back to the fetcher when no replay script is left", async () => {
 		const host = createHostWithShadow();
 		const fetcher = vi.fn(() => Promise.resolve("fetched"));
-		const value = await loadData(host, fetcher);
+		const value = await load(host, fetcher);
 		expect(value).toBe("fetched");
 		expect(fetcher).toHaveBeenCalledTimes(1);
 	});
@@ -62,7 +62,7 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		keyed.textContent = JSON.stringify(["p1", "p2"]);
 		host.shadowRoot!.append(unkeyed, keyed);
 
-		const value = await loadData(host, () => Promise.resolve([]), "posts");
+		const value = await load(host, () => Promise.resolve([]), "posts");
 		expect(value).toEqual(["p1", "p2"]);
 		//keyed script removed; the unkeyed one is left for a future unkeyed read
 		expect(
@@ -83,7 +83,7 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		host.shadowRoot!.append(keyed);
 
 		const fetcher = vi.fn(() => Promise.resolve("fresh"));
-		const value = await loadData(host, fetcher);
+		const value = await load(host, fetcher);
 		expect(value).toBe("fresh");
 		expect(fetcher).toHaveBeenCalledTimes(1);
 		expect(
@@ -100,13 +100,13 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		host.shadowRoot!.append(script);
 
 		const fetcher = vi.fn(() => Promise.resolve("forced"));
-		const value = await loadData(host, fetcher, { skipSsr: true });
+		const value = await load(host, fetcher, { skipSsr: true });
 		expect(value).toBe("forced");
 		expect(host.shadowRoot!.querySelector("script[data-ssr]")).not.toBeNull();
 	});
 });
 
-//loadData branches on `typeof window === "undefined"` at call time
+//load branches on `typeof window === "undefined"` at call time
 //swapping it out lets us drive the server-side collect path against a real (happy-dom) shadow root, so we can assert what flushHostPayload writes
 const withoutWindow = async <ReturnValue>(
 	body: () => Promise<ReturnValue>,
@@ -127,8 +127,8 @@ describe("flushHostPayload writes server-collected values into the shadow root",
 		host.shadowRoot!.append(document.createElement("article"));
 
 		await withoutWindow(async () => {
-			await loadData(host, () => Promise.resolve("alpha"));
-			await loadData(host, () => Promise.resolve("beta-value"), "beta");
+			await load(host, () => Promise.resolve("alpha"));
+			await load(host, () => Promise.resolve("beta-value"), "beta");
 		});
 		flushHostPayload(host);
 
@@ -148,7 +148,7 @@ describe("flushHostPayload writes server-collected values into the shadow root",
 	test("flush clears the per-host scratch — a second flush is a no-op", async () => {
 		const host = createHostWithShadow();
 		await withoutWindow(async () => {
-			await loadData(host, () => Promise.resolve("once"));
+			await load(host, () => Promise.resolve("once"));
 		});
 		flushHostPayload(host);
 		expect(host.shadowRoot!.children.length).toBe(1);
@@ -160,7 +160,7 @@ describe("flushHostPayload writes server-collected values into the shadow root",
 		const host = createHostWithShadow();
 		const payload = { body: "</script><script>alert(1)</script>" };
 		await withoutWindow(async () => {
-			await loadData(host, () => Promise.resolve(payload));
+			await load(host, () => Promise.resolve(payload));
 		});
 		flushHostPayload(host);
 
@@ -171,7 +171,7 @@ describe("flushHostPayload writes server-collected values into the shadow root",
 		expect(JSON.parse(script.textContent!)).toEqual(payload);
 	});
 
-	test("a host that never called loadData survives flushHostPayload as a no-op", () => {
+	test("a host that never called load survives flushHostPayload as a no-op", () => {
 		const host = createHostWithShadow();
 		host.shadowRoot!.append(document.createElement("article"));
 		flushHostPayload(host);

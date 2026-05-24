@@ -11,8 +11,8 @@ const TAGS = {
 	customSentinel: "ssr-custom-sentinel",
 	unmarked: "ssr-unmarked",
 	noSentinel: "ssr-no-sentinel",
-	loadDataSingle: "ssr-load-data-single",
-	loadDataShared: "ssr-load-data-shared",
+	loadSingle: "ssr-load-single",
+	loadShared: "ssr-load-shared",
 } as const;
 
 //lazy import: the happy-dom polyfill (set up before loaders are awaited) must be in place when parser/html.ts runs its module-load createElement
@@ -22,26 +22,22 @@ const ensureDefined = (): Promise<void> => {
 	if (definedPromise) return definedPromise;
 	definedPromise = (async () => {
 		const { html, render } = await import("../lib/src");
-		const { loadData } = await import("../lib/src/loader/load-data");
+		const { load } = await import("../lib/src/loader/load");
 
 		customElements.define(
-			TAGS.loadDataSingle,
+			TAGS.loadSingle,
 			render(async function* (host) {
-				const value = await loadData(host, () =>
-					Promise.resolve({ name: "Ada" }),
-				);
+				const value = await load(host, () => Promise.resolve({ name: "Ada" }));
 				yield () => html`<p>${value.name}</p>`;
 			}),
 		);
 
 		customElements.define(
-			TAGS.loadDataShared,
+			TAGS.loadShared,
 			render(async function* (host) {
 				const id = host.getAttribute("data-id") ?? "?";
 				//per-host serialization — each instance gets its own data-ssr script in its shadow root
-				const value = await loadData(host, () =>
-					Promise.resolve(`payload-${id}`),
-				);
+				const value = await load(host, () => Promise.resolve(`payload-${id}`));
 				yield () => html`<p>${id}:${value}</p>`;
 			}),
 		);
@@ -252,10 +248,10 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 	});
 });
 
-describe("prerender plugin: loadData payload injection", () => {
-	test("loadData call on the server emits a per-host data-ssr script inside the declarative shadow root", async () => {
+describe("prerender plugin: load payload injection", () => {
+	test("load call on the server emits a per-host data-ssr script inside the declarative shadow root", async () => {
 		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.loadDataSingle} ssr></${TAGS.loadDataSingle}></body></html>`;
+		const input = `<html><body><${TAGS.loadSingle} ssr></${TAGS.loadSingle}></body></html>`;
 		const output = await runTransform(plugin, input);
 
 		//declarative shadow root carries the payload — no global window.__ssrData any more
@@ -271,8 +267,8 @@ describe("prerender plugin: loadData payload injection", () => {
 	test("two hosts get independent per-host payloads — no cross-host dedupe", async () => {
 		const plugin = buildPlugin();
 		const input = `<html><body>
-			<${TAGS.loadDataShared} ssr data-id="alpha"></${TAGS.loadDataShared}>
-			<${TAGS.loadDataShared} ssr data-id="beta"></${TAGS.loadDataShared}>
+			<${TAGS.loadShared} ssr data-id="alpha"></${TAGS.loadShared}>
+			<${TAGS.loadShared} ssr data-id="beta"></${TAGS.loadShared}>
 		</body></html>`;
 		const output = await runTransform(plugin, input);
 
@@ -283,7 +279,7 @@ describe("prerender plugin: loadData payload injection", () => {
 		expect(scriptMatches.length).toBe(2);
 	});
 
-	test("a page with no loadData calls gets no data-ssr scripts", async () => {
+	test("a page with no load calls gets no data-ssr scripts", async () => {
 		const plugin = buildPlugin();
 		const input = `<html><body><${TAGS.simple} ssr></${TAGS.simple}></body></html>`;
 		const output = await runTransform(plugin, input);

@@ -1,9 +1,11 @@
 import { applyAttributeBinding } from "./rendering/attribute";
+import { html as parseTemplate } from "./parser/html";
 import {
 	BaseComponent,
 	ComponentConstructor,
 	ComponentGenerator,
 	ComponentOptions,
+	Template,
 } from "./types";
 import { defaultOptions, RUNTIME_KIND, UPDATE_STATE } from "./utils/constants";
 import { isServer } from "./utils/is-server";
@@ -24,11 +26,29 @@ import {
 } from "./rendering/csr-runtime";
 import { FormBase } from "./forms/form-base";
 
-export { html } from "./parser/html";
 export { props } from "./validator/props";
-export { type ComponentOptions, type BaseComponent } from "./types";
-export { loadData, type LoadDataOptions } from "./loader/load-data";
+export {
+	type ComponentOptions,
+	type BaseComponent,
+	type Template,
+} from "./types";
+export { load, type LoadOptions } from "./loader/load";
 
+/**
+ * Tagged template literal for markup. Parsed once and cached; later renders only
+ * touch the dynamic parts. Returns an opaque {@link Template} to yield or embed.
+ */
+//the real return type (HTMLTemplate) is an internal class; we re-type the export to the opaque Template so the published .d.ts doesn't leak the parser/runtime internals reachable through it
+export const html = parseTemplate as unknown as (
+	tokens: TemplateStringsArray,
+	...dynamicValues: Array<unknown>
+) => Template;
+
+/**
+ * Defines a web component from a generator. Returns a custom element constructor —
+ * register it with `customElements.define`. The generator receives the host element,
+ * yields render functions or `html` templates, and returns an optional cleanup function.
+ */
 export const render = (
 	componentGenerator: ComponentGenerator,
 	options: ComponentOptions = defaultOptions,

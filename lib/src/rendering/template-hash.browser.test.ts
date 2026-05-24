@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../index";
+import { render } from "../index";
+//white-box test of HTMLTemplate.hash, so we use the internal parser export (real type) rather than the opaque public html
+import { html } from "../parser/html";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));

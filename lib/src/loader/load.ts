@@ -10,7 +10,7 @@ and no JS-side cache survives the hydration pass
 */
 import { isServer } from "../utils/is-server";
 
-export interface LoadDataOptions {
+export interface LoadOptions {
 	/** Optional name for this load — survives refactors, lets keyed reads ignore unkeyed scripts. */
 	key?: string;
 	/** Skip the SSR replay and always call the fetcher (escape hatch for forced revalidation). */
@@ -59,10 +59,15 @@ const collectOnServer = async <Value>(
 	return value;
 };
 
-export const loadData = <Value>(
+/**
+ * Loads data the component needs before its first render. On the server the fetcher runs and
+ * its result is serialized into the markup; on the client that result is replayed once during
+ * hydration, then the fetcher is used. Pass a `string` as a shorthand for `{ key }`.
+ */
+export const load = <Value>(
 	host: Element,
 	fetcher: () => Promise<Value>,
-	options?: string | LoadDataOptions,
+	options?: string | LoadOptions,
 ): Promise<Value> => {
 	let key: string | undefined;
 	let skipSsr = false;

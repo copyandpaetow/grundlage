@@ -1,0 +1,110 @@
+# Grundlage
+
+Zero-dependency library for building web components with tagged template literals.
+Server-rendered and hydrated on the client. `npm install grundlage`.
+
+## Mental model
+
+A component is a generator function passed to `render`. It runs ONCE when the element
+mounts and runs to completion (never `while (true)`): setup code runs, you `yield`
+something renderable (a render function, an `html` template, or an inner generator), and
+the host element is both the first argument and the value every `yield` returns. The
+return value is a cleanup function. There are no signals or hooks — re-rendering happens
+only when you call `host.update()`. State you declare before the `yield` survives updates
+because the yielded render function closes over it; the generator itself does not re-run.
+
+## Complete example
+
+```javascript
+import { render, html, props } from "grundlage";
+
+customElements.define(
+	"click-counter",
+	render(function* (host) {
+		const { start } = props(host, { start: [Number, 0] });
+		let count = start; // lives in the generator, which runs once — persists across updates
+
+		const increment = () => {
+			count += 1;
+			host.update(); // re-calls the yielded render function below; count is still here
+		};
+
+		yield () => html`<button onClick=${increment}>count: ${count}</button>`;
+	}),
+);
+```
+
+## API
+
+`render(generator, options?) => CustomElementConstructor`
+  Register the return value with `customElements.define`. `options` extends
+  `ShadowRootInit` (default `{ mode: "open" }`); set `formAssociated: true` for form
+  components. The generator may be sync or async.
+
+`` html`...` `` => `Template` (opaque)
+  Tagged template literal. Parsed once and cached; later renders only touch dynamic
+  parts. Yield it, or embed it inside another `html` template.
+
+`props(host, schema) => typed object`
+  Reads typed values whether they arrived as attributes (strings) or properties.
+  Schema entry forms: `String` | `Number` | `Boolean` | `Function` | `Array` | a class;
+  `[Constructor]` allows `undefined`; `[Constructor, fallback]` supplies a default.
+
+`load(host, fetcher, options?) => Promise<Value>`
+  Data needed before first render. On the server the fetcher runs and the result is
+  serialized into the markup; on the client it's replayed once during hydration, then
+  the fetcher runs normally. `options` is `{ key?, skipSsr? }`, or a string shorthand
+  for `{ key }`.
+
+Types: `BaseComponent`, `ComponentOptions`, `LoadOptions`, `Template`.
+
+## Bindings
+
+```
+content        <p>${text}</p>
+attribute      <div class=${className}>
+mixed attr     <div class="static ${dynamic}">
+event          <button onClick=${handler}>        // on + EventName, camelCase
+list           <ul>${items.map((i) => html`<li>${i}</li>`)}</ul>
+nested         <div>${show ? html`<details>…</details>` : null}</div>
+dynamic tag    <${tagName}>content</${tagName}>
+raw            <style>${css}</style>               // style/script/textarea
+```
+
+## Host attributes
+
+If the OUTERMOST element of a component's render output is a `<template>`, its attributes
+go on the host element and the wrapper is unwrapped (its children become the shadow DOM).
+This is how a component sets its own `class`/`id`/`role`/event handlers from the inside.
+
+```javascript
+yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>…</template>`;
+```
+
+- Static, dynamic, boolean, and multi-part attributes all work and update between renders.
+- Spread an object to fan out attributes: `<template ${attributes}>`.
+- Event handlers bind here too (e.g. `on-form-*` for form components).
+- Attributes dropped by a later render are removed from the host.
+- The `<template>` must be top-level — one nested inside content throws.
+
+## Rules — get these right
+
+- The component generator runs ONCE per mount and runs to completion — no `while (true)`.
+  State declared before your `yield` persists across re-renders (the yielded render
+  function closes over it), so keep mutable state there rather than re-deriving it.
+- `host.update()` is the ONLY re-render trigger (no reactive primitive). It re-fires what
+  you last yielded: a render function is re-called, a yielded INNER generator restarts
+  from scratch, a yielded static `html` template does not re-run. The root never re-runs.
+- `yield` evaluates to the host element: `const host = yield () => html`…``. Yielded inner
+  generators and render functions also receive the host as their first argument.
+- Components render into SHADOW DOM by default. Light-DOM selectors won't reach inside.
+- Events bind in markup as `onEventName=${handler}` (e.g. `onClick`, `onInput`) — not
+  `addEventListener` strings and not lowercase `onclick=""`.
+- Change detection is HASH-BASED and SHALLOW for arrays/objects: mutate-then-`update()`
+  is fine, but a deep change to a nested object the parent already holds may not be seen.
+- Read inputs with `props(host, schema)`. Don't read attributes directly — they're strings
+  and skip the type coercion/defaults `props` gives you.
+- `load` replays SSR data on hydration; don't add your own fetch-once cache around it.
+- Form components: `render(gen, { formAssociated: true })` exposes `host.internals`
+  (`null` on the server) and re-dispatches lifecycle as events `form-associated`,
+  `form-disabled`, `form-reset`, `form-state-restore` (or declarative `on-form-*` attrs).
