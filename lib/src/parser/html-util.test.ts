@@ -1,10 +1,14 @@
 import { describe, test, expect } from "vitest";
 import {
 	COMMENT_IDENTIFIER,
-	isWhitespace,
-	isQuote,
+	isWhitespaceCode,
+	isQuoteCode,
 	moveArrayContents,
 } from "./html-util";
+
+//the parser hot loop reads char codes, so we test against `.charCodeAt(0)` of the
+//literal character to keep the intent readable while exercising the numeric predicate
+const code = (char: string) => char.charCodeAt(0);
 
 describe("COMMENT_IDENTIFIER", () => {
 	test("is a stable string", () => {
@@ -12,53 +16,53 @@ describe("COMMENT_IDENTIFIER", () => {
 	});
 });
 
-describe("isWhitespace", () => {
+describe("isWhitespaceCode", () => {
 	test("detects space", () => {
-		expect(isWhitespace(" ")).toBe(true);
+		expect(isWhitespaceCode(code(" "))).toBe(true);
 	});
 
 	test("detects tab", () => {
-		expect(isWhitespace("\t")).toBe(true);
+		expect(isWhitespaceCode(code("\t"))).toBe(true);
 	});
 
 	test("detects newline", () => {
-		expect(isWhitespace("\n")).toBe(true);
+		expect(isWhitespaceCode(code("\n"))).toBe(true);
 	});
 
 	test("detects carriage return", () => {
-		expect(isWhitespace("\r")).toBe(true);
+		expect(isWhitespaceCode(code("\r"))).toBe(true);
 	});
 
 	test("rejects letters", () => {
-		expect(isWhitespace("a")).toBe(false);
+		expect(isWhitespaceCode(code("a"))).toBe(false);
 	});
 
 	test("rejects digits", () => {
-		expect(isWhitespace("0")).toBe(false);
+		expect(isWhitespaceCode(code("0"))).toBe(false);
 	});
 
 	test("rejects symbols", () => {
-		expect(isWhitespace("<")).toBe(false);
-		expect(isWhitespace("=")).toBe(false);
+		expect(isWhitespaceCode(code("<"))).toBe(false);
+		expect(isWhitespaceCode(code("="))).toBe(false);
 	});
 });
 
-describe("isQuote", () => {
+describe("isQuoteCode", () => {
 	test("detects single quote", () => {
-		expect(isQuote("'")).toBe(true);
+		expect(isQuoteCode(code("'"))).toBe(true);
 	});
 
 	test("detects double quote", () => {
-		expect(isQuote('"')).toBe(true);
+		expect(isQuoteCode(code('"'))).toBe(true);
 	});
 
 	test("rejects backtick", () => {
-		expect(isQuote("`")).toBe(false);
+		expect(isQuoteCode(code("`"))).toBe(false);
 	});
 
 	test("rejects non-quote characters", () => {
-		expect(isQuote("a")).toBe(false);
-		expect(isQuote(" ")).toBe(false);
+		expect(isQuoteCode(code("a"))).toBe(false);
+		expect(isQuoteCode(code(" "))).toBe(false);
 	});
 });
 

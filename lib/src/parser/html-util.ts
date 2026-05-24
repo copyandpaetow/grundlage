@@ -17,11 +17,6 @@ export const CHAR_CODE = {
 	BANG: 33,
 } as const;
 
-export const isWhitespace = (char: string) =>
-	char === " " || char === "\t" || char === "\n" || char === "\r";
-
-export const isQuote = (char: string) => char === "'" || char === '"';
-
 export const isWhitespaceCode = (code: number) =>
 	code === CHAR_CODE.SPACE ||
 	code === CHAR_CODE.LINE_FEED ||

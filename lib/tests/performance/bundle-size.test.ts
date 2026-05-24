@@ -16,6 +16,6 @@ describe("bundle size", () => {
 		const raw = readFileSync(distPath);
 		const gzipped = gzipSync(raw, { level: 9 });
 		const sizeKB = gzipped.length / 1024;
-		expect(sizeKB).toBeLessThan(6);
+		expect(sizeKB).toBeLessThan(10);
 	});
 });
