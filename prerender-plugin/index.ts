@@ -13,19 +13,14 @@ export interface PrerenderOptions {
 const escapeRegex = (value: string) =>
 	value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export const prerenderWebcomponents = (
-	options: PrerenderOptions,
-): Plugin => {
+export const prerenderWebcomponents = (options: PrerenderOptions): Plugin => {
 	const sentinelAttribute = options.sentinelAttribute ?? "ssr";
 	const componentLoaders = Object.values(options.components);
 	const tagNames = Object.keys(options.components);
 
 	//two passes (tag match, then sentinel check) instead of one combined regex — clearer and the sentinel check runs only on tag hits
 	const tagUnion = tagNames.map(escapeRegex).join("|");
-	const tagPattern = new RegExp(
-		`<(${tagUnion})([^>]*)>\\s*</\\1>`,
-		"g",
-	);
+	const tagPattern = new RegExp(`<(${tagUnion})([^>]*)>\\s*</\\1>`, "g");
 	//lookahead on `[\s=/>]|$` keeps `ssr` standalone — `data-ssr` and `ssrcheck` don't match
 	const sentinelPattern = new RegExp(
 		`\\s${escapeRegex(sentinelAttribute)}(?=[\\s=/>]|$)`,

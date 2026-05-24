@@ -5,14 +5,10 @@ const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
 //resolve as soon as the first-yield content lands; a fixed sleep would silently flake on slower async-before-yield generators
-const waitForShadowContent = async (
-	element: HTMLElement,
-	timeoutMs = 200,
-) => {
+const waitForShadowContent = async (element: HTMLElement, timeoutMs = 200) => {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
-		if (element.shadowRoot && element.shadowRoot.childNodes.length > 0)
-			return;
+		if (element.shadowRoot && element.shadowRoot.childNodes.length > 0) return;
 		await sleep(0);
 	}
 };

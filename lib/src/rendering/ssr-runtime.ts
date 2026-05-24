@@ -12,7 +12,7 @@ import {
 	installStaticSource,
 	RenderCallback,
 	SourceHandle,
-	YieldHandler
+	YieldHandler,
 } from "./sources";
 import { HTMLTemplate } from "./template-html";
 import { RUNTIME_KIND } from "../utils/constants";

@@ -92,7 +92,9 @@ describe("HTMLTemplate.setup: host binding requirement", () => {
 		const items = [html`<template class="leak"><p>x</p></template>`];
 		const host = document.createElement("div");
 		host.attachShadow({ mode: "open" });
-		const outer = html`<ul>${items}</ul>`;
+		const outer = html`<ul>
+			${items}
+		</ul>`;
 		expect(() => outer.setup(host as any)).toThrow(
 			/top level of a component's render output/,
 		);

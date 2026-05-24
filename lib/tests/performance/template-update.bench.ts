@@ -131,8 +131,11 @@ describe("HTMLTemplate.update() — plain-object expression (hash-cache opportun
 	});
 
 	let changingCounter = 0;
-	bench("5-key object, one value changes every call (real-change baseline)", () => {
-		changingCounter++;
-		template.update([{ a: changingCounter, b: 2, c: 3, d: 4, e: 5 }]);
-	});
+	bench(
+		"5-key object, one value changes every call (real-change baseline)",
+		() => {
+			changingCounter++;
+			template.update([{ a: changingCounter, b: 2, c: 3, d: 4, e: 5 }]);
+		},
+	);
 });

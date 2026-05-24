@@ -16,11 +16,11 @@ root generator  ─▶  installs ─▶  current source ─▶  HTMLTemplate ─
 
 A current source can be one of three shapes:
 
-| Shape              | Lifetime    | Re-runs on `update()`?                       |
-| ------------------ | ----------- | -------------------------------------------- |
-| Static template    | zero        | no, the value is frozen                      |
-| Render function    | one call    | yes, the function is called again            |
-| Inner generator    | live        | yes, the generator is restarted from scratch |
+| Shape           | Lifetime | Re-runs on `update()`?                       |
+| --------------- | -------- | -------------------------------------------- |
+| Static template | zero     | no, the value is frozen                      |
+| Render function | one call | yes, the function is called again            |
+| Inner generator | live     | yes, the generator is restarted from scratch |
 
 `update()` targets the current source only. The root never re-runs.
 
@@ -96,12 +96,12 @@ The hash on `HTMLTemplate` folds the template's parsed shape with a per-expressi
 
 Each binding type has its own update function in a per-shape file. The dispatch table lives in `template-html.ts`:
 
-| File              | Binding type                  | What it patches                                      |
-| ----------------- | ----------------------------- | ---------------------------------------------------- |
-| `attribute.ts`    | `ATTR`                        | element attributes, event listeners, JS properties   |
-| `content.ts`      | `CONTENT`                     | text, nested templates, lists                        |
-| `raw-content.ts`  | `RAW_CONTENT`                 | `textContent` of an element (script/style payloads)  |
-| `tag.ts`          | `TAG`                         | the tag name of an element (rewraps with focus save) |
+| File             | Binding type  | What it patches                                      |
+| ---------------- | ------------- | ---------------------------------------------------- |
+| `attribute.ts`   | `ATTR`        | element attributes, event listeners, JS properties   |
+| `content.ts`     | `CONTENT`     | text, nested templates, lists                        |
+| `raw-content.ts` | `RAW_CONTENT` | `textContent` of an element (script/style payloads)  |
+| `tag.ts`         | `TAG`         | the tag name of an element (rewraps with focus save) |
 
 The interesting per-file details (event-listener swap, the spread/cleanup of expandable bindings, the keyed reconciliation loop in `renderList`, the focus preservation in `updateTag`) are documented inline.
 

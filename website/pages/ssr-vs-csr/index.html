@@ -19,10 +19,10 @@
 				pass already painted the first yield into the HTML.
 			</p>
 			<p>
-				The click counter is the reactivity probe — closure state, every
-				click runs through <code>host.update()</code>. Interactivity still
-				waits for the client generator to reach the same first yield (its
-				own copy of the fetch). SSR saves the paint, not time-to-interactive.
+				The click counter is the reactivity probe — closure state, every click
+				runs through <code>host.update()</code>. Interactivity still waits for
+				the client generator to reach the same first yield (its own copy of the
+				fetch). SSR saves the paint, not time-to-interactive.
 			</p>
 
 			<button class="reload-button" type="button" onclick="location.reload()">
@@ -33,9 +33,9 @@
 				<section>
 					<h3>CSR (no server pass)</h3>
 					<p>
-						Empty in the HTML. The browser parses, the generator runs, the
-						await fires, then the first yield writes the card — empty
-						dashed box for the duration of the fetch.
+						Empty in the HTML. The browser parses, the generator runs, the await
+						fires, then the first yield writes the card — empty dashed box for
+						the duration of the fetch.
 					</p>
 					<demo-loader data-label="CSR" data-delay-ms="1200"></demo-loader>
 				</section>
@@ -46,14 +46,10 @@
 						A vite plugin (see <code>vite.config.ts</code>) ran the lib in
 						server mode at build time. The
 						<code>&lt;template shadowrootmode&gt;</code> is already in the
-						response — instant paint, no flash. Hydration wires bindings
-						without overwriting the server text.
+						response — instant paint, no flash. Hydration wires bindings without
+						overwriting the server text.
 					</p>
-					<demo-loader
-						ssr
-						data-label="SSR"
-						data-delay-ms="1200"
-					></demo-loader>
+					<demo-loader ssr data-label="SSR" data-delay-ms="1200"></demo-loader>
 				</section>
 			</div>
 		</main>

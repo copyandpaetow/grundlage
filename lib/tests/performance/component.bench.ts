@@ -52,8 +52,7 @@ const useMountedElement = (
 const barCount = 20;
 const phases = Array.from({ length: barCount }, (_, index) => index * 0.3);
 
-const formatLabel = (index: number) =>
-	`b${index.toString().padStart(2, "0")}`;
+const formatLabel = (index: number) => `b${index.toString().padStart(2, "0")}`;
 
 const computeBar = (time: number, phase: number, barIndex: number) => {
 	const currentPhase = time + phase;
@@ -106,28 +105,22 @@ describe("BaseElement — mount (connect + initial render)", () => {
 		yield () => html`<p>${"hello"}</p>`;
 	});
 
-	bench(
-		"minimal component (single text expression)",
-		() => {
-			const element = document.createElement(minimalTag);
-			document.body.appendChild(element);
-			element.remove();
-		},
-	);
+	bench("minimal component (single text expression)", () => {
+		const element = document.createElement(minimalTag);
+		document.body.appendChild(element);
+		element.remove();
+	});
 
 	let mountFrame = 0;
 	const listTag = defineConstructor(function* () {
 		yield () => renderBars(mountFrame++);
 	});
 
-	bench(
-		"20-bar list component",
-		() => {
-			const element = document.createElement(listTag);
-			document.body.appendChild(element);
-			element.remove();
-		},
-	);
+	bench("20-bar list component", () => {
+		const element = document.createElement(listTag);
+		document.body.appendChild(element);
+		element.remove();
+	});
 });
 
 /*
@@ -141,12 +134,9 @@ describe("BaseElement.update() — identical template every frame (no-op floor)"
 		yield () => stableTemplate;
 	});
 
-	bench(
-		"microtask + #renderToDom early-out",
-		async () => {
-			await getElement().update();
-		},
-	);
+	bench("microtask + #renderToDom early-out", async () => {
+		await getElement().update();
+	});
 });
 
 /*
@@ -161,30 +151,26 @@ describe("BaseElement.update() — render-function source", () => {
 			singleFrame++;
 			return html`
 				<div
-					style="width:${singleFrame % 100}%;background:hsl(${(singleFrame * 7) % 360},70%,50%);opacity:${(singleFrame % 100) / 100}"
+					style="width:${singleFrame % 100}%;background:hsl(${(singleFrame *
+						7) %
+					360},70%,50%);opacity:${(singleFrame % 100) / 100}"
 				></div>
 			`;
 		};
 	});
 
-	bench(
-		"single bar, 3 floats change every frame",
-		async () => {
-			await getSingleElement().update();
-		},
-	);
+	bench("single bar, 3 floats change every frame", async () => {
+		await getSingleElement().update();
+	});
 
 	let listFrame = 0;
 	const getListElement = useMountedElement(function* () {
 		yield () => renderBars(listFrame++);
 	});
 
-	bench(
-		"20-bar list, all floats change every frame",
-		async () => {
-			await getListElement().update();
-		},
-	);
+	bench("20-bar list, all floats change every frame", async () => {
+		await getListElement().update();
+	});
 });
 
 /*
@@ -198,17 +184,15 @@ describe("BaseElement.update() — generator source", () => {
 		outerFrame++;
 		yield html`
 			<div
-				style="width:${outerFrame % 100}%;background:hsl(${(outerFrame * 7) % 360},70%,50%)"
+				style="width:${outerFrame % 100}%;background:hsl(${(outerFrame * 7) %
+				360},70%,50%)"
 			></div>
 		`;
 	});
 
-	bench(
-		"single bar via generator (restartGenerator path)",
-		async () => {
-			await getElement().update();
-		},
-	);
+	bench("single bar via generator (restartGenerator path)", async () => {
+		await getElement().update();
+	});
 });
 
 /*
@@ -285,14 +269,11 @@ describe("BaseElement.setProperty() — programmatic property write", () => {
 		};
 	});
 
-	bench(
-		"setProperty(stringable) + awaited update",
-		async () => {
-			counter++;
-			getElement().setProperty("data-value", String(counter));
-			await getElement().update();
-		},
-	);
+	bench("setProperty(stringable) + awaited update", async () => {
+		counter++;
+		getElement().setProperty("data-value", String(counter));
+		await getElement().update();
+	});
 });
 
 /*
@@ -309,17 +290,14 @@ describe("BaseElement — attribute change via setAttribute (MutationObserver pa
 		};
 	});
 
-	bench(
-		"setAttribute → observer → update",
-		async () => {
-			counter++;
-			const element = getElement();
-			element.setAttribute("data-value", String(counter));
-			//two microtasks: one for the observer's record delivery, one for update()'s own batching await
-			await Promise.resolve();
-			await element.update();
-		},
-	);
+	bench("setAttribute → observer → update", async () => {
+		counter++;
+		const element = getElement();
+		element.setAttribute("data-value", String(counter));
+		//two microtasks: one for the observer's record delivery, one for update()'s own batching await
+		await Promise.resolve();
+		await element.update();
+	});
 });
 
 /*
@@ -341,18 +319,12 @@ describe("BaseElement.update() — list reconciliation through component", () =>
 			</ul>`;
 	});
 
-	bench(
-		"20-item list, unchanged order (hash-hit reuse path)",
-		async () => {
-			await getElement().update();
-		},
-	);
+	bench("20-item list, unchanged order (hash-hit reuse path)", async () => {
+		await getElement().update();
+	});
 
-	bench(
-		"20-item list, one item mutated",
-		async () => {
-			items[10].label = `item-10-${items[10].id + Math.random()}`;
-			await getElement().update();
-		},
-	);
+	bench("20-item list, one item mutated", async () => {
+		items[10].label = `item-10-${items[10].id + Math.random()}`;
+		await getElement().update();
+	});
 });

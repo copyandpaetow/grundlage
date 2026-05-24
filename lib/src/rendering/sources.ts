@@ -238,7 +238,11 @@ const currentGeneratorYield: YieldHandler = (handle, value) => {
 		if (isGeneratorFunction(value)) {
 			throw new Error("Inner generators cannot yield generator functions");
 		}
-		handle.render!(handle.context, handle, (value as RenderFunction)(handle.host!));
+		handle.render!(
+			handle.context,
+			handle,
+			(value as RenderFunction)(handle.host!),
+		);
 		return handle.host;
 	}
 	//unknown value (e.g. resolved value from `yield somePromise`). hand it back as the yield expression's result

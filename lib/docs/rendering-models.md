@@ -33,18 +33,20 @@ Stop modeling "root slot + current slot." Model a **stack of one or two frames**
 
 ```ts
 type Frame =
-  | { kind: "static" }
-  | { kind: "renderFunction"; fn }
-  | { kind: "generator"; createGen; generator; generation; cleanup };
+	| { kind: "static" }
+	| { kind: "renderFunction"; fn }
+	| { kind: "generator"; createGen; generator; generation; cleanup };
 
-interface Stack { frames: Frame[]; }   // depth 1 or 2 today, model supports more
+interface Stack {
+	frames: Frame[];
+} // depth 1 or 2 today, model supports more
 ```
 
 When the root yields a producer, push a frame. When it completes, pop. When `update()` fires, restart the top frame. Errors propagate up the stack in one direction. Cancellation is "drop frames above N."
 
 Static and render-function frames are stored as typed stack entries (not wrapped in synthetic generators) to keep allocations down.
 
-**Cost:** the stack is conceptually cleaner but the implementation still needs a tag-switch on the top frame. You save the *two-slot* duplication (cancellation, error, generation each existed twice), not the per-kind switch. Pays its complexity budget on extensibility (depth > 2) that the spec doesn't ask for.
+**Cost:** the stack is conceptually cleaner but the implementation still needs a tag-switch on the top frame. You save the _two-slot_ duplication (cancellation, error, generation each existed twice), not the per-kind switch. Pays its complexity budget on extensibility (depth > 2) that the spec doesn't ask for.
 
 ## Model 3 — Mode-specialized runtimes
 

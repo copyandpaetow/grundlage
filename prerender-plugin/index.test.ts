@@ -261,7 +261,9 @@ describe("prerender plugin: loadData payload injection", () => {
 		//declarative shadow root carries the payload — no global window.__ssrData any more
 		expect(output).not.toContain("__ssrData");
 		expect(output).toContain("shadowrootmode");
-		expect(output).toContain(`<script type="application/json" data-ssr="">{"name":"Ada"}</script>`);
+		expect(output).toContain(
+			`<script type="application/json" data-ssr="">{"name":"Ada"}</script>`,
+		);
 		//the resolved value also lands in the SSR'd markup itself
 		expect(output).toContain("Ada");
 	});
