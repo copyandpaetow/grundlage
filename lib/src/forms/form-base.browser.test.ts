@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { FORM_EVENTS, type FormBase } from "./form-base";
-import { html, render } from "./index";
+import { html, render } from "../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
