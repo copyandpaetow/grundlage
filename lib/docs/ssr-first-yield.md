@@ -31,8 +31,12 @@ the shadow root to fill, and emits
 
 ```html
 <demo-loader>
-	<template shadowrootmode="open" shadowrootclonable
-		shadowrootdelegatesfocus shadowrootserializable>
+	<template
+		shadowrootmode="open"
+		shadowrootclonable
+		shadowrootdelegatesfocus
+		shadowrootserializable
+	>
 		<article class="card">…</article>
 	</template>
 </demo-loader>
@@ -60,7 +64,7 @@ Two signals; either flips the lib into server mode (`utils/is-server.ts`):
   polyfills `document`, `customElements`, etc. onto `globalThis` but
   deliberately never assigns `window`.
 - **`globalThis.__grundlage_ssr__ === true`** — explicit opt-in for
-  environments that *do* have `window` but want server semantics. This
+  environments that _do_ have `window` but want server semantics. This
   exists so the in-browser SSR test (`ssr.browser.test.ts`) can exercise
   the serialization + hydration round-trip end-to-end in a real browser —
   which is the only place we get early signal on Declarative-Shadow-DOM
@@ -96,7 +100,7 @@ leaking.
 - **Error path** — a rejecting pre-yield promise routes through
   `#abortAndShowError`, which writes the message into the shadow root.
 - **User `finally` runs** — `cancelGenerator` calls `.return()`; the cleanup
-  *return value* is intentionally discarded.
+  _return value_ is intentionally discarded.
 
 ## Data sharing: `loadData`
 

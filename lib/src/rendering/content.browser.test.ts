@@ -141,7 +141,7 @@ describe("content updates", () => {
 	});
 
 	test('renders false as the literal string "false"', async () => {
-		//false is stringable — the renderer uses assertPrimitiveString, so the text node holds "false"
+		//false is stringable, so the renderer uses assertPrimitiveString, so the text node holds "false"
 		const tag = uniqueTag();
 		let value: unknown = false;
 
@@ -759,7 +759,7 @@ describe("content updates", () => {
 		);
 		expect(originalItems.length).toBe(4);
 
-		// Every value changes — no hash match anywhere, but structure is identical.
+		// Every value changes, so no hash match anywhere, but structure is identical.
 		items = [11, 21, 31, 41];
 		await element.update();
 		await sleep();
@@ -946,7 +946,7 @@ describe("content updates", () => {
 		);
 
 		// Phase 2: inner reorder within one group, outer unchanged. Exercises
-		// re-entrant renderList — inner reconciliation must not corrupt the
+		// re-entrant renderList; inner reconciliation must not corrupt the
 		// outer list markers or the sibling group.
 		groups = [
 			{ name: "b", items: ["b2", "b1"] },
@@ -1255,8 +1255,8 @@ describe("content updates", () => {
 		expect(afterMiddleSwap[1].textContent).toContain("m");
 		expect(afterMiddleSwap[2].textContent).toContain("n");
 		expect(afterMiddleSwap[3].textContent).toContain("o");
-		// Middle <li>s are reused via structural fallback — same parsedHTML,
-		// updated text — so their DOM identity survives the value swap.
+		// Middle <li>s are reused via structural fallback: same parsedHTML,
+		// updated text, so their DOM identity survives the value swap.
 		expect(afterMiddleSwap[1]).toBe(xNode);
 		expect(afterMiddleSwap[2]).toBe(yNode);
 		expect(afterMiddleSwap[3]).toBe(zNode);
@@ -1268,7 +1268,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		// New array reference each render, identical hash-per-item contents.
 		// The binding still dirties (array path in update()), so renderList
-		// runs — head peel should consume everything with zero DOM work and no
+		// runs; head peel should consume everything with zero DOM work and no
 		// middle bookkeeping.
 		let items = ["a", "b", "c"];
 
@@ -1360,7 +1360,7 @@ describe("content updates", () => {
 		expect(afterPrepend[0].textContent).toContain("a");
 		expect(afterPrepend[1].textContent).toContain("b");
 		expect(afterPrepend[2].textContent).toContain("c");
-		// Tail peel preserves both existing <li>s — the inserts land ahead of
+		// Tail peel preserves both existing <li>s; the inserts land ahead of
 		// them with no moves.
 		expect(afterPrepend[3]).toBe(dNode);
 		expect(afterPrepend[4]).toBe(eNode);
@@ -1435,10 +1435,10 @@ describe("content updates", () => {
 	});
 
 	test("static HTML comments in the template survive a render pass", async () => {
-		// template-html.ts:#findMarkers walks every comment but only treats those
-		// carrying the binding-marker prefix as markers (line 86). Static author
+		// template-html.ts #findTargets walks every comment but only treats those
+		// carrying the binding-marker prefix as markers. Static author
 		// comments must pass through the tree walker untouched and not be picked
-		// up as markers — if they were, the binding indices would shift and the
+		// up as markers; if they were, the binding indices would shift and the
 		// content binding below would lose its anchors.
 		const tag = uniqueTag();
 		let label = "first";
@@ -1466,10 +1466,78 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		// The binding still resolves to the correct text after update — proves
+		// The binding still resolves to the correct text after update, which proves
 		// the static comment didn't get treated as an extra marker and shift the
 		// content binding's start/end anchors.
 		expect(section.textContent).toContain("second");
+
+		cleanup(element);
+	});
+
+	test("renders and updates a dynamic HTML comment binding", async () => {
+		// content.ts renderComment path: a comment whose content interpolates an
+		// expression (binding.values.length > 1) renders as a real comment node
+		// between its markers, and update() recreates it with the new value. No
+		// other rendering test exercises this branch.
+		const tag = uniqueTag();
+		let note = "first";
+
+		const MyElement = render(function* () {
+			yield () => html`<section><!-- ${note} --></section>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const commentText = (section: Element) =>
+			Array.from(section.childNodes)
+				.filter((node) => node.nodeType === Node.COMMENT_NODE)
+				.map((node) => (node as Comment).data);
+
+		const section = element.shadowRoot!.querySelector("section")!;
+		// the rendered comment carries the interpolated value; the bracketing
+		// marker comments carry the binding identifier, never the user value
+		expect(commentText(section)).toContain(" first ");
+
+		note = "second";
+		await element.update();
+		await sleep();
+
+		expect(commentText(section)).toContain(" second ");
+		expect(commentText(section)).not.toContain(" first ");
+
+		cleanup(element);
+	});
+
+	test("updates one expression in a multi-expression comment binding", async () => {
+		// `<!-- ${a} and ${b} -->` folds both expressions into a single comment
+		// binding; changing one must re-render the comment with both current values.
+		const tag = uniqueTag();
+		let left = "a";
+		let right = "b";
+
+		const MyElement = render(function* () {
+			yield () => html`<section><!-- ${left} and ${right} --></section>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const commentText = (section: Element) =>
+			Array.from(section.childNodes)
+				.filter((node) => node.nodeType === Node.COMMENT_NODE)
+				.map((node) => (node as Comment).data);
+
+		const section = element.shadowRoot!.querySelector("section")!;
+		expect(commentText(section)).toContain(" a and b ");
+
+		right = "c";
+		await element.update();
+		await sleep();
+
+		expect(commentText(section)).toContain(" a and c ");
 
 		cleanup(element);
 	});

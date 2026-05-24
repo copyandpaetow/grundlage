@@ -13,18 +13,4 @@ export const UPDATE_STATE = {
 	RENDERING: 2,
 } as const;
 
-export const RENDER_MODE = {
-	SSR: 1,
-	CSR: 2,
-} as const;
-
-export const TEMPLATE_SOURCE_TYPE = {
-	STATIC: 0,
-	RENDER_FUNCTION: 1,
-	GENERATOR: 2,
-} as const;
-
-export const RECOVERY_ATTEMPT_TYPE = {
-	CAUGHT: 0,
-	UNCAUGHT: 1,
-} as const;
+export const RUNTIME_KIND = { CSR: 1, SSR: 2 } as const;

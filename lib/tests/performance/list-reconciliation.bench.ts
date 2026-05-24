@@ -201,12 +201,15 @@ describe("renderList — bulk removal (Tier 1.2)", () => {
 
 	const clearTemplate = renderOnce(listFor(items100));
 	let clearToggle = false;
-	bench("100 items, clear/refill alternation (full delete + setup cycle)", () => {
-		clearToggle = !clearToggle;
-		clearTemplate.update(
-			listFor(clearToggle ? empty : items100).currentExpressions,
-		);
-	});
+	bench(
+		"100 items, clear/refill alternation (full delete + setup cycle)",
+		() => {
+			clearToggle = !clearToggle;
+			clearTemplate.update(
+				listFor(clearToggle ? empty : items100).currentExpressions,
+			);
+		},
+	);
 
 	const shrinkTemplate = renderOnce(listFor(items100));
 	let shrinkToggle = false;
@@ -243,8 +246,7 @@ describe("renderList — nested list (re-entrancy stress)", () => {
 					html`<li>
 						<ul>
 							${group.map(
-								(item) =>
-									html`<li data-id="${item.id}">${item.label}</li>`,
+								(item) => html`<li data-id="${item.id}">${item.label}</li>`,
 							)}
 						</ul>
 					</li>`,

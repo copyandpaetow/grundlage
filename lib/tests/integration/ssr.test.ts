@@ -218,14 +218,18 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		const Component = render(function* (host) {
 			renderCount++;
-			yield () => html`<span>${host.getAttribute("data-value") ?? "missing"}</span>`;
+			yield () =>
+				html`<span>${host.getAttribute("data-value") ?? "missing"}</span>`;
 		});
 
 		const element = track(await mount(tag, Component));
 		expect(renderCount).toBe(1);
 
-		(element as unknown as { setProperty: (name: string, value: unknown) => void })
-			.setProperty("data-value", "after");
+		(
+			element as unknown as {
+				setProperty: (name: string, value: unknown) => void;
+			}
+		).setProperty("data-value", "after");
 		await flushMicrotasks();
 
 		expect(element.getAttribute("data-value")).toBe("after");

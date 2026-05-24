@@ -280,7 +280,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	});
 
 	test("shared host attribute name keeps the new value when both templates declare it", async () => {
-		//both templates write `class`, but at different source positions — so the templateHash differs and #renderToDom takes the swap path
+		//both templates write `class`, but at different source positions, so the templateHash differs and renderTemplate takes the swap path
 		//the post-swap value must be the new template's value, not stale from the previous one
 		const tag = uniqueTag();
 		let showFirst = true;
@@ -664,7 +664,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	});
 
 	test("nested generator source swap also clears the previous host attrs", async () => {
-		//the outer-generator → render-function path is what every other test exercises; this one routes through a nested-generator active source so #restartGenerator drives the swap rather than the render-function re-call path
+		//the outer-generator → render-function path is what every other test exercises; this one routes through a nested-generator active source so dispatchCSRUpdate restarts the generator rather than the render-function re-call path
 		const tag = uniqueTag();
 		let showFirst = true;
 		const MyElement = render(function* () {
@@ -691,7 +691,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 });
 
 describe("root-template host attribute updates within a single template (refactor regression guards)", () => {
-	//the swap cleanup work refactored the previous-name removal in updateAttribute and handleExpandableAttribute to go through removeAttributeBinding
+	//the swap cleanup work refactored the previous-name removal in updateAttribute and updateExpandable to go through removeAttributeBinding
 	//these tests pin behavior that must not change: same-template renders that drop or rename host attributes still clean up correctly
 	let tagId = 0;
 	const uniqueTag = () => `test-host-same-${tagId++}-${Date.now()}`;
@@ -831,7 +831,7 @@ describe("root-template host attribute updates within a single template (refacto
 
 describe("root-template host attribute writes do not feed back through the MutationObserver", () => {
 	//the host MutationObserver in index.ts watches `this` with { attributes: true }
-	//framework-driven writes to the host (from root-template host bindings) must not be observed as user mutations — otherwise every render that writes a host attr would queue an extra re-render one microtask later
+	//framework-driven writes to the host (from root-template host bindings) must not be observed as user mutations; otherwise every render that writes a host attr would queue an extra re-render one microtask later
 	let tagId = 0;
 	const uniqueTag = () => `test-host-mo-${tagId++}-${Date.now()}`;
 
@@ -972,7 +972,7 @@ describe("root-template host attributes are rejected when nested inside content"
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		//#renderToDom doesn't catch synchronous setup throws on mount — the parser cache means subsequent users see the same failure
+		//renderTemplate doesn't catch synchronous setup throws on mount; the parser cache means subsequent users see the same failure
 		expect(element.shadowRoot?.textContent).toMatch(
 			/top level of a component's render output/,
 		);

@@ -8,7 +8,7 @@ the client reads those scripts in DOM order (or by data-key when one is given), 
 goes, and falls through to the fetcher once nothing is left to replay — so the DOM is the queue
 and no JS-side cache survives the hydration pass
 */
-import { isServer } from "./utils/is-server";
+import { isServer } from "../utils/is-server";
 
 export interface LoadDataOptions {
 	/** Optional name for this load — survives refactors, lets keyed reads ignore unkeyed scripts. */

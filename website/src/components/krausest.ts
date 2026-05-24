@@ -88,7 +88,7 @@ const NOUNS = [
 	"keyboard",
 ];
 
-const pickRandom = <T,>(items: ReadonlyArray<T>): T =>
+const pickRandom = <T>(items: ReadonlyArray<T>): T =>
 	items[Math.floor(Math.random() * items.length)];
 
 const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline";
@@ -248,7 +248,8 @@ customElements.define(
 				},
 				apply: () => {
 					const more = buildRows(1000);
-					for (let index = 0; index < more.length; index++) rows.push(more[index]);
+					for (let index = 0; index < more.length; index++)
+						rows.push(more[index]);
 				},
 			},
 			{
@@ -451,18 +452,10 @@ customElements.define(
 			</style>
 
 			<div class="controls">
-				<button
-					onclick="${runSuite}"
-					disabled="${isRunning}"
-				>
-					run suite
-				</button>
+				<button onclick="${runSuite}" disabled="${isRunning}">run suite</button>
 				${operations.map(
 					(op) => html`
-						<button
-							onclick="${() => runOperation(op)}"
-							disabled="${isRunning}"
-						>
+						<button onclick="${() => runOperation(op)}" disabled="${isRunning}">
 							${op.label}
 						</button>
 					`,
@@ -489,10 +482,7 @@ customElements.define(
 				>
 					save as baseline
 				</button>
-				<button
-					onclick="${dropBaseline}"
-					disabled="${!baseline || isRunning}"
-				>
+				<button onclick="${dropBaseline}" disabled="${!baseline || isRunning}">
 					clear baseline
 				</button>
 				${baseline

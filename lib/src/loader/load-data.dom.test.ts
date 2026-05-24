@@ -65,7 +65,9 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		const value = await loadData(host, () => Promise.resolve([]), "posts");
 		expect(value).toEqual(["p1", "p2"]);
 		//keyed script removed; the unkeyed one is left for a future unkeyed read
-		expect(host.shadowRoot!.querySelector('script[data-key="posts"]')).toBeNull();
+		expect(
+			host.shadowRoot!.querySelector('script[data-key="posts"]'),
+		).toBeNull();
 		expect(
 			host.shadowRoot!.querySelector("script[data-ssr]:not([data-key])"),
 		).not.toBeNull();
@@ -84,7 +86,9 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		const value = await loadData(host, fetcher);
 		expect(value).toBe("fresh");
 		expect(fetcher).toHaveBeenCalledTimes(1);
-		expect(host.shadowRoot!.querySelector('script[data-key="user"]')).not.toBeNull();
+		expect(
+			host.shadowRoot!.querySelector('script[data-key="user"]'),
+		).not.toBeNull();
 	});
 
 	test("skipSsr bypasses replay even when a matching script is present", async () => {
@@ -112,7 +116,8 @@ const withoutWindow = async <ReturnValue>(
 	try {
 		return await body();
 	} finally {
-		if (descriptor !== undefined) Object.defineProperty(globalThis, "window", descriptor);
+		if (descriptor !== undefined)
+			Object.defineProperty(globalThis, "window", descriptor);
 	}
 };
 

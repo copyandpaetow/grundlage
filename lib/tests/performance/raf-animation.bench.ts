@@ -23,10 +23,7 @@ const renderOnce = (template: HTMLTemplate) => {
 
 describe("HTMLTemplate.update() — raf-animation-list steady state", () => {
 	const barCount = 20;
-	const phases = Array.from(
-		{ length: barCount },
-		(_, index) => index * 0.3,
-	);
+	const phases = Array.from({ length: barCount }, (_, index) => index * 0.3);
 
 	const formatLabel = (index: number) =>
 		`b${index.toString().padStart(2, "0")}`;

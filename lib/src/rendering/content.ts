@@ -24,6 +24,7 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
 	}
 };
 
+//we wrap non-template entries in place rather than allocating a new array. renderList already walks every entry several times (peel, hash map, claim loop), so cutting one array allocation per render matters on large lists
 const toTemplateList = (list: Array<unknown>): Array<HTMLTemplate> => {
 	for (let index = 0; index < list.length; index++) {
 		const element = list[index];
@@ -85,7 +86,7 @@ const renderList = (
 	) as Array<HTMLTemplate>;
 
 	//we walk the live DOM once and collect one marker per item that's currently rendered
-	//the DOM is the source of truth here — if it has fewer items than trackedPrevious (e.g. someone cleared the binding's children between renders) we cap collection at what we actually see
+	//the DOM is the source of truth here. if it has fewer items than trackedPrevious (e.g. someone cleared the binding's children between renders) we cap collection at what we actually see
 	const previousMarkers: Array<Comment> = [];
 	let sibling: Node | null = marker.nextSibling;
 	while (sibling) {
@@ -312,6 +313,7 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 		return;
 	}
 
+	//previous was a template or list, so non-text nodes sit after the marker. clear them before inserting the text node
 	deleteNodesBetween(marker);
 	marker.after(document.createTextNode(renderableCurrent));
 };

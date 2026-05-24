@@ -21,7 +21,7 @@ export class HTMLTemplate {
 	parsedHTML: ParsedHTML;
 	//targets[bindingIndex] lines up with parsedHTML.bindings[bindingIndex] and dirtyBindings[bindingIndex]
 	//for ATTR/TAG/RAW_CONTENT bindings we pre-resolve the Element at setup so the hot path doesn't walk the DOM
-	//for CONTENT bindings we store the leading Comment marker — the binding still needs it as a range anchor
+	//for CONTENT bindings we store the leading Comment marker. the binding still needs it as a range anchor
 	//host bindings (first hostBindingOffset entries) resolve straight to the host element, no marker required
 	targets: Array<Element | Comment>;
 	dirtyBindings: Uint8Array;
@@ -63,7 +63,7 @@ export class HTMLTemplate {
 	}
 
 	//called by the renderer when we're about to swap to a different template
-	//host bindings live on the component element itself, so they don't get cleared by replaceChildren — we have to walk this template's host bindings and remove whatever names they last applied before the new template runs setup()
+	//host bindings live on the component element itself, so they don't get cleared by replaceChildren. we have to walk this template's host bindings and remove whatever names they last applied before the new template runs setup()
 	clearHostAttributes(host: BaseComponent) {
 		const hostBindingOffset = this.parsedHTML.hostBindingOffset;
 		const bindings = this.parsedHTML.bindings;
@@ -81,7 +81,7 @@ export class HTMLTemplate {
 		this.dirtyBindings = new Uint8Array(this.parsedHTML.bindings.length);
 		this.targets = this.#findTargets(host.shadowRoot!, host);
 
-		//SSR already wrote child elements and their static attrs into the DOM, but the host element's attrs were never serialized — they live in bindings now
+		//SSR already wrote child elements and their static attrs into the DOM, but the host element's attrs were never serialized. they live in bindings now
 		//=> we re-apply every ATTR binding on hydrate so host bindings (and any dynamic child attrs) land on the right element with the current expression values
 		for (let index = 0; index < this.parsedHTML.bindings.length; index++) {
 			const binding = this.parsedHTML.bindings[index];
@@ -95,11 +95,11 @@ export class HTMLTemplate {
 		parent: DocumentFragment | ShadowRoot,
 		host: BaseComponent | null,
 	): Array<Element | Comment> {
-		//host is only threaded in from #renderToDom (the component's top-level render call); content.ts passes null when setting up nested templates
+		//host is only threaded in from the runtime's render callback (renderTemplate on CSR, renderOnce on SSR); content.ts passes null when setting up nested templates
 		//=> a nested literal that happens to be a root template (<template ...> with attributes) lands here with host=null and we reject it with a message naming the actual misuse
 		if (this.parsedHTML.hostBindingOffset > 0 && !host) {
 			throw new Error(
-				"Root template host bindings are only allowed at the top level of a component's render output — `<template ...>` with attributes cannot be used inside ${...} content, list items, or any nested template position.",
+				"Root template host bindings are only allowed at the top level of a component's render output. `<template ...>` with attributes cannot be used inside ${...} content, list items, or any nested template position.",
 			);
 		}
 		//host bindings come first in `bindings`, so we pre-fill that many entries with the host before walking the DOM for child markers
