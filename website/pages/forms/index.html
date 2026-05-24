@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - Forms</title>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
+
+		<main>
+			<h1>Form-associated components</h1>
+			<p>
+				The <code>&lt;form-field&gt;</code> below is a custom element that joins
+				the form like a native control. Type, then submit to see its value in
+				the form data; reset and disable exercise its lifecycle listeners.
+			</p>
+
+			<form id="demo">
+				<fieldset id="fields">
+					<form-field name="nickname"></form-field>
+				</fieldset>
+				<div>
+					<button type="submit">submit</button>
+					<button type="reset">reset</button>
+					<button type="button" id="toggle-disabled">toggle disabled</button>
+				</div>
+			</form>
+
+			<p>submitted form data: <output id="result">—</output></p>
+		</main>
+	</body>
+</html>
