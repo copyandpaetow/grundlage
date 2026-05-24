@@ -17,6 +17,7 @@ export default defineConfig({
 				animation: resolve(__dirname, "pages/animation/index.html"),
 				animationList: resolve(__dirname, "pages/animation-list/index.html"),
 				attributes: resolve(__dirname, "pages/attributes/index.html"),
+				forms: resolve(__dirname, "pages/forms/index.html"),
 				list: resolve(__dirname, "pages/list/index.html"),
 				tags: resolve(__dirname, "pages/tags/index.html"),
 				perf: resolve(__dirname, "pages/perf/index.html"),
