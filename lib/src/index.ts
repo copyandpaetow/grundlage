@@ -22,6 +22,7 @@ import {
 	startCSRRoot,
 	teardownCSRRuntime,
 } from "./rendering/csr-runtime";
+import { FormBase } from "./form-base";
 
 export { html } from "./parser/html";
 export { props } from "./validator/props";
@@ -32,7 +33,12 @@ export const render = (
 	componentGenerator: ComponentGenerator,
 	options: ComponentOptions = defaultOptions,
 ): ComponentConstructor => {
-	class BaseElement extends HTMLElement implements BaseComponent {
+	//FormBase carries `static formAssociated` + attachInternals; it inherits down to BaseElement, and the browser reads formAssociated off the subclass at define time
+	const ParentClass: typeof HTMLElement = options.formAssociated
+		? FormBase
+		: HTMLElement;
+
+	class BaseElement extends ParentClass implements BaseComponent {
 		#runtime: CSRRuntime | SSRRuntime;
 
 		constructor() {

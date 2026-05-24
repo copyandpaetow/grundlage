@@ -6,9 +6,10 @@ import { isPlainObject } from "../utils/validators";
 import { HTMLTemplate } from "./template-html";
 
 //event-handler attributes always start with "on" (onclick, onsubmit, …)
-//=> we sniff the first two char codes ('o' = 111, 'n' = 110) instead of `key.startsWith("on")` so we avoid allocating a substring on every attribute write
+//=> we sniff char codes ('o' = 111, 'n' = 110, '-' = 45) instead of `key.startsWith` so we avoid allocating a substring on every attribute write
 const CHAR_LOWER_O = 111;
 const CHAR_LOWER_N = 110;
+const CHAR_DASH = 45;
 
 export const applyAttributeBinding = (
 	element: Element,
@@ -24,9 +25,16 @@ export const applyAttributeBinding = (
 			key.charCodeAt(0) === CHAR_LOWER_O &&
 			key.charCodeAt(1) === CHAR_LOWER_N
 		) {
-			const lowerKey = key.toLowerCase();
-			if (lowerKey in element) {
-				const eventName = lowerKey.slice(2);
+			let eventName: string | null = null;
+			if (key.charCodeAt(2) === CHAR_DASH) {
+				//`on-<name>`: explicit listener. nothing native uses the `on-` shape, so the dash is the signal — no IDL-property gate, so custom events bind without any registration
+				eventName = key.slice(3).toLowerCase();
+			} else {
+				//`on<name>`: native handlers (onclick, …), gated on the matching IDL property existing so arbitrary on* function props still fall through to property assignment below
+				const lowerKey = key.toLowerCase();
+				if (lowerKey in element) eventName = lowerKey.slice(2);
+			}
+			if (eventName !== null) {
 				if (oldValueIsFunction) {
 					element.removeEventListener(eventName, oldValue as EventListener);
 				}

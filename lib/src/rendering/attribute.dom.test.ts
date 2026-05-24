@@ -233,6 +233,85 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 	});
 });
 
+describe("applyAttributeBinding - on- explicit listeners", () => {
+	test("binds a custom event with no IDL property, skipping the in-element gate", () => {
+		// the whole point of `on-`: `on-form-reset` has no prototype property, so
+		// the gated `on*` path would fall through. the dash marks it as a listener
+		// unconditionally.
+		const element = document.createElement("div");
+		expect("on-form-reset" in element).toBe(false);
+
+		const received: Array<string> = [];
+		const addSpy = vi.spyOn(element, "addEventListener");
+
+		applyAttributeBinding(element, "on-form-reset", (event: Event) =>
+			received.push(event.type),
+		);
+
+		expect(addSpy).toHaveBeenCalledWith("form-reset", expect.any(Function));
+		// must not leak as an attribute or a JS property
+		expect(element.hasAttribute("on-form-reset")).toBe(false);
+		expect(
+			(element as unknown as Record<string, unknown>)["on-form-reset"],
+		).toBeUndefined();
+
+		element.dispatchEvent(new Event("form-reset"));
+		expect(received).toEqual(["form-reset"]);
+	});
+
+	test("strips only the `on-` prefix, keeping hyphens in the event name", () => {
+		const element = document.createElement("div");
+		const received: Array<string> = [];
+
+		applyAttributeBinding(element, "on-form-state-restore", (event: Event) =>
+			received.push(event.type),
+		);
+
+		element.dispatchEvent(new Event("form-state-restore"));
+		expect(received).toEqual(["form-state-restore"]);
+	});
+
+	test("swaps the handler, detaching the old listener", () => {
+		const element = document.createElement("div");
+		const received: Array<string> = [];
+		const first = () => received.push("first");
+		const second = () => received.push("second");
+
+		applyAttributeBinding(element, "on-my-event", first);
+		applyAttributeBinding(element, "on-my-event", second, first);
+
+		element.dispatchEvent(new Event("my-event"));
+		expect(received).toEqual(["second"]);
+	});
+
+	test("detaches when the value becomes null", () => {
+		const element = document.createElement("div");
+		const received: Array<Event> = [];
+		const handler = (event: Event) => received.push(event);
+
+		applyAttributeBinding(element, "on-my-event", handler);
+		applyAttributeBinding(element, "on-my-event", null, handler);
+
+		element.dispatchEvent(new Event("my-event"));
+		expect(received).toEqual([]);
+	});
+
+	test("lowercases the event name, matching the DOM's attribute-name folding", () => {
+		// declarative event names can't preserve case (the DOM lowercases attribute
+		// names), so `on-` follows the same rule: the listener binds to the
+		// lowercased remainder. case-sensitive types need imperative addEventListener.
+		const element = document.createElement("div");
+		const received: Array<string> = [];
+
+		applyAttributeBinding(element, "on-MyEvent", (event: Event) =>
+			received.push(event.type),
+		);
+
+		element.dispatchEvent(new Event("myevent"));
+		expect(received).toEqual(["myevent"]);
+	});
+});
+
 describe("applyAttributeBinding - removal", () => {
 	test.each([
 		["null", null],
