@@ -1,5 +1,7 @@
 import { html, render } from "../../../lib/src";
 import { installCameraProperties } from "./scene-shared";
+import { installEditor } from "./scene-editor";
+import "./scene-gizmo";
 
 // <scene-world> — owns the camera. It holds the perspective and the single
 // inverse-camera wrapper transform the whole scene inherits through. Authored
@@ -43,10 +45,42 @@ customElements.define(
 			rootStyle.setProperty("--camera-pitch", `${camera.pitch}deg`);
 		};
 
+		// Orbit is the constrained camera ("inspect this block"): it pivots around a
+		// fixed target instead of flying free. We keep the same yaw/pitch/inverse-
+		// camera wrapper — only the camera position is derived, so the cascade and
+		// the world transform are untouched. Target is the scene origin for now.
+		const ORBIT_TARGET = { x: 0, y: 0, z: 0 };
+		let cameraMode: "free" | "orbit" = "free";
+		let orbitRadius = 600;
+
+		// View direction from yaw/pitch, matching the wrapper's rotateX/rotateY.
+		// Forward is -Z at the origin; screen-space +Y (down) is positive pitch.
+		const orbitForward = (): { x: number; y: number; z: number } => {
+			const yawRadians = (camera.yaw * Math.PI) / 180;
+			const pitchRadians = (camera.pitch * Math.PI) / 180;
+			return {
+				x: Math.sin(yawRadians) * Math.cos(pitchRadians),
+				y: Math.sin(pitchRadians),
+				z: -Math.cos(yawRadians) * Math.cos(pitchRadians),
+			};
+		};
+
+		// Sit the camera one radius behind the target along the view direction, so
+		// it always looks at the target.
+		const applyOrbit = (): void => {
+			const forward = orbitForward();
+			camera.x = ORBIT_TARGET.x - orbitRadius * forward.x;
+			camera.y = ORBIT_TARGET.y - orbitRadius * forward.y;
+			camera.z = ORBIT_TARGET.z - orbitRadius * forward.z;
+		};
+
 		// Free-fly: we translate along the heading derived from yaw, so "forward"
 		// always follows where we look. Forward is -Z at yaw 0. This runs only
 		// while a movement key is held, so a still camera does no frame work.
 		const step = (): void => {
+			// In orbit mode the camera position is derived from the target, not the
+			// keys; WASD is a free-fly gesture only.
+			if (cameraMode === "free") {
 			const yawRadians = (camera.yaw * Math.PI) / 180;
 			const forwardX = Math.sin(yawRadians);
 			const forwardZ = -Math.cos(yawRadians);
@@ -72,6 +106,7 @@ customElements.define(
 			// Screen-space +Y is down, so moving the camera up decreases Y.
 			if (pressedKeys.has(" ")) camera.y -= MOVE_SPEED;
 			if (pressedKeys.has("shift")) camera.y += MOVE_SPEED;
+			}
 
 			writeCamera();
 			animationFrame =
@@ -91,30 +126,80 @@ customElements.define(
 			pressedKeys.delete(event.key.toLowerCase());
 		};
 
-		// Mouse-look is event-driven: we adjust orientation only when the pointer
-		// actually moves, and only while this element holds the pointer lock.
+		// Mouse-look is event-driven and bound to the right button, leaving the
+		// left button free for editing (select/drag). We adjust orientation only
+		// while the right button is held and the pointer actually moves — a still
+		// camera does no frame work.
+		let looking = false;
+
+		const onPointerDown = (event: PointerEvent): void => {
+			if (event.button !== 2) return;
+			looking = true;
+		};
+
 		const onPointerMove = (event: PointerEvent): void => {
-			if (document.pointerLockElement !== element) return;
+			if (!looking) return;
 			camera.yaw += event.movementX * LOOK_SENSITIVITY;
 			camera.pitch = Math.max(
 				-MAX_PITCH,
 				Math.min(MAX_PITCH, camera.pitch + event.movementY * LOOK_SENSITIVITY),
 			);
+			// Free-fly turns in place; orbit re-derives the position so the look
+			// gesture sweeps the camera around the target.
+			if (cameraMode === "orbit") applyOrbit();
 			writeCamera();
 		};
 
-		const onClick = (): void => {
-			element.requestPointerLock();
+		const onPointerUp = (event: PointerEvent): void => {
+			if (event.button === 2) looking = false;
 		};
 
-		// Listeners and the initial camera write are client-only; on the server
-		// the generator still produces the static markup without them.
+		// Right-drag is our look gesture, so suppress the context menu over the
+		// scene; without this the menu interrupts every turn.
+		const onContextMenu = (event: Event): void => event.preventDefault();
+
+		// The wheel dollies the orbit radius in/out (orbit mode only).
+		const onWheel = (event: WheelEvent): void => {
+			if (cameraMode !== "orbit") return;
+			event.preventDefault();
+			orbitRadius = Math.max(120, Math.min(4000, orbitRadius + event.deltaY));
+			applyOrbit();
+			writeCamera();
+		};
+
+		// The editor's palette flips the mode through this. Entering orbit keeps the
+		// current gaze but pins the radius to the present distance from the target,
+		// so the view doesn't jump.
+		type CameraControl = { toggleCameraMode?: () => string };
+		(element as unknown as CameraControl).toggleCameraMode = (): string => {
+			if (cameraMode === "free") {
+				cameraMode = "orbit";
+				orbitRadius =
+					Math.hypot(
+						camera.x - ORBIT_TARGET.x,
+						camera.y - ORBIT_TARGET.y,
+						camera.z - ORBIT_TARGET.z,
+					) || orbitRadius;
+				applyOrbit();
+				writeCamera();
+				return "Orbit";
+			}
+			cameraMode = "free";
+			return "Free";
+		};
+
+		// Listeners, the editor, and the initial camera write are client-only; on
+		// the server the generator still produces the static markup without them.
+		let disposeEditor: (() => void) | undefined;
 		if (typeof window !== "undefined") {
 			writeCamera();
 			window.addEventListener("keydown", onKeyDown);
 			window.addEventListener("keyup", onKeyUp);
 			window.addEventListener("pointermove", onPointerMove);
-			element.addEventListener("click", onClick);
+			element.addEventListener("pointerdown", onPointerDown);
+			window.addEventListener("pointerup", onPointerUp);
+			element.addEventListener("contextmenu", onContextMenu);
+			element.addEventListener("wheel", onWheel, { passive: false });
 		}
 
 		yield html`
@@ -128,14 +213,10 @@ customElements.define(
 					border: 1px solid rgba(255, 255, 255, 0.12);
 					border-radius: 12px;
 					background: radial-gradient(circle at 50% 30%, #2a2f3a, #14161c);
-					cursor: grab;
+					cursor: default;
 					perspective: var(--camera-perspective);
 					perspective-origin: 50% 50%;
 				}
-				:host(:active) {
-					cursor: grabbing;
-				}
-
 				.world {
 					position: absolute;
 					inset: 0;
@@ -165,14 +246,25 @@ customElements.define(
 			<div class="world"><slot></slot></div>
 		`;
 
+		// The shadow content now exists, so the editor can host its palette in our
+		// shadow and add its gizmo to our light DOM. Client-only: the server emits
+		// just the static scene markup.
+		if (typeof window !== "undefined") {
+			disposeEditor = installEditor(element);
+		}
+
 		// Generator return = teardown. The lib fires this on disconnect.
 		return () => {
 			if (typeof window === "undefined") return;
 			if (animationFrame !== 0) cancelAnimationFrame(animationFrame);
+			disposeEditor?.();
 			window.removeEventListener("keydown", onKeyDown);
 			window.removeEventListener("keyup", onKeyUp);
 			window.removeEventListener("pointermove", onPointerMove);
-			element.removeEventListener("click", onClick);
+			element.removeEventListener("pointerdown", onPointerDown);
+			window.removeEventListener("pointerup", onPointerUp);
+			element.removeEventListener("contextmenu", onContextMenu);
+			element.removeEventListener("wheel", onWheel);
 		};
 	}),
 );

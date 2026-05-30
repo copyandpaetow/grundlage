@@ -14,9 +14,16 @@
 <main>
     <h1>CSS-3D scene</h1>
     <p class="scene-hint">
-        Click the scene to capture the mouse, then look with the mouse and move with
-        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>,
-        <kbd>Space</kbd> up / <kbd>Shift</kbd> down. <kbd>Esc</kbd> releases the mouse.
+        <strong>Look:</strong> hold the right mouse button and drag.
+        <strong>Move:</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>,
+        <kbd>Space</kbd> up / <kbd>Shift</kbd> down.
+        <strong>Edit:</strong> left-click a block to select (<kbd>Shift</kbd>-click for
+        multi-select), drag a gizmo handle to move it (yellow handle rotates).
+        <strong>Place:</strong> click <em>+ Cube/Wall/Ramp</em>, move over the grid
+        floor, click to drop. <strong>Group:</strong> <kbd>G</kbd> groups the
+        selection, <kbd>U</kbd> ungroups. <kbd>Delete</kbd> removes,
+        <kbd>Esc</kbd> cancels. <em>Camera</em> toggles free-fly / orbit (orbit:
+        right-drag to swing, wheel to zoom). <em>Export</em> copies portable markup.
     </p>
 
     <!-- Hardcoded Phase 1 scene. Several cubes share an identical rotation but
@@ -35,6 +42,10 @@
         <scene-cube position="0 2 -3" rotation="20 45 0" size="1.5"></scene-cube>
         <scene-cube position="-3 1 0" size="1 2 1"></scene-cube>
         <scene-cube position="3 0 3" width="2" rotation="0 -30 10"></scene-cube>
+
+        <!-- The other two geometries, sharing the same authoring contract. -->
+        <scene-wall position="-1.5 0 3" size="3 1.5 1"></scene-wall>
+        <scene-ramp position="1.5 0 -3"></scene-ramp>
     </scene-world>
 </main>
 </body>

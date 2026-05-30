@@ -7,6 +7,21 @@
 // is laid out once at this size; every dimension after that is scale3d over it.
 export const UNIT_SIZE = 120;
 
+// Authoring grid resolution in grid units. Direct manipulation commits snap to
+// this so dragged blocks land on a regular lattice instead of arbitrary floats.
+export const GRID_SNAP = 0.5;
+
+// Snap a continuous grid value onto the authoring lattice.
+export const snapToGrid = (value: number): number =>
+	Math.round(value / GRID_SNAP) * GRID_SNAP;
+
+// Format a number for serialized attributes: drop trailing zeros so exported
+// markup reads `2` and `1.5`, never `2.000000001` or `1.50`.
+export const formatNumber = (value: number): string => {
+	const rounded = Math.round(value * 1000) / 1000;
+	return Object.is(rounded, -0) ? "0" : String(rounded);
+};
+
 // Camera state lives in typed, registered custom properties on the document root.
 // Keeping them on :root (not on a custom element) is deliberate: a camera move is
 // then a pure variable write the compositor consumes through the cascade, and it
