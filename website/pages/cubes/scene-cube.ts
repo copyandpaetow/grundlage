@@ -66,8 +66,7 @@ customElements.define(
 								var(--block-y),
 								var(--block-z)
 							)
-							rotateX(var(--block-rotate-x))
-							rotateY(var(--block-rotate-y))
+							rotateX(var(--block-rotate-x)) rotateY(var(--block-rotate-y))
 							rotateZ(var(--block-rotate-z))
 							scale3d(
 								var(--block-scale-x),
@@ -87,25 +86,24 @@ customElements.define(
 						border: 1px solid rgba(0, 0, 0, 0.35);
 						display: grid;
 						place-items: center;
-						font: 600 14px/1 system-ui, sans-serif;
+						font:
+							600 14px/1 system-ui,
+							sans-serif;
 						color: rgba(0, 0, 0, 0.7);
 						/* Self-backface culling: free, compositor-side, and
 						   perspective-correct. No JS decides per-face visibility. */
 						backface-visibility: hidden;
+						/* World sheet is pointer-events:none; faces opt back in to stay clickable. */
+						pointer-events: auto;
 					}
 
-					/* Editor selection cue. The selected attribute is authoring
-					   state the editor toggles; it never survives serialization. */
-					:host([selected]) .face {
-						outline: 2px solid #ffffff;
+					/* Multi-select cue for grouping. The primary selection is shown by
+					   the <scene-gizmo> that wraps it, not a class; this faint outline
+					   only marks the extra co-selected members. Editor-only, never
+					   serialized. */
+					:host([co-selected]) .face {
+						outline: 2px dashed rgba(255, 255, 255, 0.8);
 						outline-offset: -2px;
-					}
-
-					/* Placement preview. A ghost is the real geometry made translucent
-					   and inert; export skips [ghost], so it never serializes. */
-					:host([ghost]) {
-						opacity: 0.4;
-						pointer-events: none;
 					}
 
 					/* Six faces of a unit cube, laid out once. Each is pushed out by

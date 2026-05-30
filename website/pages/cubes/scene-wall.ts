@@ -17,7 +17,7 @@ const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
 const HALF_UNIT = UNIT_SIZE / 2;
 // Baked thickness of the panel before scale3d. A wall is authored as a flat
 // surface, so depth defaults thin; `depth`/`size`'s third axis still scales it.
-const THICKNESS = UNIT_SIZE * 0.12;
+const THICKNESS = UNIT_SIZE * 0.06;
 const HALF_THICKNESS = THICKNESS / 2;
 
 customElements.define(
@@ -83,17 +83,13 @@ customElements.define(
 						box-sizing: border-box;
 						border: 1px solid rgba(0, 0, 0, 0.35);
 						backface-visibility: hidden;
+							/* World sheet is pointer-events:none; faces opt back in to stay clickable. */
+							pointer-events: auto;
 					}
 
-					:host([selected]) .face {
-						outline: 2px solid #ffffff;
+					:host([co-selected]) .face {
+						outline: 2px dashed rgba(255, 255, 255, 0.8);
 						outline-offset: -2px;
-					}
-
-					/* Placement preview: real geometry, translucent and inert. */
-					:host([ghost]) {
-						opacity: 0.4;
-						pointer-events: none;
 					}
 
 					/* Broad faces: the painted surfaces of the panel. */

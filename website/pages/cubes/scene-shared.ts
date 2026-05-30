@@ -22,55 +22,6 @@ export const formatNumber = (value: number): string => {
 	return Object.is(rounded, -0) ? "0" : String(rounded);
 };
 
-// Camera state lives in typed, registered custom properties on the document root.
-// Keeping them on :root (not on a custom element) is deliberate: a camera move is
-// then a pure variable write the compositor consumes through the cascade, and it
-// never mutates a component's attributes, so it never triggers a re-render.
-const CAMERA_PROPERTY_RULES = /*css*/ `
-  @property --camera-perspective {
-    syntax: "<length>";
-    inherits: true;
-    initial-value: 800px;
-  }
-  @property --camera-x {
-    syntax: "<length>";
-    inherits: true;
-    initial-value: 0px;
-  }
-  @property --camera-y {
-    syntax: "<length>";
-    inherits: true;
-    initial-value: 0px;
-  }
-  @property --camera-z {
-    syntax: "<length>";
-    inherits: true;
-    initial-value: 600px;
-  }
-  @property --camera-yaw {
-    syntax: "<angle>";
-    inherits: true;
-    initial-value: 0deg;
-  }
-  @property --camera-pitch {
-    syntax: "<angle>";
-    inherits: true;
-    initial-value: 0deg;
-  }
-`;
-
-let cameraPropertiesInstalled = false;
-
-// We register the camera properties once per document. Guarded so repeated
-// <scene-world> upgrades (or hydration) don't append duplicate stylesheets.
-export const installCameraProperties = (): void => {
-	if (cameraPropertiesInstalled || typeof document === "undefined") return;
-	cameraPropertiesInstalled = true;
-	const propertyStyle = document.createElement("style");
-	propertyStyle.textContent = CAMERA_PROPERTY_RULES;
-	document.head.appendChild(propertyStyle);
-};
-
 const parseNumberList = (raw: string | null): number[] => {
 	if (raw === null) return [];
 	return raw
