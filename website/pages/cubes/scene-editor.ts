@@ -130,28 +130,52 @@ export const installEditor = (
 		}
 	};
 
-	// Tear the wrappers down, returning every block to the host where the gizmo sat.
+	// Pulling a block into the cage leaves a comment anchor at its original spot in
+	// the host, so deselecting drops it back exactly where it was. Without this the
+	// live DOM order — and therefore Export order — drifted every time blocks were
+	// gathered into one selection and released.
+	const anchors = new Map<HTMLElement, Comment>();
+
+	const foldIn = (block: HTMLElement): void => {
+		if (sceneSelect === null) return;
+		const anchor = document.createComment("scene-selection-anchor");
+		block.parentNode?.insertBefore(anchor, block);
+		anchors.set(block, anchor);
+		sceneSelect.appendChild(block);
+		selection.add(block);
+	};
+
+	const foldOut = (block: HTMLElement): void => {
+		const anchor = anchors.get(block);
+		if (anchor?.parentNode != null) {
+			anchor.parentNode.insertBefore(block, anchor);
+			anchor.remove();
+		} else {
+			host.appendChild(block);
+		}
+		anchors.delete(block);
+		selection.delete(block);
+	};
+
+	// Tear the wrappers down, dropping every block back onto its anchor.
 	const clearSelection = (): void => {
 		if (gizmo === null) return;
 		selectionObserver?.disconnect();
 		selectionObserver = null;
-		for (const block of [...selection]) {
-			gizmo.parentNode?.insertBefore(block, gizmo);
-		}
+		for (const block of [...selection]) foldOut(block);
 		gizmo.remove();
 		gizmo = null;
 		sceneSelect = null;
 		selection.clear();
 	};
 
-	// Build the gizmo + scene-select around a block, placed where the block sat.
+	// Build the gizmo + scene-select at the block's spot, then fold the block in.
 	const buildSelection = (block: HTMLElement): void => {
 		gizmo = document.createElement("scene-gizmo");
 		sceneSelect = document.createElement("scene-select");
 		gizmo.appendChild(sceneSelect);
 		block.parentNode?.insertBefore(gizmo, block);
-		sceneSelect.appendChild(block);
-		selection.add(block);
+		foldIn(block);
 	};
 
 	const select = (block: HTMLElement): void => {
@@ -170,13 +194,11 @@ export const installEditor = (
 			return;
 		}
 		if (selection.has(block)) {
-			gizmo.parentNode?.insertBefore(block, gizmo);
-			selection.delete(block);
+			foldOut(block);
 			if (selection.size === 0) clearSelection();
 			else observeSelection();
 		} else {
-			sceneSelect.appendChild(block);
-			selection.add(block);
+			foldIn(block);
 			observeSelection();
 		}
 		updateInspector();
@@ -278,9 +300,31 @@ export const installEditor = (
 			block.removeAttribute("x");
 			block.removeAttribute("y");
 			block.removeAttribute("z");
+			// The attribute → re-render bridge is async, but the group's own translate
+			// renders synchronously on connect. If we leave it there, the cage's first
+			// sync (run synchronously inside select()) reads each child's STALE world
+			// position while the group already carries the centroid, so the centroid is
+			// double-counted and the highlight box sits one centroid off. We write the
+			// rebased transform to the live inline channel too (inline wins over the
+			// shadow :host rule) so the first read sees the new group-local position.
+			block.style.setProperty("--block-x", `${rebased[0] * UNIT_SIZE}px`);
+			block.style.setProperty("--block-y", `${-rebased[1] * UNIT_SIZE}px`);
+			block.style.setProperty("--block-z", `${rebased[2] * UNIT_SIZE}px`);
 			group.appendChild(block);
 		}
 		select(group);
+		// Once the bridge has re-resolved the rebased attributes, drop the live
+		// overrides so the blocks fall back to their authored values — the same
+		// commit-then-clear the gizmo uses after a drag. Clearing the inline `style`
+		// is itself a mutation the new scene-select observer catches, so the cage
+		// re-syncs against the now-settled positions.
+		requestAnimationFrame(() => {
+			for (const block of members) {
+				block.style.removeProperty("--block-x");
+				block.style.removeProperty("--block-y");
+				block.style.removeProperty("--block-z");
+			}
+		});
 	};
 
 	const ungroupSelection = (): void => {
@@ -312,9 +356,12 @@ export const installEditor = (
 
 	const deleteSelection = (): void => {
 		if (gizmo === null) return;
-		// Removing the gizmo takes the scene-select and every wrapped block with it.
+		// Removing the gizmo takes the scene-select and every wrapped block with it;
+		// the blocks' anchors stay behind in the host, so clear them too.
 		selectionObserver?.disconnect();
 		selectionObserver = null;
+		for (const anchor of anchors.values()) anchor.remove();
+		anchors.clear();
 		gizmo.remove();
 		gizmo = null;
 		sceneSelect = null;
@@ -438,6 +485,7 @@ export const installEditor = (
 		ground.remove();
 		palette.remove();
 		selectionObserver?.disconnect();
+		for (const anchor of anchors.values()) anchor.remove();
 	};
 };
 

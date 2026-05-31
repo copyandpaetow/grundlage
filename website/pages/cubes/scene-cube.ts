@@ -60,6 +60,11 @@ customElements.define(
 						--block-scale-x: ${width};
 						--block-scale-y: ${height};
 						--block-scale-z: ${depth};
+						/* Local half-extents (px, before scale): let the selection cage bound this
+						   geometry without assuming it fills its unit cube. */
+						--block-extent-x: ${HALF_UNIT}px;
+						--block-extent-y: ${HALF_UNIT}px;
+						--block-extent-z: ${HALF_UNIT}px;
 
 						transform: translate3d(
 								var(--block-x),

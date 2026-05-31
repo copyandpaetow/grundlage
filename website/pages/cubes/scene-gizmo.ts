@@ -520,6 +520,10 @@ customElements.define(
 			element.shadowRoot?.removeEventListener("pointerdown", onHandleDown);
 			window.removeEventListener("pointermove", onPointerMove);
 			window.removeEventListener("pointerup", commitDrag);
+			// Torn down mid-drag (e.g. Escape while holding a knob): the commit never
+			// runs, so clear the in-flight inline overrides — the blocks fall back to
+			// their committed attributes instead of stranding the half-dragged value.
+			if (drag !== null) drag.blocks.forEach(clearBlockLive);
 		};
 	}),
 );

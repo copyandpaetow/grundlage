@@ -64,8 +64,14 @@ export const resolveTriple = (
 
 export type Vector3 = [number, number, number];
 
-const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
-const HALF_UNIT = UNIT_SIZE / 2;
+// Scene elements that carry a --block-* transform: leaf geometry plus the group
+// carrier. blockCornersPx recurses through a group into these to bound the set.
+const BLOCK_TAGS = new Set([
+	"scene-cube",
+	"scene-wall",
+	"scene-ramp",
+	"scene-group",
+]);
 
 // CSS single-axis rotations in screen-px space (the same space the block lays its
 // faces out in). Applied right-to-left they reproduce the block's own
@@ -90,50 +96,81 @@ const rotateAxisZ = ([x, y, z]: Vector3, sin: number, cos: number): Vector3 => [
 // The eight corners of a block in screen-px world space, read from its LIVE
 // transform: position/rotation come from the resolved --block-* custom properties
 // (so an in-flight inline drag override is honoured, not only the committed
-// attribute), size from the authored attribute (it never changes during a drag).
-// Mirrors the bridge in scene-cube, where +Y is already negated into --block-y, so
-// no sign juggling is needed here — we read the values the faces themselves use.
+// attribute). Mirrors the bridge in scene-cube, where +Y is already negated into
+// --block-y, so we read the very values the faces are laid out with — no sign
+// juggling. Each LEAF geometry also publishes its own local half-extents as
+// --block-extent-* (px, before scale), so a thin wall bounds as a slab, not a cube.
+// A transform CARRIER (a group) has no faces and no extent: we recurse into its
+// blocks and lift their corners through this element's own rotate + translate,
+// which composes correctly through nested groups.
 export const blockCornersPx = (block: Element): Vector3[] => {
 	const style = getComputedStyle(block as HTMLElement);
 	const readVar = (name: string): number => {
 		const value = parseFloat(style.getPropertyValue(name));
 		return Number.isNaN(value) ? 0 : value;
 	};
+	const hasVar = (name: string): boolean =>
+		style.getPropertyValue(name).trim() !== "";
+
 	const translate: Vector3 = [
 		readVar("--block-x"),
 		readVar("--block-y"),
 		readVar("--block-z"),
 	];
 	const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
-	const angleX = toRadians(readVar("--block-rotate-x"));
-	const angleY = toRadians(readVar("--block-rotate-y"));
-	const angleZ = toRadians(readVar("--block-rotate-z"));
-	const [width, height, depth] = resolveTriple(block, "size", SIZE_SPECIFIC, 1);
-	const half: Vector3 = [width * HALF_UNIT, height * HALF_UNIT, depth * HALF_UNIT];
+	const [sinX, cosX] = [
+		Math.sin(toRadians(readVar("--block-rotate-x"))),
+		Math.cos(toRadians(readVar("--block-rotate-x"))),
+	];
+	const [sinY, cosY] = [
+		Math.sin(toRadians(readVar("--block-rotate-y"))),
+		Math.cos(toRadians(readVar("--block-rotate-y"))),
+	];
+	const [sinZ, cosZ] = [
+		Math.sin(toRadians(readVar("--block-rotate-z"))),
+		Math.cos(toRadians(readVar("--block-rotate-z"))),
+	];
 
-	const [sinX, cosX] = [Math.sin(angleX), Math.cos(angleX)];
-	const [sinY, cosY] = [Math.sin(angleY), Math.cos(angleY)];
-	const [sinZ, cosZ] = [Math.sin(angleZ), Math.cos(angleZ)];
+	// Lift a point out of this element's local frame into its parent's frame:
+	// rotateX·Y·Z then translate, matching the block's own CSS transform order.
+	const place = (point: Vector3): Vector3 => {
+		let turned = rotateAxisZ(point, sinZ, cosZ);
+		turned = rotateAxisY(turned, sinY, cosY);
+		turned = rotateAxisX(turned, sinX, cosX);
+		return [
+			turned[0] + translate[0],
+			turned[1] + translate[1],
+			turned[2] + translate[2],
+		];
+	};
 
-	const corners: Vector3[] = [];
-	for (const signX of [-1, 1]) {
-		for (const signY of [-1, 1]) {
-			for (const signZ of [-1, 1]) {
-				let corner: Vector3 = [
-					signX * half[0],
-					signY * half[1],
-					signZ * half[2],
-				];
-				corner = rotateAxisZ(corner, sinZ, cosZ);
-				corner = rotateAxisY(corner, sinY, cosY);
-				corner = rotateAxisX(corner, sinX, cosX);
-				corners.push([
-					corner[0] + translate[0],
-					corner[1] + translate[1],
-					corner[2] + translate[2],
-				]);
+	// Leaf geometry: the eight corners of its own scaled box.
+	if (hasVar("--block-extent-x")) {
+		const scaleOf = (name: string): number =>
+			hasVar(name) ? readVar(name) : 1;
+		const half: Vector3 = [
+			readVar("--block-extent-x") * scaleOf("--block-scale-x"),
+			readVar("--block-extent-y") * scaleOf("--block-scale-y"),
+			readVar("--block-extent-z") * scaleOf("--block-scale-z"),
+		];
+		const corners: Vector3[] = [];
+		for (const signX of [-1, 1]) {
+			for (const signY of [-1, 1]) {
+				for (const signZ of [-1, 1]) {
+					corners.push(
+						place([signX * half[0], signY * half[1], signZ * half[2]]),
+					);
+				}
 			}
 		}
+		return corners;
+	}
+
+	// Transform carrier (group): bound by its blocks' corners, lifted into our frame.
+	const corners: Vector3[] = [];
+	for (const child of Array.from(block.children)) {
+		if (!BLOCK_TAGS.has(child.tagName.toLowerCase())) continue;
+		for (const corner of blockCornersPx(child)) corners.push(place(corner));
 	}
 	return corners;
 };

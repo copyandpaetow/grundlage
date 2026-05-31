@@ -60,6 +60,11 @@ customElements.define(
 						--block-scale-x: ${width};
 						--block-scale-y: ${height};
 						--block-scale-z: ${depth};
+						/* Local half-extents (px, before scale): let the selection cage bound this
+						   geometry without assuming it fills its unit cube. */
+						--block-extent-x: ${HALF_UNIT}px;
+						--block-extent-y: ${HALF_UNIT}px;
+						--block-extent-z: ${HALF_THICKNESS}px;
 
 						transform: translate3d(
 								var(--block-x),
@@ -83,8 +88,8 @@ customElements.define(
 						box-sizing: border-box;
 						border: 1px solid rgba(0, 0, 0, 0.35);
 						backface-visibility: hidden;
-							/* World sheet is pointer-events:none; faces opt back in to stay clickable. */
-							pointer-events: auto;
+						/* World sheet is pointer-events:none; faces opt back in to stay clickable. */
+						pointer-events: auto;
 						/* Ambient dim hook: a wrapping <scene-ghost> sets --block-opacity and
 						   it inherits across the slot to here. Per-face opacity keeps the 3D
 						   context intact (opacity on a preserve-3d ancestor would flatten the
