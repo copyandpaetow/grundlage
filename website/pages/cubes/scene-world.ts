@@ -2,6 +2,7 @@ import { html, render } from "../../../lib/src";
 import { installEditor, type CameraControls } from "./scene-editor";
 import "./scene-gizmo";
 import "./scene-ghost";
+import "./scene-select";
 
 // <scene-world> — owns the camera. It holds the perspective and the single
 // inverse-camera wrapper transform the whole scene inherits through. Authored

@@ -6,8 +6,15 @@ import { resolveTriple, UNIT_SIZE } from "./scene-shared";
 // position, so the slotted child shows the real shape at the real spot, just
 // translucent and inert. On drop the editor lifts the child out at the ghost's
 // position and discards the ghost — the same wrap/unwrap shape as the gizmo.
-// Editor-only: it is never serialized, and `opacity`/`pointer-events` here cascade
-// to the previewed child so the preview can't be clicked.
+// Editor-only: it is never serialized, and `pointer-events` here cascades to the
+// previewed child so the preview can't be clicked.
+//
+// Translucency is the subtle part: setting `opacity` on this wrapper would create
+// a group that FLATTENS the child's preserve-3d, collapsing the ghost to a 2D
+// silhouette. Instead we hand the child an inherited `--block-opacity`, which its
+// faces apply per-face (each face is a single plane, so dimming it stays 3D). The
+// custom property inherits across the slot into the child's shadow, so the ghost
+// dims the real geometry without ever touching its 3D context.
 
 const POSITION_SPECIFIC = ["x", "y", "z"] as const;
 
@@ -28,8 +35,10 @@ customElements.define(
 						top: 50%;
 						left: 50%;
 						transform-style: preserve-3d;
-						opacity: 0.4;
 						pointer-events: none;
+						/* Inherits across the slot into the child's faces; dims the
+						   preview per-face so the 3D context survives (see note above). */
+						--block-opacity: 0.45;
 
 						--block-x: ${positionX * UNIT_SIZE}px;
 						--block-y: ${-positionY * UNIT_SIZE}px;

@@ -31,6 +31,18 @@ const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
 const POSITION_SPECIFIC = ["x", "y", "z"] as const;
 const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
 
+// The inspector edits one authored triple at a time; this maps the field name to
+// its per-axis specific attributes (so editing `position` clears a stale `x`).
+type InspectorField = "position" | "rotation" | "size";
+const FIELD_SPECIFIC: Record<
+	InspectorField,
+	readonly [string, string, string]
+> = {
+	position: POSITION_SPECIFIC,
+	rotation: ROTATION_SPECIFIC,
+	size: SIZE_SPECIFIC,
+};
+
 const GROUND_HALF_UNITS = 20;
 
 type Vector3 = [number, number, number];
@@ -104,16 +116,32 @@ export const installEditor = (
 		gizmo = null;
 	};
 
+	// Co-selection mirrors the primary's wrap/unwrap model: wrap the block in a
+	// <scene-select> (its existence is the highlight) instead of tagging it.
+	const coWrap = (block: HTMLElement): void => {
+		const wrapper = document.createElement("scene-select");
+		block.parentNode?.insertBefore(wrapper, block);
+		wrapper.appendChild(block);
+		coSelection.add(block);
+	};
+
+	const coUnwrap = (block: HTMLElement): void => {
+		const wrapper = block.parentElement;
+		if (wrapper?.tagName.toLowerCase() === "scene-select") {
+			wrapper.parentNode?.insertBefore(block, wrapper);
+			wrapper.remove();
+		}
+		coSelection.delete(block);
+	};
+
 	const clearCoSelection = (): void => {
-		for (const block of coSelection) block.removeAttribute("co-selected");
-		coSelection.clear();
+		for (const block of [...coSelection]) coUnwrap(block);
 	};
 
 	const selectPrimary = (block: HTMLElement): void => {
 		if (block === selected) return;
 		unwrap();
-		coSelection.delete(block);
-		block.removeAttribute("co-selected");
+		coUnwrap(block);
 		wrap(block);
 	};
 
@@ -123,13 +151,8 @@ export const installEditor = (
 			return;
 		}
 		if (block === selected) return;
-		if (coSelection.has(block)) {
-			coSelection.delete(block);
-			block.removeAttribute("co-selected");
-		} else {
-			coSelection.add(block);
-			block.setAttribute("co-selected", "");
-		}
+		if (coSelection.has(block)) coUnwrap(block);
+		else coWrap(block);
 	};
 
 	const deselectAll = (): void => {
@@ -270,7 +293,11 @@ export const installEditor = (
 		gizmo?.remove();
 		selected = null;
 		gizmo = null;
-		for (const block of coSelection) block.remove();
+		for (const block of [...coSelection]) {
+			const wrapper = block.parentElement;
+			if (wrapper?.tagName.toLowerCase() === "scene-select") wrapper.remove();
+			else block.remove();
+		}
 		coSelection.clear();
 		updateInspector();
 	};
@@ -284,37 +311,52 @@ export const installEditor = (
 		onGroup: groupSelection,
 		onUngroup: ungroupSelection,
 		onToggleCamera: () => camera.toggleMode(),
-		onSize: (axis, value) => {
-			if (selected === null || !SIZED_TAGS.has(selected.tagName.toLowerCase())) {
+		onField: (field, axis, value) => {
+			if (selected === null) return;
+			if (field === "size" && !SIZED_TAGS.has(selected.tagName.toLowerCase())) {
 				return;
 			}
-			const size = resolveTriple(selected, "size", SIZE_SPECIFIC, 1);
-			size[axis] = value;
-			selected.setAttribute("size", size.map(formatNumber).join(" "));
-			selected.removeAttribute(SIZE_SPECIFIC[axis]);
+			const specific = FIELD_SPECIFIC[field];
+			const triple = resolveTriple(
+				selected,
+				field,
+				specific,
+				field === "size" ? 1 : 0,
+			);
+			triple[axis] = value;
+			selected.setAttribute(field, triple.map(formatNumber).join(" "));
+			// Clear the per-axis override so the edited shorthand wins.
+			selected.removeAttribute(specific[axis]);
 		},
 	});
 	shadowRoot.appendChild(palette);
 
-	// Reflect the primary's size into the inspector inputs, and show them only for
-	// a single sized block (not a group, not a multi-selection).
+	// Reflect the primary's transform into the inspector inputs. The whole panel
+	// shows for a single selection (block or group); the size row is disabled for a
+	// group, which has no size of its own.
 	function updateInspector(): void {
-		const inspector = palette.querySelector(
-			".size-inspector",
-		) as HTMLElement | null;
+		const inspector = palette.querySelector(".inspector") as HTMLElement | null;
 		if (inspector === null) return;
-		const showable =
-			selected !== null &&
-			coSelection.size === 0 &&
-			SIZED_TAGS.has(selected.tagName.toLowerCase());
+		const showable = selected !== null && coSelection.size === 0;
 		inspector.style.display = showable ? "" : "none";
 		if (!showable || selected === null) return;
-		const size = resolveTriple(selected, "size", SIZE_SPECIFIC, 1);
-		for (let axis = 0; axis < 3; axis++) {
-			const input = inspector.querySelector(
-				`input[data-size="${axis}"]`,
-			) as HTMLInputElement | null;
-			if (input !== null) input.value = String(size[axis]);
+		const sized = SIZED_TAGS.has(selected.tagName.toLowerCase());
+		const fields: InspectorField[] = ["position", "rotation", "size"];
+		for (const field of fields) {
+			const triple = resolveTriple(
+				selected,
+				field,
+				FIELD_SPECIFIC[field],
+				field === "size" ? 1 : 0,
+			);
+			for (let axis = 0; axis < 3; axis++) {
+				const input = inspector.querySelector(
+					`input[data-field="${field}"][data-axis="${axis}"]`,
+				) as HTMLInputElement | null;
+				if (input === null) continue;
+				input.value = String(triple[axis]);
+				if (field === "size") input.disabled = !sized;
+			}
 		}
 	}
 
@@ -406,7 +448,11 @@ const buildPalette = (handlers: {
 	onGroup: () => void;
 	onUngroup: () => void;
 	onToggleCamera: () => string;
-	onSize: (axis: number, value: number) => void;
+	onField: (
+		field: InspectorField,
+		axis: number,
+		value: number,
+	) => void;
 }): HTMLElement => {
 	const container = document.createElement("div");
 	container.className = "editor-palette";
@@ -450,12 +496,20 @@ const buildPalette = (handlers: {
 				background: rgba(255, 255, 255, 0.18);
 				margin: 0 2px;
 			}
-			.editor-palette .size-inspector {
+			.editor-palette .inspector {
+				display: flex;
+				flex-direction: column;
+				gap: 4px;
+			}
+			.editor-palette .field-row {
 				gap: 4px;
 				color: rgba(255, 255, 255, 0.75);
 				font: 600 11px/1 system-ui, sans-serif;
 			}
-			.editor-palette .size-inspector input {
+			.editor-palette .field-row > span {
+				width: 30px;
+			}
+			.editor-palette .field-row input {
 				width: 48px;
 				font: 600 11px/1 system-ui, sans-serif;
 				color: #f5f5f5;
@@ -463,6 +517,10 @@ const buildPalette = (handlers: {
 				border: 1px solid rgba(255, 255, 255, 0.18);
 				border-radius: 5px;
 				padding: 4px 5px;
+			}
+			.editor-palette .field-row input:disabled {
+				opacity: 0.4;
+				cursor: not-allowed;
 			}
 		</style>
 		<div class="row">
@@ -477,11 +535,25 @@ const buildPalette = (handlers: {
 			<button data-action="camera">Camera: Free</button>
 			<button data-action="export">Export</button>
 		</div>
-		<div class="row size-inspector" style="display:none">
-			<span>Size</span>
-			<input type="number" step="0.5" min="0.1" data-size="0" title="width" />
-			<input type="number" step="0.5" min="0.1" data-size="1" title="height" />
-			<input type="number" step="0.5" min="0.1" data-size="2" title="depth" />
+		<div class="inspector" style="display:none">
+			<div class="row field-row">
+				<span>Pos</span>
+				<input type="number" step="0.5" data-field="position" data-axis="0" title="x" />
+				<input type="number" step="0.5" data-field="position" data-axis="1" title="y" />
+				<input type="number" step="0.5" data-field="position" data-axis="2" title="z" />
+			</div>
+			<div class="row field-row">
+				<span>Rot</span>
+				<input type="number" step="15" data-field="rotation" data-axis="0" title="rotate-x" />
+				<input type="number" step="15" data-field="rotation" data-axis="1" title="rotate-y" />
+				<input type="number" step="15" data-field="rotation" data-axis="2" title="rotate-z" />
+			</div>
+			<div class="row field-row">
+				<span>Size</span>
+				<input type="number" step="0.5" min="0.1" data-field="size" data-axis="0" title="width" />
+				<input type="number" step="0.5" min="0.1" data-field="size" data-axis="1" title="height" />
+				<input type="number" step="0.5" min="0.1" data-field="size" data-axis="2" title="depth" />
+			</div>
 		</div>
 	`;
 	container.addEventListener("click", (event) => {
@@ -510,10 +582,14 @@ const buildPalette = (handlers: {
 	container.addEventListener("input", (event) => {
 		const target = event.target;
 		if (!(target instanceof HTMLInputElement)) return;
-		const axis = target.dataset.size;
-		if (axis === undefined) return;
+		const field = target.dataset.field as InspectorField | undefined;
+		const axis = target.dataset.axis;
+		if (field === undefined || axis === undefined) return;
 		const value = Number(target.value);
-		if (!Number.isNaN(value) && value > 0) handlers.onSize(Number(axis), value);
+		if (Number.isNaN(value)) return;
+		// Position and rotation accept any value; only size must stay positive.
+		if (field === "size" && value <= 0) return;
+		handlers.onField(field, Number(axis), value);
 	});
 	return container;
 };
@@ -569,7 +645,11 @@ const exportScene = (host: HTMLElement): void => {
 	const walk = (parent: Element): void => {
 		for (const child of Array.from(parent.children)) {
 			if (isSelectable(child)) serializeBlock(child, 1, lines);
-			else if (child.tagName.toLowerCase() === "scene-gizmo") walk(child);
+			else if (
+				child.tagName.toLowerCase() === "scene-gizmo" ||
+				child.tagName.toLowerCase() === "scene-select"
+			)
+				walk(child);
 		}
 	};
 	walk(host);

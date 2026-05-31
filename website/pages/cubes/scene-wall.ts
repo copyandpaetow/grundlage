@@ -85,12 +85,13 @@ customElements.define(
 						backface-visibility: hidden;
 							/* World sheet is pointer-events:none; faces opt back in to stay clickable. */
 							pointer-events: auto;
+						/* Ambient dim hook: a wrapping <scene-ghost> sets --block-opacity and
+						   it inherits across the slot to here. Per-face opacity keeps the 3D
+						   context intact (opacity on a preserve-3d ancestor would flatten the
+						   whole block). Geometry knows nothing about ghosting. */
+						opacity: var(--block-opacity, 1);
 					}
 
-					:host([co-selected]) .face {
-						outline: 2px dashed rgba(255, 255, 255, 0.8);
-						outline-offset: -2px;
-					}
 
 					/* Broad faces: the painted surfaces of the panel. */
 					.front,
