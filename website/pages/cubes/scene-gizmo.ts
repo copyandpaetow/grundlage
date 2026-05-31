@@ -1,42 +1,52 @@
 import { html, render } from "../../../lib/src";
 import {
+	blocksBoundsPx,
 	formatNumber,
 	resolveTriple,
 	snapToGrid,
 	UNIT_SIZE,
+	type Vector3,
 } from "./scene-shared";
 
-// <scene-gizmo> — an editor-only overlay that wraps the selected block. Selecting
-// reparents the block inside a gizmo (<scene-gizmo><scene-cube/></scene-gizmo>),
-// deselecting unwraps it again — the element's mere existence is the selection.
+// <scene-gizmo> — the manipulation knobs, and nothing else. The cage moved out to
+// <scene-select>; the gizmo now wraps a scene-select (which in turn holds the
+// selected blocks): `<scene-gizmo><scene-select><scene-cube/>…</scene-select></scene-gizmo>`.
+// So the gizmo reaches THROUGH the scene-select to the blocks it operates on, and a
+// one-block selection and a many-block selection drive through one code path.
 //
-// The wrapped child stays the single source of truth for its transform: the
-// gizmo never carries the transform, it just mirrors the child's position/
-// rotation onto its handle chrome and, while a handle is dragged, writes the new
-// values onto that same child (live --block-* during the drag, the authored
-// attribute on drop). So unwrapping needs no bake-back — the child already holds
-// everything.
+// The blocks stay the single source of truth for their own transforms: the gizmo
+// never carries a transform, it sits its handles at the blocks' shared centroid and,
+// during a drag, writes the new values onto the blocks (live --block-* through the
+// drag, the authored attribute on drop). Unwrapping needs no bake-back.
 //
-// Drag projection is DOM-native and self-contained: the gizmo measures its own
-// handle knobs (already perspective-projected by the browser) and turns a pointer
-// delta into world units with one dot product. No camera matrix, no reaching
-// across shadow boundaries, no functions bolted onto other elements.
+// The handle frame is WORLD-axis-aligned (it follows the centroid's position, never
+// any block's rotation) so the handles never swing behind a turned block and the
+// X/Y/Z handles line up with the world axes they actually drive. Translating moves
+// every block by the same world delta; the yaw knob spins every block about the
+// shared centroid (orbit + local spin), so for a single block it is a spin in place.
+//
+// Drag projection is DOM-native: the gizmo measures its own handle knobs (already
+// perspective-projected by the browser) and turns a pointer delta into world units
+// with one dot product — no camera matrix, no reaching across shadow boundaries.
 
 const POSITION_SPECIFIC = ["x", "y", "z"] as const;
 const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
 const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
+const SELECTABLE = new Set([
+	"scene-cube",
+	"scene-wall",
+	"scene-ramp",
+	"scene-group",
+]);
 
 const HANDLE_LENGTH = UNIT_SIZE;
-const HALF_UNIT = UNIT_SIZE / 2;
 const YAW_PER_PIXEL = 0.5;
-// Screen-px the cage sits outside each face, and the px a knob sits beyond that,
-// added onto the block's half-extent so the chrome grows with the block.
-const CAGE_MARGIN = 6;
+// Screen-px a knob sits beyond the selection's bounding box, so the handles always
+// clear the cage whatever the selection's size.
 const HANDLE_MARGIN = 44;
 
 type ScreenPoint = { x: number; y: number };
 type DragMode = "x" | "y" | "z" | "yaw";
-type Vector3 = [number, number, number];
 
 const dot = (a: ScreenPoint, b: ScreenPoint): number => a.x * b.x + a.y * b.y;
 
@@ -45,21 +55,45 @@ const centerOf = (rectangle: DOMRect): ScreenPoint => ({
 	y: rectangle.top + rectangle.height / 2,
 });
 
+const addVectors = (a: Vector3, b: Vector3): Vector3 => [
+	a[0] + b[0],
+	a[1] + b[1],
+	a[2] + b[2],
+];
+const subtractVectors = (a: Vector3, b: Vector3): Vector3 => [
+	a[0] - b[0],
+	a[1] - b[1],
+	a[2] - b[2],
+];
+// Author-space orbit about Y, matching CSS rotateY. Used to swing blocks around the
+// shared centroid as the yaw knob turns.
+const rotateAroundY = ([x, y, z]: Vector3, degrees: number): Vector3 => {
+	const radians = (degrees * Math.PI) / 180;
+	const sin = Math.sin(radians);
+	const cos = Math.cos(radians);
+	return [x * cos + z * sin, y, -x * sin + z * cos];
+};
+
 customElements.define(
 	"scene-gizmo",
 	render(function* (element) {
-		// The block we annotate: our first slotted element. Resolved on slotchange.
-		let child: HTMLElement | null = null;
-		// Watches the wrapped child so the chrome follows attribute edits made
-		// elsewhere (e.g. the editor's position/rotation/size inspector).
+		// Watches the wrapped scene-select so the handles follow blocks being added or
+		// removed (cmd-click) and attribute edits made elsewhere (the inspector).
 		let childObserver: MutationObserver | null = null;
+		// Current handle lengths in px per axis — needed to convert a knob's measured
+		// screen offset back into one-world-unit screen vectors for drag projection.
+		const lengthPx: Vector3 = [HANDLE_LENGTH, HANDLE_LENGTH, HANDLE_LENGTH];
 		let drag:
 			| {
 					mode: DragMode;
+					axisIndex: number;
 					startPointer: ScreenPoint;
+					// Screen displacement for ONE world unit along the dragged axis.
 					axisScreen: ScreenPoint;
-					startPosition: Vector3;
-					startRotation: Vector3;
+					centroid: Vector3;
+					blocks: HTMLElement[];
+					startPositions: Vector3[];
+					startRotations: Vector3[];
 			  }
 			| null = null;
 
@@ -67,67 +101,91 @@ customElements.define(
 			resolveTriple(target, "position", POSITION_SPECIFIC, 0);
 		const readRotation = (target: Element): Vector3 =>
 			resolveTriple(target, "rotation", ROTATION_SPECIFIC, 0);
-		const readSize = (target: Element): Vector3 =>
-			resolveTriple(target, "size", SIZE_SPECIFIC, 1);
 
-		// Mirror the child's translate + rotate onto the chrome frame so both the
-		// bounding box and the handles sit on the block in its own orientation
-		// (local-axis manipulation). The frame carries no scale — handles must keep
-		// a constant pixel size regardless of how big the block is.
-		const placeMirror = (position: Vector3, rotation: Vector3): void => {
-			const mirror = element.shadowRoot?.querySelector(
-				".mirror",
-			) as HTMLElement | null;
-			if (mirror === null) return;
-			mirror.style.setProperty("--block-x", `${position[0] * UNIT_SIZE}px`);
-			mirror.style.setProperty("--block-y", `${-position[1] * UNIT_SIZE}px`);
-			mirror.style.setProperty("--block-z", `${position[2] * UNIT_SIZE}px`);
-			mirror.style.setProperty("--block-rotate-x", `${rotation[0]}deg`);
-			mirror.style.setProperty("--block-rotate-y", `${rotation[1]}deg`);
-			mirror.style.setProperty("--block-rotate-z", `${rotation[2]}deg`);
+		// Our slotted child is the scene-select; the blocks are its children. Reaching
+		// through it keeps the gizmo's knob logic identical for one or many blocks.
+		const sceneSelect = (): HTMLElement | null => {
+			const slot = element.shadowRoot?.querySelector("slot");
+			const assigned = (slot?.assignedElements() ?? [])[0];
+			return assigned instanceof HTMLElement ? assigned : null;
+		};
+		const blocks = (): HTMLElement[] => {
+			const host = sceneSelect();
+			if (host === null) return [];
+			return Array.from(host.children).filter(
+				(node): node is HTMLElement =>
+					node instanceof HTMLElement &&
+					SELECTABLE.has(node.tagName.toLowerCase()),
+			);
+		};
+		const centroidOf = (list: HTMLElement[]): Vector3 => {
+			if (list.length === 0) return [0, 0, 0];
+			const sum = list
+				.map(readPosition)
+				.reduce(addVectors, [0, 0, 0] as Vector3);
+			return [sum[0] / list.length, sum[1] / list.length, sum[2] / list.length];
 		};
 
-		// Drive the cage and the handle lengths off the block's real half-extents so
-		// the chrome scales with the block: the cage clears each face by CAGE_MARGIN,
-		// each knob sits HANDLE_MARGIN beyond. Written in px onto the unscaled .mirror
-		// frame, so the values read straight as world units (no scale to undo). We do
-		// NOT scale the chrome itself — scaling would stretch the knobs and the cage's
-		// border thickness with the block.
-		const sizeChrome = (size: Vector3): void => {
+		// Sit the handle frame at the selection's shared centroid (world position only,
+		// never a rotation), so it stays world-axis-aligned and is the rotation pivot.
+		const placeMirror = (centroid: Vector3): void => {
 			const mirror = element.shadowRoot?.querySelector(
 				".mirror",
 			) as HTMLElement | null;
 			if (mirror === null) return;
-			const axes = ["x", "y", "z"] as const;
-			axes.forEach((axis, index) => {
-				const halfExtent = size[index] * HALF_UNIT;
-				mirror.style.setProperty(`--half-${axis}`, `${halfExtent + CAGE_MARGIN}px`);
-				mirror.style.setProperty(`--len-${axis}`, `${halfExtent + HANDLE_MARGIN}px`);
+			mirror.style.setProperty("--block-x", `${centroid[0] * UNIT_SIZE}px`);
+			mirror.style.setProperty("--block-y", `${-centroid[1] * UNIT_SIZE}px`);
+			mirror.style.setProperty("--block-z", `${centroid[2] * UNIT_SIZE}px`);
+		};
+
+		// Drive the handle lengths off the selection's bounding box so the knobs clear
+		// the cage whatever its size. Written in px onto the unscaled .mirror so the
+		// values read straight as screen units; the chrome itself is never scaled
+		// (scaling would stretch the knobs and the bars' thickness).
+		const sizeChrome = (halfExtentsPx: Vector3): void => {
+			const mirror = element.shadowRoot?.querySelector(
+				".mirror",
+			) as HTMLElement | null;
+			if (mirror === null) return;
+			(["x", "y", "z"] as const).forEach((axis, index) => {
+				const length = halfExtentsPx[index] + HANDLE_MARGIN;
+				mirror.style.setProperty(`--len-${axis}`, `${length}px`);
+				lengthPx[index] = length;
 			});
 		};
 
-		const syncHandlesToChild = (): void => {
-			if (child === null) return;
-			placeMirror(readPosition(child), readRotation(child));
-			sizeChrome(readSize(child));
+		const syncHandles = (): void => {
+			const list = blocks();
+			if (list.length === 0) return;
+			placeMirror(centroidOf(list));
+			const bounds = blocksBoundsPx(list);
+			if (bounds !== null) sizeChrome(bounds.half);
 		};
 
-		// Live drag overrides the child's :host values inline (inline wins), staying
+		// Live drag overrides each block's :host values inline (inline wins), staying
 		// compositor-only; the commit clears them once the bridge re-resolves.
-		const writeChildPosition = (position: Vector3): void => {
-			if (child === null) return;
-			child.style.setProperty("--block-x", `${position[0] * UNIT_SIZE}px`);
-			child.style.setProperty("--block-y", `${-position[1] * UNIT_SIZE}px`);
-			child.style.setProperty("--block-z", `${position[2] * UNIT_SIZE}px`);
+		const writeBlockPosition = (block: HTMLElement, position: Vector3): void => {
+			block.style.setProperty("--block-x", `${position[0] * UNIT_SIZE}px`);
+			block.style.setProperty("--block-y", `${-position[1] * UNIT_SIZE}px`);
+			block.style.setProperty("--block-z", `${position[2] * UNIT_SIZE}px`);
 		};
-		const writeChildYaw = (yaw: number): void => {
-			child?.style.setProperty("--block-rotate-y", `${yaw}deg`);
+		const clearBlockLive = (block: HTMLElement): void => {
+			block.style.removeProperty("--block-x");
+			block.style.removeProperty("--block-y");
+			block.style.removeProperty("--block-z");
+			block.style.removeProperty("--block-rotate-y");
 		};
-		const clearChildLive = (target: HTMLElement): void => {
-			target.style.removeProperty("--block-x");
-			target.style.removeProperty("--block-y");
-			target.style.removeProperty("--block-z");
-			target.style.removeProperty("--block-rotate-y");
+		// Read a block's live position back out of its inline overrides (px → world,
+		// undoing the Y negation), falling back to the drag-start value.
+		const readLivePosition = (block: HTMLElement, fallback: Vector3): Vector3 => {
+			const read = (name: string, sign = 1): number | null => {
+				const raw = block.style.getPropertyValue(name);
+				return raw === "" ? null : (parseFloat(raw) / UNIT_SIZE) * sign;
+			};
+			const x = read("--block-x");
+			const y = read("--block-y", -1);
+			const z = read("--block-z");
+			return [x ?? fallback[0], y ?? fallback[1], z ?? fallback[2]];
 		};
 
 		const handlePoint = (selector: string): ScreenPoint => {
@@ -138,70 +196,81 @@ customElements.define(
 		};
 
 		const onPointerMove = (event: PointerEvent): void => {
-			if (drag === null || child === null) return;
+			if (drag === null) return;
+			const active = drag;
 			const delta: ScreenPoint = {
-				x: event.clientX - drag.startPointer.x,
-				y: event.clientY - drag.startPointer.y,
+				x: event.clientX - active.startPointer.x,
+				y: event.clientY - active.startPointer.y,
 			};
 
-			if (drag.mode === "yaw") {
-				const yaw = drag.startRotation[1] + delta.x * YAW_PER_PIXEL;
-				writeChildYaw(yaw);
-				placeMirror(drag.startPosition, [
-					drag.startRotation[0],
-					yaw,
-					drag.startRotation[2],
-				]);
+			if (active.mode === "yaw") {
+				// Every block spins about the shared centroid: orbit its position and add
+				// the same yaw to its own rotation. For one block centroid == position, so
+				// the orbit term is zero and it spins in place. The chrome stays put.
+				const deltaYaw = delta.x * YAW_PER_PIXEL;
+				active.blocks.forEach((block, index) => {
+					const relative = subtractVectors(
+						active.startPositions[index],
+						active.centroid,
+					);
+					const orbited = addVectors(
+						active.centroid,
+						rotateAroundY(relative, deltaYaw),
+					);
+					writeBlockPosition(block, orbited);
+					block.style.setProperty(
+						"--block-rotate-y",
+						`${active.startRotations[index][1] + deltaYaw}deg`,
+					);
+				});
 				return;
 			}
 
-			const lengthSquared = dot(drag.axisScreen, drag.axisScreen);
+			const lengthSquared = dot(active.axisScreen, active.axisScreen);
 			const units =
-				lengthSquared === 0 ? 0 : dot(delta, drag.axisScreen) / lengthSquared;
-			const axisIndex = drag.mode === "x" ? 0 : drag.mode === "y" ? 1 : 2;
-			const next = [...drag.startPosition] as Vector3;
-			next[axisIndex] = drag.startPosition[axisIndex] + units;
-			writeChildPosition(next);
-			placeMirror(next, drag.startRotation);
+				lengthSquared === 0 ? 0 : dot(delta, active.axisScreen) / lengthSquared;
+			active.blocks.forEach((block, index) => {
+				const next = [...active.startPositions[index]] as Vector3;
+				next[active.axisIndex] =
+					active.startPositions[index][active.axisIndex] + units;
+				writeBlockPosition(block, next);
+			});
+			// The centroid slides by the same delta, so the handles follow live.
+			const nextCentroid = [...active.centroid] as Vector3;
+			nextCentroid[active.axisIndex] = active.centroid[active.axisIndex] + units;
+			placeMirror(nextCentroid);
 		};
 
 		const commitDrag = (): void => {
-			if (drag === null || child === null) return;
-			const settledChild = child;
-			if (drag.mode === "yaw") {
-				const raw = settledChild.style.getPropertyValue("--block-rotate-y");
-				const yaw = Math.round(
-					raw === "" ? drag.startRotation[1] : parseFloat(raw),
-				);
-				const [rotateX, , rotateZ] = drag.startRotation;
-				settledChild.setAttribute(
-					"rotation",
-					`${formatNumber(rotateX)} ${formatNumber(yaw)} ${formatNumber(rotateZ)}`,
-				);
-			} else {
-				const read = (name: string, fallback: number, sign = 1): number => {
-					const raw = settledChild.style.getPropertyValue(name);
-					return raw === "" ? fallback : (parseFloat(raw) / UNIT_SIZE) * sign;
-				};
-				const committed = [
-					read("--block-x", drag.startPosition[0]),
-					read("--block-y", drag.startPosition[1], -1),
-					read("--block-z", drag.startPosition[2]),
-				].map(snapToGrid) as Vector3;
-				settledChild.setAttribute(
-					"position",
-					committed.map(formatNumber).join(" "),
-				);
-				settledChild.removeAttribute("x");
-				settledChild.removeAttribute("y");
-				settledChild.removeAttribute("z");
-			}
-			// Re-resolve on the next frame (the bridge update is async) so clearing
-			// the inline overrides doesn't flash the pre-commit value, then re-pin the
-			// handles to the committed transform.
+			if (drag === null) return;
+			const settled = drag;
+			settled.blocks.forEach((block, index) => {
+				if (settled.mode === "yaw") {
+					const raw = block.style.getPropertyValue("--block-rotate-y");
+					const yaw = Math.round(
+						raw === "" ? settled.startRotations[index][1] : parseFloat(raw),
+					);
+					const [rotateX, , rotateZ] = settled.startRotations[index];
+					block.setAttribute(
+						"rotation",
+						`${formatNumber(rotateX)} ${formatNumber(yaw)} ${formatNumber(rotateZ)}`,
+					);
+				}
+				const committed = readLivePosition(
+					block,
+					settled.startPositions[index],
+				).map(snapToGrid) as Vector3;
+				block.setAttribute("position", committed.map(formatNumber).join(" "));
+				block.removeAttribute("x");
+				block.removeAttribute("y");
+				block.removeAttribute("z");
+			});
+			// Re-resolve on the next frame (the bridge update is async) so clearing the
+			// inline overrides doesn't flash the pre-commit value, then re-pin the
+			// handles to the committed transforms.
 			requestAnimationFrame(() => {
-				clearChildLive(settledChild);
-				syncHandlesToChild();
+				settled.blocks.forEach(clearBlockLive);
+				syncHandles();
 			});
 			drag = null;
 			window.removeEventListener("pointermove", onPointerMove);
@@ -210,7 +279,9 @@ customElements.define(
 
 		const onHandleDown = (rawEvent: Event): void => {
 			const event = rawEvent as PointerEvent;
-			if (event.button !== 0 || child === null) return;
+			if (event.button !== 0) return;
+			const list = blocks();
+			if (list.length === 0) return;
 			const handle = (event.target as HTMLElement)?.closest("[data-axis]");
 			if (!(handle instanceof HTMLElement)) return;
 			const mode = handle.dataset.axis as DragMode;
@@ -218,22 +289,35 @@ customElements.define(
 			event.preventDefault();
 			event.stopPropagation();
 
-			const origin = handlePoint("#origin");
-			const tip =
-				mode === "x"
-					? handlePoint("#knob-x")
-					: mode === "y"
-						? handlePoint("#knob-y")
-						: handlePoint("#knob-z");
+			const axisIndex = mode === "x" ? 0 : mode === "y" ? 1 : 2;
+			let axisScreen: ScreenPoint = { x: 0, y: 0 };
+			if (mode !== "yaw") {
+				const origin = handlePoint("#origin");
+				const tip =
+					mode === "x"
+						? handlePoint("#knob-x")
+						: mode === "y"
+							? handlePoint("#knob-y")
+							: handlePoint("#knob-z");
+				// The knob sits lengthPx px from the origin = lengthPx / UNIT_SIZE world
+				// units out; scale its screen offset down to a single world unit so the
+				// dot-product projection yields world units directly.
+				const worldUnitsOut = lengthPx[axisIndex] / UNIT_SIZE;
+				const scale = worldUnitsOut === 0 ? 0 : 1 / worldUnitsOut;
+				axisScreen = {
+					x: (tip.x - origin.x) * scale,
+					y: (tip.y - origin.y) * scale,
+				};
+			}
 			drag = {
 				mode,
+				axisIndex,
 				startPointer: { x: event.clientX, y: event.clientY },
-				axisScreen:
-					mode === "yaw"
-						? { x: 0, y: 0 }
-						: { x: tip.x - origin.x, y: tip.y - origin.y },
-				startPosition: readPosition(child),
-				startRotation: readRotation(child),
+				axisScreen,
+				centroid: centroidOf(list),
+				blocks: list,
+				startPositions: list.map(readPosition),
+				startRotations: list.map(readRotation),
 			};
 			window.addEventListener("pointermove", onPointerMove);
 			window.addEventListener("pointerup", commitDrag);
@@ -243,76 +327,29 @@ customElements.define(
 			<style>
 				:host {
 					position: absolute;
-					/* Zero size at the world centre, exactly like the block before wrapping, so
-					   the slotted child's own top/left:50% still resolves to the world centre and
-					   its transform is unchanged. The chrome below mirrors the child. */
+					/* Zero size at the world centre, so the slotted scene-select (and the
+					   blocks within) keep their own top/left:50% world origin unchanged. The
+					   handle frame below positions itself at the blocks' centroid. */
 					top: 50%;
 					left: 50%;
 					transform-style: preserve-3d;
 					pointer-events: none;
 				}
 
-				/* Shared chrome frame: mirrors the child's translate + rotate (never its scale).
-				   Both the bounding box and the handles live in this frame, so they pick up the
-				   block's local orientation for local-axis manipulation. */
+				/* Handle frame: follows the centroid's position but NOT any block's
+				   rotation, so the handles stay world-axis-aligned (never swing behind a
+				   block, and the X/Y/Z handles line up with the world axes they drive). */
 				.mirror {
 					position: absolute;
 					top: 50%;
 					left: 50%;
 					transform-style: preserve-3d;
 					transform: translate3d(
-							var(--block-x, 0px),
-							var(--block-y, 0px),
-							var(--block-z, 0px)
-						)
-						rotateX(var(--block-rotate-x, 0deg))
-						rotateY(var(--block-rotate-y, 0deg))
-						rotateZ(var(--block-rotate-z, 0deg));
+						var(--block-x, 0px),
+						var(--block-y, 0px),
+						var(--block-z, 0px)
+					);
 				}
-
-				/* Faint cage sized a hair outside the block (driven by --half-*), so the
-				   selection reads as large as its child instead of a zero-size point. The
-				   cage is NOT scaled — it is built from explicit half-extents, so its border
-				   stays 1px and it always clears the opaque faces enough to be seen. */
-				.body {
-					position: absolute;
-					top: 50%;
-					left: 50%;
-					transform-style: preserve-3d;
-					pointer-events: none;
-				}
-				.body .edge {
-					position: absolute;
-					top: 50%;
-					left: 50%;
-					box-sizing: border-box;
-					border: 1px solid rgba(255, 255, 255, 0.6);
-					background: rgba(255, 255, 255, 0.04);
-				}
-				.body .front,
-				.body .back {
-					width: calc(2 * var(--half-x, ${HALF_UNIT}px));
-					height: calc(2 * var(--half-y, ${HALF_UNIT}px));
-					margin: calc(-1 * var(--half-y, ${HALF_UNIT}px)) 0 0 calc(-1 * var(--half-x, ${HALF_UNIT}px));
-				}
-				.body .front { transform: translateZ(var(--half-z, ${HALF_UNIT}px)); }
-				.body .back { transform: translateZ(calc(-1 * var(--half-z, ${HALF_UNIT}px))); }
-				.body .right,
-				.body .left {
-					width: calc(2 * var(--half-z, ${HALF_UNIT}px));
-					height: calc(2 * var(--half-y, ${HALF_UNIT}px));
-					margin: calc(-1 * var(--half-y, ${HALF_UNIT}px)) 0 0 calc(-1 * var(--half-z, ${HALF_UNIT}px));
-				}
-				.body .right { transform: rotateY(90deg) translateZ(var(--half-x, ${HALF_UNIT}px)); }
-				.body .left { transform: rotateY(-90deg) translateZ(var(--half-x, ${HALF_UNIT}px)); }
-				.body .top,
-				.body .bottom {
-					width: calc(2 * var(--half-x, ${HALF_UNIT}px));
-					height: calc(2 * var(--half-z, ${HALF_UNIT}px));
-					margin: calc(-1 * var(--half-z, ${HALF_UNIT}px)) 0 0 calc(-1 * var(--half-x, ${HALF_UNIT}px));
-				}
-				.body .top { transform: rotateX(90deg) translateZ(var(--half-y, ${HALF_UNIT}px)); }
-				.body .bottom { transform: rotateX(-90deg) translateZ(var(--half-y, ${HALF_UNIT}px)); }
 
 				.handles {
 					position: absolute;
@@ -328,8 +365,8 @@ customElements.define(
 				}
 
 				/* Each axis bar is a thin rod pivoting at the origin (transform-origin: left
-				   center); its length tracks the block's half-extent so it always reaches its
-				   knob, whatever the block's size. */
+				   center); its length tracks the selection's extent so it always reaches its
+				   knob, whatever the selection's size. */
 				.bar {
 					position: absolute;
 					top: 50%;
@@ -350,6 +387,10 @@ customElements.define(
 					pointer-events: auto;
 					cursor: grab;
 				}
+				/* Knobs are flat discs; left as-is they vanish edge-on as the view turns.
+				   Appending the inverse of the world's camera rotation (it applies
+				   rotateX(-pitch) rotateY(-yaw)) makes each disc face the camera — a CSS
+				   billboard, no JS per frame. The trailing translate is unaffected. */
 				#origin {
 					position: absolute;
 					top: 50%;
@@ -359,12 +400,18 @@ customElements.define(
 					margin: -6px 0 0 -6px;
 					border-radius: 50%;
 					background: #f5f5f5;
+					transform: rotateY(var(--camera-yaw, 0deg))
+						rotateX(var(--camera-pitch, 0deg));
 				}
 
 				/* +x runs right: the bar needs no rotation (its left edge is the origin). */
-				.axis-x .bar { width: var(--len-x, ${HANDLE_LENGTH}px); background: #ff5d5d; }
+				.axis-x .bar {
+					width: var(--len-x, ${HANDLE_LENGTH}px);
+					background: #ff5d5d;
+				}
 				.axis-x .knob {
-					transform: translateX(var(--len-x, ${HANDLE_LENGTH}px));
+					transform: translateX(var(--len-x, ${HANDLE_LENGTH}px))
+						rotateY(var(--camera-yaw, 0deg)) rotateX(var(--camera-pitch, 0deg));
 					background: #ff5d5d;
 				}
 				/* Author +Y is up; screen +Y is down, so the up handle points -y. */
@@ -374,7 +421,8 @@ customElements.define(
 					background: #62d562;
 				}
 				.axis-y .knob {
-					transform: translateY(calc(-1 * var(--len-y, ${HANDLE_LENGTH}px)));
+					transform: translateY(calc(-1 * var(--len-y, ${HANDLE_LENGTH}px)))
+						rotateY(var(--camera-yaw, 0deg)) rotateX(var(--camera-pitch, 0deg));
 					background: #62d562;
 				}
 				/* +z points toward the viewer. */
@@ -384,7 +432,8 @@ customElements.define(
 					background: #5d9dff;
 				}
 				.axis-z .knob {
-					transform: translateZ(var(--len-z, ${HANDLE_LENGTH}px));
+					transform: translateZ(var(--len-z, ${HANDLE_LENGTH}px))
+						rotateY(var(--camera-yaw, 0deg)) rotateX(var(--camera-pitch, 0deg));
 					background: #5d9dff;
 				}
 				.knob-yaw {
@@ -399,24 +448,21 @@ customElements.define(
 					background: #ffd95d;
 					pointer-events: auto;
 					cursor: grab;
-					transform: translate3d(calc(var(--len-x, ${HANDLE_LENGTH}px) * 0.7), 0, calc(var(--len-z, ${HANDLE_LENGTH}px) * 0.7));
+					transform: translate3d(
+							calc(var(--len-x, ${HANDLE_LENGTH}px) * 0.7),
+							0,
+							calc(var(--len-z, ${HANDLE_LENGTH}px) * 0.7)
+						)
+						rotateY(var(--camera-yaw, 0deg)) rotateX(var(--camera-pitch, 0deg));
 				}
 
-				/* The wrapped child must share our 3D context, so the slot must not introduce a
-				   flattening box. */
+				/* The wrapped scene-select must share our 3D context, so the slot must not
+				   introduce a flattening box. */
 				slot {
 					display: contents;
 				}
 			</style>
 			<div class="mirror">
-				<div class="body">
-					<div class="edge front"></div>
-					<div class="edge back"></div>
-					<div class="edge right"></div>
-					<div class="edge left"></div>
-					<div class="edge top"></div>
-					<div class="edge bottom"></div>
-				</div>
 				<div class="handles">
 					<div id="origin"></div>
 					<div class="axis axis-x">
@@ -437,21 +483,20 @@ customElements.define(
 			<slot></slot>
 		`;
 
-		// Track which block we wrap, and keep the handles pinned to it. The slot
-		// fires this once the editor reparents the child into us.
+		// Track the wrapped scene-select and keep the handles pinned to its blocks. We
+		// watch its light subtree: childList for blocks folded in/out by cmd-click, and
+		// the authored transform attributes for inspector edits. We do NOT watch
+		// `style`, so the live --block-* writes during a drag don't trigger a feedback
+		// resync mid-drag.
 		const slot = element.shadowRoot?.querySelector("slot");
 		const onSlotChange = (): void => {
-			const assigned = slot?.assignedElements() ?? [];
-			child = (assigned[0] as HTMLElement | undefined) ?? null;
-			// Follow attribute edits the child receives from elsewhere (the editor's
-			// inspector) so the chrome stays pinned. We watch only the authored
-			// transform attributes, never `style`, so the live --block-* writes during
-			// a handle drag don't trigger a feedback resync mid-drag.
 			childObserver?.disconnect();
-			if (child !== null) {
-				childObserver = new MutationObserver(syncHandlesToChild);
-				childObserver.observe(child, {
-					attributes: true,
+			const host = sceneSelect();
+			if (host !== null) {
+				childObserver = new MutationObserver(syncHandles);
+				childObserver.observe(host, {
+					childList: true,
+					subtree: true,
 					attributeFilter: [
 						"position",
 						"rotation",
@@ -462,11 +507,10 @@ customElements.define(
 					],
 				});
 			}
-			syncHandlesToChild();
+			syncHandles();
 		};
 		slot?.addEventListener("slotchange", onSlotChange);
-		// Catch a child that was already slotted before this listener attached, so
-		// the handles pin to the block regardless of wrap/render ordering.
+		// Catch a scene-select already slotted before this listener attached.
 		onSlotChange();
 		element.shadowRoot?.addEventListener("pointerdown", onHandleDown);
 

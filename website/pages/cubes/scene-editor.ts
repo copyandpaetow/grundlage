@@ -83,12 +83,25 @@ export const installEditor = (
 	const shadowRoot = host.shadowRoot;
 	if (shadowRoot === null) return () => {};
 
-	// The primary selection is the block currently wrapped in a gizmo; `gizmo` is
-	// that wrapper. `coSelection` is the lighter "these go together" set for
-	// grouping, marked with a faint outline rather than a gizmo.
-	let selected: HTMLElement | null = null;
+	// Selection wraps the chosen blocks in ONE `<scene-gizmo><scene-select>…</scene-select>
+	// </scene-gizmo>`: the gizmo carries the knobs, the scene-select the cage. Every
+	// selected block — the first and any cmd-clicked extras — is a sibling inside that
+	// one scene-select, so a single-block and a multi-block selection look identical and
+	// the gizmo moves/rotates them all with one logic. The wrappers' existence IS the
+	// selection; no `selected` attribute lives on the geometry.
 	let gizmo: HTMLElement | null = null;
-	const coSelection = new Set<HTMLElement>();
+	let sceneSelect: HTMLElement | null = null;
+	const selection = new Set<HTMLElement>();
+	// Keeps the inspector inputs in step while the selected block is edited from
+	// anywhere else — chiefly a gizmo handle drag, which commits by writing the block's
+	// own attributes. Without this the inputs go stale and the next spinner nudge writes
+	// a stale value back, undoing the drag.
+	let selectionObserver: MutationObserver | null = null;
+
+	// The lone selected block, or null when zero or many are selected — the inspector
+	// only makes sense for a single block.
+	const primaryBlock = (): HTMLElement | null =>
+		selection.size === 1 ? [...selection][0] : null;
 
 	type Placement = { tag: string; ghost: HTMLElement; child: HTMLElement; position: Vector3 };
 	let placement: Placement | null = null;
@@ -99,65 +112,78 @@ export const installEditor = (
 
 	// --- Selection (wrap / unwrap) ---------------------------------------------
 
-	const wrap = (block: HTMLElement): void => {
-		const wrapper = document.createElement("scene-gizmo");
-		block.parentNode?.insertBefore(wrapper, block);
-		wrapper.appendChild(block);
-		selected = block;
-		gizmo = wrapper;
+	const observeSelection = (): void => {
+		selectionObserver?.disconnect();
+		selectionObserver = new MutationObserver(() => updateInspector());
+		for (const block of selection) {
+			selectionObserver.observe(block, {
+				attributes: true,
+				attributeFilter: [
+					"position",
+					"rotation",
+					"size",
+					...POSITION_SPECIFIC,
+					...ROTATION_SPECIFIC,
+					...SIZE_SPECIFIC,
+				],
+			});
+		}
+	};
+
+	// Tear the wrappers down, returning every block to the host where the gizmo sat.
+	const clearSelection = (): void => {
+		if (gizmo === null) return;
+		selectionObserver?.disconnect();
+		selectionObserver = null;
+		for (const block of [...selection]) {
+			gizmo.parentNode?.insertBefore(block, gizmo);
+		}
+		gizmo.remove();
+		gizmo = null;
+		sceneSelect = null;
+		selection.clear();
+	};
+
+	// Build the gizmo + scene-select around a block, placed where the block sat.
+	const buildSelection = (block: HTMLElement): void => {
+		gizmo = document.createElement("scene-gizmo");
+		sceneSelect = document.createElement("scene-select");
+		gizmo.appendChild(sceneSelect);
+		block.parentNode?.insertBefore(gizmo, block);
+		sceneSelect.appendChild(block);
+		selection.add(block);
+	};
+
+	const select = (block: HTMLElement): void => {
+		if (selection.size === 1 && selection.has(block)) return;
+		clearSelection();
+		buildSelection(block);
+		observeSelection();
 		updateInspector();
 	};
 
-	const unwrap = (): void => {
-		if (gizmo === null || selected === null) return;
-		gizmo.parentNode?.insertBefore(selected, gizmo);
-		gizmo.remove();
-		selected = null;
-		gizmo = null;
-	};
-
-	// Co-selection mirrors the primary's wrap/unwrap model: wrap the block in a
-	// <scene-select> (its existence is the highlight) instead of tagging it.
-	const coWrap = (block: HTMLElement): void => {
-		const wrapper = document.createElement("scene-select");
-		block.parentNode?.insertBefore(wrapper, block);
-		wrapper.appendChild(block);
-		coSelection.add(block);
-	};
-
-	const coUnwrap = (block: HTMLElement): void => {
-		const wrapper = block.parentElement;
-		if (wrapper?.tagName.toLowerCase() === "scene-select") {
-			wrapper.parentNode?.insertBefore(block, wrapper);
-			wrapper.remove();
-		}
-		coSelection.delete(block);
-	};
-
-	const clearCoSelection = (): void => {
-		for (const block of [...coSelection]) coUnwrap(block);
-	};
-
-	const selectPrimary = (block: HTMLElement): void => {
-		if (block === selected) return;
-		unwrap();
-		coUnwrap(block);
-		wrap(block);
-	};
-
-	const toggleCoSelect = (block: HTMLElement): void => {
-		if (selected === null) {
-			wrap(block);
+	// Cmd/Ctrl-click: fold a block into the existing cage (or lift it back out),
+	// so the gizmo operates on the whole set at once.
+	const toggleSelect = (block: HTMLElement): void => {
+		if (gizmo === null || sceneSelect === null) {
+			select(block);
 			return;
 		}
-		if (block === selected) return;
-		if (coSelection.has(block)) coUnwrap(block);
-		else coWrap(block);
+		if (selection.has(block)) {
+			gizmo.parentNode?.insertBefore(block, gizmo);
+			selection.delete(block);
+			if (selection.size === 0) clearSelection();
+			else observeSelection();
+		} else {
+			sceneSelect.appendChild(block);
+			selection.add(block);
+			observeSelection();
+		}
+		updateInspector();
 	};
 
 	const deselectAll = (): void => {
-		unwrap();
-		clearCoSelection();
+		clearSelection();
 		updateInspector();
 	};
 
@@ -227,20 +253,16 @@ export const installEditor = (
 		child.setAttribute("position", position.map(formatNumber).join(" "));
 		host.appendChild(child);
 		cancelPlacement();
-		selectPrimary(child);
+		select(child);
 	};
 
 	// --- Grouping --------------------------------------------------------------
 
 	const groupSelection = (): void => {
-		const primaryBlock = selected;
-		const members: HTMLElement[] = [];
-		if (primaryBlock !== null) members.push(primaryBlock);
-		members.push(...coSelection);
+		const members = [...selection];
 		if (members.length < 2) return;
 
-		unwrap();
-		clearCoSelection();
+		clearSelection();
 
 		const centroid = members
 			.map((block) => readPosition(block))
@@ -258,15 +280,15 @@ export const installEditor = (
 			block.removeAttribute("z");
 			group.appendChild(block);
 		}
-		selectPrimary(group);
+		select(group);
 	};
 
 	const ungroupSelection = (): void => {
-		if (selected === null || selected.tagName.toLowerCase() !== "scene-group") {
+		const group = primaryBlock();
+		if (group === null || group.tagName.toLowerCase() !== "scene-group") {
 			return;
 		}
-		const group = selected;
-		unwrap();
+		clearSelection();
 		const groupPosition = readPosition(group);
 		const groupRotation = readRotation(group);
 		for (const child of [...group.children]) {
@@ -289,16 +311,14 @@ export const installEditor = (
 	};
 
 	const deleteSelection = (): void => {
-		// Removing the gizmo takes its wrapped child with it.
-		gizmo?.remove();
-		selected = null;
+		if (gizmo === null) return;
+		// Removing the gizmo takes the scene-select and every wrapped block with it.
+		selectionObserver?.disconnect();
+		selectionObserver = null;
+		gizmo.remove();
 		gizmo = null;
-		for (const block of [...coSelection]) {
-			const wrapper = block.parentElement;
-			if (wrapper?.tagName.toLowerCase() === "scene-select") wrapper.remove();
-			else block.remove();
-		}
-		coSelection.clear();
+		sceneSelect = null;
+		selection.clear();
 		updateInspector();
 	};
 
@@ -312,21 +332,22 @@ export const installEditor = (
 		onUngroup: ungroupSelection,
 		onToggleCamera: () => camera.toggleMode(),
 		onField: (field, axis, value) => {
-			if (selected === null) return;
-			if (field === "size" && !SIZED_TAGS.has(selected.tagName.toLowerCase())) {
+			const block = primaryBlock();
+			if (block === null) return;
+			if (field === "size" && !SIZED_TAGS.has(block.tagName.toLowerCase())) {
 				return;
 			}
 			const specific = FIELD_SPECIFIC[field];
 			const triple = resolveTriple(
-				selected,
+				block,
 				field,
 				specific,
 				field === "size" ? 1 : 0,
 			);
 			triple[axis] = value;
-			selected.setAttribute(field, triple.map(formatNumber).join(" "));
+			block.setAttribute(field, triple.map(formatNumber).join(" "));
 			// Clear the per-axis override so the edited shorthand wins.
-			selected.removeAttribute(specific[axis]);
+			block.removeAttribute(specific[axis]);
 		},
 	});
 	shadowRoot.appendChild(palette);
@@ -337,14 +358,14 @@ export const installEditor = (
 	function updateInspector(): void {
 		const inspector = palette.querySelector(".inspector") as HTMLElement | null;
 		if (inspector === null) return;
-		const showable = selected !== null && coSelection.size === 0;
-		inspector.style.display = showable ? "" : "none";
-		if (!showable || selected === null) return;
-		const sized = SIZED_TAGS.has(selected.tagName.toLowerCase());
+		const block = primaryBlock();
+		inspector.style.display = block !== null ? "" : "none";
+		if (block === null) return;
+		const sized = SIZED_TAGS.has(block.tagName.toLowerCase());
 		const fields: InspectorField[] = ["position", "rotation", "size"];
 		for (const field of fields) {
 			const triple = resolveTriple(
-				selected,
+				block,
 				field,
 				FIELD_SPECIFIC[field],
 				field === "size" ? 1 : 0,
@@ -381,8 +402,8 @@ export const installEditor = (
 
 		const block = pickBlock(event);
 		if (block !== null) {
-			if (event.metaKey || event.ctrlKey) toggleCoSelect(block);
-			else selectPrimary(block);
+			if (event.metaKey || event.ctrlKey) toggleSelect(block);
+			else select(block);
 		} else {
 			deselectAll();
 		}
@@ -416,6 +437,7 @@ export const installEditor = (
 		ground.removeEventListener("pointermove", onGroundMove);
 		ground.remove();
 		palette.remove();
+		selectionObserver?.disconnect();
 	};
 };
 
@@ -640,8 +662,8 @@ const serializeBlock = (
 
 const exportScene = (host: HTMLElement): void => {
 	const lines: string[] = ["<scene-world>"];
-	// The selected block sits one level inside a gizmo wrapper, so reach through
-	// it. The placement ghost is a transient preview and is deliberately skipped.
+	// Selected blocks sit inside a scene-select inside a gizmo, so reach through both
+	// wrappers. The placement ghost is a transient preview and is deliberately skipped.
 	const walk = (parent: Element): void => {
 		for (const child of Array.from(parent.children)) {
 			if (isSelectable(child)) serializeBlock(child, 1, lines);
