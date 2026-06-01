@@ -1,5 +1,5 @@
 import { html, render } from "../../../lib/src";
-import { resolveTriple, UNIT_SIZE } from "./scene-shared";
+import { resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
 
 // <scene-group> — a transform carrier. It contributes a transform and nothing
 // else: no faces, never paints. Grouping is just the cascade — selected blocks
@@ -15,25 +15,16 @@ import { resolveTriple, UNIT_SIZE } from "./scene-shared";
 // The slot keeps children in the light DOM (portable, serializable) while routing
 // them into this element's 3D context.
 
-const POSITION_SPECIFIC = ["x", "y", "z"] as const;
-const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
-
 customElements.define(
 	"scene-group",
 	render(function* (element) {
 		yield () => {
-			const [positionX, positionY, positionZ] = resolveTriple(
-				element,
-				"position",
-				POSITION_SPECIFIC,
-				0,
-			);
-			const [rotationX, rotationY, rotationZ] = resolveTriple(
-				element,
-				"rotation",
-				ROTATION_SPECIFIC,
-				0,
-			);
+			// A group has no size of its own (scaling would distort its children),
+			// so we resolve all three triples and simply ignore the size.
+			const {
+				position: [positionX, positionY, positionZ],
+				rotation: [rotationX, rotationY, rotationZ],
+			} = resolveBlockTransform(element);
 
 			return html`
 				<style>

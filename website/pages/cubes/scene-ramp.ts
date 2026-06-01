@@ -1,5 +1,5 @@
 import { html, render } from "../../../lib/src";
-import { resolveTriple, UNIT_SIZE } from "./scene-shared";
+import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
 
 // <scene-ramp> — one element per geometry. A right-triangular prism: a flat base,
 // a vertical back, a 45° sloped cap rising from the front-bottom edge to the
@@ -13,11 +13,6 @@ import { resolveTriple, UNIT_SIZE } from "./scene-shared";
 // block centre, so its corners land exactly on the front-bottom and back-top
 // edges with no extra push along its normal.
 
-const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
-const POSITION_SPECIFIC = ["x", "y", "z"] as const;
-const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
-
-const HALF_UNIT = UNIT_SIZE / 2;
 // The hypotenuse of a unit right triangle: the sloped cap is this long.
 const SLOPE_LENGTH = UNIT_SIZE * Math.SQRT2;
 const HALF_SLOPE = SLOPE_LENGTH / 2;
@@ -26,24 +21,11 @@ customElements.define(
 	"scene-ramp",
 	render(function* (element) {
 		yield () => {
-			const [width, height, depth] = resolveTriple(
-				element,
-				"size",
-				SIZE_SPECIFIC,
-				1,
-			);
-			const [positionX, positionY, positionZ] = resolveTriple(
-				element,
-				"position",
-				POSITION_SPECIFIC,
-				0,
-			);
-			const [rotationX, rotationY, rotationZ] = resolveTriple(
-				element,
-				"rotation",
-				ROTATION_SPECIFIC,
-				0,
-			);
+			const {
+				size: [width, height, depth],
+				position: [positionX, positionY, positionZ],
+				rotation: [rotationX, rotationY, rotationZ],
+			} = resolveBlockTransform(element);
 
 			return html`
 				<style>

@@ -55,6 +55,14 @@ export default defineConfig({
 				},
 			},
 			{
+				root: "./website",
+				test: {
+					name: "cubes",
+					include: ["pages/cubes/**/*.dom.test.ts"],
+					environment: "happy-dom",
+				},
+			},
+			{
 				root: "./prerender-plugin",
 				test: {
 					name: "prerender-plugin",

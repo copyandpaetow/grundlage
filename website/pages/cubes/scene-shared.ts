@@ -7,6 +7,10 @@
 // is laid out once at this size; every dimension after that is scale3d over it.
 export const UNIT_SIZE = 120;
 
+// Half a unit cube in px. Every geometry lays its faces out around this, and the
+// leaf cube/ramp publish it as their --block-extent-*; shared so the value can't drift.
+export const HALF_UNIT = UNIT_SIZE / 2;
+
 // Authoring grid resolution in grid units. Direct manipulation commits snap to
 // this so dragged blocks land on a regular lattice instead of arbitrary floats.
 export const GRID_SNAP = 0.5;
@@ -22,6 +26,15 @@ export const formatNumber = (value: number): string => {
 	return Object.is(rounded, -0) ? "0" : String(rounded);
 };
 
+export type Vector3 = [number, number, number];
+
+// The three authored transform triples and their per-axis specific attributes.
+// One copy lives here so every geometry element, the gizmo, and the editor read
+// the same names — both for resolution precedence and for MutationObserver filters.
+export const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
+export const POSITION_SPECIFIC = ["x", "y", "z"] as const;
+export const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
+
 const parseNumberList = (raw: string | null): number[] => {
 	if (raw === null) return [];
 	return raw
@@ -36,12 +49,12 @@ const parseNumberList = (raw: string | null): number[] => {
 // attribute overrides its own axis when present. A single shorthand value
 // applies to every axis; three values map to x/y/z in order. We resolve this in
 // JS so CSS only ever sees the concrete --block-* channel, never the shorthand.
-export const resolveTriple = (
+const resolveAxisTriple = (
 	element: Element,
 	shorthand: string,
 	specific: readonly [string, string, string],
 	fallback: number,
-): [number, number, number] => {
+): Vector3 => {
 	const shorthandValues = parseNumberList(element.getAttribute(shorthand));
 
 	const seedForAxis = (axis: number): number => {
@@ -62,115 +75,130 @@ export const resolveTriple = (
 	return [resolveAxis(0), resolveAxis(1), resolveAxis(2)];
 };
 
-export type Vector3 = [number, number, number];
+export type BlockTransform = {
+	size: Vector3;
+	position: Vector3;
+	rotation: Vector3;
+};
+
+// Resolve a block's three authored triples in one pass. Every element that carries
+// a transform — leaf geometry, the group carrier, the ghost — reads the same way, so
+// the attribute → variable bridge lives in exactly one place. A group has no size of
+// its own and simply ignores the resolved `size` (three cheap getAttribute reads on a
+// cold path; not worth a second helper). Returns packed tuples so a caller can pull a
+// single field with one contiguous destructure.
+export const resolveBlockTransform = (element: Element): BlockTransform => ({
+	size: resolveAxisTriple(element, "size", SIZE_SPECIFIC, 1),
+	position: resolveAxisTriple(element, "position", POSITION_SPECIFIC, 0),
+	rotation: resolveAxisTriple(element, "rotation", ROTATION_SPECIFIC, 0),
+});
+
+// Commit sequencing for a live manipulation (drag, grouping). The gesture holds its
+// in-flight value as an inline --block-* override, which wins over the geometry's
+// shadow :host rule. On commit we write the authored attribute — but that re-renders
+// ASYNCHRONOUSLY (the lib re-renders off a MutationObserver, two microtask hops away),
+// so clearing the override too early would flash the pre-commit value for a frame.
+//
+// The fix is to call update() ourselves (which skips the observer hop) and await it:
+// the returned promise resolves AFTER the synchronous re-render, so by the time `clear`
+// runs the resolved --block-* already reflect the commit and there is no flash. A bare
+// `await Promise.resolve()` would NOT do — its continuation is enqueued ahead of the
+// bridge's delivery, so the clear would still run first.
+//
+// update() early-returns (resolving immediately) if the block is disconnected or
+// already mid-update; that is fine here because we run exactly one commit per gesture,
+// on a connected, idle block — do NOT lean on this await to sequence overlapping updates
+// on the same block. A block that is not a lib component (e.g. under test) has no
+// update(); we skip straight to the clear.
+// Await a block's next render, so a subsequent read of its resolved --block-* sees a
+// just-committed attribute rather than the stale prior value. We call update() directly
+// (skipping the attribute observer's extra hop) and the returned promise resolves AFTER
+// the synchronous re-render. A block that is not a lib component (e.g. under test) has
+// no update(), so we resolve immediately.
+export const blockRendered = (block: HTMLElement): Promise<void> => {
+	const update = (block as { update?: () => Promise<void> }).update;
+	return typeof update === "function" ? update.call(block) : Promise.resolve();
+};
+
+export const commitBlockRender = async (
+	block: HTMLElement,
+	clear: (block: HTMLElement) => void,
+): Promise<void> => {
+	await blockRendered(block);
+	clear(block);
+};
 
 // Scene elements that carry a --block-* transform: leaf geometry plus the group
-// carrier. blockCornersPx recurses through a group into these to bound the set.
-const BLOCK_TAGS = new Set([
+// carrier. This is the one selectable/boundable set — the editor, the gizmo, and
+// the cage all share it. blockCornersPx recurses through a group into these.
+export const BLOCK_TAGS = new Set([
 	"scene-cube",
 	"scene-wall",
 	"scene-ramp",
 	"scene-group",
 ]);
 
-// CSS single-axis rotations in screen-px space (the same space the block lays its
-// faces out in). Applied right-to-left they reproduce the block's own
-// `rotateX(...) rotateY(...) rotateZ(...)`, so the corners we derive land exactly
-// where the browser paints them.
-const rotateAxisX = ([x, y, z]: Vector3, sin: number, cos: number): Vector3 => [
-	x,
-	cos * y - sin * z,
-	sin * y + cos * z,
-];
-const rotateAxisY = ([x, y, z]: Vector3, sin: number, cos: number): Vector3 => [
-	cos * x + sin * z,
-	y,
-	-sin * x + cos * z,
-];
-const rotateAxisZ = ([x, y, z]: Vector3, sin: number, cos: number): Vector3 => [
-	cos * x - sin * y,
-	sin * x + cos * y,
-	z,
-];
+export const isBlock = (node: Element): boolean =>
+	BLOCK_TAGS.has(node.tagName.toLowerCase());
 
-// The eight corners of a block in screen-px world space, read from its LIVE
-// transform: position/rotation come from the resolved --block-* custom properties
-// (so an in-flight inline drag override is honoured, not only the committed
-// attribute). Mirrors the bridge in scene-cube, where +Y is already negated into
-// --block-y, so we read the very values the faces are laid out with — no sign
-// juggling. Each LEAF geometry also publishes its own local half-extents as
-// --block-extent-* (px, before scale), so a thin wall bounds as a slab, not a cube.
-// A transform CARRIER (a group) has no faces and no extent: we recurse into its
-// blocks and lift their corners through this element's own rotate + translate,
-// which composes correctly through nested groups.
-export const blockCornersPx = (block: Element): Vector3[] => {
+// The eight corners of a block in screen-px world space, read from the LIVE
+// transform the BROWSER resolved for it. We do not re-derive rotation by hand:
+// getComputedStyle().transform already composes the block's translate · rotate ·
+// scale — with the bridge's Y-negation and scale3d baked in — into one matrix, so
+// pushing the unit corners through it lands them exactly where the faces paint.
+//
+// getComputedStyle gives only this element's LOCAL matrix, so to bound a block
+// inside a (possibly rotated) group we compose: each recursion multiplies the
+// parent's accumulated matrix by the child's local one and passes it down.
+//
+// A LEAF geometry publishes its own pre-scale half-extents as --block-extent-* (px),
+// so a thin wall bounds as a slab, not a cube. We push those PRE-scale extents
+// through the matrix — the matrix ALREADY carries scale3d, so re-applying
+// --block-scale-* would double the scale. A transform CARRIER (a group) has no
+// faces and no extent: we recurse into its blocks through the composed matrix.
+export const blockCornersPx = (
+	block: Element,
+	accumulated: DOMMatrix = new DOMMatrix(),
+): Vector3[] => {
 	const style = getComputedStyle(block as HTMLElement);
-	const readVar = (name: string): number => {
+	const transform = style.transform;
+	const local =
+		transform === "" || transform === "none"
+			? new DOMMatrix()
+			: new DOMMatrix(transform);
+	const worldMatrix = accumulated.multiply(local);
+
+	const readExtent = (name: string): number => {
 		const value = parseFloat(style.getPropertyValue(name));
 		return Number.isNaN(value) ? 0 : value;
 	};
-	const hasVar = (name: string): boolean =>
-		style.getPropertyValue(name).trim() !== "";
+	const hasExtent = style.getPropertyValue("--block-extent-x").trim() !== "";
 
-	const translate: Vector3 = [
-		readVar("--block-x"),
-		readVar("--block-y"),
-		readVar("--block-z"),
-	];
-	const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
-	const [sinX, cosX] = [
-		Math.sin(toRadians(readVar("--block-rotate-x"))),
-		Math.cos(toRadians(readVar("--block-rotate-x"))),
-	];
-	const [sinY, cosY] = [
-		Math.sin(toRadians(readVar("--block-rotate-y"))),
-		Math.cos(toRadians(readVar("--block-rotate-y"))),
-	];
-	const [sinZ, cosZ] = [
-		Math.sin(toRadians(readVar("--block-rotate-z"))),
-		Math.cos(toRadians(readVar("--block-rotate-z"))),
-	];
-
-	// Lift a point out of this element's local frame into its parent's frame:
-	// rotateX·Y·Z then translate, matching the block's own CSS transform order.
-	const place = (point: Vector3): Vector3 => {
-		let turned = rotateAxisZ(point, sinZ, cosZ);
-		turned = rotateAxisY(turned, sinY, cosY);
-		turned = rotateAxisX(turned, sinX, cosX);
-		return [
-			turned[0] + translate[0],
-			turned[1] + translate[1],
-			turned[2] + translate[2],
-		];
-	};
-
-	// Leaf geometry: the eight corners of its own scaled box.
-	if (hasVar("--block-extent-x")) {
-		const scaleOf = (name: string): number =>
-			hasVar(name) ? readVar(name) : 1;
-		const half: Vector3 = [
-			readVar("--block-extent-x") * scaleOf("--block-scale-x"),
-			readVar("--block-extent-y") * scaleOf("--block-scale-y"),
-			readVar("--block-extent-z") * scaleOf("--block-scale-z"),
-		];
+	// Leaf geometry: the eight corners of its own pre-scale box, pushed through the
+	// composed matrix (which already scales them).
+	if (hasExtent) {
+		const halfX = readExtent("--block-extent-x");
+		const halfY = readExtent("--block-extent-y");
+		const halfZ = readExtent("--block-extent-z");
 		const corners: Vector3[] = [];
 		for (const signX of [-1, 1]) {
 			for (const signY of [-1, 1]) {
 				for (const signZ of [-1, 1]) {
-					corners.push(
-						place([signX * half[0], signY * half[1], signZ * half[2]]),
+					const point = worldMatrix.transformPoint(
+						new DOMPoint(signX * halfX, signY * halfY, signZ * halfZ),
 					);
+					corners.push([point.x, point.y, point.z]);
 				}
 			}
 		}
 		return corners;
 	}
 
-	// Transform carrier (group): bound by its blocks' corners, lifted into our frame.
+	// Transform carrier (group): bound by its blocks' corners, composed through our matrix.
 	const corners: Vector3[] = [];
 	for (const child of Array.from(block.children)) {
-		if (!BLOCK_TAGS.has(child.tagName.toLowerCase())) continue;
-		for (const corner of blockCornersPx(child)) corners.push(place(corner));
+		if (!isBlock(child)) continue;
+		for (const corner of blockCornersPx(child, worldMatrix)) corners.push(corner);
 	}
 	return corners;
 };

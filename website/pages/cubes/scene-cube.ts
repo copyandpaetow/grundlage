@@ -1,5 +1,5 @@
 import { html, render } from "../../../lib/src";
-import { resolveTriple, UNIT_SIZE } from "./scene-shared";
+import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
 
 // <scene-cube> — one element per geometry. It owns its six faces and a fixed
 // unit-cube layout. Authored state arrives as attributes; the render function
@@ -8,36 +8,17 @@ import { resolveTriple, UNIT_SIZE } from "./scene-shared";
 // concrete --block-* variables. Everything routes to `transform`: size is
 // scale3d over the unit cube, never a layout property.
 
-const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
-const POSITION_SPECIFIC = ["x", "y", "z"] as const;
-const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
-
-const HALF_UNIT = UNIT_SIZE / 2;
-
 customElements.define(
 	"scene-cube",
 	render(function* (element) {
 		yield () => {
 			// The attribute → variable bridge: committed attributes in, concrete
 			// render variables out. CSS downstream reads only the resolved values.
-			const [width, height, depth] = resolveTriple(
-				element,
-				"size",
-				SIZE_SPECIFIC,
-				1,
-			);
-			const [positionX, positionY, positionZ] = resolveTriple(
-				element,
-				"position",
-				POSITION_SPECIFIC,
-				0,
-			);
-			const [rotationX, rotationY, rotationZ] = resolveTriple(
-				element,
-				"rotation",
-				ROTATION_SPECIFIC,
-				0,
-			);
+			const {
+				size: [width, height, depth],
+				position: [positionX, positionY, positionZ],
+				rotation: [rotationX, rotationY, rotationZ],
+			} = resolveBlockTransform(element);
 
 			return html`
 				<style>

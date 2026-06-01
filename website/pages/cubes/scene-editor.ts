@@ -1,6 +1,12 @@
 import {
+	blockRendered,
+	commitBlockRender,
 	formatNumber,
-	resolveTriple,
+	isBlock,
+	POSITION_SPECIFIC,
+	resolveBlockTransform,
+	ROTATION_SPECIFIC,
+	SIZE_SPECIFIC,
 	snapToGrid,
 	UNIT_SIZE,
 } from "./scene-shared";
@@ -19,17 +25,9 @@ export type CameraControls = {
 	toggleMode(): "Free" | "Orbit";
 };
 
-const SELECTABLE_TAGS = new Set([
-	"scene-cube",
-	"scene-wall",
-	"scene-ramp",
-	"scene-group",
-]);
+// Geometry that has a size of its own — everything except the group carrier, which
+// would distort its children if scaled. Used to disable the inspector's size row.
 const SIZED_TAGS = new Set(["scene-cube", "scene-wall", "scene-ramp"]);
-
-const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
-const POSITION_SPECIFIC = ["x", "y", "z"] as const;
-const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
 
 // The inspector edits one authored triple at a time; this maps the field name to
 // its per-axis specific attributes (so editing `position` clears a stale `x`).
@@ -58,23 +56,71 @@ const subtractVectors = (a: Vector3, b: Vector3): Vector3 => [
 	a[2] - b[2],
 ];
 
-// Rotate a position about Y, matching CSS rotateY. Used when ungrouping a yaw-
-// rotated group; X/Z group rotation stays exact only for the unrotated case (the
-// Euler-order question the plan parks for later).
-const rotateAroundY = ([x, y, z]: Vector3, degrees: number): Vector3 => {
-	const radians = (degrees * Math.PI) / 180;
-	const sin = Math.sin(radians);
-	const cos = Math.cos(radians);
-	return [x * cos + z * sin, y, -x * sin + z * cos];
+// Author-space position (grid units, +Y up) ↔ the screen-px point the geometry
+// translates to (+Y down). The bridge negates Y, so we mirror that here.
+const toScreenPoint = ([x, y, z]: Vector3): DOMPoint =>
+	new DOMPoint(x * UNIT_SIZE, -y * UNIT_SIZE, z * UNIT_SIZE);
+const fromScreenPoint = (point: DOMPoint): Vector3 => [
+	point.x / UNIT_SIZE,
+	-point.y / UNIT_SIZE,
+	point.z / UNIT_SIZE,
+];
+
+// A pure rotation matrix in the geometry's own order (rotateX · rotateY · rotateZ),
+// built from a resolved Euler triple. We compose two of these by matrix multiply to
+// combine rotations — Euler angles do NOT compose by addition, which is why the old
+// rotateAroundY-plus-sum approach was only ever right for a yaw-only group.
+const rotationMatrix = ([rotateX, rotateY, rotateZ]: Vector3): DOMMatrix =>
+	new DOMMatrix(
+		`rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`,
+	);
+
+// The full transform a group contributes to its children: translate then rotate, in
+// the same order the geometry's :host writes it (a group never scales). A child lifts
+// into the parent frame by pushing its own translation through this.
+const frameMatrix = (position: Vector3, rotation: Vector3): DOMMatrix =>
+	new DOMMatrix(
+		`translate3d(${position[0] * UNIT_SIZE}px, ${-position[1] * UNIT_SIZE}px, ${
+			position[2] * UNIT_SIZE
+		}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${
+			rotation[2]
+		}deg)`,
+	);
+
+// Decompose a rotation matrix back into the geometry's rotateX·rotateY·rotateZ Euler
+// triple (degrees), mirroring the composition order so a round-trip is stable. Reads
+// the rotated basis vectors out of the matrix; falls back to a yaw-only read at the
+// ±90° pitch gimbal, where the X and Z rotations couple and one must be chosen as 0.
+const eulerFromMatrix = (matrix: DOMMatrix): Vector3 => {
+	const xAxis = matrix.transformPoint(new DOMPoint(1, 0, 0));
+	const yAxis = matrix.transformPoint(new DOMPoint(0, 1, 0));
+	const zAxis = matrix.transformPoint(new DOMPoint(0, 0, 1));
+	const sinPitch = Math.max(-1, Math.min(1, zAxis.x));
+	const pitch = Math.asin(sinPitch);
+	const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
+	if (Math.abs(Math.cos(pitch)) > 1e-6) {
+		return [
+			toDegrees(Math.atan2(-zAxis.y, zAxis.z)),
+			toDegrees(pitch),
+			toDegrees(Math.atan2(-yAxis.x, xAxis.x)),
+		];
+	}
+	// Gimbal lock: fold the coupled rotation into X and leave Z at zero.
+	return [toDegrees(Math.atan2(sinPitch * xAxis.y, yAxis.y)), toDegrees(pitch), 0];
+};
+
+// Drop a block's in-flight inline transform override so it falls back to its authored
+// --block-* (set once the committed attribute has re-rendered — see commitBlockRender).
+const clearLiveTransform = (block: HTMLElement): void => {
+	block.style.removeProperty("--block-x");
+	block.style.removeProperty("--block-y");
+	block.style.removeProperty("--block-z");
 };
 
 const readPosition = (block: Element): Vector3 =>
-	resolveTriple(block, "position", POSITION_SPECIFIC, 0);
+	resolveBlockTransform(block).position;
 const readRotation = (block: Element): Vector3 =>
-	resolveTriple(block, "rotation", ROTATION_SPECIFIC, 0);
-
-const isSelectable = (node: Element): boolean =>
-	SELECTABLE_TAGS.has(node.tagName.toLowerCase());
+	resolveBlockTransform(block).rotation;
 
 export const installEditor = (
 	host: HTMLElement,
@@ -92,11 +138,10 @@ export const installEditor = (
 	let gizmo: HTMLElement | null = null;
 	let sceneSelect: HTMLElement | null = null;
 	const selection = new Set<HTMLElement>();
-	// Keeps the inspector inputs in step while the selected block is edited from
-	// anywhere else — chiefly a gizmo handle drag, which commits by writing the block's
-	// own attributes. Without this the inputs go stale and the next spinner nudge writes
-	// a stale value back, undoing the drag.
-	let selectionObserver: MutationObserver | null = null;
+	// The inspector stays in step with the selected block through the two events that
+	// edit it, rather than by observing the block's attributes for our own writes: a
+	// gizmo drag commits with a bubbling "scene-commit" event we listen for below, and
+	// an inspector spinner edit goes through onField, which refreshes the inputs itself.
 
 	// The lone selected block, or null when zero or many are selected — the inspector
 	// only makes sense for a single block.
@@ -112,22 +157,12 @@ export const installEditor = (
 
 	// --- Selection (wrap / unwrap) ---------------------------------------------
 
-	const observeSelection = (): void => {
-		selectionObserver?.disconnect();
-		selectionObserver = new MutationObserver(() => updateInspector());
-		for (const block of selection) {
-			selectionObserver.observe(block, {
-				attributes: true,
-				attributeFilter: [
-					"position",
-					"rotation",
-					"size",
-					...POSITION_SPECIFIC,
-					...ROTATION_SPECIFIC,
-					...SIZE_SPECIFIC,
-				],
-			});
-		}
+	// After an inspector edit the block re-renders asynchronously; once it has, signal
+	// the gizmo so its handles and cage re-pin to the new transform (it no longer
+	// observes the block's attributes — that change is one we own here).
+	const signalGizmoResync = async (block: HTMLElement): Promise<void> => {
+		await blockRendered(block);
+		gizmo?.dispatchEvent(new CustomEvent("scene-resync"));
 	};
 
 	// Pulling a block into the cage leaves a comment anchor at its original spot in
@@ -157,16 +192,21 @@ export const installEditor = (
 		selection.delete(block);
 	};
 
-	// Tear the wrappers down, dropping every block back onto its anchor.
-	const clearSelection = (): void => {
-		if (gizmo === null) return;
-		selectionObserver?.disconnect();
-		selectionObserver = null;
-		for (const block of [...selection]) foldOut(block);
-		gizmo.remove();
+	// Drop the gizmo + scene-select and reset the selection state. The two callers
+	// differ only in what they do with the blocks FIRST: clearSelection folds them back
+	// out onto their anchors; deleteSelection discards them with the gizmo.
+	const teardownSelection = (): void => {
+		gizmo?.remove();
 		gizmo = null;
 		sceneSelect = null;
 		selection.clear();
+	};
+
+	// Tear the wrappers down, dropping every block back onto its anchor.
+	const clearSelection = (): void => {
+		if (gizmo === null) return;
+		for (const block of [...selection]) foldOut(block);
+		teardownSelection();
 	};
 
 	// Build the gizmo + scene-select at the block's spot, then fold the block in.
@@ -182,7 +222,6 @@ export const installEditor = (
 		if (selection.size === 1 && selection.has(block)) return;
 		clearSelection();
 		buildSelection(block);
-		observeSelection();
 		updateInspector();
 	};
 
@@ -196,10 +235,8 @@ export const installEditor = (
 		if (selection.has(block)) {
 			foldOut(block);
 			if (selection.size === 0) clearSelection();
-			else observeSelection();
 		} else {
 			foldIn(block);
-			observeSelection();
 		}
 		updateInspector();
 	};
@@ -214,7 +251,7 @@ export const installEditor = (
 	const pickBlock = (event: PointerEvent): HTMLElement | null => {
 		let block: HTMLElement | null = null;
 		for (const node of event.composedPath()) {
-			if (node instanceof HTMLElement && isSelectable(node)) block = node;
+			if (node instanceof HTMLElement && isBlock(node)) block = node;
 		}
 		return block;
 	};
@@ -300,31 +337,25 @@ export const installEditor = (
 			block.removeAttribute("x");
 			block.removeAttribute("y");
 			block.removeAttribute("z");
-			// The attribute → re-render bridge is async, but the group's own translate
-			// renders synchronously on connect. If we leave it there, the cage's first
-			// sync (run synchronously inside select()) reads each child's STALE world
-			// position while the group already carries the centroid, so the centroid is
-			// double-counted and the highlight box sits one centroid off. We write the
-			// rebased transform to the live inline channel too (inline wins over the
-			// shadow :host rule) so the first read sees the new group-local position.
+			// The rebased attribute re-renders ASYNCHRONOUSLY, but the group's own
+			// translate renders synchronously on connect. Until the child catches up its
+			// resolved --block-* still hold its old WORLD position, which — now inside the
+			// group's centroid translate — would double-count and put the cage one
+			// centroid off. So we also write the rebased transform to the inline channel
+			// (inline wins over the shadow :host rule) so the first measure reads it.
 			block.style.setProperty("--block-x", `${rebased[0] * UNIT_SIZE}px`);
 			block.style.setProperty("--block-y", `${-rebased[1] * UNIT_SIZE}px`);
 			block.style.setProperty("--block-z", `${rebased[2] * UNIT_SIZE}px`);
 			group.appendChild(block);
 		}
 		select(group);
-		// Once the bridge has re-resolved the rebased attributes, drop the live
-		// overrides so the blocks fall back to their authored values — the same
-		// commit-then-clear the gizmo uses after a drag. Clearing the inline `style`
-		// is itself a mutation the new scene-select observer catches, so the cage
-		// re-syncs against the now-settled positions.
-		requestAnimationFrame(() => {
-			for (const block of members) {
-				block.style.removeProperty("--block-x");
-				block.style.removeProperty("--block-y");
-				block.style.removeProperty("--block-z");
-			}
-		});
+		// Same commit-then-clear the gizmo uses after a drag: once each child has
+		// re-rendered from its rebased attribute (commitBlockRender awaits that), drop
+		// the inline override so it falls back to its authored value — no flash, because
+		// by then the resolved transform already matches.
+		void Promise.all(
+			members.map((block) => commitBlockRender(block, clearLiveTransform)),
+		);
 	};
 
 	const ungroupSelection = (): void => {
@@ -333,21 +364,22 @@ export const installEditor = (
 			return;
 		}
 		clearSelection();
-		const groupPosition = readPosition(group);
-		const groupRotation = readRotation(group);
+		// The group's full frame and its rotation alone. Each child lifts into world
+		// space by pushing its position through the frame and composing its rotation
+		// with the group's BY MATRIX — correct for a group authored with X/Z rotation,
+		// not only the yaw case the old add-the-Euler-triples math handled.
+		const frame = frameMatrix(readPosition(group), readRotation(group));
+		const groupRotation = rotationMatrix(readRotation(group));
 		for (const child of [...group.children]) {
-			if (!(child instanceof HTMLElement) || !isSelectable(child)) continue;
-			const world = addVectors(
-				groupPosition,
-				rotateAroundY(readPosition(child), groupRotation[1]),
+			if (!(child instanceof HTMLElement) || !isBlock(child)) continue;
+			const world = fromScreenPoint(
+				frame.transformPoint(toScreenPoint(readPosition(child))),
+			);
+			const rotation = eulerFromMatrix(
+				groupRotation.multiply(rotationMatrix(readRotation(child))),
 			);
 			child.setAttribute("position", world.map(formatNumber).join(" "));
-			child.setAttribute(
-				"rotation",
-				addVectors(readRotation(child), groupRotation)
-					.map(formatNumber)
-					.join(" "),
-			);
+			child.setAttribute("rotation", rotation.map(formatNumber).join(" "));
 			host.appendChild(child);
 		}
 		group.remove();
@@ -358,14 +390,9 @@ export const installEditor = (
 		if (gizmo === null) return;
 		// Removing the gizmo takes the scene-select and every wrapped block with it;
 		// the blocks' anchors stay behind in the host, so clear them too.
-		selectionObserver?.disconnect();
-		selectionObserver = null;
 		for (const anchor of anchors.values()) anchor.remove();
 		anchors.clear();
-		gizmo.remove();
-		gizmo = null;
-		sceneSelect = null;
-		selection.clear();
+		teardownSelection();
 		updateInspector();
 	};
 
@@ -385,16 +412,15 @@ export const installEditor = (
 				return;
 			}
 			const specific = FIELD_SPECIFIC[field];
-			const triple = resolveTriple(
-				block,
-				field,
-				specific,
-				field === "size" ? 1 : 0,
-			);
+			const triple = resolveBlockTransform(block)[field];
 			triple[axis] = value;
 			block.setAttribute(field, triple.map(formatNumber).join(" "));
 			// Clear the per-axis override so the edited shorthand wins.
 			block.removeAttribute(specific[axis]);
+			// Reflect the normalized value back into the inputs, and once the block has
+			// re-rendered, have the gizmo re-pin its handles and cage to the new transform.
+			updateInspector();
+			void signalGizmoResync(block);
 		},
 	});
 	shadowRoot.appendChild(palette);
@@ -402,21 +428,17 @@ export const installEditor = (
 	// Reflect the primary's transform into the inspector inputs. The whole panel
 	// shows for a single selection (block or group); the size row is disabled for a
 	// group, which has no size of its own.
-	function updateInspector(): void {
+	const updateInspector = (): void => {
 		const inspector = palette.querySelector(".inspector") as HTMLElement | null;
 		if (inspector === null) return;
 		const block = primaryBlock();
 		inspector.style.display = block !== null ? "" : "none";
 		if (block === null) return;
 		const sized = SIZED_TAGS.has(block.tagName.toLowerCase());
+		const transform = resolveBlockTransform(block);
 		const fields: InspectorField[] = ["position", "rotation", "size"];
 		for (const field of fields) {
-			const triple = resolveTriple(
-				block,
-				field,
-				FIELD_SPECIFIC[field],
-				field === "size" ? 1 : 0,
-			);
+			const triple = transform[field];
 			for (let axis = 0; axis < 3; axis++) {
 				const input = inspector.querySelector(
 					`input[data-field="${field}"][data-axis="${axis}"]`,
@@ -426,7 +448,7 @@ export const installEditor = (
 				if (field === "size") input.disabled = !sized;
 			}
 		}
-	}
+	};
 
 	// --- Pointer wiring --------------------------------------------------------
 
@@ -469,22 +491,27 @@ export const installEditor = (
 		if (event.key.toLowerCase() === "u") ungroupSelection();
 	};
 
+	// The gizmo signals a drag commit by bubbling "scene-commit" up to us; refresh the
+	// inspector inputs against the freshly committed transform.
+	const onGizmoCommit = (): void => updateInspector();
+
 	ground.addEventListener("pointermove", onGroundMove);
 	host.addEventListener("pointerdown", onPointerDown);
 	host.addEventListener("wheel", onWheel, { passive: false });
+	host.addEventListener("scene-commit", onGizmoCommit);
 	window.addEventListener("keydown", onKeyDown);
 	updateInspector();
 
 	return () => {
 		host.removeEventListener("pointerdown", onPointerDown);
 		host.removeEventListener("wheel", onWheel);
+		host.removeEventListener("scene-commit", onGizmoCommit);
 		window.removeEventListener("keydown", onKeyDown);
 		window.removeEventListener("pointermove", onLookMove);
 		window.removeEventListener("pointerup", onLookUp);
 		ground.removeEventListener("pointermove", onGroundMove);
 		ground.remove();
 		palette.remove();
-		selectionObserver?.disconnect();
 		for (const anchor of anchors.values()) anchor.remove();
 	};
 };
@@ -689,7 +716,7 @@ const serializeBlock = (
 		attributes.push(`rotation="${rotation.map(formatNumber).join(" ")}"`);
 	}
 	if (!isGroup) {
-		const size = resolveTriple(block, "size", SIZE_SPECIFIC, 1);
+		const size = resolveBlockTransform(block).size;
 		if (size.some((value) => value !== 1)) {
 			attributes.push(`size="${size.map(formatNumber).join(" ")}"`);
 		}
@@ -698,7 +725,7 @@ const serializeBlock = (
 
 	// A selected block sits inside a gizmo; serialize the real geometry, not the
 	// wrapper, by recursing through children for groups only.
-	const childBlocks = Array.from(block.children).filter(isSelectable);
+	const childBlocks = Array.from(block.children).filter(isBlock);
 	if (isGroup && childBlocks.length > 0) {
 		lines.push(`${indent}<${tag}${suffix}>`);
 		for (const child of childBlocks) serializeBlock(child, depth + 1, lines);
@@ -714,7 +741,7 @@ const exportScene = (host: HTMLElement): void => {
 	// wrappers. The placement ghost is a transient preview and is deliberately skipped.
 	const walk = (parent: Element): void => {
 		for (const child of Array.from(parent.children)) {
-			if (isSelectable(child)) serializeBlock(child, 1, lines);
+			if (isBlock(child)) serializeBlock(child, 1, lines);
 			else if (
 				child.tagName.toLowerCase() === "scene-gizmo" ||
 				child.tagName.toLowerCase() === "scene-select"

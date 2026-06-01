@@ -1,8 +1,10 @@
 import { html, render } from "../../../lib/src";
 import {
 	blocksBoundsPx,
+	commitBlockRender,
 	formatNumber,
-	resolveTriple,
+	isBlock,
+	resolveBlockTransform,
 	snapToGrid,
 	UNIT_SIZE,
 	type Vector3,
@@ -28,16 +30,6 @@ import {
 // Drag projection is DOM-native: the gizmo measures its own handle knobs (already
 // perspective-projected by the browser) and turns a pointer delta into world units
 // with one dot product — no camera matrix, no reaching across shadow boundaries.
-
-const POSITION_SPECIFIC = ["x", "y", "z"] as const;
-const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
-const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
-const SELECTABLE = new Set([
-	"scene-cube",
-	"scene-wall",
-	"scene-ramp",
-	"scene-group",
-]);
 
 const HANDLE_LENGTH = UNIT_SIZE;
 const YAW_PER_PIXEL = 0.5;
@@ -94,13 +86,18 @@ customElements.define(
 					blocks: HTMLElement[];
 					startPositions: Vector3[];
 					startRotations: Vector3[];
+					// The last value each move computed, kept in JS so the commit reads it
+					// straight from here — no parsing it back out of the inline --block-*
+					// the move just wrote (the DOM round-trip G5 removes).
+					livePositions: Vector3[];
+					liveYaw: number[];
 			  }
 			| null = null;
 
 		const readPosition = (target: Element): Vector3 =>
-			resolveTriple(target, "position", POSITION_SPECIFIC, 0);
+			resolveBlockTransform(target).position;
 		const readRotation = (target: Element): Vector3 =>
-			resolveTriple(target, "rotation", ROTATION_SPECIFIC, 0);
+			resolveBlockTransform(target).rotation;
 
 		// Our slotted child is the scene-select; the blocks are its children. Reaching
 		// through it keeps the gizmo's knob logic identical for one or many blocks.
@@ -114,8 +111,7 @@ customElements.define(
 			if (host === null) return [];
 			return Array.from(host.children).filter(
 				(node): node is HTMLElement =>
-					node instanceof HTMLElement &&
-					SELECTABLE.has(node.tagName.toLowerCase()),
+					node instanceof HTMLElement && isBlock(node),
 			);
 		};
 		const centroidOf = (list: HTMLElement[]): Vector3 => {
@@ -162,6 +158,22 @@ customElements.define(
 			if (bounds !== null) sizeChrome(bounds.half);
 		};
 
+		// Reach through to the wrapped cage and have it remeasure. The cage is our
+		// slotted child and carries writeBounds as a real method, so this is a direct
+		// synchronous call — no observer watching the blocks for us to react to.
+		const remeasureCage = (): void => {
+			const cage = sceneSelect() as { writeBounds?: () => void } | null;
+			cage?.writeBounds?.();
+		};
+
+		// Re-pin the handles AND the cage to the blocks' committed transforms. Run on
+		// the owned, post-DOM cadences: a block folded in/out (cmd-click), a drag
+		// commit, or an inspector edit signalled from the editor.
+		const refresh = (): void => {
+			syncHandles();
+			remeasureCage();
+		};
+
 		// Live drag overrides each block's :host values inline (inline wins), staying
 		// compositor-only; the commit clears them once the bridge re-resolves.
 		const writeBlockPosition = (block: HTMLElement, position: Vector3): void => {
@@ -174,18 +186,6 @@ customElements.define(
 			block.style.removeProperty("--block-y");
 			block.style.removeProperty("--block-z");
 			block.style.removeProperty("--block-rotate-y");
-		};
-		// Read a block's live position back out of its inline overrides (px → world,
-		// undoing the Y negation), falling back to the drag-start value.
-		const readLivePosition = (block: HTMLElement, fallback: Vector3): Vector3 => {
-			const read = (name: string, sign = 1): number | null => {
-				const raw = block.style.getPropertyValue(name);
-				return raw === "" ? null : (parseFloat(raw) / UNIT_SIZE) * sign;
-			};
-			const x = read("--block-x");
-			const y = read("--block-y", -1);
-			const z = read("--block-z");
-			return [x ?? fallback[0], y ?? fallback[1], z ?? fallback[2]];
 		};
 
 		const handlePoint = (selector: string): ScreenPoint => {
@@ -218,11 +218,13 @@ customElements.define(
 						rotateAroundY(relative, deltaYaw),
 					);
 					writeBlockPosition(block, orbited);
-					block.style.setProperty(
-						"--block-rotate-y",
-						`${active.startRotations[index][1] + deltaYaw}deg`,
-					);
+					const yaw = active.startRotations[index][1] + deltaYaw;
+					block.style.setProperty("--block-rotate-y", `${yaw}deg`);
+					active.livePositions[index] = orbited;
+					active.liveYaw[index] = yaw;
 				});
+				// The cage grows and shifts as the blocks orbit; remeasure it live.
+				remeasureCage();
 				return;
 			}
 
@@ -234,11 +236,14 @@ customElements.define(
 				next[active.axisIndex] =
 					active.startPositions[index][active.axisIndex] + units;
 				writeBlockPosition(block, next);
+				active.livePositions[index] = next;
 			});
 			// The centroid slides by the same delta, so the handles follow live.
 			const nextCentroid = [...active.centroid] as Vector3;
 			nextCentroid[active.axisIndex] = active.centroid[active.axisIndex] + units;
 			placeMirror(nextCentroid);
+			// The cage follows the blocks as they slide.
+			remeasureCage();
 		};
 
 		const commitDrag = (): void => {
@@ -246,32 +251,30 @@ customElements.define(
 			const settled = drag;
 			settled.blocks.forEach((block, index) => {
 				if (settled.mode === "yaw") {
-					const raw = block.style.getPropertyValue("--block-rotate-y");
-					const yaw = Math.round(
-						raw === "" ? settled.startRotations[index][1] : parseFloat(raw),
-					);
 					const [rotateX, , rotateZ] = settled.startRotations[index];
+					const yaw = Math.round(settled.liveYaw[index]);
 					block.setAttribute(
 						"rotation",
 						`${formatNumber(rotateX)} ${formatNumber(yaw)} ${formatNumber(rotateZ)}`,
 					);
 				}
-				const committed = readLivePosition(
-					block,
-					settled.startPositions[index],
-				).map(snapToGrid) as Vector3;
+				const committed = settled.livePositions[index].map(snapToGrid) as Vector3;
 				block.setAttribute("position", committed.map(formatNumber).join(" "));
 				block.removeAttribute("x");
 				block.removeAttribute("y");
 				block.removeAttribute("z");
 			});
-			// Re-resolve on the next frame (the bridge update is async) so clearing the
-			// inline overrides doesn't flash the pre-commit value, then re-pin the
-			// handles to the committed transforms.
-			requestAnimationFrame(() => {
-				settled.blocks.forEach(clearBlockLive);
-				syncHandles();
-			});
+			// The authored attributes are written; the inline --block-* override still
+			// holds the dragged value so nothing flashes. Once each block has re-rendered
+			// from its attribute (commitBlockRender awaits that), drop the override and
+			// re-pin handles + cage to the committed transforms.
+			void Promise.all(
+				settled.blocks.map((block) => commitBlockRender(block, clearBlockLive)),
+			).then(refresh);
+			// Tell the editor the selection's transforms just changed, so it refreshes
+			// the inspector inputs. A bubbling event needs no editor→gizmo wiring and
+			// survives our create/destroy lifecycle.
+			element.dispatchEvent(new CustomEvent("scene-commit", { bubbles: true }));
 			drag = null;
 			window.removeEventListener("pointermove", onPointerMove);
 			window.removeEventListener("pointerup", commitDrag);
@@ -309,6 +312,8 @@ customElements.define(
 					y: (tip.y - origin.y) * scale,
 				};
 			}
+			const startPositions = list.map(readPosition);
+			const startRotations = list.map(readRotation);
 			drag = {
 				mode,
 				axisIndex,
@@ -316,8 +321,11 @@ customElements.define(
 				axisScreen,
 				centroid: centroidOf(list),
 				blocks: list,
-				startPositions: list.map(readPosition),
-				startRotations: list.map(readRotation),
+				startPositions,
+				startRotations,
+				// Seed the live values at the start; each move overwrites them.
+				livePositions: startPositions.map((position) => [...position] as Vector3),
+				liveYaw: startRotations.map((rotation) => rotation[1]),
 			};
 			window.addEventListener("pointermove", onPointerMove);
 			window.addEventListener("pointerup", commitDrag);
@@ -483,41 +491,35 @@ customElements.define(
 			<slot></slot>
 		`;
 
-		// Track the wrapped scene-select and keep the handles pinned to its blocks. We
-		// watch its light subtree: childList for blocks folded in/out by cmd-click, and
-		// the authored transform attributes for inspector edits. We do NOT watch
-		// `style`, so the live --block-* writes during a drag don't trigger a feedback
-		// resync mid-drag.
+		// Track the wrapped scene-select for ONE external change we don't otherwise hear
+		// about: blocks folded in or out by cmd-click (a childList change). We watch the
+		// subtree's childList ONLY — NOT attributes. An attribute change is always one we
+		// caused (our own drag commit) or one the editor owns (an inspector edit, which
+		// it signals via "scene-resync" below); observing it would be reacting to our own
+		// consequences, the pattern this refactor removes.
 		const slot = element.shadowRoot?.querySelector("slot");
 		const onSlotChange = (): void => {
 			childObserver?.disconnect();
 			const host = sceneSelect();
 			if (host !== null) {
-				childObserver = new MutationObserver(syncHandles);
-				childObserver.observe(host, {
-					childList: true,
-					subtree: true,
-					attributeFilter: [
-						"position",
-						"rotation",
-						"size",
-						...POSITION_SPECIFIC,
-						...ROTATION_SPECIFIC,
-						...SIZE_SPECIFIC,
-					],
-				});
+				childObserver = new MutationObserver(refresh);
+				childObserver.observe(host, { childList: true, subtree: true });
 			}
-			syncHandles();
+			refresh();
 		};
 		slot?.addEventListener("slotchange", onSlotChange);
 		// Catch a scene-select already slotted before this listener attached.
 		onSlotChange();
 		element.shadowRoot?.addEventListener("pointerdown", onHandleDown);
+		// The editor fires this after an inspector edit (an attribute change we no longer
+		// observe), once the block has re-rendered, so the handles and cage follow.
+		element.addEventListener("scene-resync", refresh);
 
 		return () => {
 			slot?.removeEventListener("slotchange", onSlotChange);
 			childObserver?.disconnect();
 			element.shadowRoot?.removeEventListener("pointerdown", onHandleDown);
+			element.removeEventListener("scene-resync", refresh);
 			window.removeEventListener("pointermove", onPointerMove);
 			window.removeEventListener("pointerup", commitDrag);
 			// Torn down mid-drag (e.g. Escape while holding a knob): the commit never

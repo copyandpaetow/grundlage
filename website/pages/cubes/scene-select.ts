@@ -1,5 +1,5 @@
 import { html, render } from "../../../lib/src";
-import { blocksBoundsPx } from "./scene-shared";
+import { blocksBoundsPx, HALF_UNIT, isBlock } from "./scene-shared";
 
 // <scene-select> — the selection highlight, and nothing else. Selecting wraps the
 // chosen blocks in `<scene-gizmo><scene-select>…</scene-select></scene-gizmo>`: this
@@ -14,53 +14,27 @@ import { blocksBoundsPx } from "./scene-shared";
 // larger when one is turned corner-on (where a cube projects biggest). A small margin
 // floats it just clear of the opaque faces — a flush cage z-fights and disappears.
 // The blocks stay the single source of truth; we only read them and follow.
-
-const SELECTABLE = new Set([
-	"scene-cube",
-	"scene-wall",
-	"scene-ramp",
-	"scene-group",
-]);
+//
+// We do NOT observe the blocks for changes. The cage remeasures on exactly two owned
+// cadences (see writeBounds): the framework re-render after a committed move (the
+// trailing call below, which runs once the template's DOM has landed), and a live
+// drag, where the wrapping gizmo writes the block transforms and then reaches through
+// to call writeBounds() synchronously. Watching for our own consequences with a
+// MutationObserver was the dead pattern this replaces.
 
 // Screen-px the cage stands proud of the bounding box, so it reads as a halo rather
 // than fighting the block surface.
 const SELECT_MARGIN = 6;
-// Half a default unit cube, used only as the CSS fallback before the first sync.
-const HALF_UNIT = 60;
 
-const isBlock = (node: Element): boolean =>
-	SELECTABLE.has(node.tagName.toLowerCase());
-
-customElements.define(
-	"scene-select",
-	render(function* (element) {
-		// One observer watches the whole light subtree: childList catches blocks being
-		// added/removed (cmd-click folding a block into or out of the cage) and
-		// attribute changes (including the live `style` writes a gizmo drag makes) keep
-		// the cage glued to the blocks as they move.
-		let observer: MutationObserver | null = null;
-
-		const syncBox = (): void => {
-			const box = element.shadowRoot?.querySelector(
-				".box",
-			) as HTMLElement | null;
-			if (box === null) return;
-			const slot = element.shadowRoot?.querySelector("slot");
-			const blocks = (slot?.assignedElements() ?? []).filter(isBlock);
-			const bounds = blocksBoundsPx(blocks);
-			if (bounds === null) {
-				box.style.display = "none";
-				return;
-			}
-			box.style.display = "";
-			box.style.setProperty("--center-x", `${bounds.center[0]}px`);
-			box.style.setProperty("--center-y", `${bounds.center[1]}px`);
-			box.style.setProperty("--center-z", `${bounds.center[2]}px`);
-			box.style.setProperty("--half-x", `${bounds.half[0] + SELECT_MARGIN}px`);
-			box.style.setProperty("--half-y", `${bounds.half[1] + SELECT_MARGIN}px`);
-			box.style.setProperty("--half-z", `${bounds.half[2] + SELECT_MARGIN}px`);
-		};
-
+// The element class carries writeBounds as a real method (not a property bolted on
+// after the fact) so the gizmo can reach through and call it during a drag, and the
+// render generator can call it as trailing post-DOM code.
+class SceneSelect extends render(function* (element) {
+	// A yielded INNER generator becomes the re-runnable current source: on every
+	// update() it re-runs top-to-bottom, re-yields the (hash-stable) template so the
+	// runtime diffs it in place, and then runs the trailing code below — by which
+	// point the cage's DOM has landed, so we can measure and place it.
+	yield function* () {
 		yield html`
 			<style>
 				:host {
@@ -151,21 +125,30 @@ customElements.define(
 			</div>
 			<slot></slot>
 		`;
+		// The cage chrome has landed; measure it against the current blocks.
+		(element as SceneSelect).writeBounds();
+	};
+}) {
+	// Size and place the cage so it wraps every slotted block. World-axis-aligned, so
+	// it never swings behind a turned block. Hidden when there is nothing to wrap.
+	writeBounds(): void {
+		const box = this.shadowRoot?.querySelector(".box") as HTMLElement | null;
+		if (box === null) return;
+		const slot = this.shadowRoot?.querySelector("slot");
+		const blocks = (slot?.assignedElements() ?? []).filter(isBlock);
+		const bounds = blocksBoundsPx(blocks);
+		if (bounds === null) {
+			box.style.display = "none";
+			return;
+		}
+		box.style.display = "";
+		box.style.setProperty("--center-x", `${bounds.center[0]}px`);
+		box.style.setProperty("--center-y", `${bounds.center[1]}px`);
+		box.style.setProperty("--center-z", `${bounds.center[2]}px`);
+		box.style.setProperty("--half-x", `${bounds.half[0] + SELECT_MARGIN}px`);
+		box.style.setProperty("--half-y", `${bounds.half[1] + SELECT_MARGIN}px`);
+		box.style.setProperty("--half-z", `${bounds.half[2] + SELECT_MARGIN}px`);
+	}
+}
 
-		const slot = element.shadowRoot?.querySelector("slot");
-		const onSlotChange = (): void => syncBox();
-		slot?.addEventListener("slotchange", onSlotChange);
-		observer = new MutationObserver(syncBox);
-		observer.observe(element, {
-			childList: true,
-			subtree: true,
-			attributes: true,
-		});
-		syncBox();
-
-		return () => {
-			slot?.removeEventListener("slotchange", onSlotChange);
-			observer?.disconnect();
-		};
-	}),
-);
+customElements.define("scene-select", SceneSelect);

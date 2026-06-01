@@ -1,5 +1,5 @@
 import { html, render } from "../../../lib/src";
-import { resolveTriple, UNIT_SIZE } from "./scene-shared";
+import { resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
 
 // <scene-ghost> — the placement preview. It wraps the geometry being placed
 // (<scene-ghost><scene-cube/></scene-ghost>) and carries the grid-snapped preview
@@ -16,18 +16,13 @@ import { resolveTriple, UNIT_SIZE } from "./scene-shared";
 // custom property inherits across the slot into the child's shadow, so the ghost
 // dims the real geometry without ever touching its 3D context.
 
-const POSITION_SPECIFIC = ["x", "y", "z"] as const;
-
 customElements.define(
 	"scene-ghost",
 	render(function* (element) {
 		yield () => {
-			const [positionX, positionY, positionZ] = resolveTriple(
-				element,
-				"position",
-				POSITION_SPECIFIC,
-				0,
-			);
+			const {
+				position: [positionX, positionY, positionZ],
+			} = resolveBlockTransform(element);
 			return html`
 				<style>
 					:host {

@@ -1,5 +1,5 @@
 import { html, render } from "../../../lib/src";
-import { resolveTriple, UNIT_SIZE } from "./scene-shared";
+import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
 
 // <scene-wall> — one element per geometry. A thin upright panel: its own unit
 // geometry is a single quad with a small baked-in thickness, two painted faces
@@ -10,11 +10,6 @@ import { resolveTriple, UNIT_SIZE } from "./scene-shared";
 // the geometry elements isolated through Phases 1–2; the shared spine is only
 // extracted in Phase 3, once the right abstraction is obvious rather than guessed.
 
-const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
-const POSITION_SPECIFIC = ["x", "y", "z"] as const;
-const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
-
-const HALF_UNIT = UNIT_SIZE / 2;
 // Baked thickness of the panel before scale3d. A wall is authored as a flat
 // surface, so depth defaults thin; `depth`/`size`'s third axis still scales it.
 const THICKNESS = UNIT_SIZE * 0.06;
@@ -24,24 +19,11 @@ customElements.define(
 	"scene-wall",
 	render(function* (element) {
 		yield () => {
-			const [width, height, depth] = resolveTriple(
-				element,
-				"size",
-				SIZE_SPECIFIC,
-				1,
-			);
-			const [positionX, positionY, positionZ] = resolveTriple(
-				element,
-				"position",
-				POSITION_SPECIFIC,
-				0,
-			);
-			const [rotationX, rotationY, rotationZ] = resolveTriple(
-				element,
-				"rotation",
-				ROTATION_SPECIFIC,
-				0,
-			);
+			const {
+				size: [width, height, depth],
+				position: [positionX, positionY, positionZ],
+				rotation: [rotationX, rotationY, rotationZ],
+			} = resolveBlockTransform(element);
 
 			return html`
 				<style>

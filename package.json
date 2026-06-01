@@ -9,6 +9,7 @@
 		"test": "vitest",
 		"test:unit": "vitest --project unit",
 		"test:dom": "vitest --project unit --project dom --project browser-as-dom --project prerender-plugin",
+		"test:cubes": "vitest  --project cubes",
 		"test:browser": "vitest --project browser",
 		"test:ci": "vitest run",
 		"test:bench": "vitest bench --config vitest.bench.config.ts",
