@@ -22,8 +22,9 @@ export type PaletteHandlers = {
 	onDelete: () => void;
 	onGroup: () => void;
 	onUngroup: () => void;
-	// Returns the new camera mode label ("Free" / "Orbit") so we can show it.
-	onToggleCamera: () => string;
+	// Returns the new camera mode label ("Free" / "Orbit") so we can show it. Omitted
+	// when the scene has no <scene-camera> to drive — then we hide the camera button.
+	onToggleCamera?: () => string;
 	onField: (field: InspectorField, axis: number, value: number) => void;
 };
 
@@ -84,6 +85,7 @@ customElements.define(
 					handlers.onUngroup();
 					break;
 				case "camera":
+					if (handlers.onToggleCamera === undefined) break;
 					cameraLabel = handlers.onToggleCamera();
 					void host.update();
 					break;
@@ -197,7 +199,11 @@ customElements.define(
 						<button data-action="ungroup">Ungroup</button>
 						<button data-action="delete">Delete</button>
 						<span class="spacer"></span>
-						<button data-action="camera">Camera: ${cameraLabel}</button>
+						${handlers.onToggleCamera
+							? html`<button data-action="camera">
+									Camera: ${cameraLabel}
+								</button>`
+							: null}
 						<button data-action="export">Export</button>
 					</div>
 					<div

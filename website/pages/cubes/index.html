@@ -1,53 +1,66 @@
 <!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <link rel="icon" type="image/svg+xml" href="/vite.svg"/>
-    <link rel="stylesheet" type="text/css" href="/src/styles/index.css"/>
-    <script type="module" src="./scripts.ts"></script>
-    <title>Grundlage - Scene</title>
-</head>
-<body>
-<nav-bar></nav-bar>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - Scene</title>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
 
-<main>
-    <h1>CSS-3D scene</h1>
-    <p class="scene-hint">
-        <strong>Look:</strong> hold <kbd>Alt</kbd> and drag.
-        <strong>Move:</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>,
-        <kbd>Space</kbd> up / <kbd>Shift</kbd> down.
-        <strong>Edit:</strong> left-click a block to select — a gizmo wraps it; drag a
-        handle to move (yellow handle rotates). <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click adds
-        more blocks for grouping. Set size with the palette inputs.
-        <strong>Place:</strong> click <em>+ Cube/Wall/Ramp</em>, move over the grid
-        floor, click to drop. <strong>Group:</strong> <kbd>G</kbd> groups,
-        <kbd>U</kbd> ungroups. <kbd>Delete</kbd> removes, <kbd>Esc</kbd> cancels /
-        deselects. <em>Camera</em> toggles free-fly / orbit (orbit: <kbd>Alt</kbd>-drag
-        to swing, wheel to zoom). <em>Export</em> copies portable markup.
-    </p>
+		<main>
+			<h1>CSS-3D scene</h1>
+			<p class="scene-hint">
+				<strong>Look:</strong> hold <kbd>Alt</kbd> and drag.
+				<strong>Move:</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>,
+				<kbd>Space</kbd> up / <kbd>Shift</kbd> down.
+				<strong>Edit:</strong> left-click a block to select — a gizmo wraps it;
+				drag a handle to move (yellow handle rotates).
+				<kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click adds more blocks for grouping. Set
+				size with the palette inputs. <strong>Place:</strong> click
+				<em>+ Cube/Wall/Ramp</em>, move over the grid floor, click to drop.
+				<strong>Group:</strong> <kbd>G</kbd> groups, <kbd>U</kbd> ungroups.
+				<kbd>Delete</kbd> removes, <kbd>Esc</kbd> cancels / deselects.
+				<em>Camera</em> toggles free-fly / orbit (orbit: <kbd>Alt</kbd>-drag to
+				swing, wheel to zoom). <em>Export</em> copies portable markup.
+			</p>
 
-    <!-- Hardcoded Phase 1 scene. Several cubes share an identical rotation but
+			<!-- Hardcoded Phase 1 scene. Several cubes share an identical rotation but
          sit at different positions: the case where naive per-face culling
          showed the wrong faces under perspective. With backface-visibility the
          compositor culls correctly regardless of position. A couple of varied
          cubes round out the eyeball test for perspective and camera motion. -->
-    <scene-world>
-        <scene-cube position="0 0 0" rotation="0 25 0"></scene-cube>
-        <scene-cube position="3 0 0" rotation="0 25 0"></scene-cube>
-        <scene-cube position="-3 0 0" rotation="0 25 0"></scene-cube>
-        <scene-cube position="0 0 -3" rotation="0 25 0"></scene-cube>
-        <scene-cube position="3 0 -3" rotation="0 25 0"></scene-cube>
-        <scene-cube position="-3 0 -3" rotation="0 25 0"></scene-cube>
+			<scene-editor>
+				<scene-camera>
+					<scene-world>
+						<scene-cube position="0 0 0" rotation="0 25 0"></scene-cube>
+						<scene-cube position="3 0 0" rotation="0 25 0"></scene-cube>
+						<scene-cube position="-3 0 0" rotation="0 25 0"></scene-cube>
+						<scene-cube position="0 0 -3" rotation="0 25 0"></scene-cube>
+						<scene-cube position="3 0 -3" rotation="0 25 0"></scene-cube>
+						<scene-cube position="-3 0 -3" rotation="0 25 0"></scene-cube>
 
-        <scene-cube position="0 2 -3" rotation="20 45 0" size="1.5"></scene-cube>
-        <scene-cube position="-3 1 0" size="1 2 1"></scene-cube>
-        <scene-cube position="3 0 3" width="2" rotation="0 -30 10"></scene-cube>
+						<scene-cube
+							position="0 2 -3"
+							rotation="20 45 0"
+							size="1.5"
+						></scene-cube>
+						<scene-cube position="-3 1 0" size="1 2 1"></scene-cube>
+						<scene-cube
+							position="3 0 3"
+							width="2"
+							rotation="0 -30 10"
+						></scene-cube>
 
-        <!-- The other two geometries, sharing the same authoring contract. -->
-        <scene-wall position="-1.5 0 3" size="3 1.5 1"></scene-wall>
-        <scene-ramp position="1.5 0 -3"></scene-ramp>
-    </scene-world>
-</main>
-</body>
+						<!-- The other two geometries, sharing the same authoring contract. -->
+						<scene-wall position="-1.5 0 3" size="3 1.5 1"></scene-wall>
+						<scene-ramp position="1.5 0 -3"></scene-ramp>
+					</scene-world>
+				</scene-camera>
+			</scene-editor>
+		</main>
+	</body>
 </html>

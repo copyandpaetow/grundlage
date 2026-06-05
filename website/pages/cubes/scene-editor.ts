@@ -1,5 +1,4 @@
-import { html, props, render } from "../../../lib/src";
-import type { BaseComponent } from "../../../lib/src/types";
+import { html, render } from "../../../lib/src";
 import {
 	blockRendered,
 	commitBlockRender,
@@ -26,20 +25,19 @@ import type {
 	ScenePaletteElement,
 } from "./scene-palette";
 import "./scene-palette";
+import "./wrappers/scene-gizmo";
+import "./wrappers/scene-ghost";
+import "./wrappers/scene-select";
 
-// scene-editor — the authoring spine layered over the renderer, defined below as the
-// <scene-editor> element. <scene-world> mounts it and hands it a plain camera-controls
-// object (not a method bolted onto the element). The editor never becomes the source of
-// truth: selection is DOM-native, and manipulation lives in the <scene-gizmo> that wraps
-// the selected block, writing the block's own attributes. The editor only does selection
-// (wrap/unwrap), placement, grouping, the palette, and serialization.
-
-// The camera surface the world exposes to us — handed over as a property, never a method.
-export type CameraControls = {
-	applyLook(deltaX: number, deltaY: number): void;
-	zoom(delta: number): boolean;
-	toggleMode(): "Free" | "Orbit";
-};
+// scene-editor — the authoring spine, the outermost wrapper. It wraps the navigable
+// scene (`<scene-editor><scene-camera><scene-world>…</scene-world></scene-camera>`) and
+// reaches DOWN to the world it wraps to author it. The editor never becomes the source
+// of truth: selection is DOM-native, and manipulation lives in the <scene-gizmo> that
+// wraps the selected block, writing the block's own attributes. The editor only does
+// selection (wrap/unwrap), placement, grouping, the palette, and serialization — and it
+// toggles the camera's mode through the camera's `mode` attribute. It is transparent:
+// the only thing it renders is the <scene-palette> chrome, anchored over the slotted
+// viewport.
 
 // Geometry that has a size of its own — everything except the group carrier, which
 // would distort its children if scaled. Used to disable the inspector's size row.
@@ -86,34 +84,24 @@ const readPosition = (block: Element): Vector3 =>
 const readRotation = (block: Element): Vector3 =>
 	resolveBlockTransform(block).rotation;
 
-// <scene-editor> — the authoring spine, now a framework element. <scene-world> creates
-// it, hands it the world element (`sceneHost`) and the camera controls as properties,
-// then mounts it into its own shadow. The editor stays a pure controller: selection is
-// DOM-native, manipulation lives in the <scene-gizmo>, and the only chrome it renders is
-// the <scene-palette> it mounts into the world's shadow — it draws nothing into its own.
-// The generator body IS the install (run once on connect); the returned function is the
-// teardown the lib fires on disconnect, exactly the dispose installEditor used to return.
-export interface SceneEditorElement extends BaseComponent {
-	sceneHost?: HTMLElement;
-	camera?: CameraControls;
-}
+// <scene-editor> — the authoring spine, the outermost wrapper. It reaches down to the
+// `<scene-world>` it wraps (the geometry it operates on) and, if present, the
+// `<scene-camera>` between them (whose `mode` it toggles). Both are resolved once after
+// the first yield — client-only, since the lib stops the generator at that yield on the
+// server, so a server render emits just the slotted scene with no editor chrome. The
+// returned function is the teardown the lib fires on disconnect.
 
 customElements.define(
 	"scene-editor",
 	render(function* (element) {
-		const editor = element as SceneEditorElement;
-		// sceneHost (the world we operate on) and camera arrive as properties before we
-		// connect and never change, so we read them once.
-		const { sceneHost: host, camera } = props(editor, {
-			sceneHost: Object,
-			camera: Object,
-		}) as { sceneHost: HTMLElement; camera: CameraControls };
-
-		const shadowRoot = host.shadowRoot;
-		if (shadowRoot === null) {
-			yield html``;
-			return;
-		}
+		// Resolved after the first yield from the wrapped subtree. `host` is the world
+		// whose geometry we author; `cameraElement` is the optional navigation wrapper
+		// whose `mode` the camera button toggles (absent when editing a fixed-camera
+		// scene). `ground` and `palette` are the DOM chrome we create on the client.
+		let host: HTMLElement;
+		let cameraElement: Element | null = null;
+		let ground: HTMLElement;
+		let palette: ScenePaletteElement;
 
 		// Selection wraps the chosen blocks in ONE `<scene-gizmo><scene-select>…</scene-select>
 		// </scene-gizmo>`: the gizmo carries the knobs, the scene-select the cage. Every
@@ -141,13 +129,6 @@ customElements.define(
 			position: Vector3;
 		};
 		let placement: Placement | null = null;
-		let looking = false;
-
-		// The placement grid: hidden until a placement starts. We own its visibility
-		// through inline display (see scene-ground), so start it off.
-		const ground = document.createElement("scene-ground");
-		ground.style.display = "none";
-		host.appendChild(ground);
 
 		// --- Selection (wrap / unwrap) ---------------------------------------------
 
@@ -263,21 +244,6 @@ customElements.define(
 				if (node instanceof HTMLElement && isBlock(node)) block = node;
 			}
 			return block;
-		};
-
-		// --- Camera look (Alt + left-drag) -----------------------------------------
-
-		const onLookMove = (event: PointerEvent): void => {
-			if (looking) camera.applyLook(event.movementX, event.movementY);
-		};
-		const onLookUp = (): void => {
-			looking = false;
-			window.removeEventListener("pointermove", onLookMove);
-			window.removeEventListener("pointerup", onLookUp);
-		};
-
-		const onWheel = (event: WheelEvent): void => {
-			if (camera.zoom(event.deltaY)) event.preventDefault();
 		};
 
 		// --- Placement -------------------------------------------------------------
@@ -413,7 +379,8 @@ customElements.define(
 			onDelete: deleteSelection,
 			onGroup: groupSelection,
 			onUngroup: ungroupSelection,
-			onToggleCamera: () => camera.toggleMode(),
+			// onToggleCamera stays undefined when there is no <scene-camera> to drive, so
+			// the palette hides the button. We fill it in below once the wrapper resolves.
 			onField: (field, axis, value) => {
 				const block = primaryBlock();
 				if (block === null) return;
@@ -432,14 +399,6 @@ customElements.define(
 				void signalGizmoResync(block);
 			},
 		};
-		// Handlers never change, so we hand them over as a plain property before mounting;
-		// the inspector snapshot we push through update() as the selection changes.
-		const palette = document.createElement(
-			"scene-palette",
-		) as ScenePaletteElement;
-		palette.handlers = handlers;
-		shadowRoot.appendChild(palette);
-
 		// Reflect the primary's transform into the inspector. We hand the palette a plain
 		// snapshot and let it render; we never reach into its inputs. The panel shows for a
 		// single selection (block or group); `sized` is false for a group, which has no size
@@ -470,14 +429,9 @@ customElements.define(
 
 		const onPointerDown = (event: PointerEvent): void => {
 			if (event.button !== 0) return;
-			// Alt + drag is the look gesture (touchpad-safe — no right button).
-			if (event.altKey) {
-				event.preventDefault();
-				looking = true;
-				window.addEventListener("pointermove", onLookMove);
-				window.addEventListener("pointerup", onLookUp);
-				return;
-			}
+			// Alt + drag is the camera's look gesture — <scene-camera> owns it, so we
+			// let it pass and never treat it as a selection click.
+			if (event.altKey) return;
 			if (event.composedPath().includes(palette)) return;
 			if (placement !== null) {
 				event.preventDefault();
@@ -552,24 +506,66 @@ customElements.define(
 			updateInspector();
 		};
 
+		// The editor is transparent: it renders the palette chrome over the slotted
+		// scene. `:host` is a positioned block so the absolutely-placed palette anchors
+		// to the viewport; the slot keeps the wrapped camera/world in flow with
+		// display:contents (no extra box around the 3D scene).
+		yield html`
+			<style>
+				:host {
+					display: block;
+					position: relative;
+				}
+				slot {
+					display: contents;
+				}
+			</style>
+			<slot></slot>
+		`;
+
+		// Everything below runs only on the client (the lib stops the generator at the
+		// yield on the server). Resolve the wrapped scene and mount the chrome.
+		const world = element.querySelector("scene-world");
+		if (world === null) return;
+		host = world as HTMLElement;
+		cameraElement = element.querySelector("scene-camera");
+
+		// Toggle the camera through its `mode` attribute — declarative, one-directional,
+		// no method bolted onto the element. Wired only when there is a camera to drive,
+		// which is what makes the palette show or hide the button.
+		if (cameraElement !== null) {
+			const cameraToToggle = cameraElement;
+			handlers.onToggleCamera = (): string => {
+				const next =
+					cameraToToggle.getAttribute("mode") === "orbit" ? "free" : "orbit";
+				cameraToToggle.setAttribute("mode", next);
+				return next === "orbit" ? "Orbit" : "Free";
+			};
+		}
+
+		// The placement grid: hidden until a placement starts. We own its visibility
+		// through inline display (see scene-ground), so start it off, inside the world.
+		ground = document.createElement("scene-ground");
+		ground.style.display = "none";
+		host.appendChild(ground);
+
+		// Handlers never change, so we hand them over as a plain property before mounting;
+		// the inspector snapshot we push through update() as the selection changes. The
+		// palette lives in our OWN shadow, alongside the slot.
+		palette = document.createElement("scene-palette") as ScenePaletteElement;
+		palette.handlers = handlers;
+		element.shadowRoot?.appendChild(palette);
+
 		ground.addEventListener("pointermove", onGroundMove);
-		host.addEventListener("pointerdown", onPointerDown);
-		host.addEventListener("wheel", onWheel, { passive: false });
-		host.addEventListener("scene-commit", onGizmoCommit);
+		element.addEventListener("pointerdown", onPointerDown);
+		element.addEventListener("scene-commit", onGizmoCommit);
 		window.addEventListener("keydown", onKeyDown);
 		updateInspector();
 
-		// The editor renders nothing of its own — its work is the wiring above and the
-		// palette it mounts into the world's shadow — so it yields an empty template.
-		yield html``;
-
 		return () => {
-			host.removeEventListener("pointerdown", onPointerDown);
-			host.removeEventListener("wheel", onWheel);
-			host.removeEventListener("scene-commit", onGizmoCommit);
+			element.removeEventListener("pointerdown", onPointerDown);
+			element.removeEventListener("scene-commit", onGizmoCommit);
 			window.removeEventListener("keydown", onKeyDown);
-			window.removeEventListener("pointermove", onLookMove);
-			window.removeEventListener("pointerup", onLookUp);
 			ground.removeEventListener("pointermove", onGroundMove);
 			ground.remove();
 			palette.remove();

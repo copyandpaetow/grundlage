@@ -1,50 +1,38 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { type CameraControls, type SceneEditorElement } from "./scene-editor";
 import "./scene-editor";
 
-// Behaviour tests for the editing spine. The editor is now its own <scene-editor>
-// element: we mount it on a host the way <scene-world> does — set sceneHost + camera as
-// properties, append it into the host's shadow — then dispatch real pointer/keyboard
-// events, click palette buttons, and assert on the observable result: the wrapper
-// structure selection produces, the attributes grouping/ungrouping write, DOM order
-// after deselect, etc. We never reach into the editor's private closures.
+// Behaviour tests for the editing spine. The editor is the outermost wrapper:
+// `<scene-editor><scene-camera><scene-world>…geometry…</scene-world></scene-camera>`.
+// We mount that real nesting, then dispatch real pointer/keyboard events, click palette
+// buttons, and assert on the observable result: the wrapper structure selection
+// produces, the attributes grouping/ungrouping write, DOM order after deselect, the
+// camera mode the toggle flips, etc. We never reach into the editor's private closures.
 //
-// The blocks the editor reads — scene-cube / scene-wall / scene-ramp / scene-group —
-// are never imported here, so plain createElement("scene-cube") elements stay inert
-// and carry only their tagName, which is all selection/grouping/serialization read.
-// The chrome the editor mounts IS the framework, though: scene-editor pulls in
-// scene-palette and scene-ground, so those upgrade and render into their own shadow
-// roots — hence the palette helpers below reach a shadow deeper, and the inspector,
-// which the editor now feeds through a prop, settles a microtask after selection.
+// The blocks the editor reads — scene-cube / scene-wall / scene-ramp / scene-group — and
+// the scene-world / scene-camera wrappers are never imported here, so they stay inert and
+// carry only their tagName + attributes, which is all selection / grouping / serialization
+// and the mode toggle read. The chrome the editor mounts IS the framework, though:
+// scene-editor pulls in scene-palette and scene-ground, so those upgrade and render into
+// their own shadow roots — hence the palette helpers below reach a shadow deeper, and the
+// inspector, which the editor feeds through a prop, settles a microtask after selection.
 
+// `host` is the <scene-world>: where geometry lives and the editor mounts the ground and
+// places blocks. `sceneCamera` is the wrapper whose `mode` the camera button toggles.
+let editor: HTMLElement;
+let sceneCamera: HTMLElement;
 let host: HTMLElement;
 let dispose: () => void;
-// toggleMode flips this so the camera stub mirrors the real Free/Orbit toggle.
-let cameraMode: "Free" | "Orbit";
-
-const camera: CameraControls = {
-	applyLook() {},
-	zoom() {
-		return false;
-	},
-	toggleMode() {
-		cameraMode = cameraMode === "Free" ? "Orbit" : "Free";
-		return cameraMode;
-	},
-};
 
 beforeEach(() => {
-	cameraMode = "Free";
-	host = document.createElement("div");
-	host.attachShadow({ mode: "open" });
-	document.body.appendChild(host);
-	// Mount the editor element exactly as <scene-world> does: hand it the host and
-	// camera as properties, then connect it into the host's shadow. Its generator runs
-	// synchronously on connect, so the palette and listeners are live straight away.
-	const editor = document.createElement("scene-editor") as SceneEditorElement;
-	editor.sceneHost = host;
-	editor.camera = camera;
-	host.shadowRoot!.appendChild(editor);
+	// Build the real nesting detached, then connect it in one shot so the editor's
+	// generator sees its wrapped world/camera at connect. The generator runs
+	// synchronously, so the palette and listeners are live straight away.
+	editor = document.createElement("scene-editor");
+	sceneCamera = document.createElement("scene-camera");
+	host = document.createElement("scene-world");
+	sceneCamera.appendChild(host);
+	editor.appendChild(sceneCamera);
+	document.body.appendChild(editor);
 	dispose = () => editor.remove();
 });
 
@@ -82,10 +70,10 @@ const pressKey = (key: string): void => {
 	window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 };
 
-// The palette is now a <scene-palette> custom element that renders into its own
-// shadow root, so its toolbar and inspector live one shadow deeper than before.
+// The palette is a <scene-palette> the editor mounts into its OWN shadow, so its
+// toolbar and inspector live one shadow deeper, under the editor.
 const paletteShadow = (): ShadowRoot | null =>
-	(host.shadowRoot?.querySelector("scene-palette") as HTMLElement | null)
+	(editor.shadowRoot?.querySelector("scene-palette") as HTMLElement | null)
 		?.shadowRoot ?? null;
 
 // The editor hands the palette its inspector state through a prop; the lib re-renders
@@ -325,6 +313,20 @@ describe("placement", () => {
 		pressKey("Escape");
 
 		expect(host.querySelector("scene-ghost")).toBeNull();
+	});
+});
+
+// --- camera -----------------------------------------------------------------
+
+describe("camera", () => {
+	test("the camera button flips the wrapped scene-camera's mode attribute", () => {
+		expect(sceneCamera.getAttribute("mode")).toBeNull();
+
+		clickPaletteButton('[data-action="camera"]');
+		expect(sceneCamera.getAttribute("mode")).toBe("orbit");
+
+		clickPaletteButton('[data-action="camera"]');
+		expect(sceneCamera.getAttribute("mode")).toBe("free");
 	});
 });
 
