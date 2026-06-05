@@ -1,5 +1,11 @@
 import { html, render } from "../../../lib/src";
-import { blocksBoundsPx, HALF_UNIT, isBlock } from "./scene-shared";
+import {
+	blocksBoundsPx,
+	HALF_UNIT,
+	isBlock,
+	resolveBlockTransform,
+	UNIT_SIZE,
+} from "./scene-shared";
 
 // <scene-select> — the selection highlight, and nothing else. Selecting wraps the
 // chosen blocks in `<scene-gizmo><scene-select>…</scene-select></scene-gizmo>`: this
@@ -9,146 +15,181 @@ import { blocksBoundsPx, HALF_UNIT, isBlock } from "./scene-shared";
 // so there is a single shared cage instead of "first block gets a gizmo, the rest
 // get something else".
 //
+// It is a self-contained drop-in: `<scene-select><scene-cube/></scene-select>` works
+// on its own. Two properties make that true:
+//
+//  1. It is a Transform carrier. Its :host transform is `var(--carrier-live, <committed>)`:
+//     normally it resolves position/rotation into the committed transform, but a wrapping
+//     gizmo can DECLARE `--carrier-live` on its own host (an inherited custom property), and
+//     we pull it — so the whole cage AND its slotted blocks ride the gizmo's in-flight
+//     transform as one rigid body, by pure CSS inheritance, with no JS and no one writing
+//     our DOM. The editor flattens any committed transform back into the leaf blocks.
+//
+//  2. It re-fits the cage to its content by MEASURING the blocks at render time and emitting
+//     the box size as bindings — no imperative style writes, no observer. We do not watch our
+//     own subtree; the editor (the one that folds blocks in/out and edits them) re-renders us
+//     through update(). One render channel: every change funnels through a re-render.
+//
 // The cage is WORLD-axis-aligned and sized from the blocks' actual rotated corners
 // (blocksBoundsPx), so it always encompasses them: tight when a block is axis-aligned,
-// larger when one is turned corner-on (where a cube projects biggest). A small margin
-// floats it just clear of the opaque faces — a flush cage z-fights and disappears.
-// The blocks stay the single source of truth; we only read them and follow.
-//
-// We do NOT observe the blocks for changes. The cage remeasures on exactly two owned
-// cadences (see writeBounds): the framework re-render after a committed move (the
-// trailing call below, which runs once the template's DOM has landed), and a live
-// drag, where the wrapping gizmo writes the block transforms and then reaches through
-// to call writeBounds() synchronously. Watching for our own consequences with a
-// MutationObserver was the dead pattern this replaces.
+// larger when one is turned corner-on. A small margin floats it just clear of the
+// opaque faces — a flush cage z-fights and disappears. Measurement reads each block's
+// LOCAL matrix, so it is invariant to our own host transform: the box and the blocks
+// share our frame and ride it together.
 
 // Screen-px the cage stands proud of the bounding box, so it reads as a halo rather
 // than fighting the block surface.
 const SELECT_MARGIN = 6;
 
-// The element class carries writeBounds as a real method (not a property bolted on
-// after the fact) so the gizmo can reach through and call it during a drag, and the
-// render generator can call it as trailing post-DOM code.
-class SceneSelect extends render(function* (element) {
-	// A yielded INNER generator becomes the re-runnable current source: on every
-	// update() it re-runs top-to-bottom, re-yields the (hash-stable) template so the
-	// runtime diffs it in place, and then runs the trailing code below — by which
-	// point the cage's DOM has landed, so we can measure and place it.
-	yield function* () {
-		yield html`
-			<style>
-				:host {
-					position: absolute;
-					top: 50%;
-					left: 50%;
-					transform-style: preserve-3d;
-					pointer-events: none;
-				}
+// Our slotted blocks: what the cage measures and wraps. Null-safe for the very first
+// render, before the template's slot exists (no blocks are folded in yet anyway).
+const slottedBlocks = (element: HTMLElement): Element[] => {
+	const slot = element.shadowRoot?.querySelector("slot");
+	return (slot?.assignedElements() ?? []).filter(isBlock);
+};
 
-				/* The cage sits at the bounding-box centre with NO rotation — it is
-				   world-axis-aligned, so it never swings behind a turned block and it
-				   wraps every child at once. Its extent comes from --half-* (the union of
-				   the blocks' rotated corners plus a margin). */
-				.box {
-					position: absolute;
-					top: 50%;
-					left: 50%;
-					transform-style: preserve-3d;
-					pointer-events: none;
-					transform: translate3d(
-						var(--center-x, 0px),
-						var(--center-y, 0px),
-						var(--center-z, 0px)
-					);
-				}
+customElements.define(
+	"scene-select",
+	render(function* (element) {
+		// A Render function: re-invoked on every update(). It measures the blocks (each
+		// renders independently, so they are already laid out) and bakes the world-aligned
+		// box straight into the markup as bindings. update() is driven by the editor on a
+		// content change and fires automatically on our own committed position/rotation.
+		yield () => {
+			// Carrier resolution: our committed transform in, concrete --block-* out. A cage
+			// has no size of its own, so we resolve position/rotation only.
+			const {
+				position: [positionX, positionY, positionZ],
+				rotation: [rotationX, rotationY, rotationZ],
+			} = resolveBlockTransform(element);
 
-				.edge {
-					position: absolute;
-					top: 50%;
-					left: 50%;
-					box-sizing: border-box;
-					border: 2px dashed rgba(120, 220, 255, 0.95);
-					background: rgba(120, 220, 255, 0.08);
-				}
-				.front,
-				.back {
-					width: calc(2 * var(--half-x, ${HALF_UNIT}px));
-					height: calc(2 * var(--half-y, ${HALF_UNIT}px));
-					margin: calc(-1 * var(--half-y, ${HALF_UNIT}px)) 0 0
-						calc(-1 * var(--half-x, ${HALF_UNIT}px));
-				}
-				.front {
-					transform: translateZ(var(--half-z, ${HALF_UNIT}px));
-				}
-				.back {
-					transform: translateZ(calc(-1 * var(--half-z, ${HALF_UNIT}px)));
-				}
-				.right,
-				.left {
-					width: calc(2 * var(--half-z, ${HALF_UNIT}px));
-					height: calc(2 * var(--half-y, ${HALF_UNIT}px));
-					margin: calc(-1 * var(--half-y, ${HALF_UNIT}px)) 0 0
-						calc(-1 * var(--half-z, ${HALF_UNIT}px));
-				}
-				.right {
-					transform: rotateY(90deg) translateZ(var(--half-x, ${HALF_UNIT}px));
-				}
-				.left {
-					transform: rotateY(-90deg) translateZ(var(--half-x, ${HALF_UNIT}px));
-				}
-				.top,
-				.bottom {
-					width: calc(2 * var(--half-x, ${HALF_UNIT}px));
-					height: calc(2 * var(--half-z, ${HALF_UNIT}px));
-					margin: calc(-1 * var(--half-z, ${HALF_UNIT}px)) 0 0
-						calc(-1 * var(--half-x, ${HALF_UNIT}px));
-				}
-				.top {
-					transform: rotateX(90deg) translateZ(var(--half-y, ${HALF_UNIT}px));
-				}
-				.bottom {
-					transform: rotateX(-90deg) translateZ(var(--half-y, ${HALF_UNIT}px));
-				}
+			// Measure the blocks' shared world-axis-aligned box. Null when there is nothing
+			// to wrap (e.g. the first render) — we hide the box rather than draw a zero cage.
+			const bounds = blocksBoundsPx(slottedBlocks(element));
+			const centerX = bounds ? bounds.center[0] : 0;
+			const centerY = bounds ? bounds.center[1] : 0;
+			const centerZ = bounds ? bounds.center[2] : 0;
+			const halfX = bounds ? bounds.half[0] + SELECT_MARGIN : HALF_UNIT;
+			const halfY = bounds ? bounds.half[1] + SELECT_MARGIN : HALF_UNIT;
+			const halfZ = bounds ? bounds.half[2] + SELECT_MARGIN : HALF_UNIT;
 
-				/* The wrapped blocks share our 3D context, so the slot must not flatten. */
-				slot {
-					display: contents;
-				}
-			</style>
-			<div class="box">
-				<div class="edge front"></div>
-				<div class="edge back"></div>
-				<div class="edge right"></div>
-				<div class="edge left"></div>
-				<div class="edge top"></div>
-				<div class="edge bottom"></div>
-			</div>
-			<slot></slot>
-		`;
-		// The cage chrome has landed; measure it against the current blocks.
-		(element as SceneSelect).writeBounds();
-	};
-}) {
-	// Size and place the cage so it wraps every slotted block. World-axis-aligned, so
-	// it never swings behind a turned block. Hidden when there is nothing to wrap.
-	writeBounds(): void {
-		const box = this.shadowRoot?.querySelector(".box") as HTMLElement | null;
-		if (box === null) return;
-		const slot = this.shadowRoot?.querySelector("slot");
-		const blocks = (slot?.assignedElements() ?? []).filter(isBlock);
-		const bounds = blocksBoundsPx(blocks);
-		if (bounds === null) {
-			box.style.display = "none";
-			return;
-		}
-		box.style.display = "";
-		box.style.setProperty("--center-x", `${bounds.center[0]}px`);
-		box.style.setProperty("--center-y", `${bounds.center[1]}px`);
-		box.style.setProperty("--center-z", `${bounds.center[2]}px`);
-		box.style.setProperty("--half-x", `${bounds.half[0] + SELECT_MARGIN}px`);
-		box.style.setProperty("--half-y", `${bounds.half[1] + SELECT_MARGIN}px`);
-		box.style.setProperty("--half-z", `${bounds.half[2] + SELECT_MARGIN}px`);
-	}
-}
+			return html`
+				<style>
+					:host {
+						position: absolute;
+						top: 50%;
+						left: 50%;
+						transform-style: preserve-3d;
+						pointer-events: none;
 
-customElements.define("scene-select", SceneSelect);
+						/* Committed carrier transform, resolved from position/rotation exactly
+						   as a block or group does (author +Y up → screen −Y, negated here). */
+						--block-x: ${positionX * UNIT_SIZE}px;
+						--block-y: ${-positionY * UNIT_SIZE}px;
+						--block-z: ${positionZ * UNIT_SIZE}px;
+						--block-rotate-x: ${rotationX}deg;
+						--block-rotate-y: ${rotationY}deg;
+						--block-rotate-z: ${rotationZ}deg;
+
+						/* The measured box, emitted as variables the chrome below reads. */
+						--box-display: ${bounds === null ? "none" : "block"};
+						--center-x: ${centerX}px;
+						--center-y: ${centerY}px;
+						--center-z: ${centerZ}px;
+						--half-x: ${halfX}px;
+						--half-y: ${halfY}px;
+						--half-z: ${halfZ}px;
+
+						/* A wrapping gizmo DECLARES --carrier-live on its own host; it inherits
+						   across the slot to us and we pull it, moving the cage + blocks as one
+						   rigid body for the duration of a drag. Unset (its initial value) the
+						   var() falls back to our committed transform — no gizmo, no override. */
+						transform: var(
+							--carrier-live,
+							translate3d(var(--block-x), var(--block-y), var(--block-z))
+								rotateX(var(--block-rotate-x)) rotateY(var(--block-rotate-y))
+								rotateZ(var(--block-rotate-z))
+						);
+					}
+
+					/* The cage sits at the bounding-box centre with NO rotation of its own — it
+					   is world-axis-aligned within our frame, so it never swings behind a turned
+					   block and it wraps every child at once. Hidden when there is nothing to
+					   wrap. */
+					.box {
+						display: var(--box-display);
+						position: absolute;
+						top: 50%;
+						left: 50%;
+						transform-style: preserve-3d;
+						pointer-events: none;
+						transform: translate3d(
+							var(--center-x),
+							var(--center-y),
+							var(--center-z)
+						);
+					}
+
+					.edge {
+						position: absolute;
+						top: 50%;
+						left: 50%;
+						box-sizing: border-box;
+						border: 2px dashed rgba(120, 220, 255, 0.95);
+						background: rgba(120, 220, 255, 0.08);
+					}
+					.front,
+					.back {
+						width: calc(2 * var(--half-x));
+						height: calc(2 * var(--half-y));
+						margin: calc(-1 * var(--half-y)) 0 0 calc(-1 * var(--half-x));
+					}
+					.front {
+						transform: translateZ(var(--half-z));
+					}
+					.back {
+						transform: translateZ(calc(-1 * var(--half-z)));
+					}
+					.right,
+					.left {
+						width: calc(2 * var(--half-z));
+						height: calc(2 * var(--half-y));
+						margin: calc(-1 * var(--half-y)) 0 0 calc(-1 * var(--half-z));
+					}
+					.right {
+						transform: rotateY(90deg) translateZ(var(--half-x));
+					}
+					.left {
+						transform: rotateY(-90deg) translateZ(var(--half-x));
+					}
+					.top,
+					.bottom {
+						width: calc(2 * var(--half-x));
+						height: calc(2 * var(--half-z));
+						margin: calc(-1 * var(--half-z)) 0 0 calc(-1 * var(--half-x));
+					}
+					.top {
+						transform: rotateX(90deg) translateZ(var(--half-y));
+					}
+					.bottom {
+						transform: rotateX(-90deg) translateZ(var(--half-y));
+					}
+
+					/* The wrapped blocks share our 3D context, so the slot must not flatten. */
+					slot {
+						display: contents;
+					}
+				</style>
+				<div class="box">
+					<div class="edge front"></div>
+					<div class="edge back"></div>
+					<div class="edge right"></div>
+					<div class="edge left"></div>
+					<div class="edge top"></div>
+					<div class="edge bottom"></div>
+				</div>
+				<slot></slot>
+			`;
+		};
+	}),
+);

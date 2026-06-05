@@ -1,13 +1,18 @@
 import {
 	blockRendered,
 	commitBlockRender,
+	eulerFromMatrix,
 	formatNumber,
+	frameMatrix,
+	fromScreenPoint,
 	isBlock,
 	POSITION_SPECIFIC,
 	resolveBlockTransform,
+	rotationMatrix,
 	ROTATION_SPECIFIC,
 	SIZE_SPECIFIC,
 	snapToGrid,
+	toScreenPoint,
 	UNIT_SIZE,
 } from "./scene-shared";
 
@@ -56,58 +61,9 @@ const subtractVectors = (a: Vector3, b: Vector3): Vector3 => [
 	a[2] - b[2],
 ];
 
-// Author-space position (grid units, +Y up) ↔ the screen-px point the geometry
-// translates to (+Y down). The bridge negates Y, so we mirror that here.
-const toScreenPoint = ([x, y, z]: Vector3): DOMPoint =>
-	new DOMPoint(x * UNIT_SIZE, -y * UNIT_SIZE, z * UNIT_SIZE);
-const fromScreenPoint = (point: DOMPoint): Vector3 => [
-	point.x / UNIT_SIZE,
-	-point.y / UNIT_SIZE,
-	point.z / UNIT_SIZE,
-];
-
-// A pure rotation matrix in the geometry's own order (rotateX · rotateY · rotateZ),
-// built from a resolved Euler triple. We compose two of these by matrix multiply to
-// combine rotations — Euler angles do NOT compose by addition, which is why the old
-// rotateAroundY-plus-sum approach was only ever right for a yaw-only group.
-const rotationMatrix = ([rotateX, rotateY, rotateZ]: Vector3): DOMMatrix =>
-	new DOMMatrix(
-		`rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`,
-	);
-
-// The full transform a group contributes to its children: translate then rotate, in
-// the same order the geometry's :host writes it (a group never scales). A child lifts
-// into the parent frame by pushing its own translation through this.
-const frameMatrix = (position: Vector3, rotation: Vector3): DOMMatrix =>
-	new DOMMatrix(
-		`translate3d(${position[0] * UNIT_SIZE}px, ${-position[1] * UNIT_SIZE}px, ${
-			position[2] * UNIT_SIZE
-		}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${
-			rotation[2]
-		}deg)`,
-	);
-
-// Decompose a rotation matrix back into the geometry's rotateX·rotateY·rotateZ Euler
-// triple (degrees), mirroring the composition order so a round-trip is stable. Reads
-// the rotated basis vectors out of the matrix; falls back to a yaw-only read at the
-// ±90° pitch gimbal, where the X and Z rotations couple and one must be chosen as 0.
-const eulerFromMatrix = (matrix: DOMMatrix): Vector3 => {
-	const xAxis = matrix.transformPoint(new DOMPoint(1, 0, 0));
-	const yAxis = matrix.transformPoint(new DOMPoint(0, 1, 0));
-	const zAxis = matrix.transformPoint(new DOMPoint(0, 0, 1));
-	const sinPitch = Math.max(-1, Math.min(1, zAxis.x));
-	const pitch = Math.asin(sinPitch);
-	const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
-	if (Math.abs(Math.cos(pitch)) > 1e-6) {
-		return [
-			toDegrees(Math.atan2(-zAxis.y, zAxis.z)),
-			toDegrees(pitch),
-			toDegrees(Math.atan2(-yAxis.x, xAxis.x)),
-		];
-	}
-	// Gimbal lock: fold the coupled rotation into X and leave Z at zero.
-	return [toDegrees(Math.atan2(sinPitch * xAxis.y, yAxis.y)), toDegrees(pitch), 0];
-};
+// The transform-matrix helpers (toScreenPoint / fromScreenPoint / frameMatrix /
+// rotationMatrix / eulerFromMatrix) live in scene-shared now — the gizmo composes
+// transforms with the same maths when it drives its direct child.
 
 // Drop a block's in-flight inline transform override so it falls back to its authored
 // --block-* (set once the committed attribute has re-rendered — see commitBlockRender).
@@ -157,12 +113,21 @@ export const installEditor = (
 
 	// --- Selection (wrap / unwrap) ---------------------------------------------
 
-	// After an inspector edit the block re-renders asynchronously; once it has, signal
-	// the gizmo so its handles and cage re-pin to the new transform (it no longer
+	// One render channel: the gizmo and cage do not observe their content (they pull it at
+	// render time), so WE — the coordinator that changes their content — re-render them. This
+	// re-pins the gizmo handles and re-fits the cage box to whatever the selection now holds.
+	const repaintSelection = (): void => {
+		type Renderable = { update?: () => Promise<void> };
+		void (gizmo as Renderable | null)?.update?.();
+		void (sceneSelect as Renderable | null)?.update?.();
+	};
+
+	// After an inspector edit the block re-renders asynchronously; once it has, re-render the
+	// selection chrome so its handles and box re-pin to the new transform (it no longer
 	// observes the block's attributes — that change is one we own here).
 	const signalGizmoResync = async (block: HTMLElement): Promise<void> => {
 		await blockRendered(block);
-		gizmo?.dispatchEvent(new CustomEvent("scene-resync"));
+		repaintSelection();
 	};
 
 	// Pulling a block into the cage leaves a comment anchor at its original spot in
@@ -222,6 +187,9 @@ export const installEditor = (
 		if (selection.size === 1 && selection.has(block)) return;
 		clearSelection();
 		buildSelection(block);
+		// The gizmo and cage ran their first render against an empty fresh cage. Now that the
+		// block is folded in, re-render both so the handles pin to it and the box fits it.
+		repaintSelection();
 		updateInspector();
 	};
 
@@ -238,6 +206,9 @@ export const installEditor = (
 		} else {
 			foldIn(block);
 		}
+		// Both the cage box and the gizmo handles re-pin to the new set; we own the content
+		// change, so we re-render them.
+		repaintSelection();
 		updateInspector();
 	};
 
@@ -491,9 +462,49 @@ export const installEditor = (
 		if (event.key.toLowerCase() === "u") ungroupSelection();
 	};
 
-	// The gizmo signals a drag commit by bubbling "scene-commit" up to us; refresh the
-	// inspector inputs against the freshly committed transform.
-	const onGizmoCommit = (): void => updateInspector();
+	// The gizmo commits a drag by bubbling "scene-commit": it has written the dragged
+	// transform onto its direct child — our scene-select cage — as one rigid move, then
+	// settled. We flatten that transform down into the leaf blocks so the blocks stay the
+	// single source of truth and the cage returns to identity. The gizmo knows nothing of
+	// this; it just transformed its child.
+	const flattenSelection = (): void => {
+		if (sceneSelect === null) return;
+		const cage = sceneSelect;
+		const blocks = [...selection];
+		if (blocks.length === 0) return;
+		// The cage's committed frame and its rotation alone. Each block lifts into world
+		// space by pushing its position through the frame and composing its rotation with
+		// the cage's BY MATRIX — correct for any cage rotation, not just yaw.
+		const frame = frameMatrix(readPosition(cage), readRotation(cage));
+		const cageRotation = rotationMatrix(readRotation(cage));
+		for (const block of blocks) {
+			const world = fromScreenPoint(
+				frame.transformPoint(toScreenPoint(readPosition(block))),
+			).map(snapToGrid) as Vector3;
+			const rotation = eulerFromMatrix(
+				cageRotation.multiply(rotationMatrix(readRotation(block))),
+			).map((degrees) => Math.round(degrees)) as Vector3;
+			block.setAttribute("position", world.map(formatNumber).join(" "));
+			block.setAttribute("rotation", rotation.map(formatNumber).join(" "));
+			block.removeAttribute("x");
+			block.removeAttribute("y");
+			block.removeAttribute("z");
+		}
+		// Return the cage to identity. The blocks now hold the full transform; until both
+		// they and the cage re-render the visible pose is unchanged (cage-frame ·
+		// block-local == the new world transform), so flipping the pair in one render
+		// batch shows no flash. Once settled, re-pin the gizmo handles to the flattened
+		// blocks.
+		cage.setAttribute("position", "0 0 0");
+		cage.setAttribute("rotation", "0 0 0");
+		void Promise.all(
+			[cage, ...blocks].map((node) => blockRendered(node as HTMLElement)),
+		).then(repaintSelection);
+	};
+	const onGizmoCommit = (): void => {
+		flattenSelection();
+		updateInspector();
+	};
 
 	ground.addEventListener("pointermove", onGroundMove);
 	host.addEventListener("pointerdown", onPointerDown);

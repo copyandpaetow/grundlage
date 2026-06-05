@@ -236,3 +236,70 @@ export const blocksBoundsPx = (blocks: Iterable<Element>): Bounds | null => {
 		half: [(max[0] - min[0]) / 2, (max[1] - min[1]) / 2, (max[2] - min[2]) / 2],
 	};
 };
+
+// --- World ↔ screen and rotation matrices ------------------------------------
+// Composing transforms by matrix lives here because both the editor (flattening a
+// carrier into its leaves) and the gizmo (driving its direct child as one rigid
+// body) need the same maths. Euler angles do NOT compose by addition, so anything
+// combining two rotations must go through these.
+
+// Author-space position (grid units, +Y up) ↔ the screen-px point a carrier
+// translates to (+Y down). The attribute → variable bridge negates Y; we mirror it.
+export const toScreenPoint = ([x, y, z]: Vector3): DOMPoint =>
+	new DOMPoint(x * UNIT_SIZE, -y * UNIT_SIZE, z * UNIT_SIZE);
+export const fromScreenPoint = (point: DOMPoint): Vector3 => [
+	point.x / UNIT_SIZE,
+	-point.y / UNIT_SIZE,
+	point.z / UNIT_SIZE,
+];
+
+// A pure rotation matrix in the carrier's own order (rotateX · rotateY · rotateZ),
+// built from a resolved Euler triple. Multiply two of these to combine rotations.
+export const rotationMatrix = ([rotateX, rotateY, rotateZ]: Vector3): DOMMatrix =>
+	new DOMMatrix(
+		`rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`,
+	);
+
+// The full transform a carrier contributes to its content: translate then rotate, in
+// the same order every :host writes it (carriers never scale). A child lifts into the
+// carrier's frame by pushing its own translation through this.
+export const frameMatrix = (position: Vector3, rotation: Vector3): DOMMatrix =>
+	new DOMMatrix(
+		`translate3d(${position[0] * UNIT_SIZE}px, ${-position[1] * UNIT_SIZE}px, ${
+			position[2] * UNIT_SIZE
+		}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${
+			rotation[2]
+		}deg)`,
+	);
+
+// Decompose a rotation matrix back into the rotateX·rotateY·rotateZ Euler triple
+// (degrees), mirroring frameMatrix's order so a round-trip is stable. Reads the
+// rotated basis vectors out of the matrix; falls back to a yaw-only read at the ±90°
+// pitch gimbal, where the X and Z rotations couple and one must be chosen as 0.
+export const eulerFromMatrix = (matrix: DOMMatrix): Vector3 => {
+	// Read the rotated basis as the LINEAR part only. transformPoint applies the FULL
+	// affine transform — translation included — so we map the origin too and subtract it.
+	// Without this, a matrix that also translates (a rotation about an off-origin pivot, or
+	// even a pure translation) contaminates the basis: e.g. a translation of dx px makes
+	// zAxis.x = dx, which asin clamps to ±90deg and decodes as a garbage rotation.
+	const origin = matrix.transformPoint(new DOMPoint(0, 0, 0));
+	const mapAxis = (x: number, y: number, z: number) => {
+		const mapped = matrix.transformPoint(new DOMPoint(x, y, z));
+		return { x: mapped.x - origin.x, y: mapped.y - origin.y, z: mapped.z - origin.z };
+	};
+	const xAxis = mapAxis(1, 0, 0);
+	const yAxis = mapAxis(0, 1, 0);
+	const zAxis = mapAxis(0, 0, 1);
+	const sinPitch = Math.max(-1, Math.min(1, zAxis.x));
+	const pitch = Math.asin(sinPitch);
+	const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
+	if (Math.abs(Math.cos(pitch)) > 1e-6) {
+		return [
+			toDegrees(Math.atan2(-zAxis.y, zAxis.z)),
+			toDegrees(pitch),
+			toDegrees(Math.atan2(-yAxis.x, xAxis.x)),
+		];
+	}
+	// Gimbal lock: fold the coupled rotation into X and leave Z at zero.
+	return [toDegrees(Math.atan2(sinPitch * xAxis.y, yAxis.y)), toDegrees(pitch), 0];
+};
