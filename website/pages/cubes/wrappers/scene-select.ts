@@ -1,11 +1,11 @@
-import { html, render } from "../../../lib/src";
+import { html, render } from "../../../../lib/src";
 import {
 	blocksBoundsPx,
 	HALF_UNIT,
 	isBlock,
 	resolveBlockTransform,
 	UNIT_SIZE,
-} from "./scene-shared";
+} from "../scene-shared";
 
 // <scene-select> — the selection highlight, and nothing else. Selecting wraps the
 // chosen blocks in `<scene-gizmo><scene-select>…</scene-select></scene-gizmo>`: this

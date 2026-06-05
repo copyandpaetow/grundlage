@@ -1,24 +1,19 @@
-import { html, render } from "../../../lib/src";
-import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
+import { html, render } from "../../../../lib/src";
+import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
-// <scene-wall> — one element per geometry. A thin upright panel: its own unit
-// geometry is a single quad with a small baked-in thickness, two painted faces
-// (front and back) plus four slim edge faces so the slab reads as solid from
-// grazing angles. Same authoring contract as <scene-cube> — shorthand vs.
-// specific attributes resolved in JS, written out as concrete --block-* variables
-// — but the dimension resolution is duplicated here on purpose. The plan keeps
-// the geometry elements isolated through Phases 1–2; the shared spine is only
-// extracted in Phase 3, once the right abstraction is obvious rather than guessed.
-
-// Baked thickness of the panel before scale3d. A wall is authored as a flat
-// surface, so depth defaults thin; `depth`/`size`'s third axis still scales it.
-const THICKNESS = UNIT_SIZE * 0.06;
-const HALF_THICKNESS = THICKNESS / 2;
+// <scene-cube> — one element per geometry. It owns its six faces and a fixed
+// unit-cube layout. Authored state arrives as attributes; the render function
+// re-runs on every attribute change (the lib watches attributes with a
+// MutationObserver), resolves shorthand-vs-specific precedence, and writes the
+// concrete --block-* variables. Everything routes to `transform`: size is
+// scale3d over the unit cube, never a layout property.
 
 customElements.define(
-	"scene-wall",
+	"scene-cube",
 	render(function* (element) {
 		yield () => {
+			// The attribute → variable bridge: committed attributes in, concrete
+			// render variables out. CSS downstream reads only the resolved values.
 			const {
 				size: [width, height, depth],
 				position: [positionX, positionY, positionZ],
@@ -31,8 +26,12 @@ customElements.define(
 						position: absolute;
 						top: 50%;
 						left: 50%;
+						/* Faces compose into one 3D context with the world through
+						   preserve-3d. */
 						transform-style: preserve-3d;
 
+						/* Author with +Y up; CSS screen-space is +Y down, so we
+						   negate the Y position here at the bridge. */
 						--block-x: ${positionX * UNIT_SIZE}px;
 						--block-y: ${-positionY * UNIT_SIZE}px;
 						--block-z: ${positionZ * UNIT_SIZE}px;
@@ -46,15 +45,14 @@ customElements.define(
 						   geometry without assuming it fills its unit cube. */
 						--block-extent-x: ${HALF_UNIT}px;
 						--block-extent-y: ${HALF_UNIT}px;
-						--block-extent-z: ${HALF_THICKNESS}px;
+						--block-extent-z: ${HALF_UNIT}px;
 
 						transform: translate3d(
 								var(--block-x),
 								var(--block-y),
 								var(--block-z)
 							)
-							rotateX(var(--block-rotate-x))
-							rotateY(var(--block-rotate-y))
+							rotateX(var(--block-rotate-x)) rotateY(var(--block-rotate-y))
 							rotateZ(var(--block-rotate-z))
 							scale3d(
 								var(--block-scale-x),
@@ -67,8 +65,19 @@ customElements.define(
 						position: absolute;
 						top: 50%;
 						left: 50%;
+						width: ${UNIT_SIZE}px;
+						height: ${UNIT_SIZE}px;
+						margin: ${-HALF_UNIT}px 0 0 ${-HALF_UNIT}px;
 						box-sizing: border-box;
 						border: 1px solid rgba(0, 0, 0, 0.35);
+						display: grid;
+						place-items: center;
+						font:
+							600 14px/1 system-ui,
+							sans-serif;
+						color: rgba(0, 0, 0, 0.7);
+						/* Self-backface culling: free, compositor-side, and
+						   perspective-correct. No JS decides per-face visibility. */
 						backface-visibility: hidden;
 						/* World sheet is pointer-events:none; faces opt back in to stay clickable. */
 						pointer-events: auto;
@@ -80,55 +89,40 @@ customElements.define(
 					}
 
 
-					/* Broad faces: the painted surfaces of the panel. */
-					.front,
-					.back {
-						width: ${UNIT_SIZE}px;
-						height: ${UNIT_SIZE}px;
-						margin: ${-HALF_UNIT}px 0 0 ${-HALF_UNIT}px;
-						background: #8a93a6;
-					}
+					/* Six faces of a unit cube, laid out once. Each is pushed out by
+					   half a unit along its own normal after orienting; with backface
+					   culling only the outward side of each ever paints. */
 					.front {
-						transform: translateZ(${HALF_THICKNESS}px);
+						transform: translateZ(${HALF_UNIT}px);
+						background: #f6c945;
 					}
 					.back {
-						transform: rotateY(180deg) translateZ(${HALF_THICKNESS}px);
-					}
-
-					/* Edge faces: span the thickness so the slab is closed. */
-					.left,
-					.right {
-						width: ${THICKNESS}px;
-						height: ${UNIT_SIZE}px;
-						margin: ${-HALF_UNIT}px 0 0 ${-HALF_THICKNESS}px;
-						background: #6c748a;
+						transform: rotateY(180deg) translateZ(${HALF_UNIT}px);
+						background: #e8923b;
 					}
 					.right {
 						transform: rotateY(90deg) translateZ(${HALF_UNIT}px);
+						background: #4fa6e0;
 					}
 					.left {
 						transform: rotateY(-90deg) translateZ(${HALF_UNIT}px);
-					}
-					.top,
-					.bottom {
-						width: ${UNIT_SIZE}px;
-						height: ${THICKNESS}px;
-						margin: ${-HALF_THICKNESS}px 0 0 ${-HALF_UNIT}px;
-						background: #767f94;
+						background: #5fc2a8;
 					}
 					.top {
 						transform: rotateX(90deg) translateZ(${HALF_UNIT}px);
+						background: #b98cd6;
 					}
 					.bottom {
 						transform: rotateX(-90deg) translateZ(${HALF_UNIT}px);
+						background: #d96c8a;
 					}
 				</style>
-				<div class="face front"></div>
-				<div class="face back"></div>
-				<div class="face right"></div>
-				<div class="face left"></div>
-				<div class="face top"></div>
-				<div class="face bottom"></div>
+				<div class="face front">front</div>
+				<div class="face back">back</div>
+				<div class="face right">right</div>
+				<div class="face left">left</div>
+				<div class="face top">top</div>
+				<div class="face bottom">bottom</div>
 			`;
 		};
 	}),

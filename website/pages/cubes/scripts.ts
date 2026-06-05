@@ -1,7 +1,7 @@
 import "../../src/components/navbar";
 import "./scene-world";
-import "./scene-cube";
-import "./scene-wall";
-import "./scene-ramp";
-import "./scene-group";
+import "./shapes/scene-cube";
+import "./shapes/scene-wall";
+import "./shapes/scene-ramp";
+import "./wrappers/scene-group";
 import "./style.css";

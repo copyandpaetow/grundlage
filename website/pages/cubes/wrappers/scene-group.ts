@@ -1,5 +1,5 @@
-import { html, render } from "../../../lib/src";
-import { resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
+import { html, render } from "../../../../lib/src";
+import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 // <scene-group> — a transform carrier. It contributes a transform and nothing
 // else: no faces, never paints. Grouping is just the cascade — selected blocks

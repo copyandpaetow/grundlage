@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, render } from "../../../../lib/src";
 import {
 	blocksBoundsPx,
 	eulerFromMatrix,
@@ -8,7 +8,7 @@ import {
 	resolveBlockTransform,
 	UNIT_SIZE,
 	type Vector3,
-} from "./scene-shared";
+} from "../scene-shared";
 
 // <scene-gizmo> — the manipulation knobs, and nothing else. It is a GENERIC transform
 // tool: it reads and writes the transform of its ONE direct child and never looks past

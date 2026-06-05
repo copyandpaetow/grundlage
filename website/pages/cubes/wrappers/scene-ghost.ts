@@ -1,5 +1,5 @@
-import { html, render } from "../../../lib/src";
-import { resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
+import { html, render } from "../../../../lib/src";
+import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 // <scene-ghost> — the placement preview. It wraps the geometry being placed
 // (<scene-ghost><scene-cube/></scene-ghost>) and carries the grid-snapped preview

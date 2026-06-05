@@ -1,5 +1,5 @@
-import { html, render } from "../../../lib/src";
-import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "./scene-shared";
+import { html, render } from "../../../../lib/src";
+import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 // <scene-ramp> — one element per geometry. A right-triangular prism: a flat base,
 // a vertical back, a 45° sloped cap rising from the front-bottom edge to the
