@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { installEditor, type CameraControls } from "./scene-editor";
+import { type CameraControls, type SceneEditorElement } from "./scene-editor";
+import "./scene-editor";
 
-// Behaviour tests for the editing spine. We drive it the way a user does — install it
-// on a host, dispatch real pointer/keyboard events, click palette buttons — and assert
-// on the observable result: the wrapper structure selection produces, the attributes
-// grouping/ungrouping write, DOM order after deselect, etc. We never reach into the
-// editor's private closures, so the upcoming refactor is free to move them.
+// Behaviour tests for the editing spine. The editor is now its own <scene-editor>
+// element: we mount it on a host the way <scene-world> does — set sceneHost + camera as
+// properties, append it into the host's shadow — then dispatch real pointer/keyboard
+// events, click palette buttons, and assert on the observable result: the wrapper
+// structure selection produces, the attributes grouping/ungrouping write, DOM order
+// after deselect, etc. We never reach into the editor's private closures.
 //
-// The editor imports only from scene-shared (no lib, no custom-element upgrade), so
-// plain createElement("scene-cube") elements carry the right tagName and that is all
-// selection/grouping/serialization read. The wrappers it creates (scene-gizmo /
-// scene-select) stay inert here, which is fine — we assert on their structure, not
-// their rendering.
+// The blocks the editor reads — scene-cube / scene-wall / scene-ramp / scene-group —
+// are never imported here, so plain createElement("scene-cube") elements stay inert
+// and carry only their tagName, which is all selection/grouping/serialization read.
+// The chrome the editor mounts IS the framework, though: scene-editor pulls in
+// scene-palette and scene-ground, so those upgrade and render into their own shadow
+// roots — hence the palette helpers below reach a shadow deeper, and the inspector,
+// which the editor now feeds through a prop, settles a microtask after selection.
 
 let host: HTMLElement;
 let dispose: () => void;
@@ -34,11 +38,21 @@ beforeEach(() => {
 	host = document.createElement("div");
 	host.attachShadow({ mode: "open" });
 	document.body.appendChild(host);
-	dispose = installEditor(host, camera);
+	// Mount the editor element exactly as <scene-world> does: hand it the host and
+	// camera as properties, then connect it into the host's shadow. Its generator runs
+	// synchronously on connect, so the palette and listeners are live straight away.
+	const editor = document.createElement("scene-editor") as SceneEditorElement;
+	editor.sceneHost = host;
+	editor.camera = camera;
+	host.shadowRoot!.appendChild(editor);
+	dispose = () => editor.remove();
 });
 
-afterEach(() => {
+afterEach(async () => {
+	// disconnectedCallback fires teardown a microtask later (it waits to rule out a
+	// move), so let that settle before tearing down the host.
 	dispose();
+	await flush();
 	host.remove();
 });
 
@@ -68,13 +82,25 @@ const pressKey = (key: string): void => {
 	window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 };
 
+// The palette is now a <scene-palette> custom element that renders into its own
+// shadow root, so its toolbar and inspector live one shadow deeper than before.
+const paletteShadow = (): ShadowRoot | null =>
+	(host.shadowRoot?.querySelector("scene-palette") as HTMLElement | null)
+		?.shadowRoot ?? null;
+
+// The editor hands the palette its inspector state through a prop; the lib re-renders
+// on the next microtask, so let that settle before asserting on the panel.
+const flush = (): Promise<void> =>
+	new Promise((resolve) => queueMicrotask(resolve));
+
 const clickPaletteButton = (selector: string): void => {
-	const button = host.shadowRoot?.querySelector(selector);
+	const button = paletteShadow()?.querySelector(selector);
 	button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 };
 
 const gizmo = (): HTMLElement | null => host.querySelector("scene-gizmo");
-const sceneSelect = (): HTMLElement | null => host.querySelector("scene-select");
+const sceneSelect = (): HTMLElement | null =>
+	host.querySelector("scene-select");
 const selectedBlocks = (): HTMLElement[] => {
 	const select = sceneSelect();
 	if (select === null) return [];
@@ -85,9 +111,9 @@ const selectedBlocks = (): HTMLElement[] => {
 	) as HTMLElement[];
 };
 const inspector = (): HTMLElement | null =>
-	host.shadowRoot?.querySelector(".inspector") as HTMLElement | null;
+	paletteShadow()?.querySelector(".inspector") as HTMLElement | null;
 const fieldInput = (field: string, axis: number): HTMLInputElement | null =>
-	host.shadowRoot?.querySelector(
+	paletteShadow()?.querySelector(
 		`input[data-field="${field}"][data-axis="${axis}"]`,
 	) as HTMLInputElement | null;
 
@@ -135,11 +161,12 @@ describe("selection wrapping", () => {
 });
 
 describe("multi-selection", () => {
-	test("meta-click folds blocks into one shared cage", () => {
+	test("meta-click folds blocks into one shared cage", async () => {
 		const first = addBlock("scene-cube");
 		const second = addBlock("scene-cube");
 		pointerDown(first);
 		pointerDown(second, true);
+		await flush();
 
 		expect(host.querySelectorAll("scene-select")).toHaveLength(1);
 		expect(new Set(selectedBlocks())).toEqual(new Set([first, second]));
@@ -304,9 +331,10 @@ describe("placement", () => {
 // --- inspector --------------------------------------------------------------
 
 describe("inspector", () => {
-	test("reflects the selected block and writes edits back to its attribute", () => {
+	test("reflects the selected block and writes edits back to its attribute", async () => {
 		const block = addBlock("scene-cube", { position: "1 2 3" });
 		pointerDown(block);
+		await flush();
 
 		expect(inspector()?.style.display).not.toBe("none");
 		expect(fieldInput("position", 0)?.value).toBe("1");
@@ -320,9 +348,10 @@ describe("inspector", () => {
 		expect(block.hasAttribute("x")).toBe(false);
 	});
 
-	test("the size row is disabled for a group, which has no size of its own", () => {
+	test("the size row is disabled for a group, which has no size of its own", async () => {
 		const group = addBlock("scene-group");
 		pointerDown(group);
+		await flush();
 
 		expect(fieldInput("size", 0)?.disabled).toBe(true);
 

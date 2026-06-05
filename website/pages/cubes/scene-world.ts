@@ -1,5 +1,6 @@
 import { html, render } from "../../../lib/src";
-import { installEditor, type CameraControls } from "./scene-editor";
+import type { CameraControls, SceneEditorElement } from "./scene-editor";
+import "./scene-editor";
 import "./wrappers/scene-gizmo";
 import "./wrappers/scene-ghost";
 import "./wrappers/scene-select";
@@ -174,13 +175,6 @@ customElements.define(
 			},
 		};
 
-		let disposeEditor: (() => void) | undefined;
-		if (typeof window !== "undefined") {
-			writeCamera();
-			window.addEventListener("keydown", onKeyDown);
-			window.addEventListener("keyup", onKeyUp);
-		}
-
 		yield html`
 			<style>
 				:host {
@@ -241,18 +235,24 @@ customElements.define(
 			<div class="world"><slot></slot></div>
 		`;
 
-		// The shadow content now exists, so the editor can host its chrome in our
-		// shadow and add overlays to our light DOM. Client-only: the server emits
-		// just the static scene markup.
-		if (typeof window !== "undefined") {
-			disposeEditor = installEditor(element, cameraControls);
-		}
+		// The shadow content now exists, so wire up interactivity and mount the editor
+		// into our shadow, where it hosts its chrome and adds overlays to our light DOM.
+		// This all sits after the first yield, which the lib reaches only on the client:
+		// on the server it stops the generator at that yield, so nothing here runs and the
+		// server emits just the static scene markup.
+		writeCamera();
+		window.addEventListener("keydown", onKeyDown);
+		window.addEventListener("keyup", onKeyUp);
+		const editor = document.createElement("scene-editor") as SceneEditorElement;
+		editor.sceneHost = element;
+		editor.camera = cameraControls;
+		element.shadowRoot?.appendChild(editor);
 
-		// Generator return = teardown. The lib fires this on disconnect.
+		// Generator return = teardown. The lib fires this on disconnect — client-only,
+		// since on the server the generator never steps past the yield to reach here.
 		return () => {
-			if (typeof window === "undefined") return;
 			if (animationFrame !== 0) cancelAnimationFrame(animationFrame);
-			disposeEditor?.();
+			editor.remove();
 			window.removeEventListener("keydown", onKeyDown);
 			window.removeEventListener("keyup", onKeyUp);
 		};
