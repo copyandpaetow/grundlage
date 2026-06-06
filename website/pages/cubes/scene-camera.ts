@@ -26,8 +26,24 @@ const MOVE_SPEED = 12;
 // degrees of rotation per pixel of pointer movement while looking.
 const LOOK_SENSITIVITY = 0.18;
 const MAX_PITCH = 89;
+// Each movement key as a unit step in camera space: [right, up, forward]. This table
+// is the single source of truth for free-fly movement — both which keys start the step
+// loop (MOVEMENT_KEYS, derived below) and how each one moves the camera (step()).
+// Screen-space +Y is down, so "up" (space) is -1.
+const MOVE_AXES: Record<string, [number, number, number]> = {
+	w: [0, 0, 1],
+	s: [0, 0, -1],
+	d: [1, 0, 0],
+	a: [-1, 0, 0],
+	" ": [0, -1, 0],
+	shift: [0, 1, 0],
+};
 // Keys that drive free-fly movement; anything else never starts the step loop.
-const MOVEMENT_KEYS = new Set(["w", "a", "s", "d", " ", "shift"]);
+const MOVEMENT_KEYS = new Set(Object.keys(MOVE_AXES));
+
+// Constrain a value to the inclusive [minimum, maximum] range.
+const clamp = (value: number, minimum: number, maximum: number): number =>
+	Math.max(minimum, Math.min(maximum, value));
 
 customElements.define(
 	"scene-camera",
@@ -89,38 +105,39 @@ customElements.define(
 			camera.z = ORBIT_TARGET.z - orbitRadius * forwardZ;
 		};
 
+		// The one reconcile: in orbit the position is derived from yaw/pitch/radius, then
+		// every path pushes the current state to CSS through here.
+		const commit = (): void => {
+			if (cameraMode === "orbit") applyOrbit();
+			writeCamera();
+		};
+
 		// Free-fly: translate along the heading derived from yaw, so "forward" follows
 		// where we look. Runs only while a movement key is held.
 		const step = (): void => {
 			if (cameraMode === "free") {
 				const { forward, right } = basis();
-				if (pressedKeys.has("w")) {
-					camera.x += MOVE_SPEED * forward[0];
-					camera.z += MOVE_SPEED * forward[1];
+				for (const key of pressedKeys) {
+					const axis = MOVE_AXES[key];
+					if (axis === undefined) continue;
+					const [alongRight, alongUp, alongForward] = axis;
+					camera.x +=
+						MOVE_SPEED * (alongRight * right[0] + alongForward * forward[0]);
+					camera.z +=
+						MOVE_SPEED * (alongRight * right[1] + alongForward * forward[1]);
+					camera.y += MOVE_SPEED * alongUp;
 				}
-				if (pressedKeys.has("s")) {
-					camera.x -= MOVE_SPEED * forward[0];
-					camera.z -= MOVE_SPEED * forward[1];
-				}
-				if (pressedKeys.has("d")) {
-					camera.x += MOVE_SPEED * right[0];
-					camera.z += MOVE_SPEED * right[1];
-				}
-				if (pressedKeys.has("a")) {
-					camera.x -= MOVE_SPEED * right[0];
-					camera.z -= MOVE_SPEED * right[1];
-				}
-				// Screen-space +Y is down, so moving the camera up decreases Y.
-				if (pressedKeys.has(" ")) camera.y -= MOVE_SPEED;
-				if (pressedKeys.has("shift")) camera.y += MOVE_SPEED;
 			}
 
-			writeCamera();
+			commit();
 			animationFrame = pressedKeys.size > 0 ? requestAnimationFrame(step) : 0;
 		};
 
 		const startStepping = (): void => {
-			if (animationFrame === 0) animationFrame = requestAnimationFrame(step);
+			// Only free-fly consumes held keys; in orbit the loop would just write
+			// unchanged state every frame, so don't start it.
+			if (cameraMode === "free" && animationFrame === 0)
+				animationFrame = requestAnimationFrame(step);
 		};
 
 		const onKeyDown = (event: KeyboardEvent): void => {
@@ -144,12 +161,12 @@ customElements.define(
 			// Drag right looks right (yaw decreases to face +X under rotateY(-yaw));
 			// drag down looks down.
 			camera.yaw -= event.movementX * LOOK_SENSITIVITY;
-			camera.pitch = Math.max(
+			camera.pitch = clamp(
+				camera.pitch + event.movementY * LOOK_SENSITIVITY,
 				-MAX_PITCH,
-				Math.min(MAX_PITCH, camera.pitch + event.movementY * LOOK_SENSITIVITY),
+				MAX_PITCH,
 			);
-			if (cameraMode === "orbit") applyOrbit();
-			writeCamera();
+			commit();
 		};
 
 		const onLookUp = (): void => {
@@ -168,9 +185,8 @@ customElements.define(
 		const onWheel = (event: WheelEvent): void => {
 			// Wheel only zooms in orbit; in free-fly we leave the page to scroll.
 			if (cameraMode !== "orbit") return;
-			orbitRadius = Math.max(120, Math.min(4000, orbitRadius + event.deltaY));
-			applyOrbit();
-			writeCamera();
+			orbitRadius = clamp(orbitRadius + event.deltaY, 120, 4000);
+			commit();
 			event.preventDefault();
 		};
 
@@ -188,8 +204,7 @@ customElements.define(
 					camera.y - ORBIT_TARGET.y,
 					camera.z - ORBIT_TARGET.z,
 				) || orbitRadius;
-			applyOrbit();
-			writeCamera();
+			commit();
 		};
 
 		const applyMode = (): void => {

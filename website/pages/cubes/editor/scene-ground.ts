@@ -1,5 +1,5 @@
-import { html, render } from "../../../lib/src";
-import { GROUND_HALF_UNITS, GROUND_SIZE, UNIT_SIZE } from "./scene-shared";
+import { html, render } from "../../../../lib/src";
+import { GROUND_HALF_UNITS, GROUND_SIZE, UNIT_SIZE } from "../scene-shared";
 
 // <scene-ground> — the placement floor. A flat, world-axis-aligned grid sheet on Y=0
 // that the editor drops into the world's `ground` slot while a block is being placed,

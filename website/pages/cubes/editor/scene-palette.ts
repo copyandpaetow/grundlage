@@ -1,5 +1,5 @@
-import { html, props, render } from "../../../lib/src";
-import type { BaseComponent } from "../../../lib/src/types";
+import { html, props, render } from "../../../../lib/src";
+import type { BaseComponent } from "../../../../lib/src/types";
 
 // <scene-palette> — the editor's 2D chrome: the toolbar (add / group / camera /
 // export) and the transform inspector. It is pure presentation and owns no editor

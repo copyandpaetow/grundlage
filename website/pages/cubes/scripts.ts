@@ -1,7 +1,7 @@
 import "../../src/components/navbar";
 import "./scene-world";
 import "./scene-camera";
-import "./scene-editor";
+import "./editor/scene-editor";
 import "./shapes/scene-cube";
 import "./shapes/scene-wall";
 import "./shapes/scene-ramp";
