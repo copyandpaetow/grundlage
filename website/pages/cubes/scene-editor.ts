@@ -16,7 +16,6 @@ import {
 	toScreenPoint,
 	UNIT_SIZE,
 } from "./scene-shared";
-import { GROUND_HALF_UNITS } from "./scene-ground";
 import "./scene-ground";
 import type {
 	InspectorField,
@@ -97,10 +96,9 @@ customElements.define(
 		// Resolved after the first yield from the wrapped subtree. `host` is the world
 		// whose geometry we author; `cameraElement` is the optional navigation wrapper
 		// whose `mode` the camera button toggles (absent when editing a fixed-camera
-		// scene). `ground` and `palette` are the DOM chrome we create on the client.
+		// scene). `palette` is the chrome we mount in our own shadow on the client.
 		let host: HTMLElement;
 		let cameraElement: Element | null = null;
-		let ground: HTMLElement;
 		let palette: ScenePaletteElement;
 
 		// Selection wraps the chosen blocks in ONE `<scene-gizmo><scene-select>…</scene-select>
@@ -126,7 +124,11 @@ customElements.define(
 			tag: string;
 			ghost: HTMLElement;
 			child: HTMLElement;
-			position: Vector3;
+			ground: HTMLElement;
+			// Null until the pointer has actually crossed the floor and we've heard a
+			// `scene-floor-point`. Dropping before then is a no-op, so a click that never
+			// touched the grid can't strand a block at the origin.
+			position: Vector3 | null;
 		};
 		let placement: Placement | null = null;
 
@@ -248,6 +250,10 @@ customElements.define(
 
 		// --- Placement -------------------------------------------------------------
 
+		// Placement chrome is transient, like the selection wrappers: its existence IS the
+		// "placing" state. We drop a translucent ghost of the geometry and a <scene-ground>
+		// grid into the world — the ground rides the world's `ground` slot into its 3D floor
+		// space — and remove both when placement ends, so there is no visibility flag to keep.
 		const enterPlacement = (tag: string): void => {
 			cancelPlacement();
 			deselectAll();
@@ -256,25 +262,29 @@ customElements.define(
 			const child = document.createElement(tag);
 			ghost.appendChild(child);
 			host.appendChild(ghost);
-			placement = { tag, ghost, child, position: [0, 0, 0] };
-			ground.style.display = "";
+
+			const ground = document.createElement("scene-ground");
+			ground.slot = "ground";
+			host.appendChild(ground);
+
+			placement = { tag, ghost, child, ground, position: null };
 		};
 
 		const cancelPlacement = (): void => {
 			if (placement === null) return;
 			placement.ghost.remove();
+			placement.ground.remove();
 			placement = null;
-			ground.style.display = "none";
 		};
 
-		// The ground plane lies flat on Y=0, so the browser hands us the local hit
-		// point as offsetX/offsetY (it already inverted the perspective): screen→world
-		// on the floor is a subtraction. We write the ghost's vars live (no re-render).
-		const onGroundMove = (event: PointerEvent): void => {
+		// The ground reports where the pointer sits on the floor, in world units; we snap
+		// it to the authoring lattice (the floor stays policy-free) and drive the ghost's
+		// vars live (no re-render).
+		const onFloorPoint = (event: Event): void => {
 			if (placement === null) return;
-			const half = GROUND_HALF_UNITS * UNIT_SIZE;
-			const worldX = snapToGrid((event.offsetX - half) / UNIT_SIZE);
-			const worldZ = snapToGrid((event.offsetY - half) / UNIT_SIZE);
+			const { x, z } = (event as CustomEvent<{ x: number; z: number }>).detail;
+			const worldX = snapToGrid(x);
+			const worldZ = snapToGrid(z);
 			placement.position = [worldX, 0, worldZ];
 			placement.ghost.style.setProperty("--block-x", `${worldX * UNIT_SIZE}px`);
 			placement.ghost.style.setProperty("--block-y", "0px");
@@ -282,12 +292,20 @@ customElements.define(
 		};
 
 		const dropPlacement = (): void => {
-			if (placement === null) return;
+			// No floor point yet means the pointer never crossed the grid — ignore the
+			// drop rather than stranding the block at the origin.
+			if (placement === null || placement.position === null) return;
 			const { child, position } = placement;
 			child.setAttribute("position", position.map(formatNumber).join(" "));
 			host.appendChild(child);
 			cancelPlacement();
 			select(child);
+			// The placed block rendered at the origin while it rode the ghost (the ghost
+			// carried the live position, not the bare child). Its drop position is a fresh
+			// attribute that re-renders ASYNCHRONOUSLY, so the cage and gizmo that select()
+			// just measured pinned to that stale origin. Re-pin them once the block has
+			// rendered at the drop point — same commit-then-repaint the gizmo/group use.
+			void blockRendered(child).then(repaintSelection);
 		};
 
 		// --- Grouping --------------------------------------------------------------
@@ -543,12 +561,6 @@ customElements.define(
 			};
 		}
 
-		// The placement grid: hidden until a placement starts. We own its visibility
-		// through inline display (see scene-ground), so start it off, inside the world.
-		ground = document.createElement("scene-ground");
-		ground.style.display = "none";
-		host.appendChild(ground);
-
 		// Handlers never change, so we hand them over as a plain property before mounting;
 		// the inspector snapshot we push through update() as the selection changes. The
 		// palette lives in our OWN shadow, alongside the slot.
@@ -556,18 +568,19 @@ customElements.define(
 		palette.handlers = handlers;
 		element.shadowRoot?.appendChild(palette);
 
-		ground.addEventListener("pointermove", onGroundMove);
+		// The placement ground bubbles a floor point up through the world while placing.
+		element.addEventListener("scene-floor-point", onFloorPoint);
 		element.addEventListener("pointerdown", onPointerDown);
 		element.addEventListener("scene-commit", onGizmoCommit);
 		window.addEventListener("keydown", onKeyDown);
 		updateInspector();
 
 		return () => {
+			element.removeEventListener("scene-floor-point", onFloorPoint);
 			element.removeEventListener("pointerdown", onPointerDown);
 			element.removeEventListener("scene-commit", onGizmoCommit);
 			window.removeEventListener("keydown", onKeyDown);
-			ground.removeEventListener("pointermove", onGroundMove);
-			ground.remove();
+			cancelPlacement();
 			palette.remove();
 			for (const anchor of anchors.values()) anchor.remove();
 		};

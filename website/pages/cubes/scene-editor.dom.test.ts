@@ -12,12 +12,14 @@ import "./scene-editor";
 // the scene-world / scene-camera wrappers are never imported here, so they stay inert and
 // carry only their tagName + attributes, which is all selection / grouping / serialization
 // and the mode toggle read. The chrome the editor mounts IS the framework, though:
-// scene-editor pulls in scene-palette and scene-ground, so those upgrade and render into
-// their own shadow roots — hence the palette helpers below reach a shadow deeper, and the
-// inspector, which the editor feeds through a prop, settles a microtask after selection.
+// scene-editor mounts a scene-palette into its own shadow at connect (hence the palette
+// helpers below reach a shadow deeper, and the inspector, which the editor feeds through a
+// prop, settles a microtask after selection). The placement grid, scene-ground, is mounted
+// only while a block is being placed — it rides the world's `ground` slot in and out.
 
-// `host` is the <scene-world>: where geometry lives and the editor mounts the ground and
-// places blocks. `sceneCamera` is the wrapper whose `mode` the camera button toggles.
+// `host` is the <scene-world>: where geometry lives, where the editor drops the ground
+// while placing, and where placed blocks land. `sceneCamera` is the wrapper whose `mode`
+// the camera button toggles.
 let editor: HTMLElement;
 let sceneCamera: HTMLElement;
 let host: HTMLElement;
@@ -68,6 +70,16 @@ const pointerDown = (target: EventTarget, meta = false): void => {
 
 const pressKey = (key: string): void => {
 	window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+};
+
+// Stand in for the pointer crossing the placement grid: the real scene-ground emits
+// this when moved over, in world units. The editor snaps it and fixes the drop point.
+const moveOverFloor = (x: number, z: number): void => {
+	host
+		.querySelector("scene-ground")
+		?.dispatchEvent(
+			new CustomEvent("scene-floor-point", { bubbles: true, detail: { x, z } }),
+		);
 };
 
 // The palette is a <scene-palette> the editor mounts into its OWN shadow, so its
@@ -299,13 +311,26 @@ describe("placement", () => {
 		clickPaletteButton('[data-add="scene-cube"]');
 		expect(host.querySelector("scene-ghost")).not.toBeNull();
 
+		moveOverFloor(2, 3); // cross the grid so the drop has a point to land on
 		pointerDown(host); // drop at the current ghost position
 
 		expect(host.querySelector("scene-ghost")).toBeNull();
 		const placed = host.querySelector("scene-cube");
 		expect(placed).not.toBeNull();
-		expect(placed?.hasAttribute("position")).toBe(true);
+		expect(placed?.getAttribute("position")).toBe("2 0 3");
 		expect(selectedBlocks()).toEqual([placed]);
+	});
+
+	test("dropping before the pointer crosses the grid strands no block", () => {
+		clickPaletteButton('[data-add="scene-cube"]');
+		pointerDown(host); // click without ever moving over the floor
+
+		// The ghost is still up (placement continues) and nothing was committed at the
+		// origin — the no-floor-point guard, not a block stranded at 0,0,0. The only
+		// cube in the tree is the ghost's preview child, never a placed sibling.
+		expect(host.querySelector("scene-ghost")).not.toBeNull();
+		expect(host.querySelector(":scope > scene-cube")).toBeNull();
+		expect(selectedBlocks()).toEqual([]);
 	});
 
 	test("Escape cancels an in-progress placement", () => {

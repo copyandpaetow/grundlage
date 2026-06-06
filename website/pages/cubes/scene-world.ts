@@ -72,13 +72,21 @@ customElements.define(
 						);
 				}
 
-				/* Slotted geometry must share the world's 3D context, so the slot
-				   itself must not introduce a flattening box. */
+				/* Slotted geometry must share the world's 3D context, so neither slot
+				   may introduce a flattening box (a block-level slot would collapse the
+				   preserve-3d above it). display:contents is the UA default for <slot>;
+				   we pin it because getting it wrong flattens the whole scene. */
 				slot {
 					display: contents;
 				}
 			</style>
-			<div class="world"><slot></slot></div>
+			<div class="world">
+				<!-- A place in the world's 3D floor space for editor chrome to be projected
+				     into — the placement grid lands here. The world lends the slot and knows
+				     nothing about what fills it. -->
+				<slot name="ground"></slot>
+				<slot></slot>
+			</div>
 		`;
 
 		// Map any `camera-*` attributes onto inline `--camera-*` so a bare (camera-less)

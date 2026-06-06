@@ -15,6 +15,16 @@ export const HALF_UNIT = UNIT_SIZE / 2;
 // this so dragged blocks land on a regular lattice instead of arbitrary floats.
 export const GRID_SNAP = 0.5;
 
+// The placement floor's half-extent in grid units: the grid spans this many cells
+// either side of the origin. <scene-ground> draws the sheet and maps a screen hit
+// back to a world cell from it, so the drawn grid and the snapped point share one
+// definition.
+export const GROUND_HALF_UNITS = 20;
+
+// The placement floor's full side length in px — the square sheet <scene-ground>
+// renders, centred on the origin.
+export const GROUND_SIZE = GROUND_HALF_UNITS * 2 * UNIT_SIZE;
+
 // Snap a continuous grid value onto the authoring lattice.
 export const snapToGrid = (value: number): number =>
 	Math.round(value / GRID_SNAP) * GRID_SNAP;

@@ -52,14 +52,13 @@ customElements.define(
 		// itself (our direct child), which is what keeps the world copy-paste portable.
 		const writeCamera = (): void => {
 			if (world === null) return;
-			requestAnimationFrame(() => {
-				const style = world.style;
-				style.setProperty("--camera-x", `${camera.x}px`);
-				style.setProperty("--camera-y", `${camera.y}px`);
-				style.setProperty("--camera-z", `${camera.z}px`);
-				style.setProperty("--camera-yaw", `${camera.yaw}deg`);
-				style.setProperty("--camera-pitch", `${camera.pitch}deg`);
-			});
+
+			const style = world.style;
+			style.setProperty("--camera-x", `${camera.x}px`);
+			style.setProperty("--camera-y", `${camera.y}px`);
+			style.setProperty("--camera-z", `${camera.z}px`);
+			style.setProperty("--camera-yaw", `${camera.yaw}deg`);
+			style.setProperty("--camera-pitch", `${camera.pitch}deg`);
 		};
 
 		// World basis derived from yaw. The world's wrapper applies rotateY(-yaw), so the
