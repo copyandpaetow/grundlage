@@ -1,26 +1,27 @@
 import { describe, expect, test } from "vitest";
 import { html } from "./html";
+import { buildFragment } from "../rendering/build-fragment";
 import { AttributeBinding, BINDING_TYPES } from "./types";
 
 describe("html parser — fragment output: static attributes beside dynamic", () => {
 	test("static attribute before dynamic attribute is preserved in fragment", () => {
 		const value = "red";
 		const template = html`<div id="fixed" class="${value}"></div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.getAttribute("id")).toBe("fixed");
 	});
 
 	test("static attribute after dynamic attribute is preserved in fragment", () => {
 		const value = "red";
 		const template = html`<div class="${value}" id="fixed"></div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.getAttribute("id")).toBe("fixed");
 	});
 
 	test("static attributes on both sides of dynamic are preserved", () => {
 		const value = "red";
 		const template = html`<div id="before" class="${value}" role="main"></div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.getAttribute("id")).toBe("before");
 		expect(div.getAttribute("role")).toBe("main");
 	});
@@ -30,7 +31,7 @@ describe("html parser — fragment output: static attributes beside dynamic", ()
 		//and is filled in at render time, not at parse time
 		const value = "red";
 		const template = html`<div class="${value}"></div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.getAttribute("class")).toBeNull();
 	});
 });
@@ -41,7 +42,7 @@ describe("html parser — fragment output: attribute marker placement", () => {
 		//element cannot hold a placeholder child — the renderer finds the element via nextSibling
 		const value = "red";
 		const template = html`<div class="${value}">hello</div>`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const firstChild = fragment.firstChild;
 		expect(firstChild?.nodeType).toBe(Node.COMMENT_NODE);
 		expect((firstChild as Comment).data).toContain("^.^");
@@ -51,7 +52,7 @@ describe("html parser — fragment output: attribute marker placement", () => {
 		const cls = "red";
 		const id = "main";
 		const template = html`<div class="${cls}" id="${id}"></div>`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const comments = Array.from(fragment.childNodes).filter(
 			(node) => node.nodeType === Node.COMMENT_NODE,
 		);
@@ -62,26 +63,28 @@ describe("html parser — fragment output: attribute marker placement", () => {
 describe("html parser — fragment output: special characters in quoted attribute values", () => {
 	test("static quoted attribute value may contain '>'", () => {
 		const template = html`<div title="a > b">content</div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.getAttribute("title")).toBe("a > b");
 		expect(div.textContent).toBe("content");
 	});
 
 	test("static quoted attribute value may contain '<'", () => {
 		const template = html`<div title="a < b">content</div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.getAttribute("title")).toBe("a < b");
 	});
 
 	test("static quoted attribute value may contain '='", () => {
 		const template = html`<a href="?x=1&y=2">link</a>`;
-		const anchor = template.parsedHTML.fragment.querySelector("a")!;
+		const anchor = buildFragment(template.parsedHTML.result).querySelector(
+			"a",
+		)!;
 		expect(anchor.getAttribute("href")).toBe("?x=1&y=2");
 	});
 
 	test("single-quoted static value may contain a double quote", () => {
 		const template = html`<div title='he said "hi"'>text</div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.getAttribute("title")).toBe('he said "hi"');
 	});
 
@@ -102,7 +105,9 @@ describe("html parser — fragment output: complex structure", () => {
 		const template = html` <section id="root">
 			<p class="${cls}">${text}</p>
 		</section>`;
-		const section = template.parsedHTML.fragment.querySelector("section")!;
+		const section = buildFragment(template.parsedHTML.result).querySelector(
+			"section",
+		)!;
 		expect(section.getAttribute("id")).toBe("root");
 		const p = section.querySelector("p")!;
 		expect(p).not.toBeNull();
@@ -113,7 +118,9 @@ describe("html parser — fragment output: complex structure", () => {
 		const b = "two";
 		const template = html`<p class="${a}">one</p>
 			<p class="${b}">two</p>`;
-		const paragraphs = template.parsedHTML.fragment.querySelectorAll("p");
+		const paragraphs = buildFragment(
+			template.parsedHTML.result,
+		).querySelectorAll("p");
 		expect(paragraphs).toHaveLength(2);
 		expect(paragraphs[0].textContent).toBe("one");
 		expect(paragraphs[1].textContent).toBe("two");
@@ -129,7 +136,7 @@ describe("html parser — fragment output: complex structure", () => {
 			<td>${identifier}</td>
 			<td>${label}</td>
 		</tr>`;
-		const row = template.parsedHTML.fragment.querySelector("tr");
+		const row = buildFragment(template.parsedHTML.result).querySelector("tr");
 		expect(row).not.toBeNull();
 		expect(row!.querySelectorAll("td")).toHaveLength(2);
 	});

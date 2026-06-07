@@ -1,5 +1,6 @@
 import { COMMENT_IDENTIFIER } from "../parser/html-util";
 import { AttributeBinding, BINDING_TYPES, ParsedHTML } from "../parser/types";
+import { buildFragment } from "./build-fragment";
 import { hashValue } from "../utils/hashing";
 import { removeAttributeBinding, updateAttribute } from "./attribute";
 import { updateContent } from "./content";
@@ -52,9 +53,11 @@ export class HTMLTemplate {
 	setup(host: BaseComponent | null = null): DocumentFragment {
 		const bindingCount = this.parsedHTML.bindings.length;
 		this.dirtyBindings = new Uint8Array(bindingCount).fill(1);
-		const fragment = this.parsedHTML.fragment.cloneNode(
-			true,
-		) as DocumentFragment;
+		//the parser is document-free, so the first setup() of a given template materializes the string seed and caches the template fragment on the shared ParsedHTML; later instances clone it
+		const template =
+			this.parsedHTML.fragment ??
+			(this.parsedHTML.fragment = buildFragment(this.parsedHTML.result));
+		const fragment = template.cloneNode(true) as DocumentFragment;
 
 		this.targets = this.#findTargets(fragment, host);
 		this.#flush();

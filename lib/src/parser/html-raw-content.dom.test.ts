@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { html } from "./html";
+import { buildFragment } from "../rendering/build-fragment";
 import { BINDING_TYPES, RawContentBinding } from "./types";
 
 describe("html parser — raw content bindings", () => {
@@ -138,7 +139,9 @@ describe("html parser — raw content bindings", () => {
 		expect(template.parsedHTML.bindings[1].type).toBe(
 			BINDING_TYPES.RAW_CONTENT,
 		);
-		const styles = template.parsedHTML.fragment.querySelectorAll("style");
+		const styles = buildFragment(template.parsedHTML.result).querySelectorAll(
+			"style",
+		);
 		expect(styles).toHaveLength(2);
 	});
 
@@ -150,7 +153,9 @@ describe("html parser — raw content bindings", () => {
 				log("</other>");
 			}
 		</script>`;
-		const script = template.parsedHTML.fragment.querySelector("script")!;
+		const script = buildFragment(template.parsedHTML.result).querySelector(
+			"script",
+		)!;
 		expect(script).not.toBeNull();
 		expect(script.textContent).toContain("</other>");
 	});
@@ -159,7 +164,9 @@ describe("html parser — raw content bindings", () => {
 		const template = html`<script>
 			if (a < b) return;
 		</script>`;
-		const script = template.parsedHTML.fragment.querySelector("script")!;
+		const script = buildFragment(template.parsedHTML.result).querySelector(
+			"script",
+		)!;
 		expect(script.textContent).toContain("<");
 	});
 });

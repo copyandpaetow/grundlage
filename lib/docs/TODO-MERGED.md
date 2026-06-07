@@ -20,7 +20,7 @@ gets rewritten as items land.
 
 ## Parser (`src/parser`)
 
-- [ ] `[L]` **Part A — document-free parser** *(do first)*. Make `parse()` touch no DOM:
+- [x] `[L]` **Part A — document-free parser** *(done)*. Make `parse()` touch no DOM:
   parser state → pooled `ParserState` struct + context-first free functions; `parse()`
   returns a `result` **string seed** (`fragment: null`); materialization (`buildFragment`,
   `parserHost`) moves to the rendering layer and runs lazily on first `setup()`;

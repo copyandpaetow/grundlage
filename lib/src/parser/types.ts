@@ -60,7 +60,12 @@ export type Binding =
 export type ParsedHTML = {
 	expressionToBinding: Array<number>;
 	bindings: Array<Binding>;
-	fragment: DocumentFragment;
+	//the document-free parse output: an HTML string seed the rendering layer materializes via buildFragment.
+	//retained (not freed) because the html compiler and string-based SSR reuse it directly.
+	result: string;
+	//null until the first setup() materializes it through buildFragment and caches it here; later instances clone.
+	//the parser itself never touches the DOM, so it always returns null (ADR-0010).
+	fragment: DocumentFragment | null;
 	templateHash: number;
 	hostBindingOffset: number;
 };
