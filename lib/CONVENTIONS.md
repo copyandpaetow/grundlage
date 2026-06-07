@@ -20,9 +20,12 @@ Per-instance mutable state lives in a plain struct returned by a `createX(...)` 
 typed by an `interface`. No module-level mutable state.
 
 **Exception:** a non-reentrant, run-once-per-call-site hot path that caches its result
-(e.g. a parser) may hold its state machine, cursors, and buffers at module scope. Every
-such global carries a comment stating the non-reentrancy assumption, including any
-synchronous self-recursion site.
+(e.g. a parser) may keep a **single pooled struct instance** at module scope and `reset`
+it between runs rather than allocating per call — the reuse is the perf point, not loose
+globals. It still takes the `createX` + struct + context-first free-function shape (no raw
+module-scope cursors, no `class`); only the one instance is long-lived. The pooled instance
+carries a comment stating the non-reentrancy assumption, including any synchronous
+self-recursion site. See ADR-0009.
 
 ## 2. Don't mutate inputs as a side channel
 
