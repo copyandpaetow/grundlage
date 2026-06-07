@@ -4,23 +4,18 @@ import {
 	POSITION_SPECIFIC,
 	resolveBlockTransform,
 	ROTATION_SPECIFIC,
-	SIZE_SPECIFIC,
+	SIZE_SPECIFIC
 } from "../scene-shared";
 import "../wrappers/scene-gizmo";
 import "../wrappers/scene-ghost";
 import "../wrappers/scene-select";
 import "./scene-palette";
-import type {
-	InspectorField,
-	InspectorState,
-	PaletteHandlers,
-	ScenePaletteElement,
-} from "./scene-palette";
-import { primaryBlock, type EditorState } from "./context";
+import type { InspectorField, InspectorState, PaletteHandlers, ScenePaletteElement } from "./scene-palette";
+import { type EditorState, primaryBlock } from "./context";
 import { createSelection } from "./selection";
 import { createPlacement } from "./placement";
 import { createGrouping } from "./grouping";
-import { exportScene } from "./serialization";
+import { exportScene } from "./serialization"; // scene-editor — the authoring spine, the outermost wrapper. It wraps the navigable
 
 // scene-editor — the authoring spine, the outermost wrapper. It wraps the navigable
 // scene (`<scene-editor><scene-camera><scene-world>…</scene-world></scene-camera>`) and

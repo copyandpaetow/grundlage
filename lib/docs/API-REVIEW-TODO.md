@@ -20,22 +20,22 @@ Actionable changes that came out of the API grilling session. Design rationale l
   `finally` — but `dispatchCSRUpdate` returns the moment the driver (`sources.ts` `step`)
   suspends on a Promise, so `updateState` goes `IDLE` while an **async** render is still
   in flight. Two consequences to fix:
-  - **Await resolves too early for every async render** (not just coalesced calls): the
-  promise settles when the synchronous slice returns, not when the async DOM lands.
-  56 call sites `await update()`; this is the flaky-test source.
-  - **Coalescing doesn't span async flight**: during an in-flight async render
-  `updateState` is already `IDLE`, so the next `update()` re-fires and *supersedes* —
-  correct result (the `handle.finished` guard prevents stale commits) but it is
-  restart-churn, not batching.
-  Fix (surface unchanged): the state machine must track the source's **settle** signal,
-  not the synchronous return of `dispatchCSRUpdate`. `IDLE → SCHEDULED` (queue microtask,
-  return shared `flushPromise`); `SCHEDULED → ` return the same promise (coalesce, as
-  today); `RENDERING → ` set a `dirty` bit and return the same promise (do **not** drop,
-  do **not** restart). On settle: if `dirty`, re-run once with a fresh pull (coalescing
-  everything that arrived mid-flight); else `IDLE` and resolve `flushPromise`. The
-  driver-level supersession (`handle.finished`) stays as the safety net for *external*
-  source swaps. Contract to ratify: "`update()` resolves once the DOM reflects this call,
-  coalescing with any concurrent update, across sync **and** async renders."
+    - **Await resolves too early for every async render** (not just coalesced calls): the
+      promise settles when the synchronous slice returns, not when the async DOM lands.
+      56 call sites `await update()`; this is the flaky-test source.
+    - **Coalescing doesn't span async flight**: during an in-flight async render
+      `updateState` is already `IDLE`, so the next `update()` re-fires and *supersedes* —
+      correct result (the `handle.finished` guard prevents stale commits) but it is
+      restart-churn, not batching.
+      Fix (surface unchanged): the state machine must track the source's **settle** signal,
+      not the synchronous return of `dispatchCSRUpdate`. `IDLE → SCHEDULED` (queue microtask,
+      return shared `flushPromise`); `SCHEDULED → ` return the same promise (coalesce, as
+      today); `RENDERING → ` set a `dirty` bit and return the same promise (do **not** drop,
+      do **not** restart). On settle: if `dirty`, re-run once with a fresh pull (coalescing
+      everything that arrived mid-flight); else `IDLE` and resolve `flushPromise`. The
+      driver-level supersession (`handle.finished`) stays as the safety net for *external*
+      source swaps. Contract to ratify: "`update()` resolves once the DOM reflects this call,
+      coalescing with any concurrent update, across sync **and** async renders."
 
 - [ ] **Warn on SSR `load` replay drift.** Unkeyed `load` replays positionally (client
   consumes `data-ssr` scripts in DOM order). We must assume **conditional / nested
@@ -92,3 +92,80 @@ Actionable changes that came out of the API grilling session. Design rationale l
   A nested `<host>` element could separate the two cleanly (`<template>` = shadow root,
   `<host …>` = host attributes). Not worth the invented vocabulary today, but revisit
   if the host/shadow-root conflation causes confusion.
+
+# Next steps
+
+Practical backlog for bringing the codebase in line with `CONVENTIONS.md`. This document
+is **disposable** — it tracks the current refactor and gets deleted or rewritten once done.
+The conventions are the durable artifact; this is not.
+
+Sequenced so the conventions are written down first and refactors land against a fixed
+target.
+
+## Phase 0 — write it down
+
+- [ ] Commit `CONVENTIONS.md`.
+- [ ] Open ADRs for the deferred tradeoffs so "decided" is distinct from "unnoticed"
+  (see Deferred below).
+
+## Phase 1 — mechanical, no design needed
+
+- [ ] **Rule 5:** unify `EMPTY_ARRAY` (template-html) + `EMPTY_PREVIOUS` (content) into one
+  exported `EMPTY_EXPRESSIONS`.
+- [ ] **Rule 5:** fix `content.ts` `previous === undefined` first-render branch to read the
+  unified sentinel explicitly instead of an out-of-bounds `undefined`.
+- [ ] **Rule 13:** resolve the `renderTemplate` (content.ts) / `renderTemplate` (csr) /
+  `renderOnce` (ssr) tangle. Same-role CSR/SSR callbacks share a name; the content.ts
+  helper is renamed.
+- [ ] **Rule 1:** add the non-reentrancy comments, including the `parse(strings, true)`
+  self-recursion site.
+
+## Phase 2 — small refactors against the rules
+
+- [ ] **Rule 7:** extract one `showFatal(host, error)`; collapse `abortAndShowError` /
+  `reportSSRError` duplicated bodies.
+- [ ] **Rule 5/4:** replace the repeated `previousExpressions.length > 0` idiom
+  (`resolvePreviousExpressions` + 4 inline checks) with one model.
+- [ ] **Rule 11:** define the marker-pair range walk once; route `deleteNodesBetween`,
+  `#findTargets`, `renderList` collection, `removeItemDom`/`moveItemAfter` through it.
+  (Also forces `deleteNodesBetween` and `removeItemDom` stop-conditions into agreement.)
+- [ ] **Rule 12:** normalize binding index — give every binding `bindingIndex`, or drop it
+  from `TagBinding` and pass the index.
+- [ ] **M/N TODO:** centralize parser per-element scope reset into one `resetElementScope()`;
+  today's correctness depends on unstated buffer-state invariants (latent, not a live bug).
+- [ ] **Rule 14:** EXPANDABLE stores its expression slot in `keys[0]` while every other shape
+  uses `values[0]`. Rename so the slot's location is consistent; remove the `as number` casts.
+
+## Phase 3 — attribute-parsing + value-kind rework (Rule 15)
+
+Fold these into one pass over `update()` / `applyAttributeBinding` rather than touching them
+twice.
+
+- [ ] Extend the parser to store attribute **type bits** (is-event, is-property) on the binding
+  so `applyAttributeBinding` skips the per-write charCode/typeof cascade.
+- [ ] **Rule 8 + 15:** convert `updateAttribute` / `removeAttributeBinding` twin switches into
+  one `{ apply, remove }` table keyed by `ATTRIBUTE_SHAPE`, using the new type bits.
+- [ ] **Rule 15:** add a `VALUE_KIND` `Uint8Array`, classified in `update()`'s existing probe.
+- [ ] **Rule 8:** convert `updateContent`'s value dispatch to a table over `VALUE_KIND`.
+- [ ] **Rule 3 + 4:** convert `HTMLTemplate` from class to struct + free functions
+  (`createTemplate`, `setupTemplate`, `updateTemplate`, …). `#hash` becomes a nullable field;
+  an `isTemplate` symbol brand replaces all 9 `instanceof HTMLTemplate` sites.
+
+## Deferred — needs decisions (ADRs), not rule work
+
+- **Hash collisions.** `templateHash` patch path and expression-`hash` list reconciliation both
+  trust 32-bit hashes; collisions silently reuse the wrong DOM. **Only correctness cliff found.**
+  Decide: accept / wider hash / structural-equality fallback / explicit keys.
+- **In-place array mutation.** `arr.push(x); update()` hits the `===` short-circuit and never
+  re-renders. Document the immutable-array contract or detect mutation.
+- **G — user-list mutation.** `renderList` mutates the user's list contents in place. Change to
+  reconcile without mutating user data (cost: an allocation; measure).
+- **`#flush` is O(all bindings).** A dirty-index queue makes it O(dirty). Measure on large static
+  templates.
+- **`oldValue` on multi-value attr paths.** Not passed → potential listener leak if a multi-value
+  attr ever carries a function. Confirm the parser invariant or pass `oldValue`.
+- **`clearHostAttributes`** casts `0..hostBindingOffset` as `AttributeBinding` unguarded.
+- **Structural debts the rules fence but don't fix:** `targets` megamorphic union + two index
+  spaces; `SourceHandle` nullable fields / `!` asserts; CSR/SSR install duplication. First open
+  empirical question: is the `targets` union a real perf cost or only a legibility one? Measure
+  before surgery.
