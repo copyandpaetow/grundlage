@@ -26,6 +26,7 @@ export default defineConfig({
 				nested: resolve(__dirname, "pages/nesting/index.html"),
 				krausest: resolve(__dirname, "pages/krausest/index.html"),
 				ssrVsCsr: resolve(__dirname, "pages/ssr-vs-csr/index.html"),
+				cubes: resolve(__dirname, "pages/cubes/index.html"),
 			},
 		},
 	},

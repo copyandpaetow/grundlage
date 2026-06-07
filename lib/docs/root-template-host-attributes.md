@@ -6,23 +6,23 @@ declared on it — static, dynamic, or expandable — are mirrored to the
 component's host element on every render.
 
 ```javascript
-import { render, html } from "grundlage";
+import {render, html} from "grundlage";
 
 customElements.define(
-	"my-card",
-	render(function* (host) {
-		let busy = false;
-		host.addEventListener("click", () => {
-			busy = !busy;
-			host.update();
-		});
+    "my-card",
+    render(function* (host) {
+        let busy = false;
+        host.addEventListener("click", () => {
+            busy = !busy;
+            host.update();
+        });
 
-		yield () => html`
+        yield () => html`
 			<template class="card" role="region" aria-busy="${busy}">
 				<p>contents</p>
 			</template>
 		`;
-	}),
+    }),
 );
 ```
 
@@ -95,13 +95,13 @@ leak into the next parse.
   `PLACEHOLDER_TAG` (`"div"`), so dynamic tags are excluded for free.
 - `completeAttribute` routes host attributes into bindings instead of
   serializing them onto the element:
-  - Dynamic host attributes become regular `AttributeBinding`s but skip the
-    comment marker (the host element is the target — no marker needed) and
-    increment `hostBindingOffset` instead.
-  - Static host attributes get lowered into `AttributeBinding`s with empty
-    `values` slots so they ride the same target/dirty machinery as dynamic
-    bindings. They consume no expression slot, so `update()` never marks them
-    dirty — zero per-update cost.
+    - Dynamic host attributes become regular `AttributeBinding`s but skip the
+      comment marker (the host element is the target — no marker needed) and
+      increment `hostBindingOffset` instead.
+    - Static host attributes get lowered into `AttributeBinding`s with empty
+      `values` slots so they ride the same target/dirty machinery as dynamic
+      bindings. They consume no expression slot, so `update()` never marks them
+      dirty — zero per-update cost.
 - After the walk, if the first element is `<template>` and every sibling is
   whitespace or a comment, the template wrapper is replaced with its
   `content` (`firstChild.replaceWith(firstChild.content)`), removing the
@@ -153,11 +153,11 @@ previous.hostBindingOffset > 0`). Disconnecting empties the observer's
 - **Cross-template cleanup** — when a render returns a template whose host
   attributes differ from the previous one, leftover host attributes from the
   previous template are removed. This holds across:
-  - root → root with different attrs
-  - root → non-root template
-  - non-root → root template
-  - A → B → A swaps (re-applying the original)
-  - Nested-generator swaps (driven by `#restartGenerator`)
+    - root → root with different attrs
+    - root → non-root template
+    - non-root → root template
+    - A → B → A swaps (re-applying the original)
+    - Nested-generator swaps (driven by `#restartGenerator`)
 - **Same-template name changes** — dropping a key from an expandable
   object/array, or changing a dynamic attribute name, removes the previous
   name from the host.

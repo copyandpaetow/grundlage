@@ -12,6 +12,7 @@ customElements.define(
 				<a href="/grundlage/pages/attributes/">attributes</a>
 				<a href="/grundlage/pages/forms/">forms</a>
 				<a href="/grundlage/pages/list/">list</a>
+				<a href="/grundlage/pages/cubes/">cubes</a>
 				<a href="/grundlage/pages/tags/">heading</a>
 				<a href="/grundlage/pages/perf/">perf</a>
 				<a href="/grundlage/pages/reorder-stress/">reorder stress</a>
