@@ -60,23 +60,39 @@ gets rewritten as items land.
 
 ## Attributes (`src/rendering/attribute.ts`)
 
-- [ ] `[S]` **Make unknown `on*` handlers loud.** When a camelCase `on<name>` carries a
-  function value but no matching IDL property exists, the value currently falls through
-  to a silent property assignment (typo'd `onClik` becomes a dead property). Add a
-  `console.warn` before that write (error contract, ADR-0002). Silent fallback is
-  incidental to IDL-gate ordering, so the warning is safe.
-- [ ] `[S]` **`clearHostAttributes`** casts `0..hostBindingOffset` as `AttributeBinding`
-  unguarded — guard it. *(Deferred.)*
-- [ ] `[M]` **Diff name-only (array/object) attributes** so only changed entries are
-  written; skip where `old === new`. Check first whether the browser already coalesces
-  these. *(TODO.md attributes.)*
-- [ ] `[M]` **Multi-value attr with a function won't clean up its listener.** `oldValue`
-  isn't passed on multi-value attr paths → potential listener leak if such an attr ever
-  carries a function. Confirm the parser invariant or pass `oldValue`. *(TODO.md +
-  API-review deferred — same item.)*
-- [ ] `[L]` **Rule 8 + 15:** collapse the `updateAttribute` / `removeAttributeBinding`
-  twin switches into one `{ apply, remove }` table keyed by `ATTRIBUTE_SHAPE`, using the
-  new parser type bits.
+- [x] `[S]` **Make unknown `on*` handlers loud** *(done)*. `warnIfDeadNativeHandler`
+  fires a `console.warn` (error contract, ADR-0002) when a function value reaches a
+  camelCase `on<name>` with no matching IDL property, just before it lands as a dead
+  property. Self-filtering (`on-<name>` and non-`on*` names return silently) so the
+  single call site after the listener-resolution block stays branch-free; gated on the
+  *current* value being the function so teardown doesn't re-warn.
+- [x] `[S]` **Guard `clearHostAttributes`' cast** *(done)*. The `0..hostBindingOffset`
+  loop now checks `binding.type === BINDING_TYPES.ATTR` before `removeAttributeBinding`,
+  so a future non-ATTR binding in that range can't be force-cast into the shape switch.
+- [x] `[M]` **Diff name-only (object) attributes** *(done)*. `updateExpandable` splits
+  into `applyExpandable` (first render / array / shape change) and
+  `diffExpandableObjects` (same-shape object update). Unchanged object entries
+  (`old === new`) are skipped entirely — a stable spread listener is no longer
+  detached+reattached every render. **Bench-gated** vs HEAD: object spread −24% to −87%
+  (−86% on a 10-key set with one key flipping, −40% keeping a stable listener while a
+  sibling class flips). The **array** path was deliberately *not* diffed: an array-membership
+  diff measured **+22%** on full alternation because the `indexOf` scan (2·N·M comparisons)
+  costs more than the cheap value-less add/removeAttribute it guards — arrays fall back to
+  clear-all + apply-all. New test pins object-listener survival.
+- [x] `[M]` **Multi-value attr listener leak — invariant confirmed** *(done, no code
+  change)*. Multi-value paths route the value through `bindingToString`, which always
+  yields a string, so a function can never reach the listener path and no listener is
+  ever attached — there is nothing to leak. Passing `oldValue` would be dead code;
+  documented the invariant on both multi-value update functions instead.
+- [x] `[L]` **Rule 8:** replaced the `updateAttribute` / `removeAttributeBinding` twin
+  switches with one **per-shape unit** model *(done)*. Each shape is a single
+  `{ apply, remove }` const (`staticAttr`, `expandableAttr`, …) holding both halves
+  together so they can't drift on what names the shape owns; two shapes that share a
+  remove reference one helper (`removeStaticName` / `removeDynamicName`). A single
+  `handlerForShape` `switch` over the dense `ATTRIBUTE_SHAPE` enum (jump table) returns
+  the unit; both entry points dispatch through it. Behavior-identical, 688 tests green,
+  bench-gate clean (object-spread wins hold; no dispatch regression above the noise
+  floor).
 
 ---
 

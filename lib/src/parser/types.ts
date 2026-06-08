@@ -80,7 +80,7 @@ export type ParsedHTML = {
 	//retained (not freed) because the html compiler and string-based SSR reuse it directly.
 	result: string;
 	//null until the first setup() materializes it through buildFragment and caches it here; later instances clone.
-	//the parser itself never touches the DOM, so it always returns null (ADR-0010).
+	//the parser itself never touches the DOM, so it always returns null.
 	fragment: DocumentFragment | null;
 	templateHash: number;
 	hostBindingOffset: number;

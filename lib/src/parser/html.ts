@@ -516,7 +516,7 @@ const completeAttribute = (parser: ParserState) => {
 	parser.attributeQuoteCode = 0;
 };
 
-//the single per-element boundary, clearing the open-tag scratch that isn't already drained by its own producer: the suppressed root <template> path can leave tagBuffer and currentTagName dangling, and a parsed-but-unconsumed selfClosing flag would leak to the next element. elementBuffer (drained by moveArrayContents above) and the attribute buffers (drained by completeAttribute) are provably empty here, so re-clearing them is pure cost — `.length = 0` on these per element measured ~18% of cold-parse time. // why: keep the invariant centralized but pay only for the buffers that can actually carry state across the boundary
+//the single per-element boundary, clearing the open-tag scratch that isn't already drained by its own producer: the suppressed root <template> path can leave tagBuffer and currentTagName dangling, and a parsed-but-unconsumed selfClosing flag would leak to the next element. elementBuffer (drained by moveArrayContents above) and the attribute buffers (drained by completeAttribute) are provably empty here, so we only clear the buffers that can actually carry state across the boundary
 const resetElementScope = (parser: ParserState) => {
 	parser.selfClosing = false;
 	parser.currentTagName = "";
@@ -928,7 +928,7 @@ const parse = (
 
 	const result = parser.resultBuffer.join("");
 
-	//document-free: we return the string seed and leave materialization to the rendering layer's buildFragment, run lazily on first setup() (ADR-0010)
+	//document-free: we return the string seed and leave materialization to the rendering layer's buildFragment, run lazily on first setup()
 	return {
 		expressionToBinding: parser.expressionToBinding,
 		bindings: parser.bindings,
@@ -939,7 +939,7 @@ const parse = (
 	};
 };
 
-//a single pooled parser instance, reset per parse (Convention #1 exception / ADR-0009): zero per-parse allocation on a render-time path.
+//a single pooled parser instance, reset per parse: zero per-parse allocation on a render-time path.
 //this is safe because parse() runs fully synchronously and can't re-enter — the only self-recursion is the `parse(parser, strings, true)` reparse at the tail, and the outer call reads nothing from `parser` after that `return`.
 //if concurrent parsing ever becomes a requirement, allocate a parser per parse instead of pooling.
 const parser = createParser();

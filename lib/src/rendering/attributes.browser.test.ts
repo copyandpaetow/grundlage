@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { html, render } from "../index";
 
 const sleep = (duration = 0) =>
@@ -614,6 +614,37 @@ describe("attribute updates", () => {
 		expect(btn.getAttribute("class")).toBe("btn-primary");
 		btn.click();
 		expect(clicks).toEqual(["clicked", "clicked again"]);
+
+		cleanup(element);
+	});
+
+	test("keeps an unchanged spread listener attached without re-binding it across renders", async () => {
+		// the spread diff skips entries whose value reference is unchanged, so a
+		// stable handler is neither detached nor reattached on update — only the
+		// changed sibling attribute is touched.
+		const tag = uniqueTag();
+		const handler = () => {};
+		let attrs: Record<string, unknown> = { class: "a", onclick: handler };
+
+		const MyElement = render(function* () {
+			yield () => html`<button ${attrs}>x</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const btn = element.shadowRoot?.querySelector("button")!;
+		const addSpy = vi.spyOn(btn, "addEventListener");
+		const removeSpy = vi.spyOn(btn, "removeEventListener");
+
+		attrs = { class: "b", onclick: handler };
+		await element.update();
+		await sleep();
+
+		expect(btn.getAttribute("class")).toBe("b");
+		expect(addSpy).not.toHaveBeenCalled();
+		expect(removeSpy).not.toHaveBeenCalled();
 
 		cleanup(element);
 	});
