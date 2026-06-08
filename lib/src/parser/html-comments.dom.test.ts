@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { html } from "./html";
+import { buildFragment } from "../rendering/build-fragment";
 import { BINDING_TYPES, ContentBinding } from "./types";
 
 describe("html parser — comment bindings", () => {
@@ -75,7 +76,7 @@ describe("html parser — comment bindings", () => {
 
 		// Static comments should be present in the fragment output
 		const walker = document.createTreeWalker(
-			template.parsedHTML.fragment,
+			buildFragment(template.parsedHTML.result),
 			NodeFilter.SHOW_COMMENT,
 		);
 		const comments: Comment[] = [];
@@ -93,9 +94,15 @@ describe("html parser — comment bindings", () => {
 			<!-- <fake-tag class="x"> -->
 			<p>after</p>`;
 		expect(template.parsedHTML.bindings).toHaveLength(0);
-		expect(template.parsedHTML.fragment.querySelector("div")).not.toBeNull();
-		expect(template.parsedHTML.fragment.querySelector("p")).not.toBeNull();
-		expect(template.parsedHTML.fragment.querySelector("fake-tag")).toBeNull();
+		expect(
+			buildFragment(template.parsedHTML.result).querySelector("div"),
+		).not.toBeNull();
+		expect(
+			buildFragment(template.parsedHTML.result).querySelector("p"),
+		).not.toBeNull();
+		expect(
+			buildFragment(template.parsedHTML.result).querySelector("fake-tag"),
+		).toBeNull();
 	});
 
 	test("comment with no whitespace around the expression", () => {

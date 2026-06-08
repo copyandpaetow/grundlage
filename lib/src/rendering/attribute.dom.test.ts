@@ -312,6 +312,66 @@ describe("applyAttributeBinding - on- explicit listeners", () => {
 	});
 });
 
+describe("applyAttributeBinding - dead native handler warning", () => {
+	test("warns when an on<name> function value finds no matching IDL property", () => {
+		// onClik is a typo'd onClick: no `onclik` IDL property, so the function
+		// would land as a dead property that never fires. that must be loud.
+		const element = document.createElement("button");
+		expect("onclik" in element).toBe(false);
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		applyAttributeBinding(element, "onClik", () => {});
+
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain("onClik");
+		warn.mockRestore();
+	});
+
+	test("does not warn for a correctly spelled native handler", () => {
+		const element = document.createElement("button");
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		applyAttributeBinding(element, "onclick", () => {});
+
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	test("does not warn for an on-<name> explicit custom-event listener", () => {
+		// on-<name> is the intended way to bind a no-IDL custom event, so it must
+		// never trip the dead-handler warning.
+		const element = document.createElement("div");
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		applyAttributeBinding(element, "on-whatever", () => {});
+
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	test("does not warn for a non-on* name carrying a function", () => {
+		const element = document.createElement("div");
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		applyAttributeBinding(element, "data-thing", () => {});
+
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	test("does not warn again on teardown when only oldValue is a function", () => {
+		// a dead handler warns once on apply; tearing it down (value null,
+		// oldValue function) must stay silent.
+		const element = document.createElement("div");
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		applyAttributeBinding(element, "onmadeup", null, () => {});
+
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+});
+
 describe("applyAttributeBinding - removal", () => {
 	test.each([
 		["null", null],

@@ -1,5 +1,6 @@
 import { COMMENT_IDENTIFIER } from "../parser/html-util";
-import { AttributeBinding, BINDING_TYPES, ParsedHTML } from "../parser/types";
+import { BINDING_TYPES, ParsedHTML } from "../parser/types";
+import { buildFragment } from "./build-fragment";
 import { hashValue } from "../utils/hashing";
 import { removeAttributeBinding, updateAttribute } from "./attribute";
 import { updateContent } from "./content";
@@ -52,9 +53,11 @@ export class HTMLTemplate {
 	setup(host: BaseComponent | null = null): DocumentFragment {
 		const bindingCount = this.parsedHTML.bindings.length;
 		this.dirtyBindings = new Uint8Array(bindingCount).fill(1);
-		const fragment = this.parsedHTML.fragment.cloneNode(
-			true,
-		) as DocumentFragment;
+		//the parser is document-free, so the first setup() of a given template materializes the string seed and caches the template fragment on the shared ParsedHTML; later instances clone it
+		const template =
+			this.parsedHTML.fragment ??
+			(this.parsedHTML.fragment = buildFragment(this.parsedHTML.result));
+		const fragment = template.cloneNode(true) as DocumentFragment;
 
 		this.targets = this.#findTargets(fragment, host);
 		this.#flush();
@@ -68,11 +71,11 @@ export class HTMLTemplate {
 		const hostBindingOffset = this.parsedHTML.hostBindingOffset;
 		const bindings = this.parsedHTML.bindings;
 		for (let index = 0; index < hostBindingOffset; index++) {
-			removeAttributeBinding(
-				host,
-				bindings[index] as AttributeBinding,
-				this.currentExpressions,
-			);
+			//host bindings come from attributes on the root <template>, so the offset range is all ATTR today. guard the cast anyway so a future non-ATTR binding landing in this range can't be force-fed into removeAttributeBinding's shape switch.
+			const binding = bindings[index];
+			if (binding.type === BINDING_TYPES.ATTR) {
+				removeAttributeBinding(host, binding, this.currentExpressions);
+			}
 		}
 	}
 

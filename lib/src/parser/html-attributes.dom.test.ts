@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { html } from "./html";
+import { buildFragment } from "../rendering/build-fragment";
 import { AttributeBinding, BINDING_TYPES } from "./types";
 
 describe("html parser — attribute bindings", () => {
@@ -255,7 +256,9 @@ describe("html parser — custom element and namespaced attribute names", () => 
 	test("hyphenated custom element tag with static attribute", () => {
 		const template = html`<my-component id="x"></my-component>`;
 		expect(template.parsedHTML.bindings).toHaveLength(0);
-		const element = template.parsedHTML.fragment.querySelector("my-component")!;
+		const element = buildFragment(template.parsedHTML.result).querySelector(
+			"my-component",
+		)!;
 		expect(element).not.toBeNull();
 		expect(element.getAttribute("id")).toBe("x");
 	});
@@ -267,7 +270,7 @@ describe("html parser — custom element and namespaced attribute names", () => 
 		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
 		expect(binding.keys).toEqual(["class"]);
 		expect(
-			template.parsedHTML.fragment.querySelector("my-component"),
+			buildFragment(template.parsedHTML.result).querySelector("my-component"),
 		).not.toBeNull();
 	});
 

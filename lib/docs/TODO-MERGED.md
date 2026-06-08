@@ -20,7 +20,7 @@ gets rewritten as items land.
 
 ## Parser (`src/parser`)
 
-- [ ] `[L]` **Part A — document-free parser** *(do first)*. Make `parse()` touch no DOM:
+- [x] `[L]` **Part A — document-free parser** *(done)*. Make `parse()` touch no DOM:
   parser state → pooled `ParserState` struct + context-first free functions; `parse()`
   returns a `result` **string seed** (`fragment: null`); materialization (`buildFragment`,
   `parserHost`) moves to the rendering layer and runs lazily on first `setup()`;
@@ -31,36 +31,68 @@ gets rewritten as items land.
   **ADR-0009** (pooled struct), **ADR-0010** (document-free). **Subsumes** the two items
   below — the non-reentrancy comment moves onto the pooled instance, and "parser returns a
   string" *is* this work.
-- [ ] `[M]` **Centralize per-element scope reset** into one `resetElementScope()` so
-  `selfClosing = false` and buffer-array flushing happen in one place. Today's
-  correctness depends on unstated buffer-state invariants (latent, not a live bug).
-  *(API-review M/N TODO + TODO.md parser — same item.)*
-- [ ] `[L]` **Store attribute type bits in the parser** (is-event, is-property) on the
-  binding, so `applyAttributeBinding` skips the per-write charCode/typeof cascade.
-  Prerequisite for the attribute-table rework below. *(API-review Phase 3 + TODO.md
-  attributes — same item.)*
+- [x] `[M]` **Centralize per-element scope reset** into one `resetElementScope()` so
+  `selfClosing = false` and buffer-array flushing happen in one place *(done)*. Both
+  `flushElement` exits route through it, draining `tagBuffer` / `elementBuffer` /
+  attribute scratch and clearing `currentTagName` + `selfClosing` — the
+  "scratch is empty between elements" invariant is now explicit, not a consequence of
+  control flow (the suppressed root `<template>` used to leave `currentTagName` /
+  `tagBuffer` dangling). *(API-review M/N TODO + TODO.md parser — same item.)*
+- [x] `[L]` **Store attribute type bits in the parser** *(done)*. New
+  `ATTRIBUTE_NAME_KIND` (`UNKNOWN`/`PLAIN`/`NATIVE_EVENT`/`EXPLICIT_EVENT`) +
+  `eventName` on `AttributeBinding`, classified once in `completeAttribute` via
+  `classifyAttributeName`; `applyAttributeBinding` takes the bits and dispatches over a
+  `switch` instead of the per-write charCode cascade, with `resolveEventNameFromKey` as
+  the runtime fallback for dynamic/spread names (`UNKNOWN`). Prerequisite for the
+  attribute-table rework below. *(API-review Phase 3 + TODO.md attributes — same item.)*
+
+  **Bench note:** 705 DOM/unit tests green. The cached re-render hot path is flat
+  (~1.0×); the new classification cost is paid once at parse time (cold, cached after
+  first parse) by design. The committed `bench/baseline.json` is from a different machine
+  (macOS) so cross-machine compares are meaningless here; an identical-code A/B on this
+  container measured a ±15–25 % process-to-process noise floor on the cold micro-benches
+  (`simple static template`, which has no attributes, swung 0.83×–1.08× with no code
+  change). No regression resolvable above that floor. **Regenerate `baseline.json` on the
+  target hardware (`npm run bench:baseline`) before trusting future `bench:compare`
+  output.**
 
 ---
 
 ## Attributes (`src/rendering/attribute.ts`)
 
-- [ ] `[S]` **Make unknown `on*` handlers loud.** When a camelCase `on<name>` carries a
-  function value but no matching IDL property exists, the value currently falls through
-  to a silent property assignment (typo'd `onClik` becomes a dead property). Add a
-  `console.warn` before that write (error contract, ADR-0002). Silent fallback is
-  incidental to IDL-gate ordering, so the warning is safe.
-- [ ] `[S]` **`clearHostAttributes`** casts `0..hostBindingOffset` as `AttributeBinding`
-  unguarded — guard it. *(Deferred.)*
-- [ ] `[M]` **Diff name-only (array/object) attributes** so only changed entries are
-  written; skip where `old === new`. Check first whether the browser already coalesces
-  these. *(TODO.md attributes.)*
-- [ ] `[M]` **Multi-value attr with a function won't clean up its listener.** `oldValue`
-  isn't passed on multi-value attr paths → potential listener leak if such an attr ever
-  carries a function. Confirm the parser invariant or pass `oldValue`. *(TODO.md +
-  API-review deferred — same item.)*
-- [ ] `[L]` **Rule 8 + 15:** collapse the `updateAttribute` / `removeAttributeBinding`
-  twin switches into one `{ apply, remove }` table keyed by `ATTRIBUTE_SHAPE`, using the
-  new parser type bits.
+- [x] `[S]` **Make unknown `on*` handlers loud** *(done)*. `warnIfDeadNativeHandler`
+  fires a `console.warn` (error contract, ADR-0002) when a function value reaches a
+  camelCase `on<name>` with no matching IDL property, just before it lands as a dead
+  property. Self-filtering (`on-<name>` and non-`on*` names return silently) so the
+  single call site after the listener-resolution block stays branch-free; gated on the
+  *current* value being the function so teardown doesn't re-warn.
+- [x] `[S]` **Guard `clearHostAttributes`' cast** *(done)*. The `0..hostBindingOffset`
+  loop now checks `binding.type === BINDING_TYPES.ATTR` before `removeAttributeBinding`,
+  so a future non-ATTR binding in that range can't be force-cast into the shape switch.
+- [x] `[M]` **Diff name-only (object) attributes** *(done)*. `updateExpandable` splits
+  into `applyExpandable` (first render / array / shape change) and
+  `diffExpandableObjects` (same-shape object update). Unchanged object entries
+  (`old === new`) are skipped entirely — a stable spread listener is no longer
+  detached+reattached every render. **Bench-gated** vs HEAD: object spread −24% to −87%
+  (−86% on a 10-key set with one key flipping, −40% keeping a stable listener while a
+  sibling class flips). The **array** path was deliberately *not* diffed: an array-membership
+  diff measured **+22%** on full alternation because the `indexOf` scan (2·N·M comparisons)
+  costs more than the cheap value-less add/removeAttribute it guards — arrays fall back to
+  clear-all + apply-all. New test pins object-listener survival.
+- [x] `[M]` **Multi-value attr listener leak — invariant confirmed** *(done, no code
+  change)*. Multi-value paths route the value through `bindingToString`, which always
+  yields a string, so a function can never reach the listener path and no listener is
+  ever attached — there is nothing to leak. Passing `oldValue` would be dead code;
+  documented the invariant on both multi-value update functions instead.
+- [x] `[L]` **Rule 8:** replaced the `updateAttribute` / `removeAttributeBinding` twin
+  switches with one **per-shape unit** model *(done)*. Each shape is a single
+  `{ apply, remove }` const (`staticAttr`, `expandableAttr`, …) holding both halves
+  together so they can't drift on what names the shape owns; two shapes that share a
+  remove reference one helper (`removeStaticName` / `removeDynamicName`). A single
+  `handlerForShape` `switch` over the dense `ATTRIBUTE_SHAPE` enum (jump table) returns
+  the unit; both entry points dispatch through it. Behavior-identical, 688 tests green,
+  bench-gate clean (object-spread wins hold; no dispatch regression above the noise
+  floor).
 
 ---
 

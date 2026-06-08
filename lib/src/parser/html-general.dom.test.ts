@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { html } from "./html";
+import { buildFragment } from "../rendering/build-fragment";
 import { AttributeBinding, BINDING_TYPES } from "./types";
 
 describe("html parser — static templates", () => {
@@ -12,7 +13,7 @@ describe("html parser — static templates", () => {
 	test("preserves static attributes", () => {
 		const template = html` <div class="red" id="main">text</div>`;
 		expect(template.parsedHTML.bindings).toHaveLength(0);
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.getAttribute("class")).toBe("red");
 		expect(div.getAttribute("id")).toBe("main");
 	});
@@ -113,7 +114,9 @@ describe("html parser — whitespace handling", () => {
 	test("whitespace before self-closing slash", () => {
 		const template = html`<br />`;
 		expect(template.parsedHTML.bindings).toHaveLength(0);
-		expect(template.parsedHTML.fragment.querySelector("br")).not.toBeNull();
+		expect(
+			buildFragment(template.parsedHTML.result).querySelector("br"),
+		).not.toBeNull();
 	});
 });
 
@@ -163,7 +166,7 @@ describe("html parser — void and self-closing elements", () => {
 		// transitions through STATE.ELEMENT. Both forms must produce a sibling,
 		// not a parent that adopts the next element.
 		const template = html`<br /><span>after</span>`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const br = fragment.querySelector("br")!;
 		const span = fragment.querySelector("span")!;
 		expect(br).not.toBeNull();
@@ -178,7 +181,7 @@ describe("html parser — void and self-closing elements", () => {
 		// HTML comment in the template should travel through the tree walker
 		// untouched, with the dynamic binding still resolving normally.
 		const template = html`<div><!-- author note -->${"payload"}</div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 
 		const commentNodes: Array<Comment> = [];
 		for (const child of div.childNodes) {
@@ -196,7 +199,7 @@ describe("html parser — void and self-closing elements", () => {
 describe("html parser — fragment structure", () => {
 	test("static template produces correct DOM structure", () => {
 		const template = html` <div><span>hello</span></div>`;
-		const div = template.parsedHTML.fragment.querySelector("div");
+		const div = buildFragment(template.parsedHTML.result).querySelector("div");
 		expect(div).not.toBeNull();
 		const span = div?.querySelector("span");
 		expect(span).not.toBeNull();
@@ -207,7 +210,7 @@ describe("html parser — fragment structure", () => {
 		const template = html`<p>one</p>
 			<p>two</p>
 			<p>three</p>`;
-		const ps = template.parsedHTML.fragment.querySelectorAll("p");
+		const ps = buildFragment(template.parsedHTML.result).querySelectorAll("p");
 		expect(ps.length).toBe(3);
 	});
 
@@ -217,7 +220,7 @@ describe("html parser — fragment structure", () => {
             <${tag}>content</${tag}>`;
 
 		// Dynamic tags use a placeholder "div" in the fragment
-		const div = template.parsedHTML.fragment.querySelector("div");
+		const div = buildFragment(template.parsedHTML.result).querySelector("div");
 		expect(div).not.toBeNull();
 	});
 
@@ -225,7 +228,7 @@ describe("html parser — fragment structure", () => {
 		const dyn = "dynamic";
 		const template = html` <div id="static" class="${dyn}">text</div>`;
 
-		const div = template.parsedHTML.fragment.querySelector("div");
+		const div = buildFragment(template.parsedHTML.result).querySelector("div");
 		expect(div?.getAttribute("id")).toBe("static");
 	});
 
@@ -234,7 +237,7 @@ describe("html parser — fragment structure", () => {
 		const val = "text";
 		const template = html`<div>${val}</div>`;
 
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		const comments = Array.from(div.childNodes).filter(
 			(node) => node.nodeType === Node.COMMENT_NODE,
 		);
@@ -250,7 +253,9 @@ describe("html parser — fragment structure", () => {
 			}
 		</style>`;
 
-		const style = template.parsedHTML.fragment.querySelector("style")!;
+		const style = buildFragment(template.parsedHTML.result).querySelector(
+			"style",
+		)!;
 		const innerComments = Array.from(style.childNodes).filter(
 			(node) => node.nodeType === Node.COMMENT_NODE,
 		);
@@ -425,13 +430,15 @@ describe("html parser — mixed scenarios", () => {
 		const template = html`<br />${value}`;
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
-		expect(template.parsedHTML.fragment.querySelector("br")).not.toBeNull();
+		expect(
+			buildFragment(template.parsedHTML.result).querySelector("br"),
+		).not.toBeNull();
 	});
 
 	test("void element without trailing slash nested in a parent", () => {
 		const value = "text";
 		const template = html`<div><br />${value}</div>`;
-		const div = template.parsedHTML.fragment.querySelector("div")!;
+		const div = buildFragment(template.parsedHTML.result).querySelector("div")!;
 		expect(div.querySelector("br")).not.toBeNull();
 	});
 

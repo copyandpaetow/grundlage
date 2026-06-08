@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { html } from "./html";
+import { buildFragment } from "../rendering/build-fragment";
 import { AttributeBinding, BINDING_TYPES, TagBinding } from "./types";
 
 describe("html parser — tag bindings", () => {
@@ -142,7 +143,7 @@ describe("html parser — tag bindings", () => {
 	test("static self-closing tag with space produces sibling, not parent", () => {
 		const template = html`<div />
 			<span>after</span>`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const div = fragment.querySelector("div")!;
 		const span = fragment.querySelector("span")!;
 		expect(div).not.toBeNull();
@@ -154,7 +155,7 @@ describe("html parser — tag bindings", () => {
 	test("static self-closing tag without space produces sibling, not parent", () => {
 		const template = html`<div />
 			<span>after</span>`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const div = fragment.querySelector("div")!;
 		const span = fragment.querySelector("span")!;
 		expect(div).not.toBeNull();
@@ -165,7 +166,7 @@ describe("html parser — tag bindings", () => {
 
 	test("static self-closing tag does not include slash in tag name", () => {
 		const template = html`<div />`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const div = fragment.querySelector("div")!;
 		expect(div).not.toBeNull();
 		expect(div.tagName).toBe("DIV");
@@ -174,7 +175,7 @@ describe("html parser — tag bindings", () => {
 	test("static self-closing tag with attributes preserves them", () => {
 		const template = html`<div id="alone" class="solo" />
 			<span>after</span>`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const div = fragment.querySelector("div")!;
 		expect(div.getAttribute("id")).toBe("alone");
 		expect(div.getAttribute("class")).toBe("solo");
@@ -185,7 +186,7 @@ describe("html parser — tag bindings", () => {
 		const cls = "red";
 		const template = html`<div class="${cls}" />
 			<span>after</span>`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const div = fragment.querySelector("div")!;
 		const span = fragment.querySelector("span")!;
 		expect(div.contains(span)).toBe(false);
@@ -198,7 +199,7 @@ describe("html parser — tag bindings", () => {
 	test("dynamic self-closing tag produces a placeholder element with no children", () => {
 		const tag = "br";
 		const template = html`<${tag} /><span>after</span>`;
-		const fragment = template.parsedHTML.fragment;
+		const fragment = buildFragment(template.parsedHTML.result);
 		const placeholder = fragment.querySelector("div")!;
 		const span = fragment.querySelector("span")!;
 		expect(placeholder).not.toBeNull();
