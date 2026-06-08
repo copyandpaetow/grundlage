@@ -1,4 +1,9 @@
-import { AttributeBinding, ATTRIBUTE_SHAPE } from "../parser/types";
+import {
+	AttributeBinding,
+	ATTRIBUTE_NAME_KIND,
+	ATTRIBUTE_SHAPE,
+	ValueOf,
+} from "../parser/types";
 import { BaseComponent } from "../types";
 import { bindingToString } from "../utils/binding-to-string";
 import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
@@ -11,38 +16,58 @@ const CHAR_LOWER_O = 111;
 const CHAR_LOWER_N = 110;
 const CHAR_DASH = 45;
 
+//runtime fallback for names the parser couldn't classify (dynamic names, spread keys): derive the listener name from the resolved key, or null if it isn't an event
+//static names skip this entirely — the parser pre-resolved their eventName at parse time (ATTRIBUTE_NAME_KIND)
+const resolveEventNameFromKey = (key: string, element: Element): string | null => {
+	if (key.charCodeAt(0) !== CHAR_LOWER_O || key.charCodeAt(1) !== CHAR_LOWER_N) {
+		return null;
+	}
+	if (key.charCodeAt(2) === CHAR_DASH) {
+		//`on-<name>`: explicit listener. nothing native uses the `on-` shape, so the dash is the signal — no IDL-property gate, so custom events bind without any registration
+		return key.slice(3).toLowerCase();
+	}
+	//`on<name>`: native handlers (onclick, …), gated on the matching IDL property existing so arbitrary on* function props still fall through to property assignment
+	const lowerKey = key.toLowerCase();
+	return lowerKey in element ? lowerKey.slice(2) : null;
+};
+
 export const applyAttributeBinding = (
 	element: Element,
 	key: string,
 	value: unknown,
 	oldValue?: unknown,
+	//pre-resolved by the parser for static names; defaulted so dynamic/spread callers fall through to the runtime probe
+	nameKind: ValueOf<typeof ATTRIBUTE_NAME_KIND> = ATTRIBUTE_NAME_KIND.UNKNOWN,
+	eventName = "",
 ) => {
 	//Static class/id/data-* attributes never carry function values, so bail before touching the key.
 	const valueIsFunction = typeof value === "function";
 	const oldValueIsFunction = typeof oldValue === "function";
 	if (valueIsFunction || oldValueIsFunction) {
-		if (
-			key.charCodeAt(0) === CHAR_LOWER_O &&
-			key.charCodeAt(1) === CHAR_LOWER_N
-		) {
-			let eventName: string | null = null;
-			if (key.charCodeAt(2) === CHAR_DASH) {
-				//`on-<name>`: explicit listener. nothing native uses the `on-` shape, so the dash is the signal — no IDL-property gate, so custom events bind without any registration
-				eventName = key.slice(3).toLowerCase();
-			} else {
-				//`on<name>`: native handlers (onclick, …), gated on the matching IDL property existing so arbitrary on* function props still fall through to property assignment below
-				const lowerKey = key.toLowerCase();
-				if (lowerKey in element) eventName = lowerKey.slice(2);
+		let listenerName: string | null = null;
+		switch (nameKind) {
+			case ATTRIBUTE_NAME_KIND.EXPLICIT_EVENT:
+				listenerName = eventName;
+				break;
+			case ATTRIBUTE_NAME_KIND.NATIVE_EVENT:
+				//IDL gate stays at write time (it depends on the element instance); the name itself is already resolved
+				if ("on" + eventName in element) listenerName = eventName;
+				break;
+			case ATTRIBUTE_NAME_KIND.PLAIN:
+				//static non-on* name: never a listener — fall through to value handling below
+				break;
+			case ATTRIBUTE_NAME_KIND.UNKNOWN:
+				listenerName = resolveEventNameFromKey(key, element);
+				break;
+		}
+		if (listenerName !== null) {
+			if (oldValueIsFunction) {
+				element.removeEventListener(listenerName, oldValue as EventListener);
 			}
-			if (eventName !== null) {
-				if (oldValueIsFunction) {
-					element.removeEventListener(eventName, oldValue as EventListener);
-				}
-				if (valueIsFunction) {
-					element.addEventListener(eventName, value as EventListener);
-				}
-				return;
+			if (valueIsFunction) {
+				element.addEventListener(listenerName, value as EventListener);
 			}
+			return;
 		}
 	}
 
@@ -121,6 +146,8 @@ const updateStaticNameSingleValue = (context: HTMLTemplate, index: number) => {
 		binding.keys[0] as string,
 		context.currentExpressions[expressionIndex],
 		previousExpression,
+		binding.nameKind,
+		binding.eventName,
 	);
 };
 
@@ -266,6 +293,8 @@ export const removeAttributeBinding = (
 				binding.keys[0] as string,
 				null,
 				expressions[binding.values[0] as number],
+				binding.nameKind,
+				binding.eventName,
 			);
 			return;
 		case ATTRIBUTE_SHAPE.DYNAMIC_NAME_BOOLEAN:

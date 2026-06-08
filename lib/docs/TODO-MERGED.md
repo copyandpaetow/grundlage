@@ -31,14 +31,30 @@ gets rewritten as items land.
   **ADR-0009** (pooled struct), **ADR-0010** (document-free). **Subsumes** the two items
   below — the non-reentrancy comment moves onto the pooled instance, and "parser returns a
   string" *is* this work.
-- [ ] `[M]` **Centralize per-element scope reset** into one `resetElementScope()` so
-  `selfClosing = false` and buffer-array flushing happen in one place. Today's
-  correctness depends on unstated buffer-state invariants (latent, not a live bug).
-  *(API-review M/N TODO + TODO.md parser — same item.)*
-- [ ] `[L]` **Store attribute type bits in the parser** (is-event, is-property) on the
-  binding, so `applyAttributeBinding` skips the per-write charCode/typeof cascade.
-  Prerequisite for the attribute-table rework below. *(API-review Phase 3 + TODO.md
-  attributes — same item.)*
+- [x] `[M]` **Centralize per-element scope reset** into one `resetElementScope()` so
+  `selfClosing = false` and buffer-array flushing happen in one place *(done)*. Both
+  `flushElement` exits route through it, draining `tagBuffer` / `elementBuffer` /
+  attribute scratch and clearing `currentTagName` + `selfClosing` — the
+  "scratch is empty between elements" invariant is now explicit, not a consequence of
+  control flow (the suppressed root `<template>` used to leave `currentTagName` /
+  `tagBuffer` dangling). *(API-review M/N TODO + TODO.md parser — same item.)*
+- [x] `[L]` **Store attribute type bits in the parser** *(done)*. New
+  `ATTRIBUTE_NAME_KIND` (`UNKNOWN`/`PLAIN`/`NATIVE_EVENT`/`EXPLICIT_EVENT`) +
+  `eventName` on `AttributeBinding`, classified once in `completeAttribute` via
+  `classifyAttributeName`; `applyAttributeBinding` takes the bits and dispatches over a
+  `switch` instead of the per-write charCode cascade, with `resolveEventNameFromKey` as
+  the runtime fallback for dynamic/spread names (`UNKNOWN`). Prerequisite for the
+  attribute-table rework below. *(API-review Phase 3 + TODO.md attributes — same item.)*
+
+  **Bench note:** 705 DOM/unit tests green. The cached re-render hot path is flat
+  (~1.0×); the new classification cost is paid once at parse time (cold, cached after
+  first parse) by design. The committed `bench/baseline.json` is from a different machine
+  (macOS) so cross-machine compares are meaningless here; an identical-code A/B on this
+  container measured a ±15–25 % process-to-process noise floor on the cold micro-benches
+  (`simple static template`, which has no attributes, swung 0.83×–1.08× with no code
+  change). No regression resolvable above that floor. **Regenerate `baseline.json` on the
+  target hardware (`npm run bench:baseline`) before trusting future `bench:compare`
+  output.**
 
 ---
 

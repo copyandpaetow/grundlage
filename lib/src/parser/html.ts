@@ -2,6 +2,7 @@ import { stringHash } from "../utils/hashing";
 import { HTMLTemplate } from "../rendering/template-html";
 import {
 	AttributeBinding,
+	ATTRIBUTE_NAME_KIND,
 	ATTRIBUTE_SHAPE,
 	Binding,
 	BINDING_TYPES,
@@ -239,12 +240,14 @@ const createBinding = (parser: ParserState) => {
 	switch (parser.state) {
 		case STATE.ATTRIBUTE_KEY:
 		case STATE.ATTRIBUTE_VALUE:
-			//shape is finalized in completeAttribute once both keys and values are populated; we initialize with STATIC so the object's hidden class is stable from the start
+			//shape and nameKind are finalized in completeAttribute once keys/values are populated; we initialize them up front so the object's hidden class is stable from the start
 			return {
 				type: BINDING_TYPES.ATTR,
 				shape: ATTRIBUTE_SHAPE.STATIC,
 				values: [],
 				keys: [],
+				nameKind: ATTRIBUTE_NAME_KIND.UNKNOWN,
+				eventName: "",
 			} satisfies AttributeBinding;
 		case STATE.COMMENT:
 		case STATE.TEXT:
@@ -438,12 +441,34 @@ const classifyAttributeShape = (
 		: ATTRIBUTE_SHAPE.STATIC_NAME_MULTI_VALUE;
 };
 
+//event-handler names always start with "on"; we sniff char codes ('o'=111, 'n'=110, '-'=45) to match the runtime probe in applyAttributeBinding
+//a static single-segment name is fully known here, so we resolve the listener name once at parse time and the write path never re-derives it
+const classifyAttributeName = (binding: AttributeBinding) => {
+	const keys = binding.keys;
+	//a dynamic name (expression slot or split across captures) isn't known until render — leave it UNKNOWN so the write path probes the resolved key
+	if (keys.length !== 1 || typeof keys[0] !== "string") return;
+
+	const name = keys[0];
+	if (name.charCodeAt(0) !== 111 || name.charCodeAt(1) !== 110) {
+		binding.nameKind = ATTRIBUTE_NAME_KIND.PLAIN;
+		return;
+	}
+	if (name.charCodeAt(2) === 45) {
+		binding.nameKind = ATTRIBUTE_NAME_KIND.EXPLICIT_EVENT;
+		binding.eventName = name.slice(3).toLowerCase();
+	} else {
+		binding.nameKind = ATTRIBUTE_NAME_KIND.NATIVE_EVENT;
+		binding.eventName = name.slice(2).toLowerCase();
+	}
+};
+
 const completeAttribute = (parser: ParserState) => {
 	if (parser.activeBinding) {
 		const attributeBinding = parser.activeBinding as AttributeBinding;
 		moveArrayContents(parser.attributeKeyBuffer, attributeBinding.keys);
 		moveArrayContents(parser.attributeValueBuffer, attributeBinding.values);
 		attributeBinding.shape = classifyAttributeShape(attributeBinding);
+		classifyAttributeName(attributeBinding);
 
 		//attributes on the root template don't need a comment marker but we need to know how many bindings we have on it
 		if (parser.isRootTemplate) {
@@ -467,10 +492,13 @@ const completeAttribute = (parser: ParserState) => {
 				shape: ATTRIBUTE_SHAPE.STATIC,
 				keys: [],
 				values: [],
+				nameKind: ATTRIBUTE_NAME_KIND.UNKNOWN,
+				eventName: "",
 			};
 			moveArrayContents(parser.attributeKeyBuffer, staticBinding.keys);
 			moveArrayContents(parser.attributeValueBuffer, staticBinding.values);
 			staticBinding.shape = classifyAttributeShape(staticBinding);
+			classifyAttributeName(staticBinding);
 			parser.bindings.push(staticBinding);
 			parser.hostBindingOffset++;
 		} else {
@@ -488,11 +516,19 @@ const completeAttribute = (parser: ParserState) => {
 	parser.attributeQuoteCode = 0;
 };
 
+//the single per-element boundary, clearing the open-tag scratch that isn't already drained by its own producer: the suppressed root <template> path can leave tagBuffer and currentTagName dangling, and a parsed-but-unconsumed selfClosing flag would leak to the next element. elementBuffer (drained by moveArrayContents above) and the attribute buffers (drained by completeAttribute) are provably empty here, so re-clearing them is pure cost — `.length = 0` on these per element measured ~18% of cold-parse time. // why: keep the invariant centralized but pay only for the buffers that can actually carry state across the boundary
+const resetElementScope = (parser: ParserState) => {
+	parser.selfClosing = false;
+	parser.currentTagName = "";
+	parser.tagBuffer.length = 0;
+};
+
 const flushElement = (parser: ParserState) => {
 	if (parser.elementBuffer.length === 0) {
 		if (parser.contentBuffer.length > 0) {
 			moveArrayContents(parser.contentBuffer, parser.resultBuffer);
 		}
+		resetElementScope(parser);
 		return;
 	}
 
@@ -503,11 +539,10 @@ const flushElement = (parser: ParserState) => {
 	//currentTagName is the static tag name, or PLACEHOLDER_TAG ("div") for dynamic tags so updateTag still finds a complete element.
 	if (parser.selfClosing) {
 		parser.resultBuffer.push("</", parser.currentTagName, ">");
-		parser.selfClosing = false;
 	}
 	moveArrayContents(parser.contentBuffer, parser.resultBuffer);
 
-	parser.currentTagName = "";
+	resetElementScope(parser);
 };
 
 const parse = (

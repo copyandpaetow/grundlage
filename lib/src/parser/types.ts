@@ -26,11 +26,27 @@ export const ATTRIBUTE_SHAPE = {
 	EXPANDABLE: 6,
 } as const;
 
+//how the attribute's name relates to event-listener handling, decided once at parse time so the per-write path in applyAttributeBinding skips the charCode/toLowerCase cascade
+export const ATTRIBUTE_NAME_KIND = {
+	//dynamic or spread name — not known at parse time, so the write path must still probe the resolved key
+	UNKNOWN: 0,
+	//static name that is not an on* handler — can never be a listener; the write path skips event handling entirely
+	PLAIN: 1,
+	//static on<name> — a listener iff the matching IDL property exists on the element (gated at write time)
+	NATIVE_EVENT: 2,
+	//static on-<name> — always a listener, no IDL gate; eventName is fully resolved at parse time
+	EXPLICIT_EVENT: 3,
+} as const;
+
 export type AttributeBinding = {
 	type: typeof BINDING_TYPES.ATTR;
 	shape: ValueOf<typeof ATTRIBUTE_SHAPE>;
 	values: Array<number | string>;
 	keys: Array<number | string>;
+	//parse-time event classification of a static name; UNKNOWN for dynamic/spread names
+	nameKind: ValueOf<typeof ATTRIBUTE_NAME_KIND>;
+	//pre-resolved listener name (lowercase, prefix stripped) for NATIVE_EVENT/EXPLICIT_EVENT; "" otherwise
+	eventName: string;
 };
 
 export type ContentBinding = {
