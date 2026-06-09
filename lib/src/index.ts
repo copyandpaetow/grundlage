@@ -75,7 +75,7 @@ export const render = (
 			//moving an element in the DOM fires disconnectedCallback then connectedCallback
 			//=> if the root is already running we bail out so the move doesn't restart the component from scratch
 			if (this.#runtime.rootHandle !== null) return;
-			//on the server we render once and cancel. no observer needed; the CSR renderTemplate guards its disconnect/observe with optional chaining to match
+			//on the server we render once and cancel. no observer needed; the CSR renderRoot guards its disconnect/observe with optional chaining to match
 			if (this.#runtime.kind === RUNTIME_KIND.CSR) this.#watchAttributes();
 
 			if (this.#runtime.kind === RUNTIME_KIND.CSR) {

@@ -34,9 +34,9 @@ describe("html parser — attribute bindings", () => {
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
 		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		// keys should contain only the expression index, no empty strings
-		expect(binding.keys).toEqual([0]);
-		expect(binding.values).toHaveLength(0);
+		// the expression slot lives in values; keys is empty (no static name parts)
+		expect(binding.values).toEqual([0]);
+		expect(binding.keys).toHaveLength(0);
 	});
 
 	test("dynamic attribute name with static prefix", () => {
@@ -87,32 +87,32 @@ describe("html parser — attribute bindings", () => {
 		expect(template.parsedHTML.bindings).toHaveLength(2);
 		const boolBinding = template.parsedHTML.bindings[0] as AttributeBinding;
 		const attrBinding = template.parsedHTML.bindings[1] as AttributeBinding;
-		expect(boolBinding.values).toHaveLength(0);
+		expect(boolBinding.keys).toHaveLength(0);
 		expect(attrBinding.keys).toEqual(["class"]);
 	});
 });
 
 describe("html parser — expandable attributes", () => {
-	test("array expandable has keys=[expressionIndex] and empty values", () => {
+	test("array expandable has values=[expressionIndex] and empty keys", () => {
 		const attrs = ["disabled", "hidden"];
 		const template = html` <button ${attrs}>click</button>`;
 
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
 		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual([0]);
-		expect(binding.values).toHaveLength(0);
+		expect(binding.values).toEqual([0]);
+		expect(binding.keys).toHaveLength(0);
 	});
 
-	test("object expandable has keys=[expressionIndex] and empty values", () => {
+	test("object expandable has values=[expressionIndex] and empty keys", () => {
 		const attrs = { class: "red", id: "main" };
 		const template = html` <div ${attrs}>content</div>`;
 
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
 		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual([0]);
-		expect(binding.values).toHaveLength(0);
+		expect(binding.values).toEqual([0]);
+		expect(binding.keys).toHaveLength(0);
 	});
 
 	test("expandable after static attribute", () => {
@@ -121,8 +121,8 @@ describe("html parser — expandable attributes", () => {
 
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.keys).toEqual([0]);
-		expect(binding.values).toHaveLength(0);
+		expect(binding.values).toEqual([0]);
+		expect(binding.keys).toHaveLength(0);
 	});
 
 	test("expandable before static attribute", () => {
@@ -131,8 +131,8 @@ describe("html parser — expandable attributes", () => {
 
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.keys).toEqual([0]);
-		expect(binding.values).toHaveLength(0);
+		expect(binding.values).toEqual([0]);
+		expect(binding.keys).toHaveLength(0);
 	});
 
 	test("expandable between static attributes", () => {
@@ -141,8 +141,8 @@ describe("html parser — expandable attributes", () => {
 
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.keys).toEqual([0]);
-		expect(binding.values).toHaveLength(0);
+		expect(binding.values).toEqual([0]);
+		expect(binding.keys).toHaveLength(0);
 	});
 });
 
@@ -213,8 +213,8 @@ describe("html parser — attribute edge cases", () => {
 		expect(template.parsedHTML.bindings).toHaveLength(1);
 		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
 		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual([0]);
-		expect(binding.values).toHaveLength(0);
+		expect(binding.values).toEqual([0]);
+		expect(binding.keys).toHaveLength(0);
 	});
 
 	test("mixed static and dynamic attributes on same element", () => {

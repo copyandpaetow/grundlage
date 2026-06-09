@@ -96,7 +96,7 @@ export const dispatchCSRUpdate = (runtime: CSRRuntime): void => {
 		runtime.currentHandle = createGeneratorHandle(
 			runtime,
 			runtime.host,
-			renderTemplate,
+			renderRoot,
 			reportCSRError,
 			createCurrent as ComponentGenerator,
 		);
@@ -105,7 +105,7 @@ export const dispatchCSRUpdate = (runtime: CSRRuntime): void => {
 		runtime.currentHandle = installRenderFunctionSource(
 			runtime,
 			runtime.host,
-			renderTemplate,
+			renderRoot,
 			createCurrent as RenderFunction,
 		);
 	}
@@ -121,7 +121,7 @@ const handleRootYield: YieldHandler = (rootHandle, value) => {
 		if (runtime.currentHandle !== null) cancelHandle(runtime.currentHandle);
 		runtime.createCurrent = null;
 		runtime.currentIsGenerator = false;
-		runtime.currentHandle = installStaticSource(runtime, renderTemplate, value);
+		runtime.currentHandle = installStaticSource(runtime, renderRoot, value);
 		return runtime.host;
 	}
 	if (typeof value === "function") {
@@ -134,7 +134,7 @@ const handleRootYield: YieldHandler = (rootHandle, value) => {
 			runtime.currentHandle = createGeneratorHandle(
 				runtime,
 				runtime.host,
-				renderTemplate,
+				renderRoot,
 				reportCSRError,
 				createGenerator,
 			);
@@ -146,7 +146,7 @@ const handleRootYield: YieldHandler = (rootHandle, value) => {
 			runtime.currentHandle = installRenderFunctionSource(
 				runtime,
 				runtime.host,
-				renderTemplate,
+				renderRoot,
 				renderFunction,
 			);
 		}
@@ -203,7 +203,7 @@ const abortAndShowError: ErrorCallback = (context, error) => {
 
 //RenderCallback for current sources. module-level so installs don't allocate a closure per component
 //=> the handle param is unused on the client: CSR doesn't tear down on render, it patches in place or replaces children
-const renderTemplate: RenderCallback = (context, _handle, value) => {
+const renderRoot: RenderCallback = (context, _handle, value) => {
 	const runtime = context as CSRRuntime;
 	const template = value instanceof HTMLTemplate ? value : html`${value}`;
 	const previousTemplate = runtime.renderedTemplate;

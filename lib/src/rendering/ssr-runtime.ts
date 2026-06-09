@@ -68,21 +68,21 @@ export const teardownSSRRuntime = (runtime: SSRRuntime): void => {
 	runtime.rootHandle = null;
 };
 
-//same root-yield shape as CSR: decide kind and install. the difference is what `renderOnce` does next
+//same root-yield shape as CSR: decide kind and install. the difference is what `renderRoot` does next
 //=> if the install path painted synchronously (the common case for static/render-fn or a sync inner gen), we cancel the root right here using the rootHandle parameter. runtime.rootHandle may still be null on the very first call (startSSRRoot hasn't assigned it yet)
 const handleRootYield: YieldHandler = (rootHandle, value) => {
 	const runtime = rootHandle.context as SSRRuntime;
 	if (runtime.done) return runtime.host;
 	if (value instanceof HTMLTemplate) {
 		if (runtime.currentHandle !== null) cancelHandle(runtime.currentHandle);
-		runtime.currentHandle = installStaticSource(runtime, renderOnce, value);
+		runtime.currentHandle = installStaticSource(runtime, renderRoot, value);
 	} else if (typeof value === "function") {
 		if (runtime.currentHandle !== null) cancelHandle(runtime.currentHandle);
 		if (isGeneratorFunction(value)) {
 			runtime.currentHandle = createGeneratorHandle(
 				runtime,
 				runtime.host,
-				renderOnce,
+				renderRoot,
 				reportSSRError,
 				value as ComponentGenerator,
 			);
@@ -91,7 +91,7 @@ const handleRootYield: YieldHandler = (rootHandle, value) => {
 			runtime.currentHandle = installRenderFunctionSource(
 				runtime,
 				runtime.host,
-				renderOnce,
+				renderRoot,
 				value as RenderFunction,
 			);
 		}
@@ -105,7 +105,7 @@ const handleRootYield: YieldHandler = (rootHandle, value) => {
 //one-shot RenderCallback. paint into the shadow root, drain the load() buffer, mark the in-flight current source finished so its step loop unwinds
 //=> the rootHandle gets cancelled by handleRootYield after the install returns (it has the rootHandle reference even when runtime.rootHandle is still null)
 //=> further calls (e.g. a sync generator yielding multiple templates in one tick) short-circuit on `done`
-const renderOnce: RenderCallback = (context, handle, value) => {
+const renderRoot: RenderCallback = (context, handle, value) => {
 	const runtime = context as SSRRuntime;
 	if (runtime.done) return;
 	runtime.done = true;

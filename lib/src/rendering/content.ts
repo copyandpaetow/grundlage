@@ -2,6 +2,7 @@ import { html } from "../parser/html";
 import { bindingToString } from "../utils/binding-to-string";
 import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
 import { isComment, isSameTemplate } from "../utils/validators";
+import { EMPTY_EXPRESSIONS } from "./empty-expressions";
 import { HTMLTemplate } from "./template-html";
 
 const deleteNodesBetween = (start: Node, end?: Node) => {
@@ -36,7 +37,6 @@ const toTemplateList = (list: Array<unknown>): Array<HTMLTemplate> => {
 };
 
 const LIST_IDENTIFIER = "*.*"; //small enough to save space but unique enough to not collide with potential user comments
-const EMPTY_PREVIOUS: ReadonlyArray<HTMLTemplate> = [];
 
 const isListMarker = (node: Node): node is Comment =>
 	isComment(node) && node.data === LIST_IDENTIFIER;
@@ -82,7 +82,7 @@ const renderList = (
 		context.currentExpressions[expressionIndex] as Array<unknown>,
 	);
 	const trackedPrevious = (
-		Array.isArray(previousValue) ? previousValue : EMPTY_PREVIOUS
+		Array.isArray(previousValue) ? previousValue : EMPTY_EXPRESSIONS
 	) as Array<HTMLTemplate>;
 
 	//we walk the live DOM once and collect one marker per item that's currently rendered
@@ -301,12 +301,14 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 	}
 
 	const renderableCurrent = assertPrimitiveString(current);
-	const previous = context.previousExpressions[expressionIndex];
 
-	if (previous === undefined) {
+	//first render: previousExpressions is the shared sentinel, so no text node exists here yet — insert one
+	if (context.previousExpressions === EMPTY_EXPRESSIONS) {
 		marker.after(document.createTextNode(renderableCurrent));
 		return;
 	}
+
+	const previous = context.previousExpressions[expressionIndex];
 
 	if (isStringable(previous)) {
 		(marker.nextSibling as Text).data = renderableCurrent;

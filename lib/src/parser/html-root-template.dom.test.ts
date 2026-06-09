@@ -145,8 +145,8 @@ describe("html parser — root template dynamic attributes", () => {
 
 		expect(parsed.hostBindingOffset).toBe(1);
 		const binding = parsed.bindings[0] as AttributeBinding;
-		expect(binding.keys).toEqual([0]);
-		expect(binding.values).toHaveLength(0);
+		expect(binding.values).toEqual([0]);
+		expect(binding.keys).toHaveLength(0);
 	});
 
 	test("mixed static and dynamic host attributes coexist in source order", () => {

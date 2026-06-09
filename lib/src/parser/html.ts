@@ -470,6 +470,12 @@ const completeAttribute = (parser: ParserState) => {
 		attributeBinding.shape = classifyAttributeShape(attributeBinding);
 		classifyAttributeName(attributeBinding);
 
+		//EXPANDABLE parses its single expression into key position (no `=value`), but every other shape carries its expression slot in `values`. relocate it so consumers read the slot from one consistent place regardless of shape.
+		if (attributeBinding.shape === ATTRIBUTE_SHAPE.EXPANDABLE) {
+			attributeBinding.values.push(attributeBinding.keys[0]);
+			attributeBinding.keys.length = 0;
+		}
+
 		//attributes on the root template don't need a comment marker but we need to know how many bindings we have on it
 		if (parser.isRootTemplate) {
 			parser.hostBindingOffset++;

@@ -1,4 +1,5 @@
 import { COMMENT_IDENTIFIER } from "../parser/html-util";
+import { EMPTY_EXPRESSIONS } from "./empty-expressions";
 import { BINDING_TYPES, ParsedHTML } from "../parser/types";
 import { buildFragment } from "./build-fragment";
 import { hashValue } from "../utils/hashing";
@@ -7,8 +8,6 @@ import { updateContent } from "./content";
 import { updateRawContent } from "./raw-content";
 import { updateTag } from "./tag";
 import { BaseComponent } from "../types";
-
-const EMPTY_ARRAY: Array<unknown> = [] as const;
 
 const updateByType = {
 	[BINDING_TYPES.TAG]: updateTag,
@@ -28,7 +27,7 @@ export class HTMLTemplate {
 	dirtyBindings: Uint8Array;
 	//currentExpressions[expressionIndex] is the expressionIndex-th interpolation in the template literal (the expressionIndex-th `${...}`)
 	currentExpressions: Array<unknown>;
-	previousExpressions = EMPTY_ARRAY;
+	previousExpressions = EMPTY_EXPRESSIONS;
 
 	//we cache this per-update and invalidate in update() when expressions change
 	get hash(): number {
@@ -98,7 +97,7 @@ export class HTMLTemplate {
 		parent: DocumentFragment | ShadowRoot,
 		host: BaseComponent | null,
 	): Array<Element | Comment> {
-		//host is only threaded in from the runtime's render callback (renderTemplate on CSR, renderOnce on SSR); content.ts passes null when setting up nested templates
+		//host is only threaded in from the runtime's render callback (renderRoot on CSR and SSR); content.ts passes null when setting up nested templates
 		//=> a nested literal that happens to be a root template (<template ...> with attributes) lands here with host=null and we reject it with a message naming the actual misuse
 		if (this.parsedHTML.hostBindingOffset > 0 && !host) {
 			throw new Error(
@@ -187,7 +186,7 @@ export class HTMLTemplate {
 		this.#flush();
 		//previousExpressions is only read during #flush
 		//=> we drop the reference so the prior frame's values (possibly large objects) can be collected between renders in long-lived idle components
-		this.previousExpressions = EMPTY_ARRAY;
+		this.previousExpressions = EMPTY_EXPRESSIONS;
 	}
 
 	#flush() {
