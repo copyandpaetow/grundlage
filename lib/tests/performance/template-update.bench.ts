@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { describe } from "vitest";
 import { html } from "../../src/parser/html";
-import { HTMLTemplate } from "../../src/rendering/template-html";
+import {
+	HTMLTemplate,
+	setupTemplate,
+	updateTemplate,
+} from "../../src/rendering/template-html";
 import { bench } from "./bench-options";
 
 /*
@@ -12,7 +16,7 @@ List reconciliation lives in list-reconciliation.bench.ts; the raf-animation ste
 
 const renderOnce = (template: HTMLTemplate) => {
 	const host = document.createElement("div");
-	host.attachShadow({ mode: "open" }).appendChild(template.setup());
+	host.attachShadow({ mode: "open" }).appendChild(setupTemplate(template));
 	return template;
 };
 
@@ -23,7 +27,7 @@ describe("HTMLTemplate.update() — no-op (all expressions unchanged)", () => {
 	const sameExpressions = ["x", 42, "hello"];
 
 	bench("strict-equal expressions (no work past the === check)", () => {
-		template.update(sameExpressions);
+		updateTemplate(template, sameExpressions);
 	});
 });
 
@@ -43,7 +47,7 @@ describe("HTMLTemplate.update() — primitives changing (animation hot path)", (
 		for (let index = 0; index < 20; index++) {
 			expressions.push(frame + index * 0.1);
 		}
-		template.update(expressions);
+		updateTemplate(template, expressions);
 	});
 });
 
@@ -59,7 +63,7 @@ describe("HTMLTemplate.update() — mixed change set", () => {
 	let frame = 0;
 	bench("one primitive changes per call (typical UI update)", () => {
 		frame++;
-		template.update(["title", "static", frame, "body", "footer"]);
+		updateTemplate(template, ["title", "static", frame, "body", "footer"]);
 	});
 });
 
@@ -70,7 +74,7 @@ describe("HTMLTemplate.update() — content slot: template <-> null", () => {
 
 	bench("toggle child template on/off (deleteNodesBetween + setup)", () => {
 		toggle = !toggle;
-		template.update([toggle ? inner : null]);
+		updateTemplate(template, [toggle ? inner : null]);
 	});
 });
 
@@ -82,7 +86,7 @@ describe("HTMLTemplate.update() — content slot: template shape swap", () => {
 
 	bench("alternate <p>${x}</p> <-> <span>${x}</span>", () => {
 		toggle = !toggle;
-		template.update([
+		updateTemplate(template, [
 			toggle ? html`<span>${"world"}</span>` : html`<p>${"hello"}</p>`,
 		]);
 	});
@@ -96,7 +100,9 @@ describe("HTMLTemplate.update() — content slot: same-shape re-render", () => {
 
 	bench("same template shape, expressions change (isSameTemplate hit)", () => {
 		counter++;
-		template.update([html`<p class="${`a-${counter}`}">${"hello"}</p>`]);
+		updateTemplate(template, [
+			html`<p class="${`a-${counter}`}">${"hello"}</p>`,
+		]);
 	});
 });
 
@@ -106,7 +112,7 @@ describe("HTMLTemplate.update() — comment slot: multi-expression", () => {
 
 	bench("3-expression comment concat (renderComment path)", () => {
 		counter++;
-		template.update([`a${counter}`, `b${counter}`, `c${counter}`]);
+		updateTemplate(template, [`a${counter}`, `b${counter}`, `c${counter}`]);
 	});
 });
 
@@ -127,7 +133,7 @@ describe("HTMLTemplate.update() — plain-object expression (hash-cache opportun
 
 	bench("5-key object, equal content, fresh reference every call", () => {
 		toggle = !toggle;
-		template.update([toggle ? reference5KeyA : reference5KeyB]);
+		updateTemplate(template, [toggle ? reference5KeyA : reference5KeyB]);
 	});
 
 	let changingCounter = 0;
@@ -135,7 +141,9 @@ describe("HTMLTemplate.update() — plain-object expression (hash-cache opportun
 		"5-key object, one value changes every call (real-change baseline)",
 		() => {
 			changingCounter++;
-			template.update([{ a: changingCounter, b: 2, c: 3, d: 4, e: 5 }]);
+			updateTemplate(template, [
+				{ a: changingCounter, b: 2, c: 3, d: 4, e: 5 },
+			]);
 		},
 	);
 });

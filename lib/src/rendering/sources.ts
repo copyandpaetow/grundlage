@@ -1,6 +1,6 @@
 import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/is-generator";
-import { HTMLTemplate } from "./template-html";
+import { HTMLTemplate, isTemplate } from "./template-html";
 
 /*
 the rendering pipeline is built around one struct: SourceHandle
@@ -230,7 +230,7 @@ const step = (
 //yield handler for current-source generators: yields are templates (or render functions returning templates)
 //=> nested generator functions are rejected. the root is the only layer that installs sources
 const currentGeneratorYield: YieldHandler = (handle, value) => {
-	if (value instanceof HTMLTemplate) {
+	if (isTemplate(value)) {
 		handle.render!(handle.context, handle, value);
 		return handle.host;
 	}

@@ -16,7 +16,14 @@ import {
 	throwIntoHandle,
 	YieldHandler,
 } from "./sources";
-import { HTMLTemplate } from "./template-html";
+import {
+	clearHostAttributes,
+	HTMLTemplate,
+	hydrateTemplate,
+	isTemplate,
+	setupTemplate,
+	updateTemplate,
+} from "./template-html";
 
 /*
 client runtime: hot path for everything after the initial paint (or for components that never went through SSR at all)
@@ -117,7 +124,7 @@ export const dispatchCSRUpdate = (runtime: CSRRuntime): void => {
 //=> anything else is returned as the yield expression's result (e.g. resolved value from a yielded Promise)
 const handleRootYield: YieldHandler = (rootHandle, value) => {
 	const runtime = rootHandle.context as CSRRuntime;
-	if (value instanceof HTMLTemplate) {
+	if (isTemplate(value)) {
 		if (runtime.currentHandle !== null) cancelHandle(runtime.currentHandle);
 		runtime.createCurrent = null;
 		runtime.currentIsGenerator = false;
@@ -205,7 +212,7 @@ const abortAndShowError: ErrorCallback = (context, error) => {
 //=> the handle param is unused on the client: CSR doesn't tear down on render, it patches in place or replaces children
 const renderRoot: RenderCallback = (context, _handle, value) => {
 	const runtime = context as CSRRuntime;
-	const template = value instanceof HTMLTemplate ? value : html`${value}`;
+	const template = isTemplate(value) ? value : html`${value}`;
 	const previousTemplate = runtime.renderedTemplate;
 
 	//bracket the observer only when this render could write to the host (swap cleanup or new host bindings); components without root templates pay nothing
@@ -223,7 +230,7 @@ const renderRoot: RenderCallback = (context, _handle, value) => {
 			previousTemplate.parsedHTML.templateHash ===
 				template.parsedHTML.templateHash
 		) {
-			previousTemplate.update(template.currentExpressions);
+			updateTemplate(previousTemplate, template.currentExpressions);
 			return;
 		}
 
@@ -231,13 +238,15 @@ const renderRoot: RenderCallback = (context, _handle, value) => {
 		runtime.renderedTemplate = template;
 		if (runtime.hydratePending) {
 			//hydrate re-hooks bindings onto the prerendered shadow tree; runs at most once per component
-			template.hydrate(runtime.host);
+			hydrateTemplate(template, runtime.host);
 			runtime.hydratePending = false;
 		} else {
 			//host attributes from the previous template don't get cleared by replaceChildren (they're on the host, not in the subtree). clean them up before setup writes the new template's host attrs
 			//optional chaining on shadowRoot covers `mode: "closed"`. the read returns null in closed mode, so we skip the write rather than crash
-			previousTemplate?.clearHostAttributes(runtime.host);
-			runtime.host.shadowRoot?.replaceChildren(template.setup(runtime.host));
+			if (previousTemplate) clearHostAttributes(previousTemplate, runtime.host);
+			runtime.host.shadowRoot?.replaceChildren(
+				setupTemplate(template, runtime.host),
+			);
 		}
 	} finally {
 		if (touchesHost) {

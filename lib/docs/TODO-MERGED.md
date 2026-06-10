@@ -8,20 +8,20 @@ are merged and noted.
 Durable rationale lives in `CONVENTIONS.md` and `docs/adr/`; this file is disposable and
 gets rewritten as items land.
 
-> **Bench-gate discipline (learned from VALUE_KIND).** Several items below add an allocation
+> **Bench-gate discipline (learned from `VALUE_KIND`).** Several items below add an allocation
 > or a comparison to a per-render or per-construction path to save work that is already cheap.
-> VALUE_KIND looked clean and **regressed** construction **+97%** / lists **+5–14%** because
+> `VALUE_KIND` looked clean and **regressed** construction **+97%** / lists **+5–14%** because
 > the cost landed on the `HTMLTemplate` constructor (every literal eval + every list item)
 > while the dispatch it bought came back within noise. **Rule:** every change must pay into at
 > least one axis — **performance or clarity** — and must **not regress the other**. A
-> clarity/consistency refactor that is perf-neutral is a _ship_ (clarity is the win); a perf
-> win that muddies the code is a _ship_ (perf is the win); when two shapes are equally
-> performant, the clearer one wins. What gets **rejected** is a _regression_ on the axis you
-> are not improving — VALUE_KIND traded clarity for a perf regression, so it lost. Any item
+> clarity/consistency refactor that is perf-neutral is a ship (clarity is the win); a perf
+> win that muddies the code is a ship (perf is the win); when two shapes are equally
+> performant, the clearer one wins. What gets **rejected** is a regression on the axis you
+> are not improving — `VALUE_KIND` traded clarity for a perf regression, so it lost. Any item
 > marked **`⟂bench-gate`** therefore needs a bench — gate it against the **construction /
 > list-reconciliation** benches, not just steady-state `update()`, and record the p75 deltas
-> (as the attribute object-diff and VALUE_KIND items already do) so "perf-neutral" is
-> _measured_, not assumed.
+> (as the attribute object-diff and `VALUE_KIND` items already do) so "perf-neutral" is
+> measured, not assumed.
 
 ---
 
@@ -181,8 +181,8 @@ neither leg of Rule 15's caveat holds — the **perf-veto** wins. Current inline
 - [ ] `[L]` **Stop mutating the user's list.** `renderList` mutates the user's list
       contents in place; reconcile without mutating user data (cost: an allocation — measure).
       Needs an alternative to the current user-data manipulation. **`⟂bench-gate`** — this is
-      the direct VALUE_KIND repeat: the copy lands per-render on the list path, exactly where
-      VALUE_KIND bled +5–14%. Gate on `list-reconciliation.bench.ts`; expect the allocation to
+      the direct `VALUE_KIND` repeat: the copy lands per-render on the list path, exactly where
+      `VALUE_KIND` bled +5–14%. Gate on `list-reconciliation.bench.ts`; expect the allocation to
       dominate. _(TODO.md list rendering + API-review "G" — same item.)_
 - [ ] `[L]` **Rule 11:** define the marker-pair range walk once; route
       `deleteNodesBetween`, `#findTargets`, `renderList` collection, and
@@ -195,21 +195,26 @@ neither leg of Rule 15's caveat holds — the **perf-veto** wins. Current inline
 
 - [ ] `[M]` **Rule 12:** normalize the binding index — give every binding `bindingIndex`,
       or drop it from `TagBinding` and pass the index.
-- [ ] `[L]` **Rule 3 + 4:** convert `HTMLTemplate` from class to struct + free functions
-      (`createTemplate`, `setupTemplate`, `updateTemplate`, …). `#hash` becomes a nullable
-      field; an `isTemplate` symbol brand replaces all 9 `instanceof HTMLTemplate` sites.
+- [x] `[L]` **Rule 3 + 4:** `HTMLTemplate` moved onto **free functions** _(done)_ —
+      `setupTemplate` / `updateTemplate` / `hydrateTemplate` / `hashTemplate` /
+      `clearHostAttributes` / `isTemplate`, with all 9 `instanceof` sites, 2 white-box tests,
+      and 6 benches ported. The type itself stayed a **data-only class** (fields + constructor,
+      no methods) rather than becoming a struct — see the bellwether outcome below.
 
-  **`⟂bench-gate` (construction path) — and the codebase-wide bellwether.** This rewrites the
-  sacred constructor: the symbol-brand check can deopt vs `instanceof` (less monomorphic) and
-  class→plain-object can drop V8's hidden-class fast path. Gate on `template-setup.bench.ts` /
-  construction, **not** just `update()`. **Consistency decision rides on this measurement.**
-  We want one data-structure idiom across the library, not a lone struct among classes.
-  `HTMLTemplate` is the hottest, most-constructed object we have, so it is the worst case for
-  struct conversion — if _it_ regresses meaningfully as a struct, that is evidence the
-  struct-conversion program is net-negative on this engine, and the remaining classes should
-  **stay classes** rather than each pay the same cost for the sake of the rule. Decide the
-  whole-codebase class-vs-struct direction from this number **before** converting any other
-  data structure (`ParsedHTML`, bindings, `SourceHandle`, …).
+  **Bellwether outcome (the consistency call).** A real struct was implemented and gated three
+  ways (symbol brand, numeric-field brand, no-guard). The brand check — _any_ form — measured
+  **~3.5× slower than `instanceof`** on the hot `hashValue` miss and recovered **none** of the
+  resulting object-hash regression; `instanceof` needs a prototype, i.e. a class. So the type
+  is a **data-only class** discriminated by `instanceof`, operated on by the free functions:
+  keeps the platform fast paths (`new`, `instanceof`), avoids duck-typing, and still gets the
+  Rule 3 call-style. Net vs the old class: **setup −4µs, list reconciliation faster, no real
+  regression** (the residual +19.6% "object value change" is ~41ns of timer quantization — its
+  identical twin recovered fully under `instanceof`). The struct-conversion program does **not**
+  extend here, but the **cold** structs (`CSRRuntime`, `SourceHandle`, pooled parser) are
+  unaffected and stay structs — the split is principled: a class only for the one type that is
+  hot, per-render-constructed, **and** sieved from arbitrary user values. Logged as a
+  **provisional Rule 3 exception** in `CONVENTIONS.md`; re-evaluate when a second template type
+  (`css\`\``) lands — two members make it a pattern or send it back to a struct + brand.
 
 ---
 

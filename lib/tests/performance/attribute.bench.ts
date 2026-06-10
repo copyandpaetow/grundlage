@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { describe } from "vitest";
 import { html } from "../../src/parser/html";
-import { HTMLTemplate } from "../../src/rendering/template-html";
+import {
+	HTMLTemplate,
+	setupTemplate,
+	updateTemplate,
+} from "../../src/rendering/template-html";
 import { bench } from "./bench-options";
 
 /*
@@ -27,7 +31,7 @@ const POOL_MASK = POOL_SIZE - 1;
 
 const renderOnce = (template: HTMLTemplate) => {
 	const host = document.createElement("div");
-	host.attachShadow({ mode: "open" }).appendChild(template.setup());
+	host.attachShadow({ mode: "open" }).appendChild(setupTemplate(template));
 	return template;
 };
 
@@ -37,7 +41,7 @@ describe("updateAttribute — single-expression value, static name", () => {
 
 	bench("class string changes every call", () => {
 		counter++;
-		template.update([`class-${counter}`]);
+		updateTemplate(template, [`class-${counter}`]);
 	});
 });
 
@@ -47,7 +51,7 @@ describe("updateAttribute — multi-expression concatenated value", () => {
 
 	bench("3-part class change (exercises bindingToString)", () => {
 		counter++;
-		template.update([`a${counter}`, `b${counter}`, `c${counter}`]);
+		updateTemplate(template, [`a${counter}`, `b${counter}`, `c${counter}`]);
 	});
 });
 
@@ -60,7 +64,7 @@ describe("updateAttribute — dynamic name + dynamic value", () => {
 	let counter = 0;
 
 	bench("name and value change every call", () => {
-		template.update(inputs[counter++ & POOL_MASK]);
+		updateTemplate(template, inputs[counter++ & POOL_MASK]);
 	});
 });
 
@@ -72,7 +76,7 @@ describe("updateAttribute — boolean expandable (single dynamic key)", () => {
 
 	bench("swap key disabled <-> readonly", () => {
 		toggle = !toggle;
-		template.update(toggle ? callB : callA);
+		updateTemplate(template, toggle ? callB : callA);
 	});
 });
 
@@ -85,7 +89,7 @@ describe("updateAttribute — boolean dynamic-name (concatenated)", () => {
 	let counter = 0;
 
 	bench("suffix changes every call", () => {
-		template.update(inputs[counter++ & POOL_MASK]);
+		updateTemplate(template, inputs[counter++ & POOL_MASK]);
 	});
 });
 
@@ -99,7 +103,7 @@ describe("updateAttribute — expandable array spread", () => {
 
 	bench("3-attr alternation (full add/remove cycle)", () => {
 		toggle = !toggle;
-		template.update(toggle ? callB : callA);
+		updateTemplate(template, toggle ? callB : callA);
 	});
 });
 
@@ -109,7 +113,7 @@ describe("updateAttribute — expandable object spread", () => {
 
 	bench("2-key object value change", () => {
 		counter++;
-		template.update([{ class: `c${counter}`, id: `i${counter}` }]);
+		updateTemplate(template, [{ class: `c${counter}`, id: `i${counter}` }]);
 	});
 });
 
@@ -126,7 +130,7 @@ describe("updateAttribute — expandable object spread, partial value change", (
 
 	bench("2-key object, one value stable + one flipping", () => {
 		toggle = !toggle;
-		template.update(toggle ? callB : callA);
+		updateTemplate(template, toggle ? callB : callA);
 	});
 });
 
@@ -146,7 +150,7 @@ describe("updateAttribute — expandable object spread, stable handler", () => {
 
 	bench("stable onclick + flipping class (listener stays attached)", () => {
 		toggle = !toggle;
-		template.update(toggle ? callB : callA);
+		updateTemplate(template, toggle ? callB : callA);
 	});
 });
 
@@ -160,7 +164,7 @@ describe("updateAttribute — event listener swap", () => {
 	let counter = 0;
 
 	bench("function reference replaced every call", () => {
-		template.update(handlerCalls[counter++ & POOL_MASK]);
+		updateTemplate(template, handlerCalls[counter++ & POOL_MASK]);
 	});
 });
 
@@ -170,7 +174,7 @@ describe("updateAttribute — complex (non-stringable) property", () => {
 
 	bench("object value change", () => {
 		counter++;
-		template.update([{ x: counter }]);
+		updateTemplate(template, [{ x: counter }]);
 	});
 });
 
@@ -209,7 +213,7 @@ describe("updateAttribute — expandable object spread, 10-key set, key flipping
 
 	bench("10-key spread, one key swapped (j <-> k), nine stable", () => {
 		toggle = !toggle;
-		template.update([toggle ? setB : setA]);
+		updateTemplate(template, [toggle ? setB : setA]);
 	});
 });
 
@@ -230,6 +234,6 @@ describe("updateAttribute — tag swap with stable multi-part attr (Tier 1.4 + 2
 	bench("tag flips span <-> div, class expressions stay (a, b, c)", () => {
 		toggle = !toggle;
 		const tag = toggle ? "div" : "span";
-		template.update([tag, "a", "b", "c", tag]);
+		updateTemplate(template, [tag, "a", "b", "c", tag]);
 	});
 });

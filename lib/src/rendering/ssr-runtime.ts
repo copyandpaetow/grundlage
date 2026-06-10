@@ -14,7 +14,7 @@ import {
 	SourceHandle,
 	YieldHandler,
 } from "./sources";
-import { HTMLTemplate } from "./template-html";
+import { hydrateTemplate, isTemplate, setupTemplate } from "./template-html";
 import { RUNTIME_KIND } from "../utils/constants";
 
 /*
@@ -73,7 +73,7 @@ export const teardownSSRRuntime = (runtime: SSRRuntime): void => {
 const handleRootYield: YieldHandler = (rootHandle, value) => {
 	const runtime = rootHandle.context as SSRRuntime;
 	if (runtime.done) return runtime.host;
-	if (value instanceof HTMLTemplate) {
+	if (isTemplate(value)) {
 		if (runtime.currentHandle !== null) cancelHandle(runtime.currentHandle);
 		runtime.currentHandle = installStaticSource(runtime, renderRoot, value);
 	} else if (typeof value === "function") {
@@ -109,13 +109,15 @@ const renderRoot: RenderCallback = (context, handle, value) => {
 	const runtime = context as SSRRuntime;
 	if (runtime.done) return;
 	runtime.done = true;
-	const template = value instanceof HTMLTemplate ? value : html`${value}`;
+	const template = isTemplate(value) ? value : html`${value}`;
 
 	//if the host already had a shadow root with content before construction, the prerender plugin attached it; hydrate. otherwise this is a fresh server render and we set up from scratch
 	if (runtime.host.shadowRoot?.firstChild) {
-		template.hydrate(runtime.host);
+		hydrateTemplate(template, runtime.host);
 	} else {
-		runtime.host.shadowRoot?.replaceChildren(template.setup(runtime.host));
+		runtime.host.shadowRoot?.replaceChildren(
+			setupTemplate(template, runtime.host),
+		);
 	}
 	flushHostPayload(runtime.host);
 
