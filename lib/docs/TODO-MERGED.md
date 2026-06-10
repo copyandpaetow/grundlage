@@ -193,8 +193,12 @@ neither leg of Rule 15's caveat holds — the **perf-veto** wins. Current inline
 
 ## Templates (`src/rendering/template-html.ts`, template-hash)
 
-- [ ] `[M]` **Rule 12:** normalize the binding index — give every binding `bindingIndex`,
-      or drop it from `TagBinding` and pass the index.
+- [x] `[M]` **Rule 12:** binding index normalized — **dropped** `bindingIndex` from
+      `TagBinding` _(done)_. The render path already passes the index positionally
+      (`updateTag` uses its `index` param), so position is the universal model and "none
+      carry it" is the symmetric reading. The lone reader was the parse-time `</${tag}>`
+      close mapping; it now derives the opener's slot via `bindings.indexOf` on that cold,
+      parse-once path instead of a stored field.
 - [x] `[L]` **Rule 3 + 4:** `HTMLTemplate` moved onto **free functions** _(done)_ —
       `setupTemplate` / `updateTemplate` / `hydrateTemplate` / `hashTemplate` /
       `clearHostAttributes` / `isTemplate`, with all 9 `instanceof` sites, 2 white-box tests,

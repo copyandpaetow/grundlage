@@ -266,7 +266,6 @@ const createBinding = (parser: ParserState) => {
 				values: [],
 				endValues: [],
 				relatedAttributes: [],
-				bindingIndex: parser.bindings.length, //we set this before the push so it matches the eventual index
 			} satisfies TagBinding;
 
 		default:
@@ -892,8 +891,9 @@ const parse = (
 				}
 				parser.activeBinding = opener;
 			}
+			//the opener was pushed before its own attribute bindings, so its slot is buried earlier in `bindings`, not at the tail — look it up so the close expression maps to the same binding the open does. cold path: only dynamic `</${tag}>` closes reach here, and parse output is cached per template shape
 			parser.expressionToBinding.push(
-				(parser.activeBinding as TagBinding).bindingIndex,
+				parser.bindings.indexOf(parser.activeBinding as TagBinding),
 			);
 		} else {
 			if (!parser.activeBinding) {
