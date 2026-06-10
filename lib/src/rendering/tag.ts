@@ -7,6 +7,9 @@ export const updateTag = (context: HTMLTemplate, index: number) => {
 	const element = context.targets[index] as Element;
 	const newTag = bindingToString(binding.values, context.currentExpressions);
 
+	//rebuilding into the same tag is a full createElement + attribute copy + child re-parent that also drops focus and selection, so repeating it for an unchanged name is pure waste. this fires most on the first flush, where every binding starts dirty and the parser's <div> placeholder already matches a `<${"div"}>`. a bare === stays cheaper than the rebuild it skips (a hash here would cost more than it saves; cf. the attribute array-diff rejection). localName is the lowercased tag, so common lowercase names take the fast path and any other case rebuilds as before
+	if (newTag === element.localName) return;
+
 	//we're about to replace the element with a freshly-created one. to the browser that's a remove + insert, which drops focus, selection, and similar live UI state
 	//=> if focus currently lives inside this element we remember it so we can restore it after the swap below
 	const focusRoot = element.getRootNode() as ShadowRoot | Document;

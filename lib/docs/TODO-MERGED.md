@@ -162,9 +162,13 @@ neither leg of Rule 15's caveat holds — the **perf-veto** wins. Current inline
 
 ## Tags (`src/rendering/tag.ts`)
 
-- [ ] `[M]` **Don't update a tag if it is identical.** **`⟂bench-gate`** — a guard only wins
-      if the compare is cheaper than the tag update it skips (cf. the array-diff rejection
-      below). Cheap if a bare `===`; a regression if it hashes. _(TODO.md tags.)_
+- [x] `[M]` **Don't update a tag if it is identical** _(done)_ — `updateTag` now bails on
+      `newTag === element.localName` before any rebuild. Bare `===` as the bench-gate
+      demanded (no hash). **Gate (two runs):** the identical-tag setup path (`<${"div"}>`
+      resolving to the parser's `<div>` placeholder, static attrs + 5 children) is
+      **−42% / −41.7%**; every changing-tag swap bench stayed within the ±5% noise floor, so
+      the guard's cost where it misses is below measurement. Side benefit: a same-name
+      re-render no longer destroys focus/selection. Added a setup bench for the hit path.
 - [ ] `[L]` **Restoring an element drops all internal state** (its own and its
       children's): event listeners, focus, scroll positions, animation progress. Restore as
       faithfully as possible. _(TODO.md tags.)_

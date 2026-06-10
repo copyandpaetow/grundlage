@@ -63,6 +63,20 @@ describe("updateTag — element wrapping static children", () => {
 	});
 });
 
+describe("updateTag — first flush resolves to the placeholder tag", () => {
+	// dynamic tags emit a <div> placeholder; a tag that resolves to "div" matches what
+	// is already mounted, so the identical-tag guard skips the placeholder rebuild
+	// (createElement + attribute copy + child re-parent) the first flush would run
+	bench("setup <${'div'}> with static attrs + 5 children", () => {
+		const template = html`
+			<${"div"} class="box" id="main" role="presentation">
+				<em>a</em><em>b</em><em>c</em><em>d</em><em>e</em>
+			</${"div"}>`;
+		const host = document.createElement("div");
+		host.attachShadow({ mode: "open" }).appendChild(setupTemplate(template));
+	});
+});
+
 describe("updateTag — element with related dynamic attribute", () => {
 	const template = renderOnce(html`<${"span"} class="${"a"}">x</${"span"}>`);
 	let toggle = false;
