@@ -7,23 +7,24 @@ import {
 	ComponentOptions,
 	Template,
 } from "./types";
-import { defaultOptions, RUNTIME_KIND, UPDATE_STATE } from "./utils/constants";
+import { defaultOptions } from "./utils/constants";
 import { isServer } from "./utils/is-server";
+import { createPainter, Painter, teardownPainter } from "./rendering/painter";
 import {
-	createSSRRuntime,
-	reportSSRError,
-	SSRRuntime,
-	startSSRRoot,
-	teardownSSRRuntime,
-} from "./rendering/ssr-runtime";
+	createRenderState,
+	finishUpdate,
+	RenderState,
+	startOuterGenerator,
+	teardownRenderState,
+	writeToDom,
+	writeToServerDom,
+} from "./rendering/generator-layer";
 import {
-	createCSRRuntime,
-	CSRRuntime,
-	dispatchCSRUpdate,
-	reportCSRError,
-	startCSRRoot,
-	teardownCSRRuntime,
-} from "./rendering/csr-runtime";
+	createScheduler,
+	resetScheduler,
+	runFlushLoop,
+	Scheduler,
+} from "./rendering/scheduler";
 import { FormBase } from "./forms/form-base";
 
 export { props } from "./validator/props";
@@ -59,30 +60,51 @@ export const render = (
 		: HTMLElement;
 
 	class BaseElement extends ParentClass implements BaseComponent {
-		#runtime: CSRRuntime | SSRRuntime;
+		//capabilities held as struct fields (Scheduler → RenderState → Painter, acyclic). #renderState/#scheduler
+		//are null between disconnect and the next connect — and that null IS the disconnected state
+		//update() guards on (C6). #painter is kept across a reconnect for DOM continuity (its
+		//renderedTemplate lets the first render after reconnect patch in place)
+		#painter: Painter | null = null;
+		//ONE RenderState for both modes (the server is the client minus the scheduler); the factory picks
+		//the writeToDom strategy. null between disconnect and the next connect
+		#renderState: RenderState | null = null;
+		//client-only: the #1-batching coordinator. stays null on the server — and that null IS update()'s
+		//SSR/disconnected no-op guard (C6)
+		#scheduler: Scheduler | null = null;
+		//true when an SSR shadow root was already attached at construction; consumed by the first paint.
+		//captured here (not derived in connectedCallback) because it reads `this.shadowRoot !== null`
+		//BEFORE the constructor's attachShadow makes that always-true
+		#hydratePending: boolean;
 
 		constructor() {
 			super();
 			//if a shadow root already exists, the prerender plugin attached it before upgrade. we'll hydrate into it on the first render
 			const prerendered = this.shadowRoot !== null;
 			if (!prerendered) this.attachShadow(options);
-			this.#runtime = isServer()
-				? createSSRRuntime(this)
-				: createCSRRuntime(this, prerendered);
+			this.#hydratePending = prerendered;
 		}
 
 		connectedCallback() {
 			//moving an element in the DOM fires disconnectedCallback then connectedCallback
-			//=> if the root is already running we bail out so the move doesn't restart the component from scratch
-			if (this.#runtime.rootHandle !== null) return;
-			//on the server we render once and cancel. no observer needed; the CSR renderTemplate guards its disconnect/observe with optional chaining to match
-			if (this.#runtime.kind === RUNTIME_KIND.CSR) this.#watchAttributes();
-
-			if (this.#runtime.kind === RUNTIME_KIND.CSR) {
-				startCSRRoot(this.#runtime, componentGenerator);
-			} else {
-				startSSRRoot(this.#runtime, componentGenerator);
+			//=> if the generator lifetime is already live we bail so a move doesn't restart it from scratch
+			if (this.#renderState !== null) return;
+			//server-vs-client is decided here, at connect (a local, not a field): it gates only this
+			//method's wiring and is never read again across the element's lifetime
+			const onServer = isServer();
+			//keep #painter across a reconnect (DOM continuity); build a FRESH generation of render state (and,
+			//on the client, scheduler) every connect — distinct struct identity is what makes
+			//restart-on-reconnect safe
+			this.#painter ??= createPainter(this, this.#hydratePending);
+			//the server paints once and never re-runs: no attribute observer, no scheduler
+			if (!onServer) {
+				this.#watchAttributes();
+				this.#scheduler = createScheduler();
 			}
+			this.#renderState = createRenderState(
+				this.#painter,
+				onServer ? writeToServerDom : writeToDom,
+			);
+			startOuterGenerator(this.#renderState, componentGenerator);
 		}
 
 		async disconnectedCallback() {
@@ -90,11 +112,15 @@ export const render = (
 			//=> wait a tick and bail if we're back so the move doesn't trigger a teardown
 			await Promise.resolve();
 			if (this.isConnected) return;
-			if (this.#runtime.kind === RUNTIME_KIND.CSR) {
-				teardownCSRRuntime(this.#runtime);
-			} else {
-				teardownSSRRuntime(this.#runtime);
-			}
+			if (this.#renderState === null) return; //already torn down (or never connected)
+			teardownPainter(this.#painter!);
+			teardownRenderState(this.#renderState);
+			finishUpdate(this.#renderState); //unstick any pending `await update()` (a no-op on the server)
+			if (this.#scheduler !== null) resetScheduler(this.#scheduler);
+			//reassign-to-null: the next connect builds a fresh generation. only #painter survives — never
+			//reuse #renderState/#scheduler across generations (that would break generational isolation)
+			this.#renderState = null;
+			this.#scheduler = null;
 		}
 
 		setProperty(name: string, value: unknown, oldValue?: unknown) {
@@ -103,46 +129,29 @@ export const render = (
 		}
 
 		#watchAttributes() {
-			//SSR runtime has no observer field; this method only runs for CSR (gated in connectedCallback)
-			const runtime = this.#runtime as Extract<
-				CSRRuntime | SSRRuntime,
-				{ kind: typeof RUNTIME_KIND.CSR }
-			>;
-			runtime.attributeObserver?.disconnect();
+			this.#painter!.attributeObserver?.disconnect();
 			const observer = new MutationObserver(() => this.update());
 			observer.observe(this, { attributes: true });
-			runtime.attributeObserver = observer;
+			this.#painter!.attributeObserver = observer;
 		}
 
-		async update() {
-			const runtime = this.#runtime;
-			//SSR has no update path; the first yield is final. without this guard a cached render-function source would re-run, and a user microtask scheduling update() from inside the render fn would loop forever
-			if (runtime.kind !== RUNTIME_KIND.CSR) return;
-			if (
-				runtime.createCurrent === null ||
-				runtime.updateState !== UPDATE_STATE.IDLE ||
-				!this.isConnected
-			) {
-				return;
+		update(): Promise<void> {
+			//the null-guard IS the C6 contract: no scheduler ⇒ SSR or disconnected ⇒ no-op resolve, so
+			//`await update()` never hangs. a static current (currentRenderer null) has nothing to re-run
+			if (this.#scheduler === null) return Promise.resolve();
+			if (this.#renderState!.currentRenderer === null) return Promise.resolve();
+			//the coalescing gate (this batch's only branch): ride an open flush, or open one. a call
+			//arriving mid-flight just flags dirty so runFlushLoop reflushes once with a fresh pull (C2–C4).
+			//runFlushLoop owns the await-null window + the async-spanning settle contract (ADR-0003)
+			const scheduler = this.#scheduler;
+			if (scheduler.flushPromise !== null) {
+				scheduler.dirty = true;
+				return scheduler.flushPromise;
 			}
-			runtime.updateState = UPDATE_STATE.SCHEDULED;
-			//wait to batch repeated update calls
-			await Promise.resolve();
-			runtime.updateState = UPDATE_STATE.RENDERING;
-
-			try {
-				dispatchCSRUpdate(runtime);
-			} catch (error) {
-				if (runtime.kind === RUNTIME_KIND.CSR) {
-					reportCSRError(runtime, error as Error);
-				} else {
-					reportSSRError(runtime, error as Error);
-				}
-			} finally {
-				//reportError can re-enter user code (via throwIntoHandle delivering to the root generator) and that user code can throw again
-				//=> reset updateState in finally so a throw on the way out can't leave it stuck non-IDLE, which would make every future update() bail at the guard above
-				runtime.updateState = UPDATE_STATE.IDLE;
-			}
+			return (scheduler.flushPromise = runFlushLoop(
+				scheduler,
+				this.#renderState!,
+			));
 		}
 	}
 

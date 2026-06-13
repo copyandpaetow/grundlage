@@ -819,35 +819,39 @@ describe("inner generator post-yield work and cancellation", () => {
 	});
 });
 
-// The website's generator-nesting demo (and any inner async generator with
-// post-yield work) hits this pattern: user calls update() while an inner
-// async generator is parked at an await. Today, #restartGenerator reuses the
-// same source object and resets terminated=false. The cancelled generator's queued
-// return eventually resolves and re-enters advanceGenerator() on that same source —
-// and can mark the freshly restarted source terminated before its second yield lands.
+// The website's generator-nesting demo (and any inner async generator with post-yield work)
+// hits this pattern: update() supersedes an inner async generator while it is parked at an
+// await. Per the model, the stopped run's queued resumption must go nowhere — a superseded run
+// checks "am I still alive?" before resuming, so its late async work can neither paint stale
+// markup nor signal "done" for the live run. update() itself resolves on the FRESH run reaching
+// its end (ADR-0003 / rendering-cycle.md: "the fresh run has finished"), so these tests drive the
+// timeline by hand — not awaiting update() across a still-parked run, which would (correctly) not
+// resolve until that run completes.
 describe("rapid restart with in-flight inner async work", () => {
-	test("late resolution of cancelled inner await must not silence the restarted generator's later yields", async () => {
+	test("a superseded inner run's late await neither paints nor silences the live run", async () => {
 		const tag = uniqueTag("restart-stale-resolution");
-		let resolveOldAwait: (() => void) | null = null;
+		let releaseOld!: () => void;
+		let releaseLive!: () => void;
 		let attempt = 0;
 
 		const ComponentClass = render(function* () {
 			yield async function* () {
 				const id = ++attempt;
 				if (id === 1) {
-					yield () => html`<span>attempt-${id}</span>`;
+					yield () => html`<span>attempt-1</span>`;
 					await new Promise<void>((resolve) => {
-						resolveOldAwait = resolve;
+						releaseOld = resolve;
 					});
-					// Cancelled before this lands.
-					yield () => html`<span>attempt-${id}-late</span>`;
+					// cancelled before this lands
+					yield () => html`<span>attempt-1-late</span>`;
 				} else {
-					// Second attempt does its own async work AFTER its first
-					// yield. The window between this yield and the second yield
-					// is when the cancelled gen1's queued return can fire.
-					yield () => html`<span>attempt-${id}-first</span>`;
-					await new Promise((resolve) => setTimeout(resolve, 20));
-					yield () => html`<span>attempt-${id}-second</span>`;
+					// the live run does its own async work BETWEEN its two yields — the window in
+					// which the superseded run's late resolution could wrongly silence it
+					yield () => html`<span>attempt-2-first</span>`;
+					await new Promise<void>((resolve) => {
+						releaseLive = resolve;
+					});
+					yield () => html`<span>attempt-2-second</span>`;
 				}
 			};
 		});
@@ -859,19 +863,25 @@ describe("rapid restart with in-flight inner async work", () => {
 			"attempt-1",
 		);
 
-		// Restart while gen1 is parked at its await.
-		await element.update();
+		// supersede gen1 (now stopped, parked at its await) with gen2. update() resolves on the
+		// fresh run's completion, so hold the promise — gen2 is still mid-flight at its own await
+		const flush = element.update();
 		await sleep();
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
 			"attempt-2-first",
 		);
 
-		// Resolve gen1's await: its queued return now drives the shared source.
-		// If the bug is present, this flips source.terminated=true on gen2's source,
-		// and gen2's next yield (attempt-2-second) is silently dropped.
-		resolveOldAwait?.();
-		await sleep(40);
+		// gen1's late await fires while gen2 is parked between its yields. it must not paint
+		// "attempt-1-late", and must not stop gen2 from landing its second yield
+		releaseOld();
+		await sleep();
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"attempt-2-first",
+		);
 
+		// gen2 runs on to its end; the flush resolves there (completion contract)
+		releaseLive();
+		await flush;
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
 			"attempt-2-second",
 		);
@@ -879,27 +889,32 @@ describe("rapid restart with in-flight inner async work", () => {
 		element.remove();
 	});
 
-	test("multiple stacked restarts: each cancelled generator's late resolution is contained", async () => {
-		// Second-order version of the same bug. After two restarts, two
-		// cancelled generators both have queued returns parked behind awaits
-		// that share a single resolution channel. When they resolve, both fire
-		// advanceGenerator(source, ...) on the current (third) source.
+	test("a superseded run's late await stays contained across a coalesced reflush", async () => {
+		// The serialization makes the old "two stacked live restarts" shape unreachable: a
+		// mid-flight update() coalesces into ONE reflush (with a fresh pull), it does not spawn a
+		// second concurrent run. So the superseded mount run stays parked across the WHOLE batch
+		// (initial render -> reflush). When its late await finally fires it must paint nothing and
+		// disturb neither the reflush nor its freshly pulled state.
 		const tag = uniqueTag("restart-stacked");
-		let resolveAll: Array<() => void> = [];
+		let releaseOld!: () => void;
+		let phase = "first";
 		let attempt = 0;
 
 		const ComponentClass = render(function* () {
 			yield async function* () {
 				const id = ++attempt;
-				yield () => html`<span>attempt-${id}-first</span>`;
-				if (id < 3) {
+				if (id === 1) {
+					yield () => html`<span>mount</span>`;
 					await new Promise<void>((resolve) => {
-						resolveAll.push(resolve);
+						releaseOld = resolve;
 					});
-					yield () => html`<span>attempt-${id}-late</span>`;
+					// cancelled before this lands
+					yield () => html`<span>mount-late</span>`;
 				} else {
-					await new Promise((resolve) => setTimeout(resolve, 20));
-					yield () => html`<span>attempt-${id}-second</span>`;
+					// later runs read fresh state and complete promptly
+					const snapshot = phase;
+					await sleep(10);
+					yield () => html`<span>${snapshot}</span>`;
 				}
 			};
 		});
@@ -907,22 +922,26 @@ describe("rapid restart with in-flight inner async work", () => {
 
 		const element = mount(tag) as InstanceType<typeof ComponentClass>;
 		await sleep();
-		await element.update();
-		await sleep();
-		await element.update();
-		await sleep();
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-3-first",
+			"mount",
 		);
 
-		// Drain the cancelled generators' awaits. Each queued return fires
-		// advanceGenerator() on the shared source — gen3 must survive both.
-		for (const resolve of resolveAll) resolve();
-		await sleep(40);
+		// open a batch that supersedes the parked mount run, then a mid-flight update that
+		// coalesces into exactly one reflush carrying the latest state
+		phase = "second";
+		const flush = element.update();
+		await sleep(); // gen2 ("second") is mid-flight at its await
+		phase = "third";
+		element.update(); // RENDERING -> sets dirty, reflushes once after gen2 completes
 
+		// the superseded mount run's late await fires while the batch is still in flight
+		releaseOld();
+
+		await flush; // resolves after the reflushed run ("third") lands
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-3-second",
+			"third",
 		);
+		expect(element.shadowRoot?.textContent).not.toContain("mount-late");
 
 		element.remove();
 	});

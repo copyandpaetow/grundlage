@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe } from "vitest";
 import { html } from "../../src/parser/html";
-import { HTMLTemplate } from "../../src/rendering/template-html";
+import { HTMLTemplate, setupTemplate } from "../../src/rendering/template-html";
 import { BaseComponent } from "../../src/types";
 import { bench } from "./bench-options";
 
@@ -15,7 +15,7 @@ setup() runs on every component mount and every list-item insert, so movement he
 
 const mountInShadow = (template: HTMLTemplate) => {
 	const host = document.createElement("div");
-	host.attachShadow({ mode: "open" }).appendChild(template.setup());
+	host.attachShadow({ mode: "open" }).appendChild(setupTemplate(template));
 	return template;
 };
 
@@ -86,7 +86,7 @@ describe("HTMLTemplate.setup() — TreeWalker-skip opportunities (Tier 1.1)", ()
 		host.attachShadow({ mode: "open" });
 		const template = html`<template class="card"><slot></slot></template>`;
 		host.shadowRoot!.appendChild(
-			template.setup(host as unknown as BaseComponent),
+			setupTemplate(template, host as unknown as BaseComponent),
 		);
 	});
 });

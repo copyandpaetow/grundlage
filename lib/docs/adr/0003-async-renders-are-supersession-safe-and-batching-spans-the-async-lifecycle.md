@@ -1,7 +1,7 @@
 # Async renders are supersession-safe; batching spans the whole async lifecycle
 
 Renders may be asynchronous — first-class promises, sync generators that `yield` a Promise,
-and async generators are all supported producers (`src/rendering/sources.ts`). We do **not**
+and async generators are all supported producers (`src/rendering/generator-layer.ts`). We do **not**
 forbid `await` inside a render to make scheduling simpler. Instead, two scheduler invariants
 keep an async render predictable: a stale async render can never land, and `update()`'s
 batching/await contract spans the async render to completion rather than stopping at the

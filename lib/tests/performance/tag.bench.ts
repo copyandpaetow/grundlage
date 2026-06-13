@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { describe } from "vitest";
 import { html } from "../../src/parser/html";
-import { HTMLTemplate } from "../../src/rendering/template-html";
+import {
+	HTMLTemplate,
+	setupTemplate,
+	updateTemplate,
+} from "../../src/rendering/template-html";
 import { bench } from "./bench-options";
 
 /*
@@ -12,7 +16,7 @@ import { bench } from "./bench-options";
 
 const renderOnce = (template: HTMLTemplate) => {
 	const host = document.createElement("div");
-	host.attachShadow({ mode: "open" }).appendChild(template.setup());
+	host.attachShadow({ mode: "open" }).appendChild(setupTemplate(template));
 	return template;
 };
 
@@ -23,7 +27,7 @@ describe("updateTag — minimal element (no attrs, no children)", () => {
 	bench("swap span <-> div", () => {
 		toggle = !toggle;
 		const tag = toggle ? "div" : "span";
-		template.update([tag, tag]);
+		updateTemplate(template, [tag, tag]);
 	});
 });
 
@@ -36,7 +40,7 @@ describe("updateTag — element with static attrs", () => {
 	bench("swap with 3 static attrs (attribute migration loop)", () => {
 		toggle = !toggle;
 		const tag = toggle ? "div" : "span";
-		template.update([tag, tag]);
+		updateTemplate(template, [tag, tag]);
 	});
 });
 
@@ -55,7 +59,21 @@ describe("updateTag — element wrapping static children", () => {
 	bench("swap parent of 5 children (firstChild re-parenting loop)", () => {
 		toggle = !toggle;
 		const tag = toggle ? "div" : "span";
-		template.update([tag, tag]);
+		updateTemplate(template, [tag, tag]);
+	});
+});
+
+describe("updateTag — first flush resolves to the placeholder tag", () => {
+	// dynamic tags emit a <div> placeholder; a tag that resolves to "div" matches what
+	// is already mounted, so the identical-tag guard skips the placeholder rebuild
+	// (createElement + attribute copy + child re-parent) the first flush would run
+	bench("setup <${'div'}> with static attrs + 5 children", () => {
+		const template = html`
+			<${"div"} class="box" id="main" role="presentation">
+				<em>a</em><em>b</em><em>c</em><em>d</em><em>e</em>
+			</${"div"}>`;
+		const host = document.createElement("div");
+		host.attachShadow({ mode: "open" }).appendChild(setupTemplate(template));
 	});
 });
 
@@ -68,6 +86,6 @@ describe("updateTag — element with related dynamic attribute", () => {
 		toggle = !toggle;
 		counter++;
 		const tag = toggle ? "div" : "span";
-		template.update([tag, `class-${counter}`, tag]);
+		updateTemplate(template, [tag, `class-${counter}`, tag]);
 	});
 });

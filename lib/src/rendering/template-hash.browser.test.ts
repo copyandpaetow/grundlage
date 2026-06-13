@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { render } from "../index";
-//white-box test of HTMLTemplate.hash, so we use the internal parser export (real type) rather than the opaque public html
+//white-box test of the template hash, so we use the internal parser export (real type) rather than the opaque public html
 import { html } from "../parser/html";
+import { hashTemplate } from "./template-html";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -10,25 +11,25 @@ describe("HTMLTemplate.hash", () => {
 	test("is stable for identical expressions", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<p>${"a"}</p>`;
-		expect(template1.hash).toBe(template2.hash);
+		expect(hashTemplate(template1)).toBe(hashTemplate(template2));
 	});
 
 	test("changes when expressions change", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<p>${"b"}</p>`;
-		expect(template1.hash).not.toBe(template2.hash);
+		expect(hashTemplate(template1)).not.toBe(hashTemplate(template2));
 	});
 
 	test("differs between templates with different structure but same expressions", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<div>${"a"}</div>`;
-		expect(template1.hash).not.toBe(template2.hash);
+		expect(hashTemplate(template1)).not.toBe(hashTemplate(template2));
 	});
 
 	test("is stable across repeated reads on the same instance", () => {
 		const template = html`<p class="${"x"}">${"y"}</p>`;
-		const first = template.hash;
-		const second = template.hash;
+		const first = hashTemplate(template);
+		const second = hashTemplate(template);
 		expect(first).toBe(second);
 	});
 
@@ -41,7 +42,11 @@ describe("HTMLTemplate.hash", () => {
 		const template1 = html`<div style="width:${50.1}%"></div>`;
 		const template2 = html`<div style="width:${50.10001}%"></div>`;
 		const template3 = html`<div style="width:${50.2}%"></div>`;
-		const hashes = new Set([template1.hash, template2.hash, template3.hash]);
+		const hashes = new Set([
+			hashTemplate(template1),
+			hashTemplate(template2),
+			hashTemplate(template3),
+		]);
 		expect(hashes.size).toBe(3);
 	});
 });

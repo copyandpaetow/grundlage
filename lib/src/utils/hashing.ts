@@ -1,4 +1,4 @@
-import { HTMLTemplate } from "../rendering/template-html";
+import { hashTemplate, isTemplate } from "../rendering/template-html";
 
 export const stringHash = (str: string): number => {
 	let hash = 0;
@@ -25,7 +25,7 @@ export const hashValue = (value: unknown): number => {
 		return (Math.imul(floatIntView[0], 31) + floatIntView[1]) | 0;
 	}
 	if (typeof value === "boolean") return value ? 1 : 0;
-	if (value instanceof HTMLTemplate) return value.hash;
+	if (isTemplate(value)) return hashTemplate(value);
 
 	if (Array.isArray(value)) {
 		let hash = value.length;

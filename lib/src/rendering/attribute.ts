@@ -1,8 +1,14 @@
-import { ATTRIBUTE_NAME_KIND, ATTRIBUTE_SHAPE, AttributeBinding, ValueOf } from "../parser/types";
+import {
+	ATTRIBUTE_NAME_KIND,
+	ATTRIBUTE_SHAPE,
+	AttributeBinding,
+	ValueOf,
+} from "../parser/types";
 import { BaseComponent } from "../types";
 import { bindingToString } from "../utils/binding-to-string";
 import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
 import { isPlainObject } from "../utils/validators";
+import { EMPTY_EXPRESSIONS } from "./empty-expressions";
 import { HTMLTemplate } from "./template-html";
 
 //event-handler attributes always start with "on" (onclick, onsubmit, …)
@@ -120,7 +126,7 @@ const removeExpandable = (
 	binding: AttributeBinding,
 	expressions: Array<unknown>,
 ) => {
-	const value = expressions[binding.keys[0] as number];
+	const value = expressions[binding.values[0] as number];
 	if (Array.isArray(value)) {
 		for (let index = 0; index < value.length; index++) {
 			applyAttributeBinding(element, value[index], null);
@@ -221,7 +227,7 @@ const staticNameSingleValueAttr: AttributeShapeHandler = {
 		const element = context.targets[index] as Element;
 		const expressionIndex = binding.values[0] as number;
 		const previousExpression =
-			context.previousExpressions.length > 0
+			context.previousExpressions !== EMPTY_EXPRESSIONS
 				? context.previousExpressions[expressionIndex]
 				: undefined;
 		applyAttributeBinding(
@@ -270,7 +276,7 @@ const dynamicNameBooleanAttr: AttributeShapeHandler = {
 			context.currentExpressions,
 		);
 		//on initial render the previous name equals the current name by construction, so we only spend a second bindingToString allocation on real updates
-		if (context.previousExpressions.length > 0) {
+		if (context.previousExpressions !== EMPTY_EXPRESSIONS) {
 			const previousName = bindingToString(
 				binding.keys,
 				context.previousExpressions,
@@ -294,7 +300,7 @@ const dynamicNameSingleValueAttr: AttributeShapeHandler = {
 			binding.keys,
 			context.currentExpressions,
 		);
-		const hasPrevious = context.previousExpressions.length > 0;
+		const hasPrevious = context.previousExpressions !== EMPTY_EXPRESSIONS;
 		const previousExpression = hasPrevious
 			? context.previousExpressions[expressionIndex]
 			: undefined;
@@ -333,7 +339,7 @@ const dynamicNameMultiValueAttr: AttributeShapeHandler = {
 			binding.keys,
 			context.currentExpressions,
 		);
-		if (context.previousExpressions.length > 0) {
+		if (context.previousExpressions !== EMPTY_EXPRESSIONS) {
 			const previousName = bindingToString(
 				binding.keys,
 				context.previousExpressions,
@@ -357,11 +363,11 @@ const expandableAttr: AttributeShapeHandler = {
 	write: (context, index) => {
 		const binding = context.parsedHTML.bindings[index] as AttributeBinding;
 		const element = context.targets[index] as Element;
-		const slot = binding.keys[0] as number;
+		const slot = binding.values[0] as number;
 		const current = context.currentExpressions[slot];
 
 		//first render: nothing was applied before, so there is nothing to diff against — apply everything
-		if (context.previousExpressions.length === 0) {
+		if (context.previousExpressions === EMPTY_EXPRESSIONS) {
 			applyExpandable(element, current);
 			return;
 		}

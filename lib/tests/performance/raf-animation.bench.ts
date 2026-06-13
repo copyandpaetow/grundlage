@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe } from "vitest";
 import { html } from "../../src/parser/html";
-import { HTMLTemplate } from "../../src/rendering/template-html";
+import { HTMLTemplate, setupTemplate } from "../../src/rendering/template-html";
 import { bench } from "./bench-options";
 
 /*
@@ -17,7 +17,7 @@ the single-bar-row bench isolates the per-item .update() cost from the surroundi
 
 const renderOnce = (template: HTMLTemplate) => {
 	const host = document.createElement("div");
-	host.attachShadow({ mode: "open" }).appendChild(template.setup());
+	host.attachShadow({ mode: "open" }).appendChild(setupTemplate(template));
 	return template;
 };
 

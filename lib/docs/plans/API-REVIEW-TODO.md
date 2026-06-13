@@ -14,28 +14,23 @@ Actionable changes that came out of the API grilling session. Design rationale l
   `prop` vocabulary, singular because it writes one). Breaking; pre-1.0. Touch:
   `src/index.ts` method, `src/types.ts` `BaseComponent`, tests, benches, `website/`.
 
-- [ ] **Make the `update()` state machine span the whole async render, not just the
-  synchronous dispatch window.** See ADR-0003. Today `update()` in `src/index.ts` sets
-  `RENDERING`, calls `dispatchCSRUpdate` *synchronously*, and flips back to `IDLE` in
-  `finally` — but `dispatchCSRUpdate` returns the moment the driver (`sources.ts` `step`)
-  suspends on a Promise, so `updateState` goes `IDLE` while an **async** render is still
-  in flight. Two consequences to fix:
-    - **Await resolves too early for every async render** (not just coalesced calls): the
-      promise settles when the synchronous slice returns, not when the async DOM lands.
-      56 call sites `await update()`; this is the flaky-test source.
-    - **Coalescing doesn't span async flight**: during an in-flight async render
-      `updateState` is already `IDLE`, so the next `update()` re-fires and *supersedes* —
-      correct result (the `handle.finished` guard prevents stale commits) but it is
-      restart-churn, not batching.
-      Fix (surface unchanged): the state machine must track the source's **settle** signal,
-      not the synchronous return of `dispatchCSRUpdate`. `IDLE → SCHEDULED` (queue microtask,
-      return shared `flushPromise`); `SCHEDULED → ` return the same promise (coalesce, as
-      today); `RENDERING → ` set a `dirty` bit and return the same promise (do **not** drop,
-      do **not** restart). On settle: if `dirty`, re-run once with a fresh pull (coalescing
-      everything that arrived mid-flight); else `IDLE` and resolve `flushPromise`. The
-      driver-level supersession (`handle.finished`) stays as the safety net for *external*
-      source swaps. Contract to ratify: "`update()` resolves once the DOM reflects this call,
-      coalescing with any concurrent update, across sync **and** async renders."
+- [x] **Make the `update()` state machine span the whole async render, not just the
+  synchronous dispatch window.** See ADR-0003. **Done.** The driver (`sources.ts`) now
+  fires a one-shot `onSettle` at each natural/error terminal point (not on `cancelHandle` —
+  supersession stays runtime-driven). The runtime (`csr-runtime.ts`) carries
+  `dirty`/`flushPromise`/`resolveFlush`/`driving` and owns the machine via `scheduleFlush`
+  → `runFlush` → `finishFlush` + `handleSourceSettle`: `IDLE → SCHEDULED` (microtask,
+  shared `flushPromise`); `SCHEDULED` returns the same promise; `RENDERING` sets `dirty`
+  and returns the same promise (no restart). On settle, one reflush if `dirty` (fresh
+  pull), else `IDLE` + resolve. `update()` in `src/index.ts` collapsed to guards +
+  `scheduleFlush`. **Settle = source completion** (chosen): `await update()` on a
+  never-returning generator never resolves (released by disconnect/supersession). **No
+  reflush loop guard** (chosen): a render that unconditionally re-updates loops the
+  microtask queue (user error), bounded only by `dirty` being one bit. Driver-level
+  supersession (`handle.finished`) stays the safety net for external source swaps. Tests:
+  `tests/integration/update-scheduling.browser.test.ts`; redundant `await sleep()` crutches
+  dropped from `async.browser.test.ts`; rapid-restart `nested-generators` tests reframed to
+  the coalesce-don't-restart contract.
 
 - [ ] **Warn on SSR `load` replay drift.** Unkeyed `load` replays positionally (client
   consumes `data-ssr` scripts in DOM order). We must assume **conditional / nested
@@ -66,15 +61,16 @@ Actionable changes that came out of the API grilling session. Design rationale l
 
 - **should the functions for the event handlers be passed down as props as well?**
 
-- **Re-entrant `update()` during a render: defer how far?** An `update()` fired while
-  `updateState === RENDERING` currently hits the `!== IDLE` shortcut and is **dropped**.
-  The async-spanning rework above changes this: a mid-flight `update()` sets the `dirty`
-  bit and re-runs after settle (defer, not drop). That answers the *missed-update* half —
-  but reopens the *infinite-loop* half: a render that **always** calls `update()` would
-  set `dirty` on every settle and re-run forever. So the remaining decision is whether a
-  render-time `update()` is legal at all (it is a side effect during what should be a
-  pull) and, if so, whether the `dirty` reflush needs a same-frame loop guard. Decide
-  alongside ADR-0003's implementation; see the rework item above.
+- **Re-entrant `update()` during a render: defer how far?** ✅ **Resolved** with the
+  ADR-0003 implementation. A mid-flight `update()` sets `dirty` and triggers exactly one
+  deferred reflush after settle (defer, not drop) — the *missed-update* half. For the
+  *infinite-loop* half we chose **no loop guard**: a render-time `update()` is legal, but
+  because `dirty` is a single bit each settle reflushes at most once, and a render that
+  *unconditionally* re-updates loops the microtask queue by construction (user error, like
+  React's setState-in-render). Reflush is always a fresh microtask, never a synchronous
+  re-entry, so the failure mode is a busy microtask queue, not a stack overflow. Bounded
+  conditional re-updates are covered by a regression test
+  (`update-scheduling.browser.test.ts`).
 
 - **Light-DOM (no-shadow) components?** `ComponentOptions = ShadowRootInit &
       { formAssociated }` always `attachShadow`s — there is no way to render into light DOM.

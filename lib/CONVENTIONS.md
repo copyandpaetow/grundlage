@@ -1,7 +1,7 @@
 # CONVENTIONS
 
 Guardrails for this codebase. The goal is code that is **fast and legible**. These are
-defaults, not dogma. They describe *how we build*, independent of any particular file or
+defaults, not dogma. They describe _how we build_, independent of any particular file or
 refactor — they should still hold at 2.0.
 
 ## Preface — performance is the veto
@@ -31,7 +31,7 @@ self-recursion site. See ADR-0009.
 
 An array or object passed in stays semantically what it was passed as. Reusing an input
 slot as a cache needs a `// why` comment naming what is cached and when it is read back.
-Mutating data owned by the *caller of the public API* is not allowed — internal reuse only.
+Mutating data owned by the _caller of the public API_ is not allowed — internal reuse only.
 
 ## 3. No `class`; use a struct + `context`-first free functions
 
@@ -40,13 +40,22 @@ struct (`context`/`handle`/`runtime`). No `class`.
 
 **Exception:** the platform demands it (e.g. extending `HTMLElement`).
 
+**Exception (provisional — tryout, evaluate soon):** a _data-only_ class — fields +
+constructor, **no methods** — still operated on by the same context-first free functions, may
+be used as a performant alternative to duck-typing. When a type must be told apart from
+arbitrary user values on a hot path, `instanceof` is measurably faster than any property
+brand (symbol or numeric field) and avoids duck-typing entirely. The sole case today is
+`HTMLTemplate`. This is a tryout, not a settled pattern: revisit once a second such type
+exists (e.g. a `css` template) to decide whether it generalizes or folds back to a struct +
+brand.
+
 ## 4. Discriminate types by brand, not by paradigm
 
 - Our own types: a single `isX(value)` guard. No `instanceof`
   on our own types.
 - Platform types: `instanceof` (`Promise`) or `typeof` (primitive, function).
 
-**Exception:** duck-typing a *user-supplied* object — comment that it is user surface.
+**Exception:** duck-typing a _user-supplied_ object — comment that it is user surface.
 
 ## 5. One shared const per absence-kind
 

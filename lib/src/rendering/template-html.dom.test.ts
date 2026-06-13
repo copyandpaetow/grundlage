@@ -1,7 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { html } from "../parser/html";
 import { BINDING_TYPES } from "../parser/types";
-import { HTMLTemplate } from "./template-html";
+import {
+	hashTemplate,
+	HTMLTemplate,
+	hydrateTemplate,
+	setupTemplate,
+	updateTemplate,
+} from "./template-html";
 
 describe("HTMLTemplate.hash: cache invalidation", () => {
 	//the renderer relies on `hash` being lazy (only computed when read) and invalidated on update()
@@ -9,10 +15,10 @@ describe("HTMLTemplate.hash: cache invalidation", () => {
 	//update() touches dirtyBindings, which is only allocated by setup(), so every test that calls update() needs setup() first, mirroring the production path
 	test("returns a new value after update() with different expressions", () => {
 		const template = html`<p>${"a"}</p>`;
-		template.setup(null);
-		const firstHash = template.hash;
-		template.update(["b"]);
-		expect(template.hash).not.toBe(firstHash);
+		setupTemplate(template, null);
+		const firstHash = hashTemplate(template);
+		updateTemplate(template, ["b"]);
+		expect(hashTemplate(template)).not.toBe(firstHash);
 	});
 
 	test("matches a freshly built template carrying the same updated expressions", () => {
@@ -21,16 +27,16 @@ describe("HTMLTemplate.hash: cache invalidation", () => {
 		//the helper exists so both `html` calls reach the parser cache via the same TemplateStringsArray identity; calling html`...` at two different source positions would parse to two different ParsedHTML with different templateHash and break the comparison
 		const makeParagraph = (value: string) => html`<p>${value}</p>`;
 		const template = makeParagraph("a");
-		template.setup(null);
-		template.update(["b"]);
+		setupTemplate(template, null);
+		updateTemplate(template, ["b"]);
 		const freshTemplate = makeParagraph("b");
-		expect(template.hash).toBe(freshTemplate.hash);
+		expect(hashTemplate(template)).toBe(hashTemplate(freshTemplate));
 	});
 
 	test("is stable across reads between updates", () => {
 		const template = html`<p>${"a"}</p>`;
-		const first = template.hash;
-		const second = template.hash;
+		const first = hashTemplate(template);
+		const second = hashTemplate(template);
 		expect(second).toBe(first);
 	});
 });
@@ -40,17 +46,17 @@ describe("HTMLTemplate.update: previousExpressions reset", () => {
 	//=> we pin that invariant here so a future refactor can't accidentally retain a reference and leak between renders
 	test("drops previousExpressions to a zero-length array after update()", () => {
 		const template = html`<p>${"a"}</p>`;
-		template.setup(null);
-		template.update(["b"]);
+		setupTemplate(template, null);
+		updateTemplate(template, ["b"]);
 		expect(template.previousExpressions.length).toBe(0);
 	});
 
 	test("repeated updates do not accumulate previousExpressions", () => {
 		const template = html`<p>${"a"}</p>`;
-		template.setup(null);
-		template.update(["b"]);
-		template.update(["c"]);
-		template.update(["d"]);
+		setupTemplate(template, null);
+		updateTemplate(template, ["b"]);
+		updateTemplate(template, ["c"]);
+		updateTemplate(template, ["d"]);
 		expect(template.previousExpressions.length).toBe(0);
 	});
 });
@@ -63,7 +69,7 @@ describe("HTMLTemplate.setup: host binding requirement", () => {
 			><p>hi</p></template
 		>`;
 		expect(template.parsedHTML.hostBindingOffset).toBeGreaterThan(0);
-		expect(() => template.setup(null)).toThrow(
+		expect(() => setupTemplate(template, null)).toThrow(
 			/top level of a component's render output/,
 		);
 	});
@@ -71,7 +77,7 @@ describe("HTMLTemplate.setup: host binding requirement", () => {
 	test("does not throw for a template without host bindings even when host is null", () => {
 		const template = html`<p>${"x"}</p>`;
 		expect(template.parsedHTML.hostBindingOffset).toBe(0);
-		expect(() => template.setup(null)).not.toThrow();
+		expect(() => setupTemplate(template, null)).not.toThrow();
 	});
 
 	test("rejects a root template that is interpolated into a parent's content", () => {
@@ -83,7 +89,7 @@ describe("HTMLTemplate.setup: host binding requirement", () => {
 		const host = document.createElement("div");
 		host.attachShadow({ mode: "open" });
 		const outer = html`<div>${inner}</div>`;
-		expect(() => outer.setup(host as any)).toThrow(
+		expect(() => setupTemplate(outer, host as any)).toThrow(
 			/top level of a component's render output/,
 		);
 	});
@@ -95,7 +101,7 @@ describe("HTMLTemplate.setup: host binding requirement", () => {
 		const outer = html`<ul>
 			${items}
 		</ul>`;
-		expect(() => outer.setup(host as any)).toThrow(
+		expect(() => setupTemplate(outer, host as any)).toThrow(
 			/top level of a component's render output/,
 		);
 	});
@@ -104,20 +110,20 @@ describe("HTMLTemplate.setup: host binding requirement", () => {
 describe("HTMLTemplate.setup: fragment + target wiring", () => {
 	test("produces a DocumentFragment with the parsed shape", () => {
 		const template = html`<section><p>${"hi"}</p></section>`;
-		const fragment = template.setup(null);
+		const fragment = setupTemplate(template, null);
 		expect(fragment.querySelector("section")).not.toBeNull();
 		expect(fragment.querySelector("p")?.textContent).toContain("hi");
 	});
 
 	test("targets array length matches the bindings array length", () => {
 		const template = html`<p class="${"c"}">${"text"}</p>`;
-		template.setup(null);
+		setupTemplate(template, null);
 		expect(template.targets.length).toBe(template.parsedHTML.bindings.length);
 	});
 
 	test("dirtyBindings is allocated to the binding count", () => {
 		const template = html`<p class="${"c"}">${"text"}</p>`;
-		template.setup(null);
+		setupTemplate(template, null);
 		expect(template.dirtyBindings.length).toBe(
 			template.parsedHTML.bindings.length,
 		);
@@ -135,13 +141,16 @@ describe("HTMLTemplate.hydrate: re-applies only ATTR bindings", () => {
 	): { host: HTMLElement; shadowRoot: ShadowRoot } => {
 		const host = document.createElement("div");
 		const shadowRoot = host.attachShadow({ mode: "open" });
-		shadowRoot.appendChild(serverTemplate.setup(null));
+		shadowRoot.appendChild(setupTemplate(serverTemplate, null));
 		return { host, shadowRoot };
 	};
 
 	const hydrateAs = (template: HTMLTemplate, host: HTMLElement) => {
 		//hydrate's signature requires a BaseComponent; it only reads host.shadowRoot, so a cast is enough for this unit test
-		template.hydrate(host as unknown as Parameters<typeof template.hydrate>[0]);
+		hydrateTemplate(
+			template,
+			host as unknown as Parameters<typeof hydrateTemplate>[1],
+		);
 	};
 
 	test("ATTR binding on a child element is re-applied on hydrate", () => {
@@ -197,7 +206,7 @@ describe("HTMLTemplate.hydrate: re-applies only ATTR bindings", () => {
 		hydrateAs(clientTemplate, host);
 		expect(shadowRoot.querySelector("p")?.textContent).toBe("server-text");
 
-		clientTemplate.update(["refreshed"]);
+		updateTemplate(clientTemplate, ["refreshed"]);
 		expect(shadowRoot.querySelector("p")?.textContent).toBe("refreshed");
 	});
 });
@@ -207,7 +216,7 @@ describe("HTMLTemplate.update: dirty-binding bookkeeping", () => {
 	//then we update with the same primitive values and assert the bookkeeping array stays clear (no spurious dirty marks for unchanged primitives)
 	test("after setup() every dirty bit is cleared", () => {
 		const template = html`<div class="${"x"}">${"y"}</div>`;
-		template.setup(null);
+		setupTemplate(template, null);
 		for (let index = 0; index < template.dirtyBindings.length; index++) {
 			expect(template.dirtyBindings[index]).toBe(0);
 		}
@@ -215,8 +224,8 @@ describe("HTMLTemplate.update: dirty-binding bookkeeping", () => {
 
 	test("update with identical primitives leaves every dirty bit clear after flush", () => {
 		const template = html`<div class="${"x"}">${"y"}</div>`;
-		template.setup(null);
-		template.update(["x", "y"]);
+		setupTemplate(template, null);
+		updateTemplate(template, ["x", "y"]);
 		for (let index = 0; index < template.dirtyBindings.length; index++) {
 			expect(template.dirtyBindings[index]).toBe(0);
 		}
@@ -225,11 +234,11 @@ describe("HTMLTemplate.update: dirty-binding bookkeeping", () => {
 	test("update with a changed primitive flushes the corresponding binding", () => {
 		//we observe the side effect (DOM mutated) rather than reading dirtyBindings mid-flight, since #flush clears the bits as it goes
 		const template = html`<p class="${"before"}">${"hi"}</p>`;
-		const fragment = template.setup(null);
+		const fragment = setupTemplate(template, null);
 		const paragraph = fragment.querySelector("p")!;
 		expect(paragraph.getAttribute("class")).toBe("before");
 
-		template.update(["after", "hi"]);
+		updateTemplate(template, ["after", "hi"]);
 		expect(paragraph.getAttribute("class")).toBe("after");
 	});
 });

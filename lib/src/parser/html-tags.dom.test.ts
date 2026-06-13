@@ -34,6 +34,30 @@ describe("html parser — tag bindings", () => {
 		expect(template.parsedHTML.expressionToBinding).toEqual([0, 0]);
 	});
 
+	test("end tag maps to a buried opener, not the last binding", () => {
+		const tag = "div";
+		const value = "x";
+		// a content binding is created between the open and the close, so the
+		// opener (binding 0) is no longer the last binding when the close is parsed.
+		// the close expression must still map back to 0, not to the content binding (1)
+		const template = html`
+			<${tag}>${value}</${tag}>`;
+
+		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1, 0]);
+	});
+
+	test("nested end tags each map to their own buried opener", () => {
+		const outer = "div";
+		const inner = "span";
+		const value = "x";
+		// outer(0), inner(1), content(2), close-inner -> 1, close-outer -> 0.
+		// the outer close maps to 0 while two later bindings sit above it
+		const template = html`
+			<${outer}><${inner}>${value}</${inner}></${outer}>`;
+
+		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1, 2, 1, 0]);
+	});
+
 	test("dynamic self-closing tag", () => {
 		const tag = "br";
 		const template = html` <${tag} />`;

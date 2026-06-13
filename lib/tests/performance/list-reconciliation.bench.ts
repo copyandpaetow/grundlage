@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { describe } from "vitest";
 import { html } from "../../src/parser/html";
-import { HTMLTemplate } from "../../src/rendering/template-html";
+import {
+	HTMLTemplate,
+	setupTemplate,
+	updateTemplate,
+} from "../../src/rendering/template-html";
 import { bench } from "./bench-options";
 
 /*
@@ -15,7 +19,7 @@ renderList is the heaviest hot path in the library when arrays are present. This
 
 const renderOnce = (template: HTMLTemplate) => {
 	const host = document.createElement("div");
-	host.attachShadow({ mode: "open" }).appendChild(template.setup());
+	host.attachShadow({ mode: "open" }).appendChild(setupTemplate(template));
 	return template;
 };
 
@@ -37,7 +41,7 @@ describe("renderList — 20 items, unchanged order", () => {
 	const template = renderOnce(listFor(items));
 
 	bench("hash-hit path (every item resolves at head peel)", () => {
-		template.update(listFor(items).currentExpressions);
+		updateTemplate(template, listFor(items).currentExpressions);
 	});
 });
 
@@ -47,7 +51,7 @@ describe("renderList — 20 items, one item mutated", () => {
 
 	bench("one label changes per call", () => {
 		items[10].label = `item-10-${Math.random()}`;
-		template.update(listFor(items).currentExpressions);
+		updateTemplate(template, listFor(items).currentExpressions);
 	});
 });
 
@@ -60,7 +64,10 @@ describe("renderList — 20 items, append/pop alternation", () => {
 
 	bench("tail growth (pure-insertion + pure-removal halves)", () => {
 		toggle = !toggle;
-		template.update(listFor(toggle ? items11 : items10).currentExpressions);
+		updateTemplate(
+			template,
+			listFor(toggle ? items11 : items10).currentExpressions,
+		);
 	});
 });
 
@@ -73,7 +80,10 @@ describe("renderList — 20 items, prepend/shift alternation", () => {
 
 	bench("head growth (tail-peel resolves entirely)", () => {
 		toggle = !toggle;
-		template.update(listFor(toggle ? items11 : items10).currentExpressions);
+		updateTemplate(
+			template,
+			listFor(toggle ? items11 : items10).currentExpressions,
+		);
 	});
 });
 
@@ -86,7 +96,10 @@ describe("renderList — 20 items, full reverse", () => {
 
 	bench("reverse alternation (full middle-map + moves)", () => {
 		toggle = !toggle;
-		template.update(listFor(toggle ? itemsDesc : itemsAsc).currentExpressions);
+		updateTemplate(
+			template,
+			listFor(toggle ? itemsDesc : itemsAsc).currentExpressions,
+		);
 	});
 });
 
@@ -100,7 +113,10 @@ describe("renderList — 20 items, adjacent swap", () => {
 
 	bench("swap items[10] and items[11] (head/tail peel + 2-item middle)", () => {
 		toggle = !toggle;
-		template.update(listFor(toggle ? itemsB : itemsA).currentExpressions);
+		updateTemplate(
+			template,
+			listFor(toggle ? itemsB : itemsA).currentExpressions,
+		);
 	});
 });
 
@@ -135,7 +151,10 @@ describe("renderList — 20 items, full shuffle", () => {
 
 	bench("shuffle alternation (hash-claim worst case)", () => {
 		toggle = !toggle;
-		template.update(listFor(toggle ? itemsB : itemsA).currentExpressions);
+		updateTemplate(
+			template,
+			listFor(toggle ? itemsB : itemsA).currentExpressions,
+		);
 	});
 });
 
@@ -152,7 +171,7 @@ describe("renderList — 100 items, one item mutated", () => {
 
 	bench("one label changes per call (linear-walk floor at N=100)", () => {
 		items[50].label = `item-50-${Math.random()}`;
-		template.update(listFor(items).currentExpressions);
+		updateTemplate(template, listFor(items).currentExpressions);
 	});
 });
 
@@ -164,7 +183,10 @@ describe("renderList — 100 items, full reverse", () => {
 
 	bench("reverse alternation (Map build + 100 moves)", () => {
 		toggle = !toggle;
-		template.update(listFor(toggle ? itemsDesc : itemsAsc).currentExpressions);
+		updateTemplate(
+			template,
+			listFor(toggle ? itemsDesc : itemsAsc).currentExpressions,
+		);
 	});
 });
 
@@ -174,7 +196,7 @@ describe("renderList — 1000 items, one item mutated", () => {
 
 	bench("one label changes per call (linear-walk floor at N=1000)", () => {
 		items[500].label = `item-500-${Math.random()}`;
-		template.update(listFor(items).currentExpressions);
+		updateTemplate(template, listFor(items).currentExpressions);
 	});
 });
 
@@ -186,7 +208,10 @@ describe("renderList — 1000 items, full reverse", () => {
 
 	bench("reverse alternation (Map build + 1000 moves)", () => {
 		toggle = !toggle;
-		template.update(listFor(toggle ? itemsDesc : itemsAsc).currentExpressions);
+		updateTemplate(
+			template,
+			listFor(toggle ? itemsDesc : itemsAsc).currentExpressions,
+		);
 	});
 });
 
@@ -224,7 +249,7 @@ describe("renderList — bulk removal (Tier 1.2)", () => {
 /*
 Nested list — the outer list has 5 items, each carrying its own inner 5-item list.
 
-re-entrancy mechanics: renderList inserts an item by calling `template.setup(null)`, which runs the inner template's #flush, which dispatches to updateContent for the inner content binding, which sees an array and re-enters renderList synchronously inside the outer call.
+re-entrancy mechanics: renderList inserts an item by calling `setupTemplate(template, null)`, which runs the inner template's #flush, which dispatches to updateContent for the inner content binding, which sees an array and re-enters renderList synchronously inside the outer call.
 => any "reuse scratch buffers in renderList" change (Tier 2.6) must preserve this bench. corrupting scratch between outer and inner calls would either crash or silently produce wrong DOM.
 
 we also mutate every inner label per frame so the inner renderList does real work; the outer renderList sees stable group references (still array-identity-different because of .map) and hash-claims through.
@@ -263,6 +288,6 @@ describe("renderList — nested list (re-entrancy stress)", () => {
 				groups[outer][inner].label = `f${frame}-o${outer}-i${inner}`;
 			}
 		}
-		template.update(nestedListFor(groups).currentExpressions);
+		updateTemplate(template, nestedListFor(groups).currentExpressions);
 	});
 });

@@ -302,6 +302,31 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(cleanupReturnInvoked).toBe(false);
 	});
 
+	test("server-side try/catch recovers by yielding a fallback (silent, no warn)", async () => {
+		//SSR now bubbles errors like CSR: a recoverable inner error lets the outer catch yield a
+		//fallback, so the server emits the SAME content the client would — no hydration mismatch, no warn
+		const tag = uniqueTag();
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const Component = render(function* () {
+			try {
+				yield function* () {
+					yield () => {
+						throw new Error("inner-failed");
+					};
+				};
+			} catch {
+				yield () => html`<p>fallback</p>`;
+			}
+		});
+
+		const element = track(await mount(tag, Component));
+
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("fallback");
+		expect(warnSpy).not.toHaveBeenCalled();
+		warnSpy.mockRestore();
+	});
+
 	test("two components on the same page each stop at their own first yield", async () => {
 		const firstTag = uniqueTag();
 		const secondTag = uniqueTag();

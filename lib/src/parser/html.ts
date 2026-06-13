@@ -266,7 +266,6 @@ const createBinding = (parser: ParserState) => {
 				values: [],
 				endValues: [],
 				relatedAttributes: [],
-				bindingIndex: parser.bindings.length, //we set this before the push so it matches the eventual index
 			} satisfies TagBinding;
 
 		default:
@@ -469,6 +468,12 @@ const completeAttribute = (parser: ParserState) => {
 		moveArrayContents(parser.attributeValueBuffer, attributeBinding.values);
 		attributeBinding.shape = classifyAttributeShape(attributeBinding);
 		classifyAttributeName(attributeBinding);
+
+		//EXPANDABLE parses its single expression into key position (no `=value`), but every other shape carries its expression slot in `values`. relocate it so consumers read the slot from one consistent place regardless of shape.
+		if (attributeBinding.shape === ATTRIBUTE_SHAPE.EXPANDABLE) {
+			attributeBinding.values.push(attributeBinding.keys[0]);
+			attributeBinding.keys.length = 0;
+		}
 
 		//attributes on the root template don't need a comment marker but we need to know how many bindings we have on it
 		if (parser.isRootTemplate) {
@@ -886,8 +891,9 @@ const parse = (
 				}
 				parser.activeBinding = opener;
 			}
+			//the opener was pushed before its own attribute bindings, so its slot is buried earlier in `bindings`, not at the tail — look it up so the close expression maps to the same binding the open does. cold path: only dynamic `</${tag}>` closes reach here, and parse output is cached per template shape
 			parser.expressionToBinding.push(
-				(parser.activeBinding as TagBinding).bindingIndex,
+				parser.bindings.indexOf(parser.activeBinding as TagBinding),
 			);
 		} else {
 			if (!parser.activeBinding) {

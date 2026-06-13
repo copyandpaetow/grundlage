@@ -2,7 +2,14 @@ import { html } from "../parser/html";
 import { bindingToString } from "../utils/binding-to-string";
 import { assertPrimitiveString, isStringable } from "../utils/to-primitive";
 import { isComment, isSameTemplate } from "../utils/validators";
-import { HTMLTemplate } from "./template-html";
+import { EMPTY_EXPRESSIONS } from "./empty-expressions";
+import {
+	hashTemplate,
+	HTMLTemplate,
+	isTemplate,
+	setupTemplate,
+	updateTemplate,
+} from "./template-html";
 
 const deleteNodesBetween = (start: Node, end?: Node) => {
 	let current = start.nextSibling;
@@ -28,7 +35,7 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
 const toTemplateList = (list: Array<unknown>): Array<HTMLTemplate> => {
 	for (let index = 0; index < list.length; index++) {
 		const element = list[index];
-		if (!(element instanceof HTMLTemplate)) {
+		if (!isTemplate(element)) {
 			list[index] = html`${element}`;
 		}
 	}
@@ -36,7 +43,6 @@ const toTemplateList = (list: Array<unknown>): Array<HTMLTemplate> => {
 };
 
 const LIST_IDENTIFIER = "*.*"; //small enough to save space but unique enough to not collide with potential user comments
-const EMPTY_PREVIOUS: ReadonlyArray<HTMLTemplate> = [];
 
 const isListMarker = (node: Node): node is Comment =>
 	isComment(node) && node.data === LIST_IDENTIFIER;
@@ -82,7 +88,7 @@ const renderList = (
 		context.currentExpressions[expressionIndex] as Array<unknown>,
 	);
 	const trackedPrevious = (
-		Array.isArray(previousValue) ? previousValue : EMPTY_PREVIOUS
+		Array.isArray(previousValue) ? previousValue : EMPTY_EXPRESSIONS
 	) as Array<HTMLTemplate>;
 
 	//we walk the live DOM once and collect one marker per item that's currently rendered
@@ -114,7 +120,8 @@ const renderList = (
 	while (
 		headCurrent <= tailCurrent &&
 		headPrevious <= tailPrevious &&
-		current[headCurrent].hash === trackedPrevious[headPrevious].hash
+		hashTemplate(current[headCurrent]) ===
+			hashTemplate(trackedPrevious[headPrevious])
 	) {
 		current[headCurrent] = trackedPrevious[headPrevious];
 		headCurrent++;
@@ -123,7 +130,8 @@ const renderList = (
 	while (
 		headCurrent <= tailCurrent &&
 		headPrevious <= tailPrevious &&
-		current[tailCurrent].hash === trackedPrevious[tailPrevious].hash
+		hashTemplate(current[tailCurrent]) ===
+			hashTemplate(trackedPrevious[tailPrevious])
 	) {
 		current[tailCurrent] = trackedPrevious[tailPrevious];
 		tailCurrent--;
@@ -152,7 +160,10 @@ const renderList = (
 			currentIndex++
 		) {
 			const listItemMarker = new Comment(LIST_IDENTIFIER);
-			position.after(current[currentIndex].setup(null), listItemMarker);
+			position.after(
+				setupTemplate(current[currentIndex], null),
+				listItemMarker,
+			);
 			position = listItemMarker;
 		}
 		return;
@@ -161,17 +172,17 @@ const renderList = (
 	/*
 	otherwise both middles have content, and we need to reconcile them
 	we walk the current middle and try to claim a previous slot for each entry:
-	- first by hash (template shape + expression values match exactly => DOM stays, no .update() needed)
-	- otherwise by parsed shape at the same relative position (DOM stays, we .update() it to the new expression values)
+	- first by hash (template shape + expression values match exactly => DOM stays, no update needed)
+	- otherwise by parsed shape at the same relative position (DOM stays, we update it to the new expression values)
 	- otherwise we insert a fresh item
 	hash and structural claims share the same walk, so a structural claim for current[earlyIndex] can occasionally take a slot that a later current[laterIndex] would have hash-matched
-	=> the output still stays correct (the reused template gets .update()d to current[laterIndex]) and the worst case is one extra .update() call in a pathological cross-pattern
+	=> the output still stays correct (the reused template gets updated to current[laterIndex]) and the worst case is one extra update in a pathological cross-pattern
 	*/
 	const middleLengthPrevious = tailPrevious - headPrevious + 1;
 	const hashToMiddleIndex = new Map<number, number>();
 	for (let middleIndex = 0; middleIndex < middleLengthPrevious; middleIndex++) {
 		hashToMiddleIndex.set(
-			trackedPrevious[headPrevious + middleIndex].hash,
+			hashTemplate(trackedPrevious[headPrevious + middleIndex]),
 			middleIndex,
 		);
 	}
@@ -190,7 +201,7 @@ const renderList = (
 		const template = current[currentIndex];
 		const relativeOffset = currentIndex - headCurrent;
 
-		let claimedMiddleIndex = hashToMiddleIndex.get(template.hash);
+		let claimedMiddleIndex = hashToMiddleIndex.get(hashTemplate(template));
 		if (
 			claimedMiddleIndex !== undefined &&
 			previousClaimed[claimedMiddleIndex]
@@ -210,15 +221,15 @@ const renderList = (
 
 		if (claimedMiddleIndex === undefined) {
 			const listItemMarker = new Comment(LIST_IDENTIFIER);
-			position.after(template.setup(null), listItemMarker);
+			position.after(setupTemplate(template, null), listItemMarker);
 			position = listItemMarker;
 			continue;
 		}
 
 		previousClaimed[claimedMiddleIndex] = 1;
 		const reusedTemplate = trackedPrevious[headPrevious + claimedMiddleIndex];
-		if (reusedTemplate.hash !== template.hash) {
-			reusedTemplate.update(template.currentExpressions);
+		if (hashTemplate(reusedTemplate) !== hashTemplate(template)) {
+			updateTemplate(reusedTemplate, template.currentExpressions);
 		}
 		current[currentIndex] = reusedTemplate;
 
@@ -249,8 +260,8 @@ const renderTemplate = (
 	const current = context.currentExpressions[expressionIndex] as HTMLTemplate;
 	const previous = context.previousExpressions[expressionIndex];
 
-	if (previous instanceof HTMLTemplate && isSameTemplate(current, previous)) {
-		previous.update(current.currentExpressions);
+	if (isTemplate(previous) && isSameTemplate(current, previous)) {
+		updateTemplate(previous, current.currentExpressions);
 		//we swap the reused template into currentExpressions so that on the next render
 		//we compare against the template actually attached to the DOM and not the discarded `current`
 		context.currentExpressions[expressionIndex] = previous;
@@ -258,7 +269,7 @@ const renderTemplate = (
 	}
 
 	deleteNodesBetween(marker);
-	marker.after(current.setup(null));
+	marker.after(setupTemplate(current, null));
 };
 
 const renderComment = (
@@ -290,7 +301,7 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 		return;
 	}
 
-	if (current instanceof HTMLTemplate) {
+	if (isTemplate(current)) {
 		renderTemplate(context, marker, expressionIndex);
 		return;
 	}
@@ -301,12 +312,14 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 	}
 
 	const renderableCurrent = assertPrimitiveString(current);
-	const previous = context.previousExpressions[expressionIndex];
 
-	if (previous === undefined) {
+	//first render: previousExpressions is the shared sentinel, so no text node exists here yet — insert one
+	if (context.previousExpressions === EMPTY_EXPRESSIONS) {
 		marker.after(document.createTextNode(renderableCurrent));
 		return;
 	}
+
+	const previous = context.previousExpressions[expressionIndex];
 
 	if (isStringable(previous)) {
 		(marker.nextSibling as Text).data = renderableCurrent;

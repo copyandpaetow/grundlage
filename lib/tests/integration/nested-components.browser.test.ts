@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, props, render } from "../../src/index";
-import { HTMLTemplate } from "../../src/rendering/template-html";
+import { hashTemplate, HTMLTemplate } from "../../src/rendering/template-html";
 import { BaseComponent, ComponentGenerator } from "../../src/types";
 
 const sleep = (duration = 0) =>
@@ -378,13 +378,13 @@ describe("shared template generator functions", () => {
 	test("same helper produces identical hashes for identical inputs", () => {
 		const first = card("Hi", "World");
 		const second = card("Hi", "World");
-		expect(first.hash).toBe(second.hash);
+		expect(hashTemplate(first)).toBe(hashTemplate(second));
 	});
 
 	test("same helper produces different hashes when inputs differ", () => {
 		const first = card("Hi", "World");
 		const second = card("Bye", "World");
-		expect(first.hash).not.toBe(second.hash);
+		expect(hashTemplate(first)).not.toBe(hashTemplate(second));
 	});
 
 	test("two components using the same helper render consistently", async () => {
