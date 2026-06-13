@@ -1,16 +1,17 @@
 # Update machinery — how the three capabilities interact
 
-The render machinery is **three structs in one acyclic line**: `Scheduler → Producer → Painter`.
-Each layer points only *down*. The `update()` settle signal travels back *up* through a **returned
+The render machinery is **three structs in one acyclic line**: `Scheduler → RenderState → Painter`.
+Each layer points only _down_. The `update()` settle signal travels back _up_ through a **returned
 Promise**, never a back-edge — so there is no cycle and nothing needs a `!`-asserted parent pointer.
 
-`Task<Producer>` sits underneath `Producer` as the generic generator driver; the `commit` strategy
-(`clientCommit` / `serverCommit`) is the single piece of per-mode data.
+`GeneratorRun` sits underneath `RenderState` as the generator driver (depth 0 = the outer generator,
+depth 1 = the inner generator, both the same primitive). The `writeToDom` strategy
+(`writeToDom` on the client / `writeToServerDom` on the server) is the single piece of per-mode data.
 
 ```
                                   ┌───────────────────────────┐
                                   │      BaseElement           │   (the custom element)
-                                  │  #painter #producer         │
+                                  │  #painter #renderState      │
                                   │  #scheduler                │
                                   └─────────────┬─────────────-┘
                        update() ────────────────┤  connectedCallback wires the stack;
@@ -25,76 +26,80 @@ Promise**, never a back-edge — so there is no cycle and nothing needs a `!`-as
         │    • returns the shared flushPromise  ───────────────┐         │
         │                                                       │         │
         │  runFlushLoop:  await null  (coalesce window)         │         │
-        │    do { dirty=false; await pullProducer(producer) }     │         │
+        │    do { dirty=false; await rerunCurrentRenderer(s) }   │         │
         │    while (dirty)                                       │         │
         └───────────────┬───────────────────────────────────────┼────────┘
                         │ calls down                              │ resolves up
-            pullProducer(producer)                                  │ (the RETURNED promise —
+            rerunCurrentRenderer(state)                           │ (the RETURNED promise —
                         │                                         │  the only upward signal)
                         ▼                                         │
         ┌───────────────────────────────────────────────────────┴────────┐
-        │  PRODUCER                         (one struct, both modes)       │
-        │  { rootTask, currentTask, createCurrent,                         │
-        │    settleResolve, commit, painter }                              │
+        │  RENDERSTATE                      (one struct, both modes)       │
+        │  { outerRun, currentRun, currentRenderer,                        │
+        │    pendingUpdateResolve, writeToDom, painter }                   │
         │                                                                  │
-        │  pullProducer: settleResolve = resolve; re-run createCurrent     │
-        │    • static (recipe null) → resolveSettle now                    │
-        │    • render-fn  → commit + resolveSettle now                     │
-        │    • generator  → spawn child; it settles later via onSettle     │
+        │  rerunCurrentRenderer: pendingUpdateResolve = resolve;           │
+        │    re-run currentRenderer                                        │
+        │    • static (renderer null) → finishUpdate now                   │
+        │    • render-fn  → paint + finishUpdate now                       │
+        │    • generator  → start inner run; it finishes later via         │
+        │                   signalRunFinished                              │
         │                                                                  │
-        │   drives ▼ Task(s)                  settle ▲ resolveSettle()      │
-        │  ┌──────────────────────────────┐   (fires settleResolve once,   │
-        │  │  TASK<Producer>  (depth 0/1) │    a no-op on the server)       │
+        │   drives ▼ GeneratorRun(s)          settle ▲ finishUpdate()      │
+        │  ┌──────────────────────────────┐   (fires pendingUpdateResolve  │
+        │  │  GENERATORRUN  (depth 0/1)   │    once, a no-op on the server) │
         │  │  generator driver, depth-    │                                 │
-        │  │  aware. hooks:               │                                 │
-        │  │  onYield  → producerYield ───┼──► producer.commit(producer, v) │
-        │  │   onError  → producerError   │      │  (the ONLY per-mode spot) │
-        │  │  onSettle → producerSettle ──┼──────┘                          │
+        │  │  aware. the driver calls     │                                 │
+        │  │  directly (no hooks):        │                                 │
+        │  │  handleYieldedValue ─────────┼──► state.writeToDom(state, v)   │
+        │  │  handleRendererError         │      │  (the ONLY per-mode spot) │
+        │  │  signalRunFinished ──────────┼──────┘                          │
         │  └──────────────────────────────┘                                 │
         └───────────────────────┬──────────────────────────────────────────┘
-                                │ commit calls down (never back up)
-              clientCommit │ serverCommit   (two exported strategies; element picks one)
+                                │ writeToDom calls down (never back up)
+              writeToDom │ writeToServerDom   (two exported strategies; element picks one)
                                 ▼
         ┌──────────────────────────────────────────────────────────────────┐
         │  PAINTER                          (leaf; survives a reconnect)     │
         │  { host, renderedTemplate, attributeObserver?, hydratePending }    │
         │                                                                    │
-        │   paint(painter, value)         ← clientCommit: patch-or-replace,  │
+        │   paint(painter, value)         ← writeToDom: patch-or-replace,    │
         │                                   observer bracket, continuous     │
-        │   serverPaint(painter, value)   ← serverCommit: hydrate-or-produce │
-        │                                   once + flushHostPayload          │
+        │   serverPaint(painter, value)   ← writeToServerDom: hydrate-or-    │
+        │                                   produce once + flushHostPayload  │
         └───────────────────────────────┬───────────────────────────────────┘
                                         │ writes
                                         ▼
                                   host.shadowRoot   (the DOM)
 ```
 
-> Diagram labels are conceptual: `producerYield` is the real shared hook, but `onError`/`onSettle` are
-> inlined closures — they call `reportProducerError` / `resolveSettle`, there are no standalone
-> `producerError` / `producerSettle` functions.
+> Since the task→producer merge there are **no behaviour hooks**: the driver in `GeneratorRun`'s
+> `step` calls `handleYieldedValue` / `handleRendererError` / `signalRunFinished` directly, all in the
+> same `generator-layer.ts` file. A yield's whole journey reads top-to-bottom with go-to-definition
+> working at every hop.
 
 ## The two directions, kept separate
 
-| Direction | Mechanism | Why it's safe |
-|-----------|-----------|---------------|
-| **Down (drive):** Scheduler → Producer → Painter | direct calls (`pullProducer`, `commit`, `paint`) | each layer knows only the layer below — a straight line |
-| **Up (settle):** Painter-done → Producer → Scheduler | the **Promise returned by `pullProducer`** resolves when `resolveSettle` fires | no struct holds an upward reference; the promise IS the signal, so the graph stays acyclic |
+| Direction                                               | Mechanism                                                                             | Why it's safe                                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **Down (drive):** Scheduler → RenderState → Painter     | direct calls (`rerunCurrentRenderer`, `writeToDom`, `paint`)                          | each layer knows only the layer below — a straight line                                    |
+| **Up (settle):** Painter-done → RenderState → Scheduler | the **Promise returned by `rerunCurrentRenderer`** resolves when `finishUpdate` fires | no struct holds an upward reference; the promise IS the signal, so the graph stays acyclic |
 
 ## Where the modes differ — exactly one field
 
-Everything above is identical on client and server **except `producer.commit`**:
+Everything above is identical on client and server **except `state.writeToDom`**:
 
-- **client** → `createProducer(painter, clientCommit)` → `paint` (continuous; observer; never one-shot)
-- **server** → `createProducer(painter, serverCommit)` → `serverPaint` once, then cancels both task
-  layers — that cancel (their `finished` flag) is what makes it one-shot; there is no `done` field.
+- **client** → `createRenderState(painter, writeToDom)` → `paint` (continuous; observer; never one-shot)
+- **server** → `createRenderState(painter, writeToServerDom)` → `serverPaint` once, then cancels both
+  run layers — that cancel (their `finished` flag) is what makes it one-shot; there is no `done` field.
   The Scheduler is never built (`#scheduler` stays null), so the whole
-  upper layer is simply inert: `settleResolve` stays null ⇒ `resolveSettle` is a no-op, `pullProducer`
-  is never called. No flag, no branch — the absent scheduler and the swapped `commit` are the whole
-  difference.
+  upper layer is simply inert: `pendingUpdateResolve` stays null ⇒ `finishUpdate` is a no-op,
+  `rerunCurrentRenderer` is never called. No flag, no branch — the absent scheduler and the swapped
+  `writeToDom` are the whole difference.
 
 ## ADR-0003 contract, read off the diagram
 
 `update()` returns `flushPromise`. That promise resolves only when `runFlushLoop` exits, which only
-happens after `pullProducer` resolves (DOM landed) **and** `dirty` is false (no update arrived
-mid-flight). So `await update()` resolves once *this* call's DOM is on screen, coalescing every
+happens after `rerunCurrentRenderer` resolves (DOM landed) **and** `dirty` is false (no update arrived
+mid-flight). So `await update()` resolves once _this_ call's DOM is on screen, coalescing every
 concurrent update — across sync and async renders.

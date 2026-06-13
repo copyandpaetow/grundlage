@@ -10,7 +10,7 @@ inspecting the built fragment's siblings — moves into the parser's own state.
 
 The parser's only DOM dependencies were materialization and the root-template
 detection/unwrap. Removing them lets `parse()` run at build time with no DOM (the
-prerequisite for the html compiler, see [the compiler plan](../html-compiler-plan.md)) and
+prerequisite for the html compiler, see [the compiler plan](../plans/html-compiler-plan.md)) and
 lets SSR parse templates without standing up happy-dom on the parse path. The string
 parser is also the more authoritative source for root-template structure than a
 re-normalized `innerHTML` round-trip — it already tracks raw-content, nesting depth, and

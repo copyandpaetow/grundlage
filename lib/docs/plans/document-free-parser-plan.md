@@ -1,6 +1,6 @@
 # Part A — Document-free parser
 
-Make `parse()` touch no DOM, so it can run at build time (the [html compiler](./html-compiler-plan.md))
+Make `parse()` touch no DOM, so it can run at build time (the [html compiler](html-compiler-plan.md))
 and without happy-dom on the SSR parse path. This is the foundation Part B depends on, and
 it folds cleanly into the ongoing parser refactor.
 

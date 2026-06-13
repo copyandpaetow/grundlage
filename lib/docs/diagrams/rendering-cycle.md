@@ -6,8 +6,8 @@ errors, tears down, and renders on the server — described in everyday language
 code names can then be read against this and judged on whether they say what this says.
 
 If you want the structural view (which layer points at which), read it alongside
-[`diagrams/update-machinery.md`](./diagrams/update-machinery.md). If you want the fixed list of
-obligations the system must satisfy, that's [`sketches/jobs.md`](./sketches/jobs.md).
+[`diagrams/update-machinery.md`](update-machinery.md). If you want the fixed list of
+obligations the system must satisfy, that's [`sketches/jobs.md`](../sketches/jobs.md).
 
 ---
 
@@ -27,7 +27,7 @@ talks to the one below it; nothing points back up.
    live sub-generator it may have started. This is where "what should we show" is decided.
 4. **The DOM layer.** The leaf. It does one thing: put a piece of markup into the component's
    shadow DOM, reusing what's already there when it can. It knows nothing about generators or
-   updates — you hand it markup, it lands it.
+   updates — you hand it markup, it puts that markup on the page.
 
 The single most important rule about how the parts connect: **the live signal that an update has
 finished travels back up as a returned promise, not as a stored back-reference.** No part holds a pointer to
@@ -112,11 +112,11 @@ depends on what the value is **and** on which depth handed it back.
 The outer generator's job is to choose **how what's shown gets produced**. There are three answers —
 the **three kinds of render**:
 
-| Handed back | What it is | Re-run when an update is requested? |
-|---|---|---|
-| A **finished piece of markup** (a template) | fixed markup — already produced | No — nothing to re-run |
-| A **render function** | a function we *call* to get markup back | Yes — we call it again |
-| A **generator function** | a generator we *run* to produce markup over time | Yes — we start it over from scratch |
+| Handed back                                 | What it is                                       | Re-run when an update is requested? |
+|---------------------------------------------|--------------------------------------------------|-------------------------------------|
+| A **finished piece of markup** (a template) | fixed markup — already produced                  | No — nothing to re-run              |
+| A **render function**                       | a function we *call* to get markup back          | Yes — we call it again              |
+| A **generator function**                    | a generator we *run* to produce markup over time | Yes — we start it over from scratch |
 
 The split between the last two is *call once and get markup back* versus *run over time and produce
 markup as it goes* — a generator can pause, resume, and be stopped; a render function just returns.
@@ -147,8 +147,8 @@ What we do, case by case:
 
 ## 4. Putting markup on screen
 
-This is the DOM layer's only responsibility. It is handed a piece of markup and lands it in the
-shadow DOM. There are **three ways** it can land, chosen automatically:
+This is the DOM layer's only responsibility. It is handed a piece of markup and puts it into the
+shadow DOM. There are **three ways** it can do that, chosen automatically:
 
 1. **Patch in place.** If markup was shown here before *and the new markup is the same template* as
    the old (only the interpolated values differ), the layer keeps the existing
@@ -210,16 +210,16 @@ Otherwise the request enters a one-decision gate:
 
 A pass does this:
 
-1. **Open a tiny waiting window** (a single microtask). A synchronous burst of requests all land
+1. **Open a tiny waiting window** (a single microtask). A synchronous burst of requests all arrive
    inside this window and collapse into this one pass. This is the one and only place the framework
    deliberately waits, and it waits because the wait *buys* something: coalescing.
 2. **Re-run the current renderer** and wait for the markup to be on screen:
-   - A **render function** is simply called again and its result shown. This is synchronous — the
-     markup is on screen immediately.
-   - A **generator** is *restarted from scratch*: the running one is stopped and a fresh run is
-     started. This is asynchronous — the new run produces its markup over time, and "on screen"
-     means **the fresh run has finished** (reached its end), having shown whatever it produced along
-     the way.
+    - A **render function** is simply called again and its result shown. This is synchronous — the
+      markup is on screen immediately.
+    - A **generator** is *restarted from scratch*: the running one is stopped and a fresh run is
+      started. This is asynchronous — the new run produces its markup over time, and "on screen"
+      means **the fresh run has finished** (reached its end), having shown whatever it produced along
+      the way.
 3. **If another request arrived while we were working**, run step 2 once more with a fresh pull.
    Exactly one extra pass, no churn. Otherwise the pass is done.
 
@@ -281,12 +281,12 @@ generator behind it), the error is routed as follows:
   into the shadow DOM so it's visible. (Awaiting updates are unstuck here too.)
 - **Otherwise, offer the error to the outer generator** by throwing it in at the point it's
   suspended:
-  - **It recovers** — its `try/catch` catches and it hands back a new renderer. That new renderer is
-    installed exactly as in [§3](#3-what-the-generator-hands-back), and the markup already on
-    screen stays until the new renderer produces its own. The old, failed inner generator is
-    dropped.
-  - **It doesn't recover** — the error escapes the outer generator and it ends. Now there's no one
-    left, so we fall to the "tear down, warn, write the error into the DOM" outcome.
+    - **It recovers** — its `try/catch` catches and it hands back a new renderer. That new renderer is
+      installed exactly as in [§3](#3-what-the-generator-hands-back), and the markup already on
+      screen stays until the new renderer produces its own. The old, failed inner generator is
+      dropped.
+    - **It doesn't recover** — the error escapes the outer generator and it ends. Now there's no one
+      left, so we fall to the "tear down, warn, write the error into the DOM" outcome.
 
 Because offering the error to the outer generator can cause the outer generator to *also* fail,
 which routes back into this same logic, the "already torn down → do nothing" guard at the top is
@@ -309,7 +309,7 @@ instead of *continuously*.** That's the entire difference.
 - The generator runs exactly as in [§2](#2-running-the-user's-generator), synchronously as far as it
   can, pausing only on the user's own promises, until it reaches the **first** thing that produces
   real markup.
-- At that first markup, the DOM layer lands it once (building fresh markup, or adopting prerendered
+- At that first markup, the DOM layer puts it into the shadow DOM once (building fresh markup, or adopting prerendered
   markup if some is already there), and then any deferred data the render registered is drained out.
 - Immediately after that single commit, **both generator depths are stopped.** Stopping them runs
   their `finally` blocks; anything they would have returned as cleanup is discarded. Stopping both is
@@ -341,7 +341,7 @@ own.
 - One thing must be re-applied during adoption: attributes on the host element. The server wrote the
   prerendered *child* markup and its static attributes, but the host element's own attributes were
   never serialized — they only exist as bindings. So on adoption, every attribute binding is applied
-  freshly, landing the host's attributes (and any dynamic child attributes) with their current
+  freshly, setting the host's attributes (and any dynamic child attributes) to their current
   values.
 
 The same adopt-or-build choice exists on the server's one-shot commit: if there's already child
@@ -383,7 +383,7 @@ In the browser, three things ask for a re-render, all funnelling through the upd
 
 Construct (note any prerendered markup) → connect (build the parts, in the browser also watch
 attributes and build the batcher) → run the outer generator synchronously until it picks how the
-markup is produced → that produces markup → the DOM layer lands it (patch, replace, or adopt). On
+markup is produced → that produces markup → the DOM layer puts it on the page (patch, replace, or adopt). On
 demand, batch the requests, re-run the current renderer, and resolve each caller exactly when its
 markup is on screen. An inner error is offered to the outer generator to recover, or else becomes a
 visible terminal error. On disconnect, stop both generators, run their cleanups, and drop everything

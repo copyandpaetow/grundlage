@@ -11,14 +11,14 @@ import { defaultOptions } from "./utils/constants";
 import { isServer } from "./utils/is-server";
 import { createPainter, Painter, teardownPainter } from "./rendering/painter";
 import {
-	clientCommit,
-	createProducer,
-	resolveSettle,
-	serverCommit,
-	Producer,
-	startRoot,
-	teardownProducer,
-} from "./rendering/producer";
+	createRenderState,
+	finishUpdate,
+	RenderState,
+	startOuterGenerator,
+	teardownRenderState,
+	writeToDom,
+	writeToServerDom,
+} from "./rendering/generator-layer";
 import {
 	createScheduler,
 	resetScheduler,
@@ -60,14 +60,14 @@ export const render = (
 		: HTMLElement;
 
 	class BaseElement extends ParentClass implements BaseComponent {
-		//capabilities held as struct fields (Scheduler → Producer → Painter, acyclic). #producer/#scheduler
+		//capabilities held as struct fields (Scheduler → RenderState → Painter, acyclic). #renderState/#scheduler
 		//are null between disconnect and the next connect — and that null IS the disconnected state
 		//update() guards on (C6). #painter is kept across a reconnect for DOM continuity (its
 		//renderedTemplate lets the first render after reconnect patch in place)
 		#painter: Painter | null = null;
-		//ONE Producer for both modes (the server is the client minus the scheduler); the factory picks
-		//the commit strategy. null between disconnect and the next connect
-		#producer: Producer | null = null;
+		//ONE RenderState for both modes (the server is the client minus the scheduler); the factory picks
+		//the writeToDom strategy. null between disconnect and the next connect
+		#renderState: RenderState | null = null;
 		//client-only: the #1-batching coordinator. stays null on the server — and that null IS update()'s
 		//SSR/disconnected no-op guard (C6)
 		#scheduler: Scheduler | null = null;
@@ -87,11 +87,11 @@ export const render = (
 		connectedCallback() {
 			//moving an element in the DOM fires disconnectedCallback then connectedCallback
 			//=> if the generator lifetime is already live we bail so a move doesn't restart it from scratch
-			if (this.#producer !== null) return;
+			if (this.#renderState !== null) return;
 			//server-vs-client is decided here, at connect (a local, not a field): it gates only this
 			//method's wiring and is never read again across the element's lifetime
 			const onServer = isServer();
-			//keep #painter across a reconnect (DOM continuity); build a FRESH generation of producer (and,
+			//keep #painter across a reconnect (DOM continuity); build a FRESH generation of render state (and,
 			//on the client, scheduler) every connect — distinct struct identity is what makes
 			//restart-on-reconnect safe
 			this.#painter ??= createPainter(this, this.#hydratePending);
@@ -100,8 +100,11 @@ export const render = (
 				this.#watchAttributes();
 				this.#scheduler = createScheduler();
 			}
-			this.#producer = createProducer(this.#painter, onServer ? serverCommit : clientCommit);
-			startRoot(this.#producer, componentGenerator);
+			this.#renderState = createRenderState(
+				this.#painter,
+				onServer ? writeToServerDom : writeToDom,
+			);
+			startOuterGenerator(this.#renderState, componentGenerator);
 		}
 
 		async disconnectedCallback() {
@@ -109,14 +112,14 @@ export const render = (
 			//=> wait a tick and bail if we're back so the move doesn't trigger a teardown
 			await Promise.resolve();
 			if (this.isConnected) return;
-			if (this.#producer === null) return; //already torn down (or never connected)
+			if (this.#renderState === null) return; //already torn down (or never connected)
 			teardownPainter(this.#painter!);
-			teardownProducer(this.#producer);
-			resolveSettle(this.#producer); //unstick any pending `await update()` (a no-op on the server)
+			teardownRenderState(this.#renderState);
+			finishUpdate(this.#renderState); //unstick any pending `await update()` (a no-op on the server)
 			if (this.#scheduler !== null) resetScheduler(this.#scheduler);
 			//reassign-to-null: the next connect builds a fresh generation. only #painter survives — never
-			//reuse #producer/#scheduler across generations (that would break generational isolation)
-			this.#producer = null;
+			//reuse #renderState/#scheduler across generations (that would break generational isolation)
+			this.#renderState = null;
 			this.#scheduler = null;
 		}
 
@@ -134,9 +137,9 @@ export const render = (
 
 		update(): Promise<void> {
 			//the null-guard IS the C6 contract: no scheduler ⇒ SSR or disconnected ⇒ no-op resolve, so
-			//`await update()` never hangs. a static current (createCurrent null) has nothing to re-run
+			//`await update()` never hangs. a static current (currentRenderer null) has nothing to re-run
 			if (this.#scheduler === null) return Promise.resolve();
-			if (this.#producer!.createCurrent === null) return Promise.resolve();
+			if (this.#renderState!.currentRenderer === null) return Promise.resolve();
 			//the coalescing gate (this batch's only branch): ride an open flush, or open one. a call
 			//arriving mid-flight just flags dirty so runFlushLoop reflushes once with a fresh pull (C2–C4).
 			//runFlushLoop owns the await-null window + the async-spanning settle contract (ADR-0003)
@@ -145,7 +148,10 @@ export const render = (
 				scheduler.dirty = true;
 				return scheduler.flushPromise;
 			}
-			return (scheduler.flushPromise = runFlushLoop(scheduler, this.#producer!));
+			return (scheduler.flushPromise = runFlushLoop(
+				scheduler,
+				this.#renderState!,
+			));
 		}
 	}
 

@@ -4,7 +4,7 @@ Move `parse()` from runtime to build time for statically-known `html\`...\`` lit
 without changing the public API. Compiled call sites skip the char-by-char parser; the
 runtime parser stays as the fallback for uncompiled sites.
 
-**Parked** until [Part A](./document-free-parser-plan.md) lands — it is the prerequisite
+**Parked** until [Part A](document-free-parser-plan.md) lands — it is the prerequisite
 (document-free `parse()` → a serializable `result` string and no build-time happy-dom).
 
 ## Goal (settled)
