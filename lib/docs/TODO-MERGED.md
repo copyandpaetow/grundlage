@@ -228,25 +228,23 @@ neither leg of Rule 15's caveat holds — the **perf-veto** wins. Current inline
 
 ## Core / update state machine (`src/index.ts`, `src/rendering/sources.ts`)
 
-- [ ] `[L]` **Make `update()` span the whole async render, not just the synchronous
-      dispatch window** (ADR-0003). Today `update()` sets `RENDERING`, calls
-      `dispatchCSRUpdate` synchronously, and flips back to `IDLE` in `finally` — but
-      `dispatchCSRUpdate` returns the moment the driver (`sources.ts` `step`) suspends on a
-      Promise, so `updateState` goes `IDLE` while an async render is still in flight.
-  - **Await resolves too early for every async render:** the promise settles when the
-    sync slice returns, not when the async DOM lands. 56 `await update()` call sites —
-    this is the flaky-test source.
-  - **Coalescing doesn't span async flight:** mid-flight, `updateState` is already
-    `IDLE`, so the next `update()` re-fires and supersedes — correct result
-    (`handle.finished` guards stale commits) but it's restart-churn, not batching.
-  - **Fix (surface unchanged):** track the source's **settle** signal, not the sync
-    return. `IDLE → SCHEDULED` (queue microtask, return shared `flushPromise`);
-    `SCHEDULED →` return same promise (coalesce); `RENDERING →` set a `dirty` bit and
-    return same promise (don't drop, don't restart). On settle: if `dirty`, re-run once
-    with a fresh pull; else `IDLE` + resolve `flushPromise`. Driver-level supersession
-    (`handle.finished`) stays as the safety net for external source swaps.
-  - **Contract to ratify:** "`update()` resolves once the DOM reflects this call,
+- [x] `[L]` **Make `update()` span the whole async render, not just the synchronous
+      dispatch window** (ADR-0003). **Done.** Driver fires a one-shot `onSettle` at each
+      natural/error terminal in `sources.ts` (not on `cancelHandle`); runtime carries
+      `dirty`/`flushPromise`/`resolveFlush`/`driving` and runs the machine via
+      `scheduleFlush → runFlush → finishFlush` + `handleSourceSettle` in `csr-runtime.ts`;
+      `update()` in `src/index.ts` is guards + `scheduleFlush`.
+  - **Contract (now honored):** "`update()` resolves once the DOM reflects this call,
     coalescing with any concurrent update, across sync **and** async renders."
+  - **Decisions:** *settle = source completion* — `await update()` on a never-returning
+    generator never resolves (release via disconnect/supersession). *No reflush loop
+    guard* — `dirty` is one bit (≤ one reflush per settle); an unconditional re-update
+    loops the microtask queue (documented user error, like setState-in-render), never the
+    stack.
+  - **Tests:** `tests/integration/update-scheduling.browser.test.ts` (early-resolve,
+    coalescing, mid-flight reflush, error-resolves, supersession); `async.browser.test.ts`
+    dropped its redundant post-`update()` sleeps; rapid-restart `nested-generators` tests
+    reframed to coalesce-don't-restart.
 
 ---
 
