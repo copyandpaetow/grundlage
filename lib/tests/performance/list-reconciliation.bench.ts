@@ -190,6 +190,23 @@ describe("renderList — 100 items, full reverse", () => {
 	});
 });
 
+describe("renderList — 1000 items, all labels change, stable order", () => {
+	const items = buildItems(1000);
+	const template = renderOnce(listFor(items));
+	let frame = 0;
+
+	//the wasted-map shape: row 0 and row N change so neither peel fires, the whole list is the middle, and every
+	//key differs so every claim resolves structurally (positionally). measures the eager key-Map's cost on the
+	//shape where it never helps.
+	bench("every label changes per call (full middle, all structural claims)", () => {
+		frame++;
+		for (let index = 0; index < items.length; index++) {
+			items[index].label = `item-${index}-f${frame}`;
+		}
+		updateTemplate(template, listFor(items).currentExpressions);
+	});
+});
+
 describe("renderList — 1000 items, one item mutated", () => {
 	const items = buildItems(1000);
 	const template = renderOnce(listFor(items));
