@@ -451,9 +451,9 @@ describe.skipIf("happyDOM" in globalThis)(
 );
 
 describe("MutationObserver and update() interleaving", () => {
-	//the renderer batches updates through UPDATE_STATE: IDLE → SCHEDULED → RENDERING → IDLE
+	//the renderer batches updates through the scheduler's flushPromise/dirty pair: the first update() opens a flush, any update() arriving while flushPromise is open just flags dirty and rides the same promise
 	//we have separate tests for "MO triggers re-render" and "update() coalesces", but nothing pins what happens when both arrive in the same task
-	//these tests pin the contract: setAttribute on the host inside an update flush does not cause an extra render to land, because the MO callback observes UPDATE_STATE != IDLE and bails
+	//these tests pin the contract: setAttribute on the host inside an update flush does not cause an extra render to land, because the MO callback's update() rides the open flushPromise instead of opening a second one
 	let tagId = 0;
 	const uniqueTag = () => `test-observer-race-${tagId++}-${Date.now()}`;
 
@@ -468,7 +468,7 @@ describe("MutationObserver and update() interleaving", () => {
 
 	test("setAttribute fired while a sync update() is mid-flight does not double-render", async () => {
 		//we trigger a render via update() and inside that render we observe whether a same-tick setAttribute (queued in user code right before update()) caused a second pass
-		//the contract we pin: a MutationObserver callback firing while UPDATE_STATE !== IDLE bails (index.ts:240-245), so the queued attribute mutation does not cause a duplicate render in the same task
+		//the contract we pin: a MutationObserver callback firing while a flush is open rides the existing flushPromise (flagging dirty) rather than opening a second one, so the queued attribute mutation does not cause a duplicate render in the same task
 		const tag = uniqueTag();
 		let renderCount = 0;
 
@@ -484,12 +484,12 @@ describe("MutationObserver and update() interleaving", () => {
 		await sleep();
 		expect(renderCount).toBe(1);
 
-		//both lines are sync — the MutationObserver microtask is queued; update() then transitions IDLE → SCHEDULED in the same task
+		//both lines are sync — the MutationObserver microtask is queued; update() then opens the flush (sets flushPromise) in the same task
 		element.setAttribute("data-label", "racy");
 		element.update();
 		await sleep(50);
 
-		//we accept one extra render: either the MO microtask runs first (and update()'s SCHEDULED guard absorbs the second request), or update() runs first (and the MO callback sees SCHEDULED and bails)
+		//we accept one extra render: the MO microtask's update() and the explicit update() both resolve to the one open flushPromise — the second just flags dirty, and runFlushLoop clears dirty at the top of the iteration that renders the already-mutated DOM
 		//either ordering yields a single re-render, not two
 		expect(renderCount).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(

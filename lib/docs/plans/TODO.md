@@ -14,9 +14,10 @@ list-reconciliation benches, not just steady-state `update()`. Complexity tags: 
 The committed-state rewrite was prototyped and **rejected** (see `CHANGELOG.md`). We stay on the
 hash engine and re-apply only these independent wins as clean commits:
 
-- [ ] `[S]` **Comment binding in-place patch.** `renderComment` destroy/recreates the node
+- [ x ] `[S]` **Comment binding in-place patch.** `renderComment` destroy/recreates the node
   (`content.ts`); patch `.data` instead — 4.25× on changing multi-expression comments. Needs no
-  stored state: `const node = marker.nextSibling; isComment(node) ? node.data = value : marker.after(new Comment(value))`.
+  stored state:
+  `const node = marker.nextSibling; isComment(node) ? node.data = value : marker.after(new Comment(value))`.
 - [ ] `[M]` **Drop `expressionToBinding`; per-binding update loop.** Iterate bindings, rebuild one
   if any feeding expression changed (`===`) — replaces the reverse map *and* the `dirtyBindings`
   bitset (`template-html.ts`). Parser + renderer change together. ⚠️ Pure-`===` loses the
@@ -138,4 +139,4 @@ hash engine and re-apply only these independent wins as clean commits:
 - **Signals / source tracking as the 2.0 change-detection model** — slot holds `() => value`,
   re-evaluates only when sources change, O(actually changed) with no diffing. Different programming
   model + a public-API break; parked at 2.0 scale.
-</content>
+  </content>
