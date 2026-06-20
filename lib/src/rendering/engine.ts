@@ -70,9 +70,6 @@ const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	}
 };
 
-//a settled outcome, or a pending raw step the driver converts on settle. heterogeneous on purpose: the
-//settled arm writes the shared outcome cell and is read immediately; the pending arm can't (the cell would
-//be clobbered across the await), so it carries the raw result and the driver converts it synchronously.
 type SteppedTask = StepOutcome | Promise<IteratorResult<unknown>>;
 
 const createCleanStepOutcome = (

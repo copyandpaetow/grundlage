@@ -114,6 +114,40 @@ describe("flush supersession", () => {
 		expect(outerCleanupRan).toBe(true);
 	});
 
+	test("await update() resolves when it supersedes an in-flight async render", async () => {
+		let suspend = true;
+		const gate = Promise.withResolvers<void>();
+
+		const element = mount(
+			render(function* () {
+				yield function* current() {
+					const willSuspend = suspend;
+					yield () => html`<p>body</p>`;
+					if (willSuspend) yield gate.promise; //park the initial render mid-flight
+				};
+			}),
+		) as Updatable;
+
+		await sleep();
+		expect(element.shadowRoot?.textContent).toContain("body"); //inner painted, then parked
+
+		//supersede the parked inner; the superseding render completes synchronously. the root has no
+		//parent to settle it, so historically the DOM landed but this update() promise never resolved.
+		suspend = false;
+		const settled = element.update().then(() => "resolved");
+		const outcome = await Promise.race([
+			settled,
+			sleep(1000).then(() => "hung"),
+		]);
+		expect(outcome).toBe("resolved");
+
+		gate.resolve(); //releasing the abandoned render must not revive it
+		await sleep();
+		expect(element.shadowRoot?.textContent).toContain("body");
+
+		element.remove();
+	});
+
 	test("a cleanup that calls update() during disconnect does not repaint", async () => {
 		let renders = 0;
 		let cleanupRan = false;
