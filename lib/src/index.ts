@@ -1,23 +1,17 @@
 import { applyAttributeBinding } from "./rendering/attribute";
 import { html as parseTemplate } from "./parser/html";
-import {
-	BaseComponent,
-	ComponentConstructor,
-	ComponentGenerator,
-	ComponentOptions,
-	Template,
-} from "./types";
+import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions, Template } from "./types";
 import { defaultOptions } from "./utils/constants";
 import { isServer } from "./utils/is-server";
 import { createPainter } from "./rendering/painter";
 import {
 	createEngine,
-	driveServerOnce,
 	Engine,
-	enqueueUpdate,
-	hasRerunnableCurrent,
+	hasRenderer,
+	scheduleNextUpdate,
 	startEngine,
-	teardownEngine,
+	startServerEngine,
+	stopEngine
 } from "./rendering/engine";
 import { FormBase } from "./forms/form-base";
 
@@ -73,18 +67,13 @@ export const render = (
 		}
 
 		connectedCallback() {
-			//moving an element in the DOM fires disconnectedCallback then connectedCallback
-			//=> a live generation (outer set) means this is a move; bail so it isn't restarted from scratch
 			if (this.#engine !== null && this.#engine.outer !== null) return;
-			//build the engine ONCE; it survives reconnect. the painter is created with it and kept across
-			//reconnect for DOM continuity, while teardownEngine resets the generation fields each disconnect
 			this.#engine ??= createEngine(
 				this,
 				createPainter(this, this.#hydratePending),
 				componentGenerator,
 			);
-			//the server paints once and never re-runs: no attribute observer, no flush, no waiters
-			if (isServer()) return driveServerOnce(this.#engine);
+			if (isServer()) return startServerEngine(this.#engine);
 			this.#watchAttributes();
 			startEngine(this.#engine);
 		}
@@ -96,7 +85,7 @@ export const render = (
 			if (this.isConnected) return;
 			const engine = this.#engine;
 			if (engine === null || engine.outer === null) return; //already torn down / never started
-			teardownEngine(engine);
+			stopEngine(engine);
 		}
 
 		setProperty(name: string, value: unknown, oldValue?: unknown) {
@@ -117,9 +106,8 @@ export const render = (
 			//the null / no-current guard IS the C6 contract: never started, server, disconnected (renderer
 			//cleared on teardown), or a static template current ⇒ no-op resolve, so `await update()` never
 			//hangs. otherwise ride the open flush or open one — enqueueUpdate owns the coalescing window.
-			if (engine === null || !hasRerunnableCurrent(engine))
-				return Promise.resolve();
-			return enqueueUpdate(engine);
+			if (engine === null || !hasRenderer(engine)) return Promise.resolve();
+			return scheduleNextUpdate(engine);
 		}
 	}
 
