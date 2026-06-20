@@ -17,17 +17,17 @@ most one child task, with a "latest template" side-effect.** Every job below map
 single generic primitive — drive a generator, cancel it (→ cleanup), throw into it
 (→ error propagation), await its settlement.
 
-| structured-concurrency primitive | jobs |
-| --- | --- |
-| spawn a task | A1 (root), A2/A3 (child install) |
-| cancel a task → run cleanup | D1, D2, D4, F2 |
-| propagate error child → parent | E1, E2, E3 |
-| "latest value" effect | B1–B3 (render) |
-| await a task's settlement | C2, C5 |
-| restart a task | C1 (generator), C4 |
+| structured-concurrency primitive | jobs                             |
+| -------------------------------- | -------------------------------- |
+| spawn a task                     | A1 (root), A2/A3 (child install) |
+| cancel a task → run cleanup      | D1, D2, D4, F2                   |
+| propagate error child → parent   | E1, E2, E3                       |
+| "latest value" effect            | B1–B3 (render)                   |
+| await a task's settlement        | C2, C5                           |
+| restart a task                   | C1 (generator), C4               |
 
 The root and the current source are **the same task primitive at two depths**. The only thing
-that differs is the yield handler: the parent *installs* a producer, the child *renders* a
+that differs is the yield handler: the parent _installs_ a producer, the child _renders_ a
 template.
 
 ---
@@ -59,7 +59,7 @@ template.
 - **C1** Re-run the **current** producer (never the root): static = no-op, render-fn = re-call
   (synchronous), generator = **restart from scratch** (asynchronous). **[pinned]** —
   `nested-generators` "update() restarts the inner generator each time"
-- **C2** The returned promise resolves once **this call's** DOM has landed — across sync *and*
+- **C2** The returned promise resolves once **this call's** DOM has landed — across sync _and_
   async renders (no trailing `sleep` crutch). **[pinned — ADR-0003]** — `update-scheduling`
   "await update() resolves only after the async DOM has landed"
 - **C3** Concurrent calls coalesce onto **one shared promise** and resolve together.
@@ -103,10 +103,10 @@ template.
   generator returned. **[pinned]**
 - **F3** Any error → teardown + warn + write into shadow. **[pinned]**
 
-## G — Synchronous transparency  ← the constraint that shapes everything
+## G — Synchronous transparency ← the constraint that shapes everything
 
 - **G1** `connectedCallback` must **not `await`** — it returns synchronously, having kicked off
-  the driver synchronously. (The framework **may** schedule its own async *elsewhere*; what it
+  the driver synchronously. (The framework **may** schedule its own async _elsewhere_; what it
   must never do is suspend the connect path itself.) **[pinned]**
 - **G2** So fully-synchronous user code produces a fully-synchronous subtree — including the
   connection/upgrade of **nested components** — within that `connectedCallback`. Only a
@@ -118,21 +118,20 @@ template.
   the connect path the framework stays transparent: sync-in ⇒ sync-out, async only where the
   user asked for it.
 
-- **G3 — async is a deliberate spend.** Framework-introduced async is *allowed*, but in a
-  rendering library "async" means *waiting*, and waiting has two faces: a useful **breather**
+- **G3 — async is a deliberate spend.** Framework-introduced async is _allowed_, but in a
+  rendering library "async" means _waiting_, and waiting has two faces: a useful **breather**
   for the main thread (let the browser do layout/paint/other tasks, coalesce a burst) or pure
   **wasted time** (a deferral that only postpones work that could have run synchronously —
   latency for nothing). So the framework spends async **only when the waiting buys something**.
   **[pinned as principle]**
-
-  - *Justified spend we already make:* the `update()` batching microtask — one deferral that
+  - _Justified spend we already make:_ the `update()` batching microtask — one deferral that
     buys coalescing of a synchronous burst (C3/C4).
-  - *Wasted spend we refuse:* deferring a yield that had no Promise behind it.
+  - _Wasted spend we refuse:_ deferring a yield that had no Promise behind it.
 
   **Consequence (this is the big one):** the driver is **synchronous-while-possible, suspending
   only on a real Promise** — it spends zero async it didn't need. Native `for await…of` fails
-  this twice: it defers the *first* paint (breaking G2's nested-component timing) **and** it
-  spends a microtask on *every* yield for no benefit (G3 waste). **G forecloses native async
+  this twice: it defers the _first_ paint (breaking G2's nested-component timing) **and** it
+  spends a microtask on _every_ yield for no benefit (G3 waste). **G forecloses native async
   iteration and makes the hand-rolled driver required, not a choice — while leaving the door
   open for deliberate, paid-for breathers (e.g. time-slicing a long render) if we ever want them.**
 

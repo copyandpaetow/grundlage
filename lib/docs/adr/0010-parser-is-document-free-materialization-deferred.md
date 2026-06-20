@@ -19,7 +19,7 @@ self-closing exactly.
 Root-template detection becomes a parse-state check: a root template is the first element
 and the only top-level node except comments and whitespace-only text, so the parser
 disqualifies on (1) a second top-level element or (2) non-whitespace top-level text
-(before or after). Erring toward *not-root* is the safe direction — a false not-root
+(before or after). Erring toward _not-root_ is the safe direction — a false not-root
 renders the same content without lifting host attributes, whereas a false root would have
 to invent a top-level node the parser never saw, which inside a `<template>` is
 near-impossible. The existing `parse(strings, true)` reparse stays as the correction, now

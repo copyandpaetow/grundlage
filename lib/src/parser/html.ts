@@ -10,9 +10,15 @@ import {
 	ParsedHTML,
 	RawContentBinding,
 	TagBinding,
-	ValueOf
+	ValueOf,
 } from "./types";
-import { CHAR_CODE, COMMENT_IDENTIFIER, isQuoteCode, isWhitespaceCode, moveArrayContents } from "./html-util";
+import {
+	CHAR_CODE,
+	COMMENT_IDENTIFIER,
+	isQuoteCode,
+	isWhitespaceCode,
+	moveArrayContents,
+} from "./html-util";
 
 /*
 the idea here is to analyze and parse a tagged template string to give us

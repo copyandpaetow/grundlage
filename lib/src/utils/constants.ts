@@ -6,4 +6,3 @@ export const defaultOptions: ComponentOptions = {
 	mode: "open",
 	serializable: true,
 } as const;
-

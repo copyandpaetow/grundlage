@@ -34,7 +34,7 @@ of truth.
 - The live drag is a declared, inherited custom property, not a cross-element write. The
   Gizmo DECLARES `--carrier-live: matrix3d(…)` on its own `:host`; it inherits across the
   slot to the direct child, whose `:host` pulls it (`transform: var(--carrier-live,
-  <committed>)`). The child and its contents ride the drag by pure CSS inheritance — the
+<committed>)`). The child and its contents ride the drag by pure CSS inheritance — the
   Gizmo touches nothing inside the child. Commit writes the child's authored attributes,
   clears `--carrier-live` (once the child has re-rendered against them, so no flash), and
   fires `scene-commit`.

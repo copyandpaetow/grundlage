@@ -68,10 +68,10 @@ Pre-1.0: engineering changes are grouped by area, not version — only tagged re
 
 - **`VALUE_KIND` content-kind classification** — a per-template `Uint8Array` on the constructor
   regressed construction up to +97% / lists +5–14%; the dispatch saving came back within noise.
-  Rejected. (The attribute half *did* land, at parse time.)
+  Rejected. (The attribute half _did_ land, at parse time.)
 - **Committed-state change detection** (2026-06-15) — built out and A/B'd head-to-head against the
   hash engine: tie on every idle path, regression on bulk change (list 1000 all-labels 2.1×, nested
   5×5 1.77×, partial-wide 1.8×). Did not earn its ~+130 LOC / per-instance `committed` array.
   Rejected; reverted to the hash engine. Independent wins kept — see `TODO.md`.
-</content>
-</invoke>
+  </content>
+  </invoke>

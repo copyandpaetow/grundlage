@@ -11,12 +11,12 @@ tree → render again — never through a `style.set*` from outside the render.
 
 ## Why
 
-The library's job is to make DOM operations sparse. Making `update()` the *only* writer is
+The library's job is to make DOM operations sparse. Making `update()` the _only_ writer is
 what lets it: repeated calls coalesce on a microtask, and the per-binding dirty-check writes
 only what changed, so even a 60fps gesture routed through the channel touches the minimum
 DOM. A second, imperative "fast lane" would defeat that — it forks the mental model and moves
 write-scheduling out of the one place that can keep it minimal and predictable. The author
-expresses *intent* ("re-render, here's the new state"); the library owns performance.
+expresses _intent_ ("re-render, here's the new state"); the library owns performance.
 
 ## Considered Options
 
@@ -29,7 +29,7 @@ expresses *intent* ("re-render, here's the new state"); the library owns perform
   than authoring in the generator. It stays available for the rare genuine need; it is not
   the idiom, so the declarative path remains the obvious one.
 - **A cross-component `setProp` push for parent→child state (rejected).** See ADR-0003: a
-  push does not pin *when* the target re-renders, standardizing a race rather than removing
+  push does not pin _when_ the target re-renders, standardizing a race rather than removing
   it. Peers coordinate by event and pull their inputs from durable element state at render
   time. A parent that must drive a child's render state does so through durable state the
   child already pulls (an attribute, or an inherited custom property declared in the parent's
@@ -37,12 +37,12 @@ expresses *intent* ("re-render, here's the new state"); the library owns perform
 
 ## Consequences
 
-- Components that depend on something *other* than their own attributes (slotted content, an
+- Components that depend on something _other_ than their own attributes (slotted content, an
   external "re-pin" signal) get no automatic re-render; the author wires the trigger to
   `update()`. The coordinator that caused the change is the right place to call it — a
   component spying on its own subtree to react to changes it or its coordinator caused is the
   anti-pattern this rules out.
-- "Measure" stays a *read* feeding the next render. The only genuinely DOM-dependent reads
+- "Measure" stays a _read_ feeding the next render. The only genuinely DOM-dependent reads
   are ones the browser alone can answer (e.g. a perspective-projected screen position via
   `getBoundingClientRect`); those belong in a handler or a Render generator's measure step,
   feeding closure state, never writing the tree.

@@ -1,6 +1,6 @@
 # Cubes Editor
 
-A DOM-as-geometry 3D editor: custom elements *are* the geometry (pure CSS-3D, no
+A DOM-as-geometry 3D editor: custom elements _are_ the geometry (pure CSS-3D, no
 canvas/WebGL). This context is the editor layered over them — selection, manipulation,
 grouping, placement. Distinct from the [Grundlage](../../../lib/CONTEXT.md) templating
 library it is built with.
@@ -43,7 +43,7 @@ _Avoid_: highlight, outline, selection box, bounding box (that last is the math 
 `blocksBoundsPx` — not the element).
 
 **Selection**:
-The wrapping of the chosen Blocks as `gizmo > cage > blocks`. The wrappers' *existence*
+The wrapping of the chosen Blocks as `gizmo > cage > blocks`. The wrappers' _existence_
 is the selection; no `selected` attribute lives on the geometry. One Cage holds one or
 many Blocks, so a single- and multi-Block selection are the same structure.
 _Avoid_: active, focused.

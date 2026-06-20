@@ -26,7 +26,8 @@ if (command.length === 0) {
 
 //resolve a bare `vitest` to the workspace binary so the wrapper doesn't depend on npx
 if (command[0] === "vitest") {
-	const local = new URL("../node_modules/.bin/vitest", import.meta.url).pathname;
+	const local = new URL("../node_modules/.bin/vitest", import.meta.url)
+		.pathname;
 	if (existsSync(local)) command[0] = local;
 }
 

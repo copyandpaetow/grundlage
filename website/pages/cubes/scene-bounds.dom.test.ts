@@ -41,10 +41,7 @@ const makeLeaf = (
 // A transform carrier: an inline `transform` but NO extent, so blockCornersPx
 // recurses into its leaf children and composes their corners through the group's
 // own matrix.
-const makeGroup = (
-	transform: string,
-	children: HTMLElement[],
-): HTMLElement => {
+const makeGroup = (transform: string, children: HTMLElement[]): HTMLElement => {
 	const group = document.createElement("scene-group");
 	if (transform !== "") group.style.transform = transform;
 	for (const child of children) group.appendChild(child);
@@ -103,9 +100,7 @@ describe("blocksBoundsPx — the world-aligned cage volume", () => {
 
 	test("a rotation swaps the extents it turns through", () => {
 		// A slab (x=60, y=20, z=60) spun 90° about Z trades its x and y extents.
-		const bounds = blocksBoundsPx([
-			makeLeaf("rotateZ(90deg)", [60, 20, 60]),
-		]);
+		const bounds = blocksBoundsPx([makeLeaf("rotateZ(90deg)", [60, 20, 60])]);
 		expect(bounds).not.toBeNull();
 		expectVectorClose(bounds!.half, [20, 60, 60]);
 	});

@@ -29,7 +29,7 @@ cursor is hoisted back to a loop local.
 - **Single pooled struct, all state on `ctx` (chosen).** Struct shape, zero per-parse
   allocation, mechanical diff. Per-char property loads, bench-gated.
 - **Keep loose module globals (rejected).** The status quo. Rejected: it's the only
-  Rule-3 holdout, and the exemption was never about *loose* state — only about avoiding
+  Rule-3 holdout, and the exemption was never about _loose_ state — only about avoiding
   per-call allocation, which a pooled struct also achieves.
 - **Allocate a `ParserState` per `parse()` (rejected).** Cleanest reentrancy story, but
   re-allocates and re-grows nine buffers every parse on a render-time path. Rejected on GC

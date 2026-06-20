@@ -1,6 +1,12 @@
 import { applyAttributeBinding } from "./rendering/attribute";
 import { html as parseTemplate } from "./parser/html";
-import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions, Template } from "./types";
+import {
+	BaseComponent,
+	ComponentConstructor,
+	ComponentGenerator,
+	ComponentOptions,
+	Template,
+} from "./types";
 import { defaultOptions } from "./utils/constants";
 import { isServer } from "./utils/is-server";
 import { createPainter } from "./rendering/painter";
@@ -11,7 +17,7 @@ import {
 	scheduleNextUpdate,
 	startEngine,
 	startServerEngine,
-	stopEngine
+	stopEngine,
 } from "./rendering/engine";
 import { FormBase } from "./forms/form-base";
 

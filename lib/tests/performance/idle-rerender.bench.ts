@@ -48,16 +48,22 @@ const treeFor = (depth: number, text: string): HTMLTemplate => {
 
 describe("idle re-render — nested template tree (depth 4)", () => {
 	const template = renderOnce(treeFor(4, "stable"));
-	bench("re-render, nothing changed (today: one deep hash, skip subtree)", () => {
-		updateTemplate(template, treeFor(4, "stable").currentExpressions);
-	});
+	bench(
+		"re-render, nothing changed (today: one deep hash, skip subtree)",
+		() => {
+			updateTemplate(template, treeFor(4, "stable").currentExpressions);
+		},
+	);
 });
 
 describe("idle re-render — nested template tree (depth 8)", () => {
 	const template = renderOnce(treeFor(8, "stable"));
-	bench("re-render, nothing changed (today: one deep hash, skip subtree)", () => {
-		updateTemplate(template, treeFor(8, "stable").currentExpressions);
-	});
+	bench(
+		"re-render, nothing changed (today: one deep hash, skip subtree)",
+		() => {
+			updateTemplate(template, treeFor(8, "stable").currentExpressions);
+		},
+	);
 });
 
 /*
@@ -80,9 +86,12 @@ for (const count of [20, 100, 1000]) {
 	describe(`idle re-render — list, unchanged (N=${count})`, () => {
 		const items = buildItems(count);
 		const template = renderOnce(listFor(items));
-		bench(`re-render same ${count} items (today: N hashTemplate, head-peel, skip)`, () => {
-			updateTemplate(template, listFor(items).currentExpressions);
-		});
+		bench(
+			`re-render same ${count} items (today: N hashTemplate, head-peel, skip)`,
+			() => {
+				updateTemplate(template, listFor(items).currentExpressions);
+			},
+		);
 	});
 }
 
@@ -92,14 +101,23 @@ frame (different ref, identical contents) fails the input `===`, so today it fal
 gate, matches, and skips. After: input `===` fails the same way, then shallowEqual decides. This baselines
 the hashValue(obj) walk that shallowEqual will replace (Tier 1 measures the two primitives in isolation).
 */
-const freshMeta = () => ({ id: 7, role: "admin", active: true, score: 42, tag: null });
+const freshMeta = () => ({
+	id: 7,
+	role: "admin",
+	active: true,
+	score: 42,
+	tag: null,
+});
 const widget = (data: object) => html`<div data-meta="${data}"></div>`;
 
 describe("idle re-render — fresh-but-equal object prop", () => {
 	const template = renderOnce(widget(freshMeta()));
-	bench("re-render fresh-but-equal object (today: hashValue(obj), skip)", () => {
-		updateTemplate(template, widget(freshMeta()).currentExpressions);
-	});
+	bench(
+		"re-render fresh-but-equal object (today: hashValue(obj), skip)",
+		() => {
+			updateTemplate(template, widget(freshMeta()).currentExpressions);
+		},
+	);
 });
 
 /*
@@ -116,12 +134,17 @@ const wideRow = (
 	e: string,
 	f: string,
 ) =>
-	html`<div class="${a}" id="${b}" title="${c}" lang="${d}" dir="${e}" role="${f}"></div>`;
+	html`<div
+		class="${a}"
+		id="${b}"
+		title="${c}"
+		lang="${d}"
+		dir="${e}"
+		role="${f}"
+	></div>`;
 
 describe("idle re-render — wide component, all-primitive attrs (=== floor)", () => {
-	const template = renderOnce(
-		wideRow("x", "y", "z", "en", "ltr", "button"),
-	);
+	const template = renderOnce(wideRow("x", "y", "z", "en", "ltr", "button"));
 	bench("re-render same 6 primitive attrs (today: === loop, no flush)", () => {
 		updateTemplate(
 			template,

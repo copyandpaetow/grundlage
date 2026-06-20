@@ -3,16 +3,7 @@ import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/is-generator";
 import { paint, Painter, serverPaint, teardownPainter } from "./painter";
 import { HTMLTemplate } from "./template-html";
-import {
-	getTaskResult,
-	RESULT,
-	ROLE,
-	STEP_EVENT,
-	StepEvent,
-	Task,
-	TASK_STATE,
-	updateStepEvent,
-} from "./task";
+import { createStepOutcome, nextOperation, OPERATION, ROLE, STEP_OUTCOME, StepOutcome, Task, TASK_STATE } from "./task";
 
 export interface Engine {
 	readonly host: BaseComponent;
@@ -79,18 +70,23 @@ const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	}
 };
 
-//todo: would inlining this to updateStepEvent(result.done ? EVENT.RETURNED : EVENT.YIELDED, result.value) and removing this function increase readability?
-//if not, the name needs some work
-const getNextStepEvent = (result: IteratorResult<unknown>): StepEvent =>
+//a settled outcome, or a pending raw step the driver converts on settle. heterogeneous on purpose: the
+//settled arm writes the shared outcome cell and is read immediately; the pending arm can't (the cell would
+//be clobbered across the await), so it carries the raw result and the driver converts it synchronously.
+type SteppedTask = StepOutcome | Promise<IteratorResult<unknown>>;
+
+const createCleanStepOutcome = (
+	result: IteratorResult<unknown>,
+): StepOutcome =>
 	result.done
-		? updateStepEvent(STEP_EVENT.RETURNED, result.value)
-		: updateStepEvent(STEP_EVENT.YIELDED, result.value);
+		? createStepOutcome(STEP_OUTCOME.RETURNED, result.value)
+		: createStepOutcome(STEP_OUTCOME.YIELDED, result.value);
 
 const nextTaskStep = (
 	task: Task,
 	mode: ValueOf<typeof MODE>,
 	value: unknown,
-): StepEvent | Promise<IteratorResult<unknown>> => {
+): SteppedTask => {
 	let stepped: IteratorResult<unknown> | Promise<IteratorResult<unknown>>;
 	try {
 		stepped =
@@ -98,9 +94,9 @@ const nextTaskStep = (
 				? (task.generator as Generator).throw!(value)
 				: task.generator.next(value);
 	} catch (error) {
-		return updateStepEvent(STEP_EVENT.THREW, error);
+		return createStepOutcome(STEP_OUTCOME.THREW, error);
 	}
-	return stepped instanceof Promise ? stepped : getNextStepEvent(stepped);
+	return stepped instanceof Promise ? stepped : createCleanStepOutcome(stepped);
 };
 
 const writeFatalErrorIntoShadow = (
@@ -130,11 +126,7 @@ const resolvePendingUpdatePromise = (engine: Engine): void => {
 const runTask = (
 	engine: Engine,
 	task: Task,
-	start: StepEvent | Promise<IteratorResult<unknown>> = nextTaskStep(
-		task,
-		MODE.SEND,
-		undefined,
-	),
+	start: SteppedTask = nextTaskStep(task, MODE.SEND, undefined),
 ): Outcome => {
 	let next = start;
 	while (true) {
@@ -142,72 +134,80 @@ const runTask = (
 			next.then(
 				(result) => {
 					if (isTaskLive(engine, task))
-						runTask(engine, task, getNextStepEvent(result));
+						runTask(engine, task, createCleanStepOutcome(result));
 				},
 				(error) => {
 					if (isTaskLive(engine, task))
-						runTask(engine, task, updateStepEvent(STEP_EVENT.THREW, error));
+						runTask(engine, task, createStepOutcome(STEP_OUTCOME.THREW, error));
 				},
 			);
 			return OUTCOME.SUSPENDED;
 		}
 
-		const taskResult = getTaskResult(task, next);
-		switch (taskResult.kind) {
-			case RESULT.PAINT:
+		const operation = nextOperation(task, next);
+		switch (operation.kind) {
+			case OPERATION.PAINT:
 				if (task.role === ROLE.OUTER) engine.renderer = null;
 				try {
-					paint(engine.painter, taskResult.payload);
+					paint(engine.painter, operation.payload);
 				} catch (error) {
-					next = updateStepEvent(STEP_EVENT.THREW, error);
+					next = createStepOutcome(STEP_OUTCOME.THREW, error);
 					break;
 				}
 				next = nextTaskStep(task, MODE.SEND, engine.host);
 				break;
 
-			case RESULT.PAINT_FROM:
-				if (task.role === ROLE.OUTER) engine.renderer = taskResult.payload;
+			case OPERATION.PAINT_FROM:
+				if (task.role === ROLE.OUTER) engine.renderer = operation.payload;
 				try {
-					paint(engine.painter, taskResult.payload(engine.host));
+					paint(engine.painter, operation.payload(engine.host));
 				} catch (error) {
-					next = updateStepEvent(STEP_EVENT.THREW, error);
+					next = createStepOutcome(STEP_OUTCOME.THREW, error);
 					break;
 				}
 				next = nextTaskStep(task, MODE.SEND, engine.host);
 				break;
 
-			case RESULT.RESUME:
-				next = nextTaskStep(task, MODE.SEND, taskResult.payload);
+			case OPERATION.RESUME:
+				next = nextTaskStep(task, MODE.SEND, operation.payload);
 				break;
 
-			case RESULT.INSTALL: {
-				engine.renderer = taskResult.payload;
+			case OPERATION.INSTALL: {
+				engine.renderer = operation.payload;
 				const innerOutcome = runTask(
 					engine,
-					resetInnerTask(engine, taskResult.payload),
+					resetInnerTask(engine, operation.payload),
 				);
 				if (innerOutcome === OUTCOME.THREW_UP) return OUTCOME.THREW_UP;
 				next = nextTaskStep(task, MODE.SEND, engine.host);
 				break;
 			}
 
-			case RESULT.AWAIT: {
-				const promise = taskResult.payload;
+			case OPERATION.AWAIT: {
+				const promise = operation.payload;
 				promise.then(
 					(value) => {
 						if (isTaskLive(engine, task))
-							runTask(engine, task, updateStepEvent(STEP_EVENT.RESUMED, value));
+							runTask(
+								engine,
+								task,
+								createStepOutcome(STEP_OUTCOME.RESUMED, value),
+							);
 					},
 					(error) => {
 						if (isTaskLive(engine, task))
-							runTask(engine, task, updateStepEvent(STEP_EVENT.THREW, error));
+							runTask(
+								engine,
+								task,
+								createStepOutcome(STEP_OUTCOME.THREW, error),
+							);
 					},
 				);
 				return OUTCOME.SUSPENDED;
 			}
 
-			case RESULT.THROW_TO_PARENT: {
-				const error = taskResult.payload;
+			case OPERATION.THROW_TO_PARENT: {
+				const error = operation.payload;
 				cancelTaskAndRunCleanup(engine.inner);
 				const parent = engine.outer;
 				const parentCanCatch =
@@ -219,7 +219,7 @@ const runTask = (
 				const reaction = nextTaskStep(parent, MODE.THROW, error);
 				const dismissed =
 					!(reaction instanceof Promise) &&
-					reaction.kind === STEP_EVENT.RETURNED;
+					reaction.kind === STEP_OUTCOME.RETURNED;
 				if (dismissed) {
 					parent.cleanup =
 						typeof reaction.payload === "function"
@@ -233,15 +233,15 @@ const runTask = (
 				return OUTCOME.THREW_UP;
 			}
 
-			case RESULT.COMPLETED:
+			case OPERATION.COMPLETED:
 				if (task.role === ROLE.INNER) resolvePendingUpdatePromise(engine);
 				return OUTCOME.DONE;
 
-			case RESULT.FAIL:
-				cancelEngineAndNotifyHost(engine, taskResult.payload);
+			case OPERATION.FAIL:
+				cancelEngineAndNotifyHost(engine, operation.payload);
 				return OUTCOME.FAILED;
 
-			case RESULT.NOOP:
+			case OPERATION.NOOP:
 				return OUTCOME.SUSPENDED;
 		}
 	}
@@ -307,64 +307,57 @@ export const startServerEngine = (engine: Engine): void => {
 const runServerTask = (
 	engine: Engine,
 	task: Task,
-	start: StepEvent | Promise<IteratorResult<unknown>> = nextTaskStep(
-		task,
-		MODE.SEND,
-		undefined,
-	),
+	start: SteppedTask = nextTaskStep(task, MODE.SEND, undefined),
 ): void => {
 	let next = start;
 	while (true) {
 		if (next instanceof Promise) {
 			next.then(
-				(result) => runServerTask(engine, task, getNextStepEvent(result)),
+				(result) => runServerTask(engine, task, createCleanStepOutcome(result)),
 				(error) => cancelEngineAndNotifyHost(engine, error),
 			);
 			return;
 		}
 
-		const taskResult = getTaskResult(task, next);
-		switch (taskResult.kind) {
-			case RESULT.PAINT:
-			case RESULT.PAINT_FROM: {
+		const operation = nextOperation(task, next);
+		switch (operation.kind) {
+			case OPERATION.PAINT:
+			case OPERATION.PAINT_FROM: {
 				let template: HTMLTemplate;
 				try {
 					template =
-						taskResult.kind === RESULT.PAINT
-							? taskResult.payload
-							: (taskResult.payload as RenderFunction)(engine.host);
+						operation.kind === OPERATION.PAINT
+							? operation.payload
+							: (operation.payload as RenderFunction)(engine.host);
 				} catch (error) {
-					next = updateStepEvent(STEP_EVENT.THREW, error);
+					next = createStepOutcome(STEP_OUTCOME.THREW, error);
 					break;
 				}
 				serverPaint(engine.painter, template);
 				return finishServerRenderAndCancel(engine);
 			}
 
-			case RESULT.INSTALL:
-				return runServerTask(
-					engine,
-					resetInnerTask(engine, taskResult.payload),
-				);
+			case OPERATION.INSTALL:
+				return runServerTask(engine, resetInnerTask(engine, operation.payload));
 
-			case RESULT.RESUME:
-				next = nextTaskStep(task, MODE.SEND, taskResult.payload);
+			case OPERATION.RESUME:
+				next = nextTaskStep(task, MODE.SEND, operation.payload);
 				break;
 
-			case RESULT.AWAIT:
-				taskResult.payload.then(
+			case OPERATION.AWAIT:
+				operation.payload.then(
 					(value) =>
 						runServerTask(
 							engine,
 							task,
-							updateStepEvent(STEP_EVENT.RESUMED, value),
+							createStepOutcome(STEP_OUTCOME.RESUMED, value),
 						),
 					(error) => cancelEngineAndNotifyHost(engine, error),
 				);
 				return;
 
-			case RESULT.THROW_TO_PARENT: {
-				const error = taskResult.payload;
+			case OPERATION.THROW_TO_PARENT: {
+				const error = operation.payload;
 				cancelTaskAndRunCleanup(engine.inner);
 				const parent = engine.outer;
 				if (parent !== null && parent.state === TASK_STATE.DRIVING)
@@ -376,13 +369,13 @@ const runServerTask = (
 				return cancelEngineAndNotifyHost(engine, error);
 			}
 
-			case RESULT.COMPLETED:
+			case OPERATION.COMPLETED:
 				return finishServerRenderAndCancel(engine);
 
-			case RESULT.FAIL:
-				return cancelEngineAndNotifyHost(engine, taskResult.payload);
+			case OPERATION.FAIL:
+				return cancelEngineAndNotifyHost(engine, operation.payload);
 
-			case RESULT.NOOP:
+			case OPERATION.NOOP:
 				return;
 		}
 	}

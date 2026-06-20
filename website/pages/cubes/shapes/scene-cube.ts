@@ -88,7 +88,6 @@ customElements.define(
 						opacity: var(--block-opacity, 1);
 					}
 
-
 					/* Six faces of a unit cube, laid out once. Each is pushed out by
 					   half a unit along its own normal after orienting; with backface
 					   culling only the outward side of each ever paints. */

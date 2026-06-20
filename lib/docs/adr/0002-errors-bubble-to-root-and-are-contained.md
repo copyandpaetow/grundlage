@@ -10,11 +10,11 @@ previously-rendered DOM, and tears down only that component — the host page ke
 ## Why
 
 The library deliberately occupies the JS-land "fail fast, be visible" position, while the
-component *boundary* gives HTML/CSS-land "be forgiving": failure is contained to one
+component _boundary_ gives HTML/CSS-land "be forgiving": failure is contained to one
 element and the author opts into graceful degradation through the language's own
 `try/catch` rather than a framework construct. This single model serves both an island
 dropped into someone else's page and a site authored entirely in the framework, with no
-dev/prod switch and no new surface area — the recovery primitive *is* the language.
+dev/prod switch and no new surface area — the recovery primitive _is_ the language.
 
 ## Considered Options
 

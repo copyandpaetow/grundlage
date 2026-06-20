@@ -19,7 +19,7 @@ generator and returned by every `yield`. Its only Grundlage-specific method is `
 _Avoid_: element (too generic), this (the library is class-free; there is no `this`).
 
 **Render function**:
-A function `(host) => html\`…\`` that a component yields. Re-invoked on each `update()`.
+A function `(host) => html\`…\``that a component yields. Re-invoked on each`update()`.
 The unit that produces markup, distinct from the one-shot setup of the Component. The
 default Producer.
 
@@ -33,13 +33,13 @@ A Producer that is itself a generator (`function*(){ yield html\`…\`; … }`),
 when a single render needs more than "return markup": post-render DOM work (FLIP/measure
 the just-rendered tree), an async or branching sequence, or local state held across yields.
 It behaves like the root Component in async/branching, but may not nest another generator.
-It runs to completion and may `yield` more than once in a single run — the canonical
-measure-render shape is **render → measure the live DOM → render again**: each `yield`
-paints synchronously, so the next line sees the rendered tree, and the re-`yield` patches
+It runs to completion and may `yield`more than once in a single run — the canonical
+measure-render shape is **render → measure the live DOM → render again**: each`yield`
+paints synchronously, so the next line sees the rendered tree, and the re-`yield`patches
 in place (unchanged expressions don't re-render). This is the *only* sanctioned way to feed
 a measured value back into markup — never an imperative DOM write from outside the render.
-On `update()` the whole generator is restarted from the top (vs a Render function, which is
-merely re-invoked), re-running that pass; `update()` is for *external* re-entry only.
+On`update()`the whole generator is restarted from the top (vs a Render function, which is
+merely re-invoked), re-running that pass;`update()` is for _external_ re-entry only.
 _Avoid_: inner generator (the runtime term), effect/hook (there is no hook API).
 
 **Prop**:
@@ -57,12 +57,12 @@ number / boolean) → attribute; complex (object / array / function) → JS prop
 must stay in step.
 
 **Update**:
-The sole re-render trigger: `host.update()`, and the *single channel* through which every
+The sole re-render trigger: `host.update()`, and the _single channel_ through which every
 change to a component's output flows — content, gesture, animation alike. There is no
 reactive primitive and no imperative DOM side-lane: an author never writes the rendered tree
 directly, they change closure state and call `update()`. Microtask-batched, so repeated
 calls in a tick collapse to one render, and the per-binding diff writes only what changed —
-that batching is *why* even a 60fps gesture can route through here. The host's own attribute
+that batching is _why_ even a 60fps gesture can route through here. The host's own attribute
 mutations call it automatically; everything else the author drives: a `MutationObserver` for
 slotted-content changes, the event handler for a gesture (scroll/pointermove are already
 refresh-tied), or a `requestAnimationFrame` loop for time-based animation with no event.
