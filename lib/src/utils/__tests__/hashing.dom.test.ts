@@ -23,20 +23,21 @@ describe("stringHash", () => {
 });
 
 describe("hashValue - primitives", () => {
-	test("null and undefined both hash to 0", () => {
-		expect(hashValue(null)).toBe(0);
-		expect(hashValue(undefined)).toBe(0);
+	test("null and undefined share the nullish hash", () => {
+		expect(hashValue(null)).toBe(hashValue(undefined));
 	});
 
-	test("booleans are 1 / 0", () => {
-		expect(hashValue(true)).toBe(1);
-		expect(hashValue(false)).toBe(0);
+	test("true and false hash distinctly and stay out of the integers' value space", () => {
+		expect(hashValue(true)).not.toBe(hashValue(false));
+		//the type tag keeps booleans from colliding with 1 and 0
+		expect(hashValue(true)).not.toBe(hashValue(1));
+		expect(hashValue(false)).not.toBe(hashValue(0));
 	});
 
-	test("integer returns itself", () => {
-		expect(hashValue(42)).toBe(42);
-		expect(hashValue(0)).toBe(0);
-		expect(hashValue(-7)).toBe(-7);
+	test("integers hash deterministically and distinctly", () => {
+		expect(hashValue(42)).toBe(hashValue(42));
+		expect(hashValue(42)).not.toBe(hashValue(43));
+		expect(hashValue(0)).not.toBe(hashValue(-7));
 	});
 
 	test("float hashing is deterministic", () => {
@@ -60,12 +61,14 @@ describe("hashValue - primitives", () => {
 		expect(hashValue(Infinity)).not.toBe(hashValue(-Infinity));
 	});
 
-	test("string hash matches stringHash", () => {
-		expect(hashValue("hello")).toBe(stringHash("hello"));
+	test("strings hash deterministically and distinctly", () => {
+		expect(hashValue("hello")).toBe(hashValue("hello"));
+		expect(hashValue("hello")).not.toBe(hashValue("world"));
 	});
 
-	test("empty string hashes to 0", () => {
-		expect(hashValue("")).toBe(0);
+	test("empty string is deterministic and distinct from nullish", () => {
+		expect(hashValue("")).toBe(hashValue(""));
+		expect(hashValue("")).not.toBe(hashValue(null));
 	});
 });
 
@@ -135,12 +138,12 @@ describe("hashValue - reference types", () => {
 		expect(hashValue(map)).toBe(hashValue(map));
 	});
 
-	test("two fresh Map instances with identical contents get distinct ids", () => {
-		//Maps and Sets are deliberately opaque to the content-walking branch (they fail `constructor === Object` and `Array.isArray`)
-		//=> they end up in the reference-identity branch and must each get their own counter id
+	test("two fresh Maps with identical contents hash equal", () => {
+		//Maps are walked for content now, so equal entries hash equal across references
 		const first = new Map<string, number>([["a", 1]]);
 		const second = new Map<string, number>([["a", 1]]);
-		expect(hashValue(first)).not.toBe(hashValue(second));
+		expect(hashValue(first)).toBe(hashValue(second));
+		expect(hashValue(first)).not.toBe(hashValue(new Map([["a", 2]])));
 	});
 
 	test("same Set instance hashes equal across reads", () => {
@@ -148,10 +151,11 @@ describe("hashValue - reference types", () => {
 		expect(hashValue(set)).toBe(hashValue(set));
 	});
 
-	test("two fresh Set instances with identical contents get distinct ids", () => {
+	test("two fresh Sets with identical contents hash equal", () => {
 		const first = new Set(["a"]);
 		const second = new Set(["a"]);
-		expect(hashValue(first)).not.toBe(hashValue(second));
+		expect(hashValue(first)).toBe(hashValue(second));
+		expect(hashValue(first)).not.toBe(hashValue(new Set(["b"])));
 	});
 });
 

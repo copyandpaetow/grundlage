@@ -23,6 +23,8 @@ hash engine and re-apply only these independent wins as clean commits:
   bitset (`template-html.ts`). Parser + renderer change together. ⚠️ Pure-`===` loses the
   fresh-but-equal-object skip `hashValue` gave — keep a one-level object compare or accept the
   re-apply deliberately. **`⟂bench-gate`**.
+    - With this we can iterate the binding and abort early in multi expression bindings when a change is already
+      detected
 - [ ] `[S]` **`isSameTemplate` / `paint()` by `parsedHTML` ref** instead of `templateHash` — one
   pointer compare, collision-free. (Does not remove `templateHash`; it still folds into the list
   row-hash.)
@@ -34,6 +36,25 @@ hash engine and re-apply only these independent wins as clean commits:
 
 ## Bugs
 
+- [ ] `[S]` **Unpadded dynamic comment renders as visible text.** `updateContent`
+  (`content.ts`) tells "comment" from "text" content only by `binding.values.length > 1`,
+  so a single-expression comment with no literal padding — `html\`<!--${x}-->\`` — folds to
+  `values.length === 1`, takes the text-node path, and renders the value as **visible DOM**
+  between the markers. `<!-- ${x} -->` only works because the spaces push `values.length` to
+    3. The parser knows it's a comment (`STATE.COMMENT` in `createBinding`) but discards that —
+       comment and text both return `BINDING_TYPES.CONTENT`. Fix with a real discriminator (a
+       comment flag or a distinct comment binding type); fold into the `ValuesBinding`
+       two-type-tag cleanup under _Render engine — simplification_ so COMMENT becomes its own tag.
+       Confirmed: `<!--${x}-->` produced a text node, `<!-- ${x} -->` a comment node.
+- [ ] `[S]` **`updateTag` rebuilds once for non-lowercase dynamic tag names.** The
+  `newTag === element.localName` guard (`tag.ts`) never matches a mixed/upper-case name —
+  `localName` is always lowercased — so `<${"DIV"}>` rebuilds from the `<div>` placeholder on the
+  first flush, dropping focus/selection for nothing. `createElement` lowercases anyway; compare
+  `newTag.toLowerCase() === element.localName`.
+- [ ] `[S]` **`setProperty` double-updates complex values.** `index.ts` calls `applyAttributeBinding`
+  then `update()`, but for a non-stringable value `applyAttributeBinding` already calls `update()`
+  (the `"update" in element` branch fires — the host carries `update`). Coalesced so harmless, but
+  redundant; drop one path.
 - [ x ] `[S]` **`await update()` hangs on root supersession of an in-flight child** — _resolved by the
   engine rework; keep until the checkbox is cleared._ Old failure (`generator-layer.ts`): the root
   superseded a parked child but no terminal resolved its `update()` promise, so the DOM landed while
@@ -49,10 +70,7 @@ hash engine and re-apply only these independent wins as clean commits:
 - [ ] `[S]` **Parser end-of-attribute helper** (`html.ts`): one `endAttribute(...)` for the 7
   near-identical capture/reset blocks; extract `createAttributeBinding()`. ≈ −50 LOC, no behavior
   change.
-- [ ] `[S]` **Shape-indexed handler table in `attribute.ts`** (one `SHAPE_HANDLERS` array vs two
-  switches). **`⟂bench-gate`** vs the static-call switch. (Rule 8 already landed `{apply,remove}` +
-  `handlerForShape` — confirm this isn't redundant.)
-- [ ] `[M]` **Fold Scheduler into the engine** — _done by the rework; keep until the checkbox is
+- [ x ] `[M]` **Fold Scheduler into the engine** — _done by the rework; keep until the checkbox is
   cleared._ `scheduler.ts` is deleted; `flushPromise`/`dirty` now live on the `Engine` struct
   (`pendingUpdate` / `scheduled`) in `engine.ts`, scheduled via `scheduleNextUpdate`. The server no-op
   gate is no longer a null-scheduler check — SSR routes through `startServerEngine` (`isServer()` in

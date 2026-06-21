@@ -311,3 +311,127 @@ describe("renderList — nested list (re-entrancy stress)", () => {
 		updateTemplate(template, nestedListFor(groups).currentExpressions);
 	});
 });
+
+/*
+Object- and nested-template-valued rows — the primitive rows above can never exercise the
+slot-diff's non-primitive comparison, because renderList's row-hash prunes a fully-equal row
+before updateTemplate runs. The slot-diff only sees a row claimed *structurally* (some
+expression changed), so to reach a non-primitive comparison we change one expression (forcing
+the structural claim) while keeping a second expression fresh-but-equal. That fresh-but-equal
+expression is exactly where a hash comparison and a short-circuit equality comparison diverge:
+
+  - object: hash walks both references fully; deep-equal short-circuits.
+  - nested template: hash prunes the equal subtree with a numeric walk; equality recurses
+    through renderTemplate to prove it unchanged.
+
+The real-change control alongside each pins the case where the second expression genuinely
+changes — both comparisons then do identical work, so any A/B delta there is pure noise.
+*/
+
+type ObjectRow = {
+	tick: number;
+	payload: { weight: number; active: boolean; tag: string };
+};
+
+const buildObjectRows = (count: number): Array<ObjectRow> =>
+	Array.from({ length: count }, (_, index) => ({
+		tick: 0,
+		payload: { weight: index, active: index % 2 === 0, tag: `t-${index}` },
+	}));
+
+const objectRowListFor = (source: ReadonlyArray<ObjectRow>) =>
+	html`<ul>
+		${source.map(
+			(item) =>
+				html`<li data-tick="${item.tick}" data-payload="${item.payload}"></li>`,
+		)}
+	</ul>`;
+
+describe("renderList — 100 object-payload rows", () => {
+	const equalItems = buildObjectRows(100);
+	const equalTemplate = renderOnce(objectRowListFor(equalItems));
+	let equalFrame = 0;
+
+	//tick changes => structural claim => slot-diff runs; payload is reallocated with identical content => the diverging comparison runs but stays clean (no write)
+	bench("tick changes, payload fresh-but-equal (object slot-diff: walk vs short-circuit)", () => {
+		equalFrame++;
+		for (let index = 0; index < equalItems.length; index++) {
+			equalItems[index].tick = equalFrame;
+			equalItems[index].payload = {
+				weight: index,
+				active: index % 2 === 0,
+				tag: `t-${index}`,
+			};
+		}
+		updateTemplate(equalTemplate, objectRowListFor(equalItems).currentExpressions);
+	});
+
+	const changeItems = buildObjectRows(100);
+	const changeTemplate = renderOnce(objectRowListFor(changeItems));
+	let changeFrame = 0;
+
+	bench("tick + payload both change (real change control)", () => {
+		changeFrame++;
+		for (let index = 0; index < changeItems.length; index++) {
+			changeItems[index].tick = changeFrame;
+			changeItems[index].payload = {
+				weight: index + changeFrame,
+				active: index % 2 === 0,
+				tag: `t-${index}-${changeFrame}`,
+			};
+		}
+		updateTemplate(
+			changeTemplate,
+			objectRowListFor(changeItems).currentExpressions,
+		);
+	});
+});
+
+type TemplateRow = { tick: number; label: string };
+
+const buildTemplateRows = (count: number): Array<TemplateRow> =>
+	Array.from({ length: count }, (_, index) => ({
+		tick: 0,
+		label: `item-${index}`,
+	}));
+
+const templateRowListFor = (source: ReadonlyArray<TemplateRow>) =>
+	html`<ul>
+		${source.map(
+			(item) =>
+				html`<li data-tick="${item.tick}">${html`<span class="row">${item.label}</span>`}</li>`,
+		)}
+	</ul>`;
+
+describe("renderList — 100 nested-template rows", () => {
+	const equalItems = buildTemplateRows(100);
+	const equalTemplate = renderOnce(templateRowListFor(equalItems));
+	let equalFrame = 0;
+
+	//tick changes => structural claim => slot-diff runs; the nested <span> is reallocated each frame but its label is unchanged => hash prunes the subtree, equality recurses to prove it unchanged
+	bench("tick changes, nested template fresh-but-equal (template slot-diff: prune vs recurse)", () => {
+		equalFrame++;
+		for (let index = 0; index < equalItems.length; index++) {
+			equalItems[index].tick = equalFrame;
+		}
+		updateTemplate(
+			equalTemplate,
+			templateRowListFor(equalItems).currentExpressions,
+		);
+	});
+
+	const changeItems = buildTemplateRows(100);
+	const changeTemplate = renderOnce(templateRowListFor(changeItems));
+	let changeFrame = 0;
+
+	bench("nested label genuinely changes (real change control: both recurse)", () => {
+		changeFrame++;
+		for (let index = 0; index < changeItems.length; index++) {
+			changeItems[index].label = `item-${index}-f${changeFrame}`;
+		}
+		updateTemplate(
+			changeTemplate,
+			templateRowListFor(changeItems).currentExpressions,
+		);
+	});
+});
