@@ -177,6 +177,13 @@ export const updateTemplate = (
 
 	for (let index = 0; index < expressions.length; index++) {
 		const currentEntry = expressions[index];
+
+		if (Array.isArray(currentEntry)) {
+			template.dirtyBindings[template.parsedHTML.expressionToBinding[index]] =
+				1;
+			continue;
+		}
+
 		const previousEntry = previousExpressions[index];
 
 		if (currentEntry === previousEntry) continue;
@@ -187,15 +194,6 @@ export const updateTemplate = (
 		const needsContentCompare =
 			(currentType === "object" && currentEntry !== null) ||
 			currentType === "function";
-
-		//arrays are reconciled per-item inside renderList via hash-based identity matching
-		//if we hashed the whole list here we would walk every item only for renderList to walk them again
-		//=> we just mark dirty and let the one place that needs the per-item compare do it
-		if (Array.isArray(currentEntry)) {
-			template.dirtyBindings[template.parsedHTML.expressionToBinding[index]] =
-				1;
-			continue;
-		}
 
 		if (
 			needsContentCompare &&

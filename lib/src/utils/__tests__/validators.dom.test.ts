@@ -44,10 +44,15 @@ describe("isPlainObject", () => {
 });
 
 describe("isSameTemplate", () => {
-	test("true when two templates share the same tagged-template strings", () => {
+	test("true when two templates come from the same tagged-template call site", () => {
+		const fromOneSite = (value: string) => html`<p>${value}</p>`;
+		expect(isSameTemplate(fromOneSite("a"), fromOneSite("b"))).toBe(true);
+	});
+
+	test("false for distinct literals even with identical static text", () => {
 		const a = html`<p>${"a"}</p>`;
 		const b = html`<p>${"b"}</p>`;
-		expect(isSameTemplate(a, b)).toBe(true);
+		expect(isSameTemplate(a, b)).toBe(false);
 	});
 
 	test("false when structure differs", () => {

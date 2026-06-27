@@ -1434,6 +1434,47 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
+	test("re-renders a list mutated in place on the same array reference", async () => {
+		// A held array mutated in place (push / index assignment) and re-rendered
+		// without allocating a fresh array: renderList diffs the live array against
+		// its own snapshot, so the mutation is seen even though the binding's value
+		// is `=== ` its prior value. The user's array is never rewritten into
+		// HTMLTemplates as a side channel.
+		const tag = uniqueTag();
+		const items: Array<string> = ["a", "b", "c"];
+
+		const MyElement = render(function* () {
+			yield () => html`<ul>${items}</ul>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		// bare primitive items render as adjacent text nodes with no separator
+		const text = () =>
+			element.shadowRoot!.textContent!.replace(/\s+/g, "").trim();
+		expect(text()).toBe("abc");
+		// the engine must not have replaced the caller's primitives with wrappers
+		expect(items).toEqual(["a", "b", "c"]);
+
+		items.push("d");
+		items[0] = "A";
+		await element.update();
+		await sleep();
+
+		expect(text()).toBe("Abcd");
+		expect(items).toEqual(["A", "b", "c", "d"]);
+
+		items.reverse();
+		await element.update();
+		await sleep();
+
+		expect(text()).toBe("dcbA");
+
+		cleanup(element);
+	});
+
 	test("static HTML comments in the template survive a render pass", async () => {
 		// template-html.ts #findTargets walks every comment but only treats those
 		// carrying the binding-marker prefix as markers. Static author

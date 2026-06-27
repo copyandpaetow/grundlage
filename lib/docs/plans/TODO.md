@@ -28,7 +28,7 @@ hash engine and re-apply only these independent wins as clean commits:
 - [ ] `[S]` **`isSameTemplate` / `paint()` by `parsedHTML` ref** instead of `templateHash` — one
   pointer compare, collision-free. (Does not remove `templateHash`; it still folds into the list
   row-hash.)
-- [ ] `[S]` **Cross-type hash collisions** (`0`/`false`, `1`/`true`, ref-ids vs raw numbers reuse
+- [ x ] `[S]` **Cross-type hash collisions** (`0`/`false`, `1`/`true`, ref-ids vs raw numbers reuse
   the wrong DOM). Mix a type tag into every `hashValue` branch; spread ref-counter ids out of the
   dense low-int range.
 - [ ] `[M]` **Slot-diff hash-pair → short-circuiting deep-equal** in `updateTemplate` — exact,
@@ -87,12 +87,22 @@ hash engine and re-apply only these independent wins as clean commits:
 
 ## List rendering
 
-- [ ] `[M]` **In-place array mutation skips re-render** (`arr.push(x); update()` hits the `===`
-  short-circuit). Document the immutable-array contract (preferred) or detect mutation.
-  **`⟂bench-gate`** if detecting (per-render copy/hash).
-- [ ] `[L]` **Stop mutating the user's list.** `renderList`/`toTemplateList` rewrite the user's
-  array contents in place — a kept reference finds `HTMLTemplate`s where its values were. Reconcile
-  without mutating user data. **`⟂bench-gate`** (the copy lands per-render).
+- [~] `[L]` **List rendering via hash side-channel, no per-item wrapper** (ADR-0011). Landed in
+  `list.ts` (extracted from `content.ts`): `renderList` diffs the live user array against an
+  engine-owned snapshot (`WeakMap` keyed on the list marker — zero `HTMLTemplate` construction cost),
+  reconciles over a **parallel hash array** (`hashValue` per entry, reused across peel/claim), and
+  **dispatches at the leaf** — `HTMLTemplate` → setup/update-in-place, nested array → engine wrapper,
+  primitive → bare text-node create/patch (no more `toTemplateList`). The user's array is never
+  mutated. The `Array.isArray` branch in `updateTemplate` (`template-html.ts`) now runs *before* the
+  `currentEntry === previousEntry` skip, so a true same-reference in-place mutation
+  (`items.push(x); update()`) re-enters `renderList` and is seen — ADR-0011's headline, pinned by
+  *"re-renders a list mutated in place on the same array reference"* (`content.browser.test.ts`).
+  Bench A/B (HEAD→now): `template-update` dirty path unregressed (no-op 0.08µs flat, the extra
+  `Array.isArray`/entry is free); list shapes −5…−10%; same-ref primitive lists go from broken no-op
+  to the irreducible O(n) content hash (100 entries ≈ 37µs, in line with template rows).
+  **Remaining (optional):** fold the per-item hashes into one rolled-up number and early-out before
+  *any* DOM access when the list is unchanged — saves the marker walk on the common "list untouched,
+  component re-rendered for another reason" path. **`⟂bench-gate`**.
 - [ ] `[L]` **Define the marker-pair range walk once** — route `deleteNodesBetween`, `findTargets`,
   `renderList` collection, and `removeItemDom`/`moveItemAfter` through it so the stop-conditions
   can't drift.
@@ -108,6 +118,10 @@ hash engine and re-apply only these independent wins as clean commits:
 - [ x ] **Extract one fatal-display path** — done by the rework. CSR and SSR both funnel through the
   single `writeFatalErrorIntoShadow` in `engine.ts` (via `cancelEngineAndNotifyHost`); there is no
   second SSR-side display path.
+
+## concistency
+
+- [  ] **Enums should either be const with GROUPNAME_NAME or objects with GROUPNAME.NAME but not both
 
 ## CSS
 

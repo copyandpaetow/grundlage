@@ -435,3 +435,70 @@ describe("renderList — 100 nested-template rows", () => {
 		);
 	});
 });
+
+/*
+All-primitive rows — `${["a", "b", ...]}` straight into the binding, no per-item html`` from
+the caller. This is the shape the no-wrapper leaf dispatch targets: each entry renders as a
+bare text node instead of a wrapper template, so the per-render cost is N text-node
+create/patch + the side-channel arrays, with zero wrapper allocation. No other bench covers
+it (every list above maps to templates), so it is the one that shows the wrapper-drop win and
+guards against a side-channel regression on the primitive path.
+*/
+
+const buildLabels = (count: number): Array<string> =>
+	Array.from({ length: count }, (_, index) => `item-${index}`);
+
+const primitiveListFor = (source: ReadonlyArray<string>) =>
+	html`<ul>
+		${source}
+	</ul>`;
+
+describe("renderList — 100 primitive rows, unchanged", () => {
+	const labels = buildLabels(100);
+	const template = renderOnce(primitiveListFor(labels));
+
+	bench("every entry resolves at head peel (hash-hit, no DOM)", () => {
+		updateTemplate(template, primitiveListFor(labels).currentExpressions);
+	});
+});
+
+describe("renderList — 100 primitive rows, one changes", () => {
+	const labels = buildLabels(100);
+	const template = renderOnce(primitiveListFor(labels));
+	let frame = 0;
+
+	bench("one entry patched in place per call (structural text-node patch)", () => {
+		frame++;
+		labels[50] = `item-50-f${frame}`;
+		updateTemplate(template, primitiveListFor(labels).currentExpressions);
+	});
+});
+
+describe("renderList — 100 primitive rows, all change", () => {
+	const labels = buildLabels(100);
+	const template = renderOnce(primitiveListFor(labels));
+	let frame = 0;
+
+	bench("every entry patched per call (full structural text-node patch)", () => {
+		frame++;
+		for (let index = 0; index < labels.length; index++) {
+			labels[index] = `item-${index}-f${frame}`;
+		}
+		updateTemplate(template, primitiveListFor(labels).currentExpressions);
+	});
+});
+
+describe("renderList — 1000 primitive rows, append/pop alternation", () => {
+	const labels1000 = buildLabels(1000);
+	const labels1001 = [...labels1000, "item-tail"];
+	const template = renderOnce(primitiveListFor(labels1000));
+	let toggle = false;
+
+	bench("tail growth on a long primitive list", () => {
+		toggle = !toggle;
+		updateTemplate(
+			template,
+			primitiveListFor(toggle ? labels1001 : labels1000).currentExpressions,
+		);
+	});
+});
