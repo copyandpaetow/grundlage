@@ -107,6 +107,20 @@ describe("updateAttribute — expandable array spread", () => {
 	});
 });
 
+/*
+the common case for a spread: the same names re-applied across renders with no change.
+updateTemplate folds the array and, finding the hash unchanged, leaves the binding clean so
+expandableAttr.write never runs — this should bail before any attribute touch.
+a fresh-but-equal array each call proves the bail rests on content, not reference identity.
+*/
+describe("updateAttribute — expandable array spread, unchanged", () => {
+	const template = renderOnce(html`<div ${["a", "b", "c"]}></div>`);
+
+	bench("3-attr array, identical content re-rendered", () => {
+		updateTemplate(template, [["a", "b", "c"]]);
+	});
+});
+
 describe("updateAttribute — expandable object spread", () => {
 	const template = renderOnce(html`<div ${{ class: "a", id: "b" }}></div>`);
 	let counter = 0;

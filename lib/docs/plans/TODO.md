@@ -87,22 +87,20 @@ hash engine and re-apply only these independent wins as clean commits:
 
 ## List rendering
 
-- [~] `[L]` **List rendering via hash side-channel, no per-item wrapper** (ADR-0011). Landed in
-  `list.ts` (extracted from `content.ts`): `renderList` diffs the live user array against an
-  engine-owned snapshot (`WeakMap` keyed on the list marker — zero `HTMLTemplate` construction cost),
-  reconciles over a **parallel hash array** (`hashValue` per entry, reused across peel/claim), and
-  **dispatches at the leaf** — `HTMLTemplate` → setup/update-in-place, nested array → engine wrapper,
-  primitive → bare text-node create/patch (no more `toTemplateList`). The user's array is never
-  mutated. The `Array.isArray` branch in `updateTemplate` (`template-html.ts`) now runs *before* the
-  `currentEntry === previousEntry` skip, so a true same-reference in-place mutation
-  (`items.push(x); update()`) re-enters `renderList` and is seen — ADR-0011's headline, pinned by
-  *"re-renders a list mutated in place on the same array reference"* (`content.browser.test.ts`).
-  Bench A/B (HEAD→now): `template-update` dirty path unregressed (no-op 0.08µs flat, the extra
-  `Array.isArray`/entry is free); list shapes −5…−10%; same-ref primitive lists go from broken no-op
-  to the irreducible O(n) content hash (100 entries ≈ 37µs, in line with template rows).
-  **Remaining (optional):** fold the per-item hashes into one rolled-up number and early-out before
-  *any* DOM access when the list is unchanged — saves the marker walk on the common "list untouched,
-  component re-rendered for another reason" path. **`⟂bench-gate`**.
+- [x] `[L]` **List rendering via hash side-channel, no per-item wrapper** (ADR-0011) — _keep until
+  the checkbox is cleared._ Landed in `list.ts` (extracted from `content.ts`): `renderList` diffs the
+  live user array against the prior render's per-item hash row (`listItemHashes[expressionIndex]` on
+  the template — no `WeakMap` side-table, no carriers), reconciles over a **parallel hash array**
+  (`hashValue` per entry, reused across peel/claim), and **dispatches at the leaf** on insert —
+  `HTMLTemplate` → `setupTemplate`, nested array → engine wrapper, primitive → bare text node (no more
+  `toTemplateList`). A changed item is **rebuilt fresh**, never updated in place. The user's array is
+  never mutated. Same-reference in-place mutation (`items.push(x); update()`) is seen because the
+  array slot folds its content in `updateTemplate` and re-enters reconciliation on a changed fold —
+  pinned by *"re-renders a list mutated in place on the same array reference"* (`content.browser.test.ts`).
+  The **fold-and-early-out** (formerly the optional remainder) landed as the fold-gate: `updateTemplate`
+  folds the array, gates the dirty bit, and an unchanged list never enters `renderList` at all — no
+  marker walk, no allocation. Bonus: the same gate bails an unchanged **array attribute spread**
+  (3.4ns → 0.1ns). Changed lists fold twice (gate + per-item), near-free via memoized `template.hash`.
 - [ ] `[L]` **Define the marker-pair range walk once** — route `deleteNodesBetween`, `findTargets`,
   `renderList` collection, and `removeItemDom`/`moveItemAfter` through it so the stop-conditions
   can't drift.

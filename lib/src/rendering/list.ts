@@ -2,14 +2,19 @@ import { html } from "../parser/html";
 import { hashValue } from "../utils/hashing";
 import { assertPrimitiveString } from "../utils/to-primitive";
 import { isComment } from "../utils/validators";
-import { HTMLTemplate, isTemplate, setupTemplate, updateTemplate } from "./template-html";
+import {
+	EMPTY_LIST_ITEM_HASHES,
+	HTMLTemplate,
+	isTemplate,
+	setupTemplate,
+} from "./template-html";
 
 const LIST_IDENTIFIER = "*.*"; //small enough to save space but unique enough to not collide with potential user comments
 
 const isListMarker = (node: Node): node is Comment =>
 	isComment(node) && node.data === LIST_IDENTIFIER;
 
-//a list entry resolves to one of three leaves on apply: a user template renders/updates in place, a nested array gets its own engine wrapper so its inner markers stay scoped, and any stringable value renders as a single bare text node
+//a list entry resolves to one of three leaves on insert: a user template renders its own DOM, a nested array gets an engine wrapper so its inner markers stay scoped, and any stringable value renders as a single bare text node
 const KIND_PRIMITIVE = 0;
 const KIND_TEMPLATE = 1;
 const KIND_ARRAY = 2;
@@ -21,86 +26,27 @@ const kindOf = (entry: unknown): number =>
 			? KIND_ARRAY
 			: KIND_PRIMITIVE;
 
-//every nested-array entry is wrapped through this one call site, so all array wrappers share one ParsedHTML. comparing a prior carrier against it tells an array slot apart from a user-template slot without storing a parallel kind array
-//resolved lazily, not at module load: list -> template-html -> content -> list is an import cycle, and html`` constructs an HTMLTemplate that may not be initialized yet during module evaluation
-let arrayWrapperParsed: HTMLTemplate["parsedHTML"] | undefined;
-const arrayWrapper = (): HTMLTemplate["parsedHTML"] =>
-	(arrayWrapperParsed ??= html`${null}`.parsedHTML);
-
-//a prior slot keeps a carrier only when it owns persistent state: a template (its DOM bindings) or an array wrapper (the nested list). a primitive's DOM is a single text node found via its marker, so it carries null
-const carrierKind = (carrier: HTMLTemplate | null): number =>
-	carrier === null
-		? KIND_PRIMITIVE
-		: carrier.parsedHTML === arrayWrapper()
-			? KIND_ARRAY
-			: KIND_TEMPLATE;
-
-interface ListSnapshot {
-	//carriers[i] is the engine's DOM carrier for item i (template/array-wrapper), or null for a primitive item
-	carriers: Array<HTMLTemplate | null>;
-	//hashes[i] folds item i's content; primitives keep no carrier, so this is the only record of their prior value
-	hashes: Array<number>;
-}
-
-const EMPTY_SNAPSHOT: ListSnapshot = { carriers: [], hashes: [] };
-
-//the engine's own record of what each list binding rendered last, keyed on the binding's marker (stable across renders) so we never write reconciled state back into the user's array. GCs with the marker when the list is torn down
-const listSnapshots = new WeakMap<Comment, ListSnapshot>();
+//shared empty so a slot that has never rendered a list reads as "nothing was here" without a null branch
+const EMPTY_HASHES: Array<number> = [];
 
 const primitiveText = (entry: unknown): string =>
 	entry == null ? "" : assertPrimitiveString(entry);
 
-//inserts a fresh item's DOM right after `position`, records its carrier, and returns the trailing item marker as the next insertion point
+//builds a fresh item's DOM right after `position` and returns its trailing marker as the next insertion point. a changed item is rebuilt through here rather than updated in place, so we never need to keep the prior item's HTMLTemplate instance around
 const insertItem = (
 	position: ChildNode,
 	entry: unknown,
 	kind: number,
-	carriers: Array<HTMLTemplate | null>,
-	index: number,
 ): Comment => {
 	const itemMarker = new Comment(LIST_IDENTIFIER);
 	if (kind === KIND_TEMPLATE) {
 		position.after(setupTemplate(entry as HTMLTemplate, null), itemMarker);
-		carriers[index] = entry as HTMLTemplate;
 	} else if (kind === KIND_ARRAY) {
-		const wrapper = html`${entry}`;
-		position.after(setupTemplate(wrapper, null), itemMarker);
-		carriers[index] = wrapper;
+		position.after(setupTemplate(html`${entry}`, null), itemMarker);
 	} else {
 		position.after(document.createTextNode(primitiveText(entry)), itemMarker);
-		carriers[index] = null;
 	}
 	return itemMarker;
-};
-
-//reuses a claimed prior slot's DOM for a changed entry of the same kind: a template re-diffs its expressions, an array wrapper re-reconciles, a primitive patches its existing text node
-const updateItem = (
-	itemMarker: Comment,
-	carrier: HTMLTemplate | null,
-	entry: unknown,
-	kind: number,
-) => {
-	if (kind === KIND_TEMPLATE) {
-		updateTemplate(
-			carrier as HTMLTemplate,
-			(entry as HTMLTemplate).currentExpressions,
-		);
-	} else if (kind === KIND_ARRAY) {
-		updateTemplate(carrier as HTMLTemplate, [entry]);
-	} else {
-		(itemMarker.previousSibling as Text).data = primitiveText(entry);
-	}
-};
-
-//a prior slot can be reused for a current entry only when their leaves are the same shape: same-kind for primitives/arrays, same ParsedHTML for templates
-const canReuseStructurally = (
-	carrier: HTMLTemplate | null,
-	entry: unknown,
-	kind: number,
-): boolean => {
-	if (kind === KIND_PRIMITIVE) return carrier === null;
-	if (kind === KIND_ARRAY) return carrierKind(carrier) === KIND_ARRAY;
-	return carrier !== null && carrier.parsedHTML === (entry as HTMLTemplate).parsedHTML;
 };
 
 const removeItemDom = (itemMarker: Comment, listContainerMarker: Comment) => {
@@ -139,30 +85,36 @@ export const renderList = (
 	marker: Comment,
 	expressionIndex: number,
 ) => {
-	//we diff the live user array against our own snapshot of what we rendered last time, never against (or into) the user's array — an in-place push/reverse is seen because we re-read and re-hash every entry here
-	const previous = listSnapshots.get(marker) ?? EMPTY_SNAPSHOT;
-	const previousCarriers = previous.carriers;
-	const previousHashes = previous.hashes;
+	//our only persisted state is the prior render's per-item hashes, kept on the template and indexed by the binding's expression slot (allocated lazily so a template that never renders a list pays nothing). we never read or write the user's array — an in-place push/reverse is seen because we re-hash every entry and diff against these stored hashes
+	let slots = context.listItemHashes;
+	if (slots === EMPTY_LIST_ITEM_HASHES) {
+		slots = context.listItemHashes = new Array(
+			context.currentExpressions.length,
+		).fill(EMPTY_HASHES);
+	}
+	const previousHashes = slots[expressionIndex];
 
 	const current = context.currentExpressions[expressionIndex] as Array<unknown>;
 	const currentLength = current.length;
 
-	//hash every entry once up front (the parallel hash side-channel); templates read their memoized hash, primitives/arrays fold their content. reused across the peel and claim passes and stored as next render's snapshot
+	//hash every entry once up front (templates read their memoized hash, primitives/arrays fold their content) for the reconciliation below
+	//updateTemplate already folded this same array and only marks the binding dirty when the fold changed, so by the time we run at least one entry differs — no "nothing changed" bail needed here
 	const currentHashes: Array<number> = new Array(currentLength);
 	for (let index = 0; index < currentLength; index++) {
 		currentHashes[index] = hashValue(current[index]);
 	}
-	const newCarriers: Array<HTMLTemplate | null> = new Array(currentLength);
+
+	slots[expressionIndex] = currentHashes;
 
 	//we walk the live DOM once and collect one marker per item that's currently rendered
-	//the DOM is the source of truth here. if it has fewer items than the snapshot (e.g. someone cleared the binding's children between renders) we cap collection at what we actually see
+	//the DOM is the source of truth here. if it has fewer items than the prior hashes (e.g. someone cleared the binding's children between renders) we cap collection at what we actually see
 	const previousMarkers: Array<Comment> = [];
 	let sibling: Node | null = marker.nextSibling;
 	while (sibling) {
 		if (isComment(sibling) && sibling.data === marker.data) break;
 		if (
 			isListMarker(sibling) &&
-			previousMarkers.length < previousCarriers.length
+			previousMarkers.length < previousHashes.length
 		) {
 			previousMarkers.push(sibling);
 		}
@@ -185,7 +137,6 @@ export const renderList = (
 		headPrevious <= tailPrevious &&
 		currentHashes[headCurrent] === previousHashes[headPrevious]
 	) {
-		newCarriers[headCurrent] = previousCarriers[headPrevious];
 		headCurrent++;
 		headPrevious++;
 	}
@@ -194,7 +145,6 @@ export const renderList = (
 		headPrevious <= tailPrevious &&
 		currentHashes[tailCurrent] === previousHashes[tailPrevious]
 	) {
-		newCarriers[tailCurrent] = previousCarriers[tailPrevious];
 		tailCurrent--;
 		tailPrevious--;
 	}
@@ -208,7 +158,6 @@ export const renderList = (
 		) {
 			removeItemDom(previousMarkers[previousIndex], marker);
 		}
-		listSnapshots.set(marker, { carriers: newCarriers, hashes: currentHashes });
 		return;
 	}
 
@@ -225,22 +174,16 @@ export const renderList = (
 				position,
 				current[currentIndex],
 				kindOf(current[currentIndex]),
-				newCarriers,
-				currentIndex,
 			);
 		}
-		listSnapshots.set(marker, { carriers: newCarriers, hashes: currentHashes });
 		return;
 	}
 
 	/*
-	otherwise both middles have content, and we need to reconcile them
-	we walk the current middle and try to claim a previous slot for each entry:
-	- first by hash (shape + content match exactly => DOM stays, no update needed)
-	- otherwise by leaf shape at the same relative position (DOM stays, we update it to the new content)
-	- otherwise we insert a fresh item
-	hash and structural claims share the same walk, so a structural claim for current[earlyIndex] can occasionally take a slot that a later current[laterIndex] would have hash-matched
-	=> the output still stays correct (the reused slot gets updated to current[laterIndex]) and the worst case is one extra update in a pathological cross-pattern
+	otherwise both middles have content. we claim a previous slot for each current entry by exact hash:
+	- a hash match means identical content => the existing DOM range stays, moved only if it arrives out of order
+	- anything unmatched is rebuilt fresh (a changed item is an insert, not an in-place update — we keep no instance to patch)
+	unclaimed previous slots are removed at the end
 	*/
 	const middleLengthPrevious = tailPrevious - headPrevious + 1;
 	const hashToMiddleIndex = new Map<number, number>();
@@ -259,10 +202,6 @@ export const renderList = (
 		currentIndex <= tailCurrent;
 		currentIndex++
 	) {
-		const entry = current[currentIndex];
-		const kind = kindOf(entry);
-		const relativeOffset = currentIndex - headCurrent;
-
 		let claimedMiddleIndex = hashToMiddleIndex.get(currentHashes[currentIndex]);
 		if (
 			claimedMiddleIndex !== undefined &&
@@ -271,33 +210,17 @@ export const renderList = (
 			claimedMiddleIndex = undefined;
 		}
 
-		if (
-			claimedMiddleIndex === undefined &&
-			relativeOffset < middleLengthPrevious &&
-			!previousClaimed[relativeOffset] &&
-			canReuseStructurally(
-				previousCarriers[headPrevious + relativeOffset],
-				entry,
-				kind,
-			)
-		) {
-			claimedMiddleIndex = relativeOffset;
-		}
-
 		if (claimedMiddleIndex === undefined) {
-			position = insertItem(position, entry, kind, newCarriers, currentIndex);
+			position = insertItem(
+				position,
+				current[currentIndex],
+				kindOf(current[currentIndex]),
+			);
 			continue;
 		}
 
 		previousClaimed[claimedMiddleIndex] = 1;
-		const claimedSlot = headPrevious + claimedMiddleIndex;
-		const reusedCarrier = previousCarriers[claimedSlot];
-		const itemMarker = previousMarkers[claimedSlot];
-		//a hash claim already matched content exactly; only a structural claim (different hash, same leaf shape) needs the DOM updated
-		if (currentHashes[currentIndex] !== previousHashes[claimedSlot]) {
-			updateItem(itemMarker, reusedCarrier, entry, kind);
-		}
-		newCarriers[currentIndex] = reusedCarrier;
+		const itemMarker = previousMarkers[headPrevious + claimedMiddleIndex];
 
 		//if our claims have been coming in the same order they appear in the previous middle (the common "same list, values changed" case), the existing DOM is already where we want it
 		//=> we only walk siblings to verify and potentially move when a claim arrives out of order
@@ -315,6 +238,4 @@ export const renderList = (
 			removeItemDom(previousMarkers[headPrevious + middleIndex], marker);
 		}
 	}
-
-	listSnapshots.set(marker, { carriers: newCarriers, hashes: currentHashes });
 };
