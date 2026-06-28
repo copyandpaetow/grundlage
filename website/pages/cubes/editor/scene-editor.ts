@@ -4,13 +4,18 @@ import {
 	POSITION_SPECIFIC,
 	resolveBlockTransform,
 	ROTATION_SPECIFIC,
-	SIZE_SPECIFIC
+	SIZE_SPECIFIC,
 } from "../scene-shared";
 import "../wrappers/scene-gizmo";
 import "../wrappers/scene-ghost";
 import "../wrappers/scene-select";
 import "./scene-palette";
-import type { InspectorField, InspectorState, PaletteHandlers, ScenePaletteElement } from "./scene-palette";
+import type {
+	InspectorField,
+	InspectorState,
+	PaletteHandlers,
+	ScenePaletteElement,
+} from "./scene-palette";
 import { type EditorState, primaryBlock } from "./context";
 import { createSelection } from "./selection";
 import { createPlacement } from "./placement";

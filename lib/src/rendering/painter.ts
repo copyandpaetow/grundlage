@@ -36,10 +36,7 @@ export const paint = (painter: Painter, value: HTMLTemplate): void => {
 
 	if (touchesHost) painter.attributeObserver?.disconnect();
 	try {
-		if (
-			previous &&
-			previous.parsedHTML.templateHash === template.parsedHTML.templateHash
-		) {
+		if (previous && previous.parsedHTML === template.parsedHTML) {
 			updateTemplate(previous, template.currentExpressions);
 			return;
 		}

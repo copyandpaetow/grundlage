@@ -46,8 +46,7 @@ customElements.define(
 								var(--block-y),
 								var(--block-z)
 							)
-							rotateX(var(--block-rotate-x))
-							rotateY(var(--block-rotate-y))
+							rotateX(var(--block-rotate-x)) rotateY(var(--block-rotate-y))
 							rotateZ(var(--block-rotate-z));
 					}
 

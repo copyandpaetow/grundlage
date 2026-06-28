@@ -15,7 +15,7 @@ platform forces: the generated element class and `FormBase`, both of which must
 - **Classes for internal types (rejected).** `HTMLTemplate` stays a `class` with
   `setup()`/`#flush()`/`get hash()` and private fields. This is what the code looks like
   today and what a web-components author would reach for by default, since the platform
-  surface *is* classes.
+  surface _is_ classes.
 
 ## Why
 
@@ -23,8 +23,8 @@ The intuition that classes are faster here does not hold, and the things that ac
 matter pull the other way:
 
 - **No perf win to give up.** V8 gives a struct built by a factory the same stable hidden
-  class and the same monomorphic field access a class instance gets, *provided the factory
-  always initializes the same fields in the same order* — which we already engineer for
+  class and the same monomorphic field access a class instance gets, _provided the factory
+  always initializes the same fields in the same order_ — which we already engineer for
   (`html.ts` initializes attribute shape to `STATIC` from the start "so the object's hidden
   class is stable"). Free functions live at module scope and are shared across all structs,
   exactly like prototype methods — no per-instance allocation either way. So choosing
@@ -49,5 +49,5 @@ The platform exception is deliberate and narrow: where the platform demands a cl
 - A future contributor tempted to "make it a class again for speed" should find this note
   first: there is no measured speedup to gain, and doing so reintroduces the `instanceof`
   realm hazard.
-- This ADR is *not* a ban on the generated element class or `FormBase` — those are the
+- This ADR is _not_ a ban on the generated element class or `FormBase` — those are the
   recorded platform exception.

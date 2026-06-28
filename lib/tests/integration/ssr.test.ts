@@ -322,7 +322,9 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		const element = track(await mount(tag, Component));
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("fallback");
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"fallback",
+		);
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();
 	});

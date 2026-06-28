@@ -208,7 +208,8 @@ export const blockCornersPx = (
 	const corners: Vector3[] = [];
 	for (const child of Array.from(block.children)) {
 		if (!isBlock(child)) continue;
-		for (const corner of blockCornersPx(child, worldMatrix)) corners.push(corner);
+		for (const corner of blockCornersPx(child, worldMatrix))
+			corners.push(corner);
 	}
 	return corners;
 };
@@ -265,7 +266,11 @@ export const fromScreenPoint = (point: DOMPoint): Vector3 => [
 
 // A pure rotation matrix in the carrier's own order (rotateX · rotateY · rotateZ),
 // built from a resolved Euler triple. Multiply two of these to combine rotations.
-export const rotationMatrix = ([rotateX, rotateY, rotateZ]: Vector3): DOMMatrix =>
+export const rotationMatrix = ([
+	rotateX,
+	rotateY,
+	rotateZ,
+]: Vector3): DOMMatrix =>
 	new DOMMatrix(
 		`rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`,
 	);
@@ -295,7 +300,11 @@ export const eulerFromMatrix = (matrix: DOMMatrix): Vector3 => {
 	const origin = matrix.transformPoint(new DOMPoint(0, 0, 0));
 	const mapAxis = (x: number, y: number, z: number) => {
 		const mapped = matrix.transformPoint(new DOMPoint(x, y, z));
-		return { x: mapped.x - origin.x, y: mapped.y - origin.y, z: mapped.z - origin.z };
+		return {
+			x: mapped.x - origin.x,
+			y: mapped.y - origin.y,
+			z: mapped.z - origin.z,
+		};
 	};
 	const xAxis = mapAxis(1, 0, 0);
 	const yAxis = mapAxis(0, 1, 0);
@@ -311,5 +320,9 @@ export const eulerFromMatrix = (matrix: DOMMatrix): Vector3 => {
 		];
 	}
 	// Gimbal lock: fold the coupled rotation into X and leave Z at zero.
-	return [toDegrees(Math.atan2(sinPitch * xAxis.y, yAxis.y)), toDegrees(pitch), 0];
+	return [
+		toDegrees(Math.atan2(sinPitch * xAxis.y, yAxis.y)),
+		toDegrees(pitch),
+		0,
+	];
 };

@@ -15,7 +15,7 @@ though that would be one fewer call and is the more "DX-friendly" looking option
 ## Why
 
 `customElements.define` is the single most vanilla part of the web-components platform,
-and it is *not* one of the pain points the library exists to hide (those are
+and it is _not_ one of the pain points the library exists to hide (those are
 attribute-vs-property handling, manual DOM updates, and lifecycle). Hiding it buys almost
 nothing and costs real capability:
 
@@ -26,7 +26,7 @@ nothing and costs real capability:
   methods doesn't fit the library's functional style, but we shouldn't forbid users who
   need it.
 
-Keeping the factory a *pure* function with no name argument and no side effect is also the
+Keeping the factory a _pure_ function with no name argument and no side effect is also the
 smaller, more honest primitive. The auto-registering form, if ever wanted, is a three-line
 userland helper and does not belong in the core surface.
 

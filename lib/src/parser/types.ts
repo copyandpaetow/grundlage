@@ -62,7 +62,6 @@ export type RawContentBinding = {
 export type TagBinding = {
 	type: typeof BINDING_TYPES.TAG;
 	values: Array<number | string>;
-	endValues: Array<number | string>;
 	relatedAttributes: Array<number>;
 };
 

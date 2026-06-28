@@ -31,8 +31,8 @@ pattern). We do **not** discriminate our own types with `instanceof`. This is Ru
   reading a stored tag is the only option that still works — the two decisions reinforce
   each other.
 
-This is the *detection* (read) side. It pairs with the *storage* side (Rule 15: classify
-once, store the kind number, read it downstream) and the *dispatch* side (Rule 8: route the
+This is the _detection_ (read) side. It pairs with the _storage_ side (Rule 15: classify
+once, store the kind number, read it downstream) and the _dispatch_ side (Rule 8: route the
 stored kind through one table). Detection produces the number; storage caches it; dispatch
 consumes it — three moments, no redundancy. Hot paths read the stored kind and the dispatch
 table; they do not call `isX` in a loop.
@@ -41,7 +41,7 @@ table; they do not call `isX` in a loop.
 
 - The nine `instanceof HTMLTemplate` sites collapse to `isTemplate(v)`. `CSSTemplate` (css\`\`)
   will use the same layer from the start.
-- The kind is a number from one per-domain map. *How* that number is carried — a field under
+- The kind is a number from one per-domain map. _How_ that number is carried — a field under
   a plain key vs. a field under a shared symbol key, a value on the object vs. a parallel
   array — is an implementation detail left to the code and the compute-vs-memory call under
   the preface; it is intentionally **not** fixed here, so this decision does not go stale
@@ -50,4 +50,4 @@ table; they do not call `isX` in a loop.
   (`isString`, `isPromise`, …) or stay inline `typeof` / `instanceof`. Because detection is
   centralized (Rule 15), there may be too few raw-detection sites left for primitive
   wrappers to earn their keep — but that is clearer after the Rule 15 storage work lands.
-  Re-evaluate then; this ADR governs *our own* types only.
+  Re-evaluate then; this ADR governs _our own_ types only.

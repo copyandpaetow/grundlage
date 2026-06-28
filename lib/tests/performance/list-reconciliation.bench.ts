@@ -190,6 +190,26 @@ describe("renderList — 100 items, full reverse", () => {
 	});
 });
 
+describe("renderList — 1000 items, all labels change, stable order", () => {
+	const items = buildItems(1000);
+	const template = renderOnce(listFor(items));
+	let frame = 0;
+
+	//the wasted-map shape: row 0 and row N change so neither peel fires, the whole list is the middle, and every
+	//key differs so every claim resolves structurally (positionally). measures the eager key-Map's cost on the
+	//shape where it never helps.
+	bench(
+		"every label changes per call (full middle, all structural claims)",
+		() => {
+			frame++;
+			for (let index = 0; index < items.length; index++) {
+				items[index].label = `item-${index}-f${frame}`;
+			}
+			updateTemplate(template, listFor(items).currentExpressions);
+		},
+	);
+});
+
 describe("renderList — 1000 items, one item mutated", () => {
 	const items = buildItems(1000);
 	const template = renderOnce(listFor(items));
@@ -289,5 +309,196 @@ describe("renderList — nested list (re-entrancy stress)", () => {
 			}
 		}
 		updateTemplate(template, nestedListFor(groups).currentExpressions);
+	});
+});
+
+/*
+Object- and nested-template-valued rows — the primitive rows above can never exercise the
+slot-diff's non-primitive comparison, because renderList's row-hash prunes a fully-equal row
+before updateTemplate runs. The slot-diff only sees a row claimed *structurally* (some
+expression changed), so to reach a non-primitive comparison we change one expression (forcing
+the structural claim) while keeping a second expression fresh-but-equal. That fresh-but-equal
+expression is exactly where a hash comparison and a short-circuit equality comparison diverge:
+
+  - object: hash walks both references fully; deep-equal short-circuits.
+  - nested template: hash prunes the equal subtree with a numeric walk; equality recurses
+    through renderTemplate to prove it unchanged.
+
+The real-change control alongside each pins the case where the second expression genuinely
+changes — both comparisons then do identical work, so any A/B delta there is pure noise.
+*/
+
+type ObjectRow = {
+	tick: number;
+	payload: { weight: number; active: boolean; tag: string };
+};
+
+const buildObjectRows = (count: number): Array<ObjectRow> =>
+	Array.from({ length: count }, (_, index) => ({
+		tick: 0,
+		payload: { weight: index, active: index % 2 === 0, tag: `t-${index}` },
+	}));
+
+const objectRowListFor = (source: ReadonlyArray<ObjectRow>) =>
+	html`<ul>
+		${source.map(
+			(item) =>
+				html`<li data-tick="${item.tick}" data-payload="${item.payload}"></li>`,
+		)}
+	</ul>`;
+
+describe("renderList — 100 object-payload rows", () => {
+	const equalItems = buildObjectRows(100);
+	const equalTemplate = renderOnce(objectRowListFor(equalItems));
+	let equalFrame = 0;
+
+	//tick changes => structural claim => slot-diff runs; payload is reallocated with identical content => the diverging comparison runs but stays clean (no write)
+	bench("tick changes, payload fresh-but-equal (object slot-diff: walk vs short-circuit)", () => {
+		equalFrame++;
+		for (let index = 0; index < equalItems.length; index++) {
+			equalItems[index].tick = equalFrame;
+			equalItems[index].payload = {
+				weight: index,
+				active: index % 2 === 0,
+				tag: `t-${index}`,
+			};
+		}
+		updateTemplate(equalTemplate, objectRowListFor(equalItems).currentExpressions);
+	});
+
+	const changeItems = buildObjectRows(100);
+	const changeTemplate = renderOnce(objectRowListFor(changeItems));
+	let changeFrame = 0;
+
+	bench("tick + payload both change (real change control)", () => {
+		changeFrame++;
+		for (let index = 0; index < changeItems.length; index++) {
+			changeItems[index].tick = changeFrame;
+			changeItems[index].payload = {
+				weight: index + changeFrame,
+				active: index % 2 === 0,
+				tag: `t-${index}-${changeFrame}`,
+			};
+		}
+		updateTemplate(
+			changeTemplate,
+			objectRowListFor(changeItems).currentExpressions,
+		);
+	});
+});
+
+type TemplateRow = { tick: number; label: string };
+
+const buildTemplateRows = (count: number): Array<TemplateRow> =>
+	Array.from({ length: count }, (_, index) => ({
+		tick: 0,
+		label: `item-${index}`,
+	}));
+
+const templateRowListFor = (source: ReadonlyArray<TemplateRow>) =>
+	html`<ul>
+		${source.map(
+			(item) =>
+				html`<li data-tick="${item.tick}">${html`<span class="row">${item.label}</span>`}</li>`,
+		)}
+	</ul>`;
+
+describe("renderList — 100 nested-template rows", () => {
+	const equalItems = buildTemplateRows(100);
+	const equalTemplate = renderOnce(templateRowListFor(equalItems));
+	let equalFrame = 0;
+
+	//tick changes => structural claim => slot-diff runs; the nested <span> is reallocated each frame but its label is unchanged => hash prunes the subtree, equality recurses to prove it unchanged
+	bench("tick changes, nested template fresh-but-equal (template slot-diff: prune vs recurse)", () => {
+		equalFrame++;
+		for (let index = 0; index < equalItems.length; index++) {
+			equalItems[index].tick = equalFrame;
+		}
+		updateTemplate(
+			equalTemplate,
+			templateRowListFor(equalItems).currentExpressions,
+		);
+	});
+
+	const changeItems = buildTemplateRows(100);
+	const changeTemplate = renderOnce(templateRowListFor(changeItems));
+	let changeFrame = 0;
+
+	bench("nested label genuinely changes (real change control: both recurse)", () => {
+		changeFrame++;
+		for (let index = 0; index < changeItems.length; index++) {
+			changeItems[index].label = `item-${index}-f${changeFrame}`;
+		}
+		updateTemplate(
+			changeTemplate,
+			templateRowListFor(changeItems).currentExpressions,
+		);
+	});
+});
+
+/*
+All-primitive rows — `${["a", "b", ...]}` straight into the binding, no per-item html`` from
+the caller. This is the shape the no-wrapper leaf dispatch targets: each entry renders as a
+bare text node instead of a wrapper template, so the per-render cost is N text-node
+create/patch + the side-channel arrays, with zero wrapper allocation. No other bench covers
+it (every list above maps to templates), so it is the one that shows the wrapper-drop win and
+guards against a side-channel regression on the primitive path.
+*/
+
+const buildLabels = (count: number): Array<string> =>
+	Array.from({ length: count }, (_, index) => `item-${index}`);
+
+const primitiveListFor = (source: ReadonlyArray<string>) =>
+	html`<ul>
+		${source}
+	</ul>`;
+
+describe("renderList — 100 primitive rows, unchanged", () => {
+	const labels = buildLabels(100);
+	const template = renderOnce(primitiveListFor(labels));
+
+	bench("every entry resolves at head peel (hash-hit, no DOM)", () => {
+		updateTemplate(template, primitiveListFor(labels).currentExpressions);
+	});
+});
+
+describe("renderList — 100 primitive rows, one changes", () => {
+	const labels = buildLabels(100);
+	const template = renderOnce(primitiveListFor(labels));
+	let frame = 0;
+
+	bench("one entry patched in place per call (structural text-node patch)", () => {
+		frame++;
+		labels[50] = `item-50-f${frame}`;
+		updateTemplate(template, primitiveListFor(labels).currentExpressions);
+	});
+});
+
+describe("renderList — 100 primitive rows, all change", () => {
+	const labels = buildLabels(100);
+	const template = renderOnce(primitiveListFor(labels));
+	let frame = 0;
+
+	bench("every entry patched per call (full structural text-node patch)", () => {
+		frame++;
+		for (let index = 0; index < labels.length; index++) {
+			labels[index] = `item-${index}-f${frame}`;
+		}
+		updateTemplate(template, primitiveListFor(labels).currentExpressions);
+	});
+});
+
+describe("renderList — 1000 primitive rows, append/pop alternation", () => {
+	const labels1000 = buildLabels(1000);
+	const labels1001 = [...labels1000, "item-tail"];
+	const template = renderOnce(primitiveListFor(labels1000));
+	let toggle = false;
+
+	bench("tail growth on a long primitive list", () => {
+		toggle = !toggle;
+		updateTemplate(
+			template,
+			primitiveListFor(toggle ? labels1001 : labels1000).currentExpressions,
+		);
 	});
 });

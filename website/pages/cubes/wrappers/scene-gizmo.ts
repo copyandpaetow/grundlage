@@ -65,25 +65,27 @@ customElements.define(
 		// closure state the render reads; a non-drag render re-measures them from the child, a
 		// drag render derives the centre from the gesture instead.
 		let handleCenterPx: Vector3 = [0, 0, 0];
-		let handleLengthsPx: Vector3 = [HANDLE_LENGTH, HANDLE_LENGTH, HANDLE_LENGTH];
+		let handleLengthsPx: Vector3 = [
+			HANDLE_LENGTH,
+			HANDLE_LENGTH,
+			HANDLE_LENGTH,
+		];
 
-		let drag:
-			| {
-					mode: DragMode;
-					axisIndex: number;
-					startPointer: ScreenPoint;
-					// Screen displacement for ONE world unit along the dragged axis.
-					axisScreen: ScreenPoint;
-					target: HTMLElement;
-					// The child's transform when the drag began (screen-px world space).
-					startMatrix: DOMMatrix;
-					startCenterPx: Vector3;
-					// What the latest move produced — read straight from here by the render
-					// (--carrier-live) and the commit (the authored attributes).
-					liveMatrix: DOMMatrix;
-					centerPx: Vector3;
-			  }
-			| null = null;
+		let drag: {
+			mode: DragMode;
+			axisIndex: number;
+			startPointer: ScreenPoint;
+			// Screen displacement for ONE world unit along the dragged axis.
+			axisScreen: ScreenPoint;
+			target: HTMLElement;
+			// The child's transform when the drag began (screen-px world space).
+			startMatrix: DOMMatrix;
+			startCenterPx: Vector3;
+			// What the latest move produced — read straight from here by the render
+			// (--carrier-live) and the commit (the authored attributes).
+			liveMatrix: DOMMatrix;
+			centerPx: Vector3;
+		} | null = null;
 
 		// Our one slotted child — whatever it is. The gizmo drives THIS element's transform
 		// and nothing inside it.
@@ -363,7 +365,8 @@ customElements.define(
 					}
 					.axis-x .knob {
 						transform: translateX(var(--len-x, ${HANDLE_LENGTH}px))
-							rotateY(var(--camera-yaw, 0deg)) rotateX(var(--camera-pitch, 0deg));
+							rotateY(var(--camera-yaw, 0deg))
+							rotateX(var(--camera-pitch, 0deg));
 						background: #ff5d5d;
 					}
 					/* Author +Y is up; screen +Y is down, so the up handle points -y. */
@@ -374,7 +377,8 @@ customElements.define(
 					}
 					.axis-y .knob {
 						transform: translateY(calc(-1 * var(--len-y, ${HANDLE_LENGTH}px)))
-							rotateY(var(--camera-yaw, 0deg)) rotateX(var(--camera-pitch, 0deg));
+							rotateY(var(--camera-yaw, 0deg))
+							rotateX(var(--camera-pitch, 0deg));
 						background: #62d562;
 					}
 					/* +z points toward the viewer. */
@@ -385,7 +389,8 @@ customElements.define(
 					}
 					.axis-z .knob {
 						transform: translateZ(var(--len-z, ${HANDLE_LENGTH}px))
-							rotateY(var(--camera-yaw, 0deg)) rotateX(var(--camera-pitch, 0deg));
+							rotateY(var(--camera-yaw, 0deg))
+							rotateX(var(--camera-pitch, 0deg));
 						background: #5d9dff;
 					}
 					.knob-yaw {
@@ -405,7 +410,8 @@ customElements.define(
 								0,
 								calc(var(--len-z, ${HANDLE_LENGTH}px) * 0.7)
 							)
-							rotateY(var(--camera-yaw, 0deg)) rotateX(var(--camera-pitch, 0deg));
+							rotateY(var(--camera-yaw, 0deg))
+							rotateX(var(--camera-pitch, 0deg));
 					}
 
 					/* The wrapped child must share our 3D context, so the slot must not

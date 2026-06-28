@@ -19,6 +19,12 @@ const updateByType = {
 //shared placeholders so a freshly constructed template has every field set to its real type from birth; setupTemplate/hydrateTemplate overwrite both with the per-instance arrays once the template is rendered
 const EMPTY_TARGETS: Array<Element | Comment> = [];
 const EMPTY_DIRTY = new Uint8Array(0);
+const EMPTY_EXPRESSION_HASHES = new Float64Array(0);
+//prior-render per-item hashes for each list slot, indexed by expressionIndex; renderList allocates the real array lazily on the first list render, so a template that never renders a list keeps this shared empty placeholder
+export const EMPTY_LIST_ITEM_HASHES: Array<Array<number>> = [];
+
+//a slot with no cached content hash: a primitive, an array, or one not yet rendered. NaN never equals a real hash, so such a slot always reads as changed
+const UNHASHED = NaN;
 
 //HTMLTemplate is a data-only class — fields + constructor, no methods — operated on by the free functions below. it is a class rather than a struct so a template can be told apart from an arbitrary user value by `instanceof` (cheaper than a property brand on the hot hashValue/content path) and constructed via `new`. see CONVENTIONS.md, data-only-class exception
 export class HTMLTemplate {
@@ -29,6 +35,10 @@ export class HTMLTemplate {
 	//host bindings (first hostBindingOffset entries) resolve straight to the host element, no marker required
 	targets: Array<Element | Comment>;
 	dirtyBindings: Uint8Array;
+	//expressionHashes[expressionIndex] caches hashValue of the object/function/array slot's last-rendered value so updateTemplate diffs against the prior render without re-walking it; UNHASHED for primitive/unrendered slots
+	expressionHashes: Float64Array;
+	//listItemHashes[expressionIndex] is the prior render's per-item hashes for that list binding — the only state renderList persists, so it can spot in-place mutation and reconcile without ever reading or writing the user's array. EMPTY_LIST_ITEM_HASHES until the first list render
+	listItemHashes: Array<Array<number>>;
 	//currentExpressions[expressionIndex] is the expressionIndex-th interpolation in the template literal (the expressionIndex-th `${...}`)
 	currentExpressions: Array<unknown>;
 	previousExpressions: Array<unknown>;
@@ -41,6 +51,8 @@ export class HTMLTemplate {
 		this.previousExpressions = EMPTY_EXPRESSIONS;
 		this.targets = EMPTY_TARGETS;
 		this.dirtyBindings = EMPTY_DIRTY;
+		this.expressionHashes = EMPTY_EXPRESSION_HASHES;
+		this.listItemHashes = EMPTY_LIST_ITEM_HASHES;
 		this.hash = null;
 	}
 }
@@ -70,6 +82,9 @@ export const setupTemplate = (
 ): DocumentFragment => {
 	const bindingCount = template.parsedHTML.bindings.length;
 	template.dirtyBindings = new Uint8Array(bindingCount).fill(1);
+	template.expressionHashes = new Float64Array(
+		template.currentExpressions.length,
+	).fill(UNHASHED);
 	//the parser is document-free, so the first setup of a given template materializes the string seed and caches the template fragment on the shared ParsedHTML; later instances clone it
 	const fragmentTemplate =
 		template.parsedHTML.fragment ??
@@ -105,6 +120,9 @@ export const hydrateTemplate = (
 ) => {
 	//Uint8Array is zero-initialized by the spec, so we don't need to fill explicitly
 	template.dirtyBindings = new Uint8Array(template.parsedHTML.bindings.length);
+	template.expressionHashes = new Float64Array(
+		template.currentExpressions.length,
+	).fill(UNHASHED);
 	template.targets = findTargets(template, host.shadowRoot!, host);
 
 	//SSR already wrote child elements and their static attrs into the DOM, but the host element's attrs were never serialized. they live in bindings now
@@ -175,8 +193,22 @@ export const updateTemplate = (
 	template.currentExpressions = expressions;
 	template.hash = null;
 
+	const expressionHashes = template.expressionHashes;
 	for (let index = 0; index < expressions.length; index++) {
 		const currentEntry = expressions[index];
+
+		if (Array.isArray(currentEntry)) {
+			//an array can mutate in place with no new reference, so we fold its content and gate on the hash exactly like an object slot: an unchanged fold means no entry moved or changed, so the binding stays clean and renderList / the attribute spread never run
+			const currentHash = hashValue(currentEntry);
+			if (currentHash !== expressionHashes[index]) {
+				expressionHashes[index] = currentHash;
+				template.dirtyBindings[
+					template.parsedHTML.expressionToBinding[index]
+				] = 1;
+			}
+			continue;
+		}
+
 		const previousEntry = previousExpressions[index];
 
 		if (currentEntry === previousEntry) continue;
@@ -188,25 +220,24 @@ export const updateTemplate = (
 			(currentType === "object" && currentEntry !== null) ||
 			currentType === "function";
 
-		//arrays are reconciled per-item inside renderList via hash-based identity matching
-		//if we hashed the whole list here we would walk every item only for renderList to walk them again
-		//=> we just mark dirty and let the one place that needs the per-item compare do it
-		if (Array.isArray(currentEntry)) {
+		if (needsContentCompare) {
+			//previousEntry's hash was folded and cached last render; reuse it instead of walking the prior value again
+			const currentHash = hashValue(currentEntry);
+			const matchesPrevious = currentHash === expressionHashes[index];
+			expressionHashes[index] = currentHash;
+			if (matchesPrevious) {
+				if (isTemplate(currentEntry)) {
+					expressions[index] = previousEntry;
+				}
+				continue;
+			}
 			template.dirtyBindings[template.parsedHTML.expressionToBinding[index]] =
 				1;
 			continue;
 		}
 
-		if (
-			needsContentCompare &&
-			hashValue(currentEntry) === hashValue(previousEntry)
-		) {
-			if (isTemplate(currentEntry)) {
-				expressions[index] = previousEntry;
-			}
-			continue;
-		}
-
+		//a changed primitive carries no content hash; clear the slot so the next object here can't read a stale match
+		expressionHashes[index] = UNHASHED;
 		template.dirtyBindings[template.parsedHTML.expressionToBinding[index]] = 1;
 	}
 	flushTemplate(template);

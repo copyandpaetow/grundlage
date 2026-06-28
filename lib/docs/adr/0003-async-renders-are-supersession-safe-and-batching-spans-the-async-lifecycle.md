@@ -23,7 +23,7 @@ Predictability rests on two pieces:
    that started against older state therefore **cannot** clobber a newer one. Last-write-wins
    is enforced at the handle level, not by hoping renders finish in order.
 
-2. **The `update()` state machine must track the source's *settle*, not the synchronous
+2. **The `update()` state machine must track the source's _settle_, not the synchronous
    return of `dispatchCSRUpdate`.** Because `dispatchCSRUpdate` returns the instant the
    driver suspends on a Promise, a naive `RENDERING → finally → IDLE` flips `IDLE` while the
    async render is still in flight — which (a) resolves `await update()` before the DOM
@@ -36,8 +36,8 @@ Predictability rests on two pieces:
 
 This closes the data-flow model on itself: components **pull** their inputs from durable
 element state at render time, `update()` re-pulls, and async work resolves into durable
-state that the next pull reads — so async never races on a *value*, only on *which render
-wins*, which supersession already decides.
+state that the next pull reads — so async never races on a _value_, only on _which render
+wins_, which supersession already decides.
 
 ## Considered Options
 
@@ -45,7 +45,7 @@ wins*, which supersession already decides.
   every flush atomic and batching trivial, but makes promises second-class and is exactly
   the React `useEffect` quarantine we want to avoid. Async stays first-class instead.
 - **Bless an imperative `setProp` push as the cross-boundary data channel (rejected).** A
-  nudge does not pin *when* the target's async render runs, so it standardizes the race
+  nudge does not pin _when_ the target's async render runs, so it standardizes the race
   rather than removing it. `setProp` stays an escape hatch; peers coordinate by event. See
   the one-writer discussion in `CONTEXT.md`.
 

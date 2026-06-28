@@ -10,7 +10,7 @@ runtime parser stays as the fallback for uncompiled sites.
 ## Goal (settled)
 
 - **Primary win: cold-start.** Skip the JS state machine on first render of each unique
-  template. Bundle tree-shaking is a *nice-to-have, not a requirement* — so this is **not**
+  template. Bundle tree-shaking is a _nice-to-have, not a requirement_ — so this is **not**
   all-or-nothing: partial compilation is fine, and the parser staying in the bundle is
   acceptable.
 - **Non-goals.** Steady-state runtime speed (the WeakMap call-site cache already makes
@@ -43,10 +43,9 @@ runtime parser stays as the fallback for uncompiled sites.
 - **Shape version-lock.** Stamp a schema version into the emitted structure and check it, so
   pre-compiled output from an older library version can't be silently wrong. Biggest
   long-term hazard.
-- **Sourcemaps.** A runtime error in a compiled template must point at the user's `html\`\``
-  literal, not the hoisted `_tpl0` const.
+- **Sourcemaps.** A runtime error in a compiled template must point at the user's `html\`\``literal, not the hoisted`\_tpl0` const.
 - **Internal call sites.** Whether to compile the three library `html\`\`` sites
-  (`content.ts:32`, `csr-runtime.ts:208`, `ssr-runtime.ts:112`). Optional under the
+(`content.ts:32`, `csr-runtime.ts:208`, `ssr-runtime.ts:112`). Optional under the
   cold-start framing; trivial templates, marginal win.
 - **Fallthrough diagnostic.** Optional now (was load-bearing only for the abandoned
   all-or-nothing bundle goal); a diagnostic naming skipped literals still helps coverage.

@@ -24,7 +24,9 @@ const floorArg = args.find((a) => a.startsWith("--floor="));
 const FLOOR_PERCENT = floorArg ? Number(floorArg.slice("--floor=".length)) : 5;
 
 if (files.length !== 2) {
-	console.error("usage: node scripts/bench-compare.mjs <baseline.json> <current.json> [--floor=5]");
+	console.error(
+		"usage: node scripts/bench-compare.mjs <baseline.json> <current.json> [--floor=5]",
+	);
 	process.exit(2);
 }
 
@@ -76,17 +78,26 @@ for (const [key, cur] of current) {
 for (const key of baseline.keys()) if (!current.has(key)) removed.push(key);
 
 const pct = (n) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
-const line = (r) => `  ${pct(r.deltaPercent).padStart(7)}  (±${r.threshold.toFixed(1)}% noise)  ${r.key}`;
+const line = (r) =>
+	`  ${pct(r.deltaPercent).padStart(7)}  (±${r.threshold.toFixed(1)}% noise)  ${r.key}`;
 
 if (regressions.length) {
-	console.log(`\n✗ REGRESSIONS — p75 slower than baseline beyond noise (${regressions.length}):`);
-	regressions.sort((a, b) => b.deltaPercent - a.deltaPercent).forEach((r) => console.log(line(r)));
+	console.log(
+		`\n✗ REGRESSIONS — p75 slower than baseline beyond noise (${regressions.length}):`,
+	);
+	regressions
+		.sort((a, b) => b.deltaPercent - a.deltaPercent)
+		.forEach((r) => console.log(line(r)));
 }
 if (improvements.length) {
 	console.log(`\n✓ improvements (${improvements.length}):`);
-	improvements.sort((a, b) => a.deltaPercent - b.deltaPercent).forEach((r) => console.log(line(r)));
+	improvements
+		.sort((a, b) => a.deltaPercent - b.deltaPercent)
+		.forEach((r) => console.log(line(r)));
 }
-console.log(`\n${steady.length} within noise · ${added.length} new · ${removed.length} removed`);
+console.log(
+	`\n${steady.length} within noise · ${added.length} new · ${removed.length} removed`,
+);
 if (added.length) console.log(`  new:     ${added.join(", ")}`);
 if (removed.length) console.log(`  removed: ${removed.join(", ")}`);
 

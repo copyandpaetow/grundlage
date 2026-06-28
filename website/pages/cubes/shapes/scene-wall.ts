@@ -53,8 +53,7 @@ customElements.define(
 								var(--block-y),
 								var(--block-z)
 							)
-							rotateX(var(--block-rotate-x))
-							rotateY(var(--block-rotate-y))
+							rotateX(var(--block-rotate-x)) rotateY(var(--block-rotate-y))
 							rotateZ(var(--block-rotate-z))
 							scale3d(
 								var(--block-scale-x),
@@ -78,7 +77,6 @@ customElements.define(
 						   whole block). Geometry knows nothing about ghosting. */
 						opacity: var(--block-opacity, 1);
 					}
-
 
 					/* Broad faces: the painted surfaces of the panel. */
 					.front,

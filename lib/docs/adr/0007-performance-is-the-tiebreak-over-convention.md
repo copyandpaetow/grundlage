@@ -7,7 +7,7 @@ license to wave away any rule with "this is faster."
 
 ## Why
 
-The library exists to make DOM operations sparse — performance *is* the product, not a
+The library exists to make DOM operations sparse — performance _is_ the product, not a
 nice-to-have layered on top. A convention that costs real cycles for cosmetic consistency
 defeats the reason the library exists. So consistency yields to performance. But an
 unbounded veto erodes the rules entirely (every shortcut gets retroactively called a perf
@@ -15,12 +15,12 @@ decision), so the veto has a bar.
 
 ## The bar
 
-An exception is valid only if it **names a concrete engine mechanism** *or* is **backed by
+An exception is valid only if it **names a concrete engine mechanism** _or_ is **backed by
 a measurement**:
 
 - **Named mechanism (preferred).** Megamorphic call site, a deopt, an extra hot-path
   allocation, hidden-class instability, a non-monomorphic compare. This is the preferred
-  justification *because* the benchmark suite is slow and unreliable (see below) — a known
+  justification _because_ the benchmark suite is slow and unreliable (see below) — a known
   engine fact is more trustworthy than a noisy number. The existing perf comments already
   work this way (`html.ts:196` hidden-class stability, `html-util.ts:3` monomorphic
   compares, `content.ts:27` one fewer allocation per render, `form-base.ts:40` skipped
@@ -49,5 +49,5 @@ that keeps the exception reviewable.
 
 - Every deliberate rule-break carries a `// why` naming a mechanism or citing a measured,
   wide-margin win. Reviewers can audit each one.
-- **Out of scope:** perf-vs-perf conflicts — most often compute vs memory — get *no* fixed
+- **Out of scope:** perf-vs-perf conflicts — most often compute vs memory — get _no_ fixed
   ordering here. Those are decided per case by measurement, not by this ADR.

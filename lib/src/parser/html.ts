@@ -1,9 +1,9 @@
 import { stringHash } from "../utils/hashing";
 import { HTMLTemplate } from "../rendering/template-html";
 import {
-	AttributeBinding,
 	ATTRIBUTE_NAME_KIND,
 	ATTRIBUTE_SHAPE,
+	AttributeBinding,
 	Binding,
 	BINDING_TYPES,
 	ContentBinding,
@@ -74,6 +74,9 @@ const STATE = {
 	ATTRIBUTE_VALUE: 6,
 	END_TAG: 7,
 } as const;
+
+const PARSE_MODE = { OPTIMISTIC_ROOT: 0, NO_ROOT_TEMPLATE: 1 } as const;
+type ParseMode = (typeof PARSE_MODE)[keyof typeof PARSE_MODE];
 
 interface ParserState {
 	state: StateValue;
@@ -152,7 +155,7 @@ const createParser = (): ParserState => ({
 const resetParser = (
 	parser: ParserState,
 	strings: TemplateStringsArray,
-	force: boolean,
+	mode: ParseMode,
 ) => {
 	parser.state = STATE.TEXT;
 	//bindings and expressionToBinding escape into the returned ParsedHTML (and the WeakMap cache), so they must be fresh each parse rather than reused
@@ -173,7 +176,7 @@ const resetParser = (
 	parser.rootTemplateClosed = false;
 	parser.sawTopLevelSibling = false;
 	parser.hasOpenedAnyTag = false;
-	parser.forceNoRootTemplate = force;
+	parser.forceNoRootTemplate = mode === PARSE_MODE.NO_ROOT_TEMPLATE;
 	parser.openTagBindings.length = 0;
 	parser.resultBuffer.length = 0;
 	parser.elementBuffer.length = 0;
@@ -211,7 +214,6 @@ const updateBinding = (parser: ParserState) => {
 
 		case STATE.END_TAG:
 			capture(parser, parser.endTagBuffer, parser.splitIndex);
-			(parser.activeBinding as TagBinding).endValues.push(parser.index);
 			break;
 
 		case STATE.ATTRIBUTE_KEY:
@@ -264,7 +266,6 @@ const createBinding = (parser: ParserState) => {
 			return {
 				type: BINDING_TYPES.TAG,
 				values: [],
-				endValues: [],
 				relatedAttributes: [],
 			} satisfies TagBinding;
 
@@ -553,9 +554,9 @@ const flushElement = (parser: ParserState) => {
 const parse = (
 	parser: ParserState,
 	strings: TemplateStringsArray,
-	force = false,
+	mode: ParseMode = PARSE_MODE.OPTIMISTIC_ROOT,
 ): ParsedHTML => {
-	resetParser(parser, strings, force);
+	resetParser(parser, strings, mode);
 
 	for (
 		parser.index = 0;
@@ -927,9 +928,9 @@ const parse = (
 	flushElement(parser);
 
 	//our optimistic root pass suppressed the <template> wrapper; a real sibling proves it wasn't a root.
-	//reparse with force so the template lowers as an ordinary (raw-content) element instead. the pooled instance is reused — the outer call reads nothing after this return.
+	//rerun in NO_ROOT_TEMPLATE so it lowers as an ordinary (raw-content) element instead. the pooled instance is reused — the outer call reads nothing after this return.
 	if (parser.hasRootTemplate && parser.sawTopLevelSibling) {
-		return parse(parser, strings, true);
+		return parse(parser, strings, PARSE_MODE.NO_ROOT_TEMPLATE);
 	}
 
 	const result = parser.resultBuffer.join("");
@@ -946,7 +947,7 @@ const parse = (
 };
 
 //a single pooled parser instance, reset per parse: zero per-parse allocation on a render-time path.
-//this is safe because parse() runs fully synchronously and can't re-enter — the only self-recursion is the `parse(parser, strings, true)` reparse at the tail, and the outer call reads nothing from `parser` after that `return`.
+//this is safe because parse() runs fully synchronously and can't re-enter — the only self-recursion is the NO_ROOT_TEMPLATE reparse at the tail, and the outer call reads nothing from `parser` after that `return`.
 //if concurrent parsing ever becomes a requirement, allocate a parser per parse instead of pooling.
 const parser = createParser();
 

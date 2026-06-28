@@ -824,7 +824,7 @@ describe("inner generator post-yield work and cancellation", () => {
 // await. Per the model, the stopped run's queued resumption must go nowhere — a superseded run
 // checks "am I still alive?" before resuming, so its late async work can neither paint stale
 // markup nor signal "done" for the live run. update() itself resolves on the FRESH run reaching
-// its end (ADR-0003 / rendering-cycle.md: "the fresh run has finished"), so these tests drive the
+// its end (ADR-0003: "the fresh run has finished"), so these tests drive the
 // timeline by hand — not awaiting update() across a still-parked run, which would (correctly) not
 // resolve until that run completes.
 describe("rapid restart with in-flight inner async work", () => {
