@@ -1,7 +1,5 @@
 export const COMMENT_IDENTIFIER = "^.^";
 
-//char codes used by the hot parser loop — numeric compares stay monomorphic and
-//avoid the single-char string holder that string indexing would create per peek
 export const CHAR_CODE = {
 	TAB: 9,
 	LINE_FEED: 10,

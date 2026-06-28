@@ -3,7 +3,16 @@ import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/is-generator";
 import { paint, Painter, serverPaint, teardownPainter } from "./painter";
 import { HTMLTemplate } from "./template-html";
-import { createStepOutcome, nextOperation, OPERATION, ROLE, STEP_OUTCOME, StepOutcome, Task, TASK_STATE } from "./task";
+import {
+	createStepOutcome,
+	nextOperation,
+	OPERATION,
+	ROLE,
+	STEP_OUTCOME,
+	StepOutcome,
+	Task,
+	TASK_STATE,
+} from "./task";
 
 export interface Engine {
 	readonly host: BaseComponent;

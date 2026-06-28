@@ -81,12 +81,6 @@ const readStringableProp = (
 	return coerced;
 };
 
-/**
- * Reads typed values off an element regardless of whether they arrived as attributes
- * (always strings) or properties. Each schema entry is a constructor (`String`, `Number`,
- * `Boolean`, `Function`, `Array`, or a class), `[Constructor]` to allow `undefined`, or
- * `[Constructor, fallback]` to supply a default. Returns an object typed from the schema.
- */
 export const props = <Type extends Schema>(
 	element: HTMLElement,
 	schema: Type,

@@ -1453,7 +1453,10 @@ describe("content updates", () => {
 		const items: Array<string> = ["a", "b", "c"];
 
 		const MyElement = render(function* () {
-			yield () => html`<ul>${items}</ul>`;
+			yield () =>
+				html`<ul>
+					${items}
+				</ul>`;
 		});
 
 		customElements.define(tag, MyElement);

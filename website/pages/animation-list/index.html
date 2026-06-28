@@ -13,13 +13,22 @@
 		<main>
 			<h1>raf-animation-list</h1>
 			<p>
-				Same animation as the <code>raf-animation</code> page, but each bar is
-				produced by mapping over an array. Every frame the entire list
-				reconciles with fresh hashes — a worst-case stress for list diffing.
+				Each bar is produced by mapping over an array, and every frame the
+				entire list reconciles with fresh values — a worst-case stress for list
+				diffing and per-frame allocation. The animation self-drives;
+				<em>measure</em> hands its rAF loop to the shared
+				<code>measureWindow</code> harness for a wall-clock window and reports
+				fps, frame time, DOM writes per frame, and heap delta. Run under
+				DevTools CPU throttle to find the cliff.
 			</p>
-			<raf-animation-list></raf-animation-list>
-			<h2>another one</h2>
-			<raf-animation-list></raf-animation-list>
+			<p>
+				One live component at a time — changing the bar count remounts it, so no
+				second rAF loop runs alongside and skews the measurement.
+			</p>
+			<label>
+				bars: <input id="bar-count" type="number" min="1" value="20" />
+			</label>
+			<div id="mount"></div>
 		</main>
 	</body>
 </html>

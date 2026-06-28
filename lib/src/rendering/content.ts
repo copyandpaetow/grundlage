@@ -14,8 +14,6 @@ const deleteNodesBetween = (start: Node, end?: Node) => {
 	let current = start.nextSibling;
 
 	while (current) {
-		//each content binding is bracketed by two comments with the same data
-		//=> when we hit another comment carrying `start`'s data we've reached the binding's far edge and can stop
 		const isLastComment =
 			current === end ||
 			(isComment(current) && current.data === (start as Comment).data);
@@ -40,8 +38,6 @@ const renderTemplate = (
 
 	if (isTemplate(previous) && isSameTemplate(current, previous)) {
 		updateTemplate(previous, current.currentExpressions);
-		//we swap the reused template into currentExpressions so that on the next render
-		//we compare against the template actually attached to the DOM and not the discarded `current`
 		context.currentExpressions[expressionIndex] = previous;
 		return;
 	}
@@ -65,7 +61,6 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 	const binding = context.parsedHTML.bindings[bindingIndex];
 	const marker = context.targets[bindingIndex] as Comment;
 
-	//only comments can have multiple bindings, normal content only has one
 	if (binding.values.length > 1) {
 		renderComment(context, marker, binding.values);
 		return;
@@ -91,7 +86,6 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 
 	const renderableCurrent = assertPrimitiveString(current);
 
-	//first render: previousExpressions is the shared sentinel, so no text node exists here yet — insert one
 	if (context.previousExpressions === EMPTY_EXPRESSIONS) {
 		marker.after(document.createTextNode(renderableCurrent));
 		return;
@@ -104,7 +98,6 @@ export const updateContent = (context: HTMLTemplate, bindingIndex: number) => {
 		return;
 	}
 
-	//previous was a template or list, so non-text nodes sit after the marker. clear them before inserting the text node
 	deleteNodesBetween(marker);
 	marker.after(document.createTextNode(renderableCurrent));
 };
