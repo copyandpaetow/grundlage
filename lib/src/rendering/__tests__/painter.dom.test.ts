@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { html } from "../../template-value";
 import { BaseComponent } from "../../types";
 import { createPainter, paint, teardownPainter } from "../painter";
@@ -53,6 +53,33 @@ describe("painter — DOM commit (B1/B2)", () => {
 		expect(host.shadowRoot?.querySelector("p")).toBeNull(); //old shape gone
 		expect(host.shadowRoot?.querySelector("section")?.textContent).toBe("b");
 		expect(paragraph?.isConnected).toBe(false); //replaced, not patched
+	});
+
+	test("hydrate commits a host attribute so the client value wins over the server's", () => {
+		//host attrs live on the host element, outside the hydrated shadow root, so the
+		//client's first-yield value must overwrite what the server serialized
+		const host = makeHost();
+		host.setAttribute("class", "server-class");
+		host.shadowRoot!.innerHTML = "<p>hi</p>";
+
+		const painter = createPainter(host, host.shadowRoot!, true);
+		paint(painter, html`<template class="${"client-class"}"><p>hi</p></template>`);
+
+		expect(host.getAttribute("class")).toBe("client-class");
+	});
+
+	test("hydrate does not re-write a host attribute whose server value already matches", () => {
+		//the getAttribute compare must skip the write — a false write restarts transitions
+		const host = makeHost();
+		host.setAttribute("class", "same");
+		host.shadowRoot!.innerHTML = "<p>hi</p>";
+		const setSpy = vi.spyOn(host, "setAttribute");
+
+		const painter = createPainter(host, host.shadowRoot!, true);
+		paint(painter, html`<template class="${"same"}"><p>hi</p></template>`);
+
+		expect(setSpy).not.toHaveBeenCalled();
+		expect(host.getAttribute("class")).toBe("same");
 	});
 
 	test("teardownPainter disconnects the observer", () => {

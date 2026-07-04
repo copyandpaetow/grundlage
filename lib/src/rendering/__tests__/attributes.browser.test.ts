@@ -150,6 +150,36 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
+	test("a conditional bare scalar toggles a boolean attribute, empty branch adds none", async () => {
+		const tag = uniqueTag();
+		let enabled = true;
+
+		const MyElement = render(function* () {
+			yield () => html`<button ${enabled ? "" : "disabled"}>click</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const btn = element.shadowRoot?.querySelector("button")!;
+		//empty branch: no attribute, and crucially no setAttribute("", "") crash
+		expect(btn.hasAttribute("disabled")).toBe(false);
+		expect(btn.getAttributeNames()).toEqual([]);
+
+		enabled = false;
+		await element.update();
+		await sleep();
+		expect(btn.hasAttribute("disabled")).toBe(true);
+
+		enabled = true;
+		await element.update();
+		await sleep();
+		expect(btn.hasAttribute("disabled")).toBe(false);
+
+		cleanup(element);
+	});
+
 	test("expands an object into key-value attributes", async () => {
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = { class: "red", id: "main" };
