@@ -2,7 +2,7 @@ import { ValueOf } from "../parser/types";
 import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/is-generator";
 import { paint, Painter, serverPaint, teardownPainter } from "./painter";
-import { HTMLTemplate } from "./template-html";
+import { TemplateValue } from "../template-value";
 import {
 	createStepOutcome,
 	nextOperation,
@@ -329,7 +329,7 @@ const runServerTask = (
 		switch (operation.kind) {
 			case OPERATION.PAINT:
 			case OPERATION.PAINT_FROM: {
-				let template: HTMLTemplate;
+				let template: TemplateValue;
 				try {
 					template =
 						operation.kind === OPERATION.PAINT

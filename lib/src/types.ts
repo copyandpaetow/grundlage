@@ -1,4 +1,4 @@
-import { HTMLTemplate } from "./rendering/template-html";
+import { TemplateValue } from "./template-value";
 
 declare const templateMarker: unique symbol;
 
@@ -16,7 +16,7 @@ export type ComponentOptions = ShadowRootInit & {
 	formAssociated?: boolean;
 };
 
-export type RenderFunction = (element: BaseComponent) => HTMLTemplate;
+export type RenderFunction = (element: BaseComponent) => TemplateValue;
 
 export type ComponentGenerator = (
 	element: BaseComponent,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html } from "../../parser/html";
+import { html } from "../../template-value";
 import { BaseComponent } from "../../types";
 import { createPainter, paint, teardownPainter } from "../painter";
 
@@ -20,16 +20,16 @@ const makeHost = (): BaseComponent => {
 describe("painter — DOM commit (B1/B2)", () => {
 	test("B1: first paint sets up the template into the shadow root", () => {
 		const host = makeHost();
-		const painter = createPainter(host, false);
+		const painter = createPainter(host, host.shadowRoot!, false);
 
 		paint(painter, html`<p>${"a"}</p>`);
 		expect(host.shadowRoot?.querySelector("p")?.textContent).toBe("a");
-		expect(painter.renderedTemplate).not.toBeNull();
+		expect(painter.instance).not.toBeNull();
 	});
 
 	test("B2: a same-shape re-paint patches in place (node identity preserved)", () => {
 		const host = makeHost();
-		const painter = createPainter(host, false);
+		const painter = createPainter(host, host.shadowRoot!, false);
 		//same tagged-template site → same parsed shape → templateHash match → updateTemplate path
 		const render = (value: string) => html`<p>${value}</p>`;
 
@@ -44,7 +44,7 @@ describe("painter — DOM commit (B1/B2)", () => {
 
 	test("B2: a different-shape re-paint replaces the children", () => {
 		const host = makeHost();
-		const painter = createPainter(host, false);
+		const painter = createPainter(host, host.shadowRoot!, false);
 
 		paint(painter, html`<p>${"a"}</p>`);
 		const paragraph = host.shadowRoot?.querySelector("p");
@@ -57,7 +57,7 @@ describe("painter — DOM commit (B1/B2)", () => {
 
 	test("teardownPainter disconnects the observer", () => {
 		const host = makeHost();
-		const painter = createPainter(host, false);
+		const painter = createPainter(host, host.shadowRoot!, false);
 		let disconnected = false;
 		painter.attributeObserver = {
 			disconnect: () => {

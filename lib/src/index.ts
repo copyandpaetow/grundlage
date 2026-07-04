@@ -1,5 +1,5 @@
-import { applyAttributeBinding } from "./rendering/attribute";
-import { html as parseTemplate } from "./parser/html";
+import { applyDynamicAttribute } from "./rendering/dynamic-attribute";
+import { html as htmlValue } from "./template-value";
 import {
 	BaseComponent,
 	ComponentConstructor,
@@ -29,7 +29,7 @@ export {
 } from "./types";
 export { load, type LoadOptions } from "./loader/load";
 
-export const html = parseTemplate as unknown as (
+export const html = htmlValue as unknown as (
 	tokens: TemplateStringsArray,
 	...dynamicValues: Array<unknown>
 ) => Template;
@@ -45,11 +45,16 @@ export const render = (
 	class BaseElement extends ParentClass implements BaseComponent {
 		#engine: Engine | null = null;
 		#hydratePending: boolean;
+		//todo: captured here for shadowRoot close mode. But would it help to inline the engine in here?
+		//todo: this currently is very little here
+		#shadowRoot: ShadowRoot;
 
 		constructor() {
 			super();
 			const prerendered = this.shadowRoot !== null;
-			if (!prerendered) this.attachShadow(options);
+			this.#shadowRoot = prerendered
+				? this.shadowRoot!
+				: this.attachShadow(options);
 			this.#hydratePending = prerendered;
 		}
 
@@ -57,7 +62,7 @@ export const render = (
 			if (this.#engine !== null && this.#engine.outer !== null) return;
 			this.#engine ??= createEngine(
 				this,
-				createPainter(this, this.#hydratePending),
+				createPainter(this, this.#shadowRoot, this.#hydratePending),
 				componentGenerator,
 			);
 			if (isServer()) return startServerEngine(this.#engine);
@@ -74,7 +79,7 @@ export const render = (
 		}
 
 		setProperty(name: string, value: unknown, oldValue?: unknown) {
-			applyAttributeBinding(this, name, value, oldValue);
+			applyDynamicAttribute(this, name, value, oldValue);
 			this.update();
 		}
 

@@ -1,7 +1,7 @@
 import { ValueOf } from "../parser/types";
 import { ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/is-generator";
-import { HTMLTemplate, isTemplate } from "./template-html";
+import { isTemplate, TemplateValue } from "../template-value";
 
 export const TASK_STATE = {
 	DRIVING: 0,
@@ -42,7 +42,7 @@ export interface Task {
 }
 
 export type Operation =
-	| { kind: typeof OPERATION.PAINT; payload: HTMLTemplate }
+	| { kind: typeof OPERATION.PAINT; payload: TemplateValue }
 	| { kind: typeof OPERATION.PAINT_FROM; payload: RenderFunction }
 	| { kind: typeof OPERATION.INSTALL; payload: ComponentGenerator }
 	| { kind: typeof OPERATION.RESUME; payload: unknown }

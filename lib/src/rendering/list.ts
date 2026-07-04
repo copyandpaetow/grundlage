@@ -1,219 +1,285 @@
-import { html } from "../parser/html";
-import { hashValue } from "../utils/hashing";
-import { assertPrimitiveString } from "../utils/to-primitive";
-import { isComment } from "../utils/validators";
 import {
-	EMPTY_LIST_ITEM_HASHES,
-	HTMLTemplate,
-	isTemplate,
-	setupTemplate,
-} from "./template-html";
+	AttributeStaticBinding,
+	BINDING,
+	ParsedTemplate,
+} from "../parser/types";
+import { getParsedTemplate } from "../parser/html";
+import { COMMENT_IDENTIFIER } from "../parser/html-util";
+import { coerceToTemplate, TemplateValue } from "../template-value";
+import { hashValue, stringHash } from "../utils/hashing";
+import { composeParts } from "./compose";
+import {
+	combineOrderedHash,
+	LIST_HASH_SEED,
+	LIST_MARKER_DATA,
+	NO_KEY,
+	NO_KEY_BINDING,
+} from "./constants";
+import {
+	ContentLiveBinding,
+	Instance,
+	ListContentState,
+	ListItem,
+	reconcileInstance,
+} from "./instance";
+import { assertNestable, hydrateInstance, mountInstance } from "./mount-hydrate";
+import { forEachRowNode } from "./range";
 
-const LIST_IDENTIFIER = "*.*";
+const isKeyed = (parsed: ParsedTemplate): boolean =>
+	parsed.keyBindingIndex !== NO_KEY_BINDING;
 
-const isListMarker = (node: Node): node is Comment =>
-	isComment(node) && node.data === LIST_IDENTIFIER;
-
-const KIND_PRIMITIVE = 0;
-const KIND_TEMPLATE = 1;
-const KIND_ARRAY = 2;
-
-const kindOf = (entry: unknown): number =>
-	isTemplate(entry)
-		? KIND_TEMPLATE
-		: Array.isArray(entry)
-			? KIND_ARRAY
-			: KIND_PRIMITIVE;
-
-const EMPTY_HASHES: Array<number> = [];
-
-const primitiveText = (entry: unknown): string =>
-	entry == null ? "" : assertPrimitiveString(entry);
-
-const insertItem = (
-	position: ChildNode,
-	entry: unknown,
-	kind: number,
-): Comment => {
-	const itemMarker = new Comment(LIST_IDENTIFIER);
-	if (kind === KIND_TEMPLATE) {
-		position.after(setupTemplate(entry as HTMLTemplate, null), itemMarker);
-	} else if (kind === KIND_ARRAY) {
-		position.after(setupTemplate(html`${entry}`, null), itemMarker);
-	} else {
-		position.after(document.createTextNode(primitiveText(entry)), itemMarker);
-	}
-	return itemMarker;
+const evaluateKeyHash = (value: TemplateValue, parsed: ParsedTemplate): number => {
+	const binding = parsed.bindings[parsed.keyBindingIndex];
+	const rendered =
+		binding.type === BINDING.SINGLE_VALUE_ATTRIBUTE
+			? String(value.values[binding.valueIndex])
+			: composeParts((binding as AttributeStaticBinding).valueParts, value.values);
+	return stringHash(rendered);
 };
 
-const removeItemDom = (itemMarker: Comment, listContainerMarker: Comment) => {
-	let current: ChildNode | null = itemMarker;
-	while (current) {
-		const prev = current.previousSibling as ChildNode | null;
-		current.remove();
-		if (!prev || prev === listContainerMarker || isListMarker(prev)) return;
-		current = prev;
-	}
+const keyHashOf = (value: TemplateValue, parsed: ParsedTemplate): number =>
+	isKeyed(parsed) ? evaluateKeyHash(value, parsed) : NO_KEY;
+
+const shapeOrKeyHash = (templateHash: number, keyHash: number): number =>
+	keyHash === NO_KEY ? templateHash : keyHash;
+
+const foldOrderedContentHashes = (values: Array<unknown>): number => {
+	let aggregateHash = LIST_HASH_SEED;
+	for (let index = 0; index < values.length; index++)
+		aggregateHash = combineOrderedHash(aggregateHash, hashValue(values[index]));
+	return aggregateHash;
 };
 
-const isAlreadyInPosition = (position: Node, itemMarker: Comment) => {
-	let scan: Node | null = itemMarker.previousSibling;
-	while (scan && scan !== position) {
-		if (isListMarker(scan)) return false;
-		scan = scan.previousSibling;
-	}
-	return scan === position;
+export const patchListContent = (
+	content: ContentLiveBinding,
+	values: Array<unknown>,
+): void => {
+	const list = content.content as ListContentState;
+	const aggregateHash = foldOrderedContentHashes(values);
+	if (aggregateHash === list.aggregateHash) return;
+	list.aggregateHash = aggregateHash;
+	reconcileRows(content, list, values);
 };
 
-const moveItemAfter = (position: ChildNode, itemMarker: Comment) => {
-	let current: ChildNode | null = itemMarker;
-	while (current) {
-		const prev = current.previousSibling as ChildNode | null;
-		position.after(current);
-		if (!prev || isListMarker(prev)) return;
-		current = prev;
-	}
+type RowsByHash = Map<number, Array<ListItem>>;
+
+const addRowToGroup = (
+	groups: RowsByHash,
+	hash: number,
+	row: ListItem,
+): void => {
+	const group = groups.get(hash);
+	if (group === undefined) groups.set(hash, [row]);
+	else group.push(row);
 };
 
-export const renderList = (
-	context: HTMLTemplate,
-	marker: Comment,
-	expressionIndex: number,
-) => {
-	let slots = context.listItemHashes;
-	if (slots === EMPTY_LIST_ITEM_HASHES) {
-		slots = context.listItemHashes = new Array(
-			context.currentExpressions.length,
-		).fill(EMPTY_HASHES);
+const groupRowsByContentHash = (
+	rows: Array<ListItem>,
+	startMarker: Comment,
+): RowsByHash => {
+	const groups: RowsByHash = new Map();
+	let boundary: ChildNode = startMarker;
+	for (let index = 0; index < rows.length; index++) {
+		addRowToGroup(groups, rows[index].itemHash, rows[index]);
+		rows[index].spanStart = boundary.nextSibling!;
+		boundary = rows[index].tailMarker;
 	}
-	const previousHashes = slots[expressionIndex];
+	return groups;
+};
 
-	const current = context.currentExpressions[expressionIndex] as Array<unknown>;
-	const currentLength = current.length;
+const groupRowsByShapeOrKey = (rows: Array<ListItem>): RowsByHash => {
+	const groups: RowsByHash = new Map();
+	for (let index = 0; index < rows.length; index++)
+		addRowToGroup(
+			groups,
+			shapeOrKeyHash(rows[index].instance.templateHash, rows[index].keyHash),
+			rows[index],
+		);
+	return groups;
+};
 
-	const currentHashes: Array<number> = new Array(currentLength);
-	for (let index = 0; index < currentLength; index++) {
-		currentHashes[index] = hashValue(current[index]);
-	}
+const claimLeftmostUnclaimedRow = (
+	groups: RowsByHash,
+	hash: number,
+): ListItem | undefined => groups.get(hash)?.shift();
 
-	slots[expressionIndex] = currentHashes;
+const unclaimedRows = (groups: RowsByHash): Array<ListItem> => {
+	const remaining: Array<ListItem> = [];
+	for (const group of groups.values())
+		for (let index = 0; index < group.length; index++) remaining.push(group[index]);
+	return remaining;
+};
 
-	const previousMarkers: Array<Comment> = [];
-	let sibling: Node | null = marker.nextSibling;
-	while (sibling) {
-		if (isComment(sibling) && sibling.data === marker.data) break;
-		if (
-			isListMarker(sibling) &&
-			previousMarkers.length < previousHashes.length
-		) {
-			previousMarkers.push(sibling);
-		}
-		sibling = sibling.nextSibling;
-	}
-	const previousLength = previousMarkers.length;
+const reconcileRows = (
+	content: ContentLiveBinding,
+	list: ListContentState,
+	values: Array<unknown>,
+): void => {
+	const previousByContentHash = groupRowsByContentHash(
+		list.items,
+		content.startMarker,
+	);
+	const resolvedRows: Array<ListItem | undefined> = new Array(values.length);
+	const newHashes: Array<number> = new Array(values.length);
 
-	let headCurrent = 0;
-	let headPrevious = 0;
-	let tailCurrent = currentLength - 1;
-	let tailPrevious = previousLength - 1;
-
-	while (
-		headCurrent <= tailCurrent &&
-		headPrevious <= tailPrevious &&
-		currentHashes[headCurrent] === previousHashes[headPrevious]
-	) {
-		headCurrent++;
-		headPrevious++;
-	}
-	while (
-		headCurrent <= tailCurrent &&
-		headPrevious <= tailPrevious &&
-		currentHashes[tailCurrent] === previousHashes[tailPrevious]
-	) {
-		tailCurrent--;
-		tailPrevious--;
-	}
-
-	if (headCurrent > tailCurrent) {
-		for (
-			let previousIndex = headPrevious;
-			previousIndex <= tailPrevious;
-			previousIndex++
-		) {
-			removeItemDom(previousMarkers[previousIndex], marker);
-		}
-		return;
-	}
-
-	if (headPrevious > tailPrevious) {
-		let position: ChildNode =
-			headPrevious === 0 ? marker : previousMarkers[headPrevious - 1];
-		for (
-			let currentIndex = headCurrent;
-			currentIndex <= tailCurrent;
-			currentIndex++
-		) {
-			position = insertItem(
-				position,
-				current[currentIndex],
-				kindOf(current[currentIndex]),
-			);
-		}
-		return;
-	}
-
-	const middleLengthPrevious = tailPrevious - headPrevious + 1;
-	const hashToMiddleIndex = new Map<number, number>();
-	for (let middleIndex = 0; middleIndex < middleLengthPrevious; middleIndex++) {
-		hashToMiddleIndex.set(
-			previousHashes[headPrevious + middleIndex],
-			middleIndex,
+	for (let index = 0; index < values.length; index++) {
+		const itemHash = hashValue(values[index]);
+		newHashes[index] = itemHash;
+		resolvedRows[index] = claimLeftmostUnclaimedRow(
+			previousByContentHash,
+			itemHash,
 		);
 	}
 
-	const previousClaimed = new Uint8Array(middleLengthPrevious);
-
-	let position: ChildNode =
-		headPrevious === 0 ? marker : previousMarkers[headPrevious - 1];
-	let expectedMiddleIndex = 0;
-
-	for (
-		let currentIndex = headCurrent;
-		currentIndex <= tailCurrent;
-		currentIndex++
-	) {
-		let claimedMiddleIndex = hashToMiddleIndex.get(currentHashes[currentIndex]);
-		if (
-			claimedMiddleIndex !== undefined &&
-			previousClaimed[claimedMiddleIndex]
-		) {
-			claimedMiddleIndex = undefined;
-		}
-
-		if (claimedMiddleIndex === undefined) {
-			position = insertItem(
-				position,
-				current[currentIndex],
-				kindOf(current[currentIndex]),
-			);
-			continue;
-		}
-
-		previousClaimed[claimedMiddleIndex] = 1;
-		const itemMarker = previousMarkers[headPrevious + claimedMiddleIndex];
-
-		if (claimedMiddleIndex !== expectedMiddleIndex) {
-			if (!isAlreadyInPosition(position, itemMarker)) {
-				moveItemAfter(position, itemMarker);
-			}
-		}
-		expectedMiddleIndex = claimedMiddleIndex + 1;
-		position = itemMarker;
+	const leftoverByShapeOrKey = groupRowsByShapeOrKey(
+		unclaimedRows(previousByContentHash),
+	);
+	for (let index = 0; index < values.length; index++) {
+		if (resolvedRows[index] !== undefined) continue;
+		const value = coerceToTemplate(values[index]);
+		const parsed = getParsedTemplate(value.__templateStrings);
+		const matchHash = shapeOrKeyHash(
+			parsed.templateHash,
+			keyHashOf(value, parsed),
+		);
+		const reusableRow = claimLeftmostUnclaimedRow(leftoverByShapeOrKey, matchHash);
+		if (reusableRow === undefined) continue;
+		patchRowInPlace(reusableRow, value, newHashes[index]);
+		resolvedRows[index] = reusableRow;
 	}
 
-	for (let middleIndex = 0; middleIndex < middleLengthPrevious; middleIndex++) {
-		if (!previousClaimed[middleIndex]) {
-			removeItemDom(previousMarkers[headPrevious + middleIndex], marker);
-		}
+	for (const removedRow of unclaimedRows(leftoverByShapeOrKey))
+		removeRowNodes(removedRow);
+
+	list.items = placeRows(content, resolvedRows, values, newHashes);
+};
+
+const placeRows = (
+	content: ContentLiveBinding,
+	resolvedRows: Array<ListItem | undefined>,
+	values: Array<unknown>,
+	newHashes: Array<number>,
+): Array<ListItem> => {
+	const finalRows: Array<ListItem> = new Array(resolvedRows.length);
+	let cursor: ChildNode = content.startMarker;
+	for (let index = 0; index < resolvedRows.length; index++) {
+		let row = resolvedRows[index];
+		if (row === undefined)
+			row = mountRowAfter(cursor, values[index], newHashes[index]);
+		else if (cursor.nextSibling !== row.spanStart) moveRowAfter(cursor, row);
+		cursor = row.tailMarker;
+		finalRows[index] = row;
 	}
+	return finalRows;
+};
+
+const mountRowAfter = (
+	after: ChildNode,
+	rawValue: unknown,
+	itemHash: number,
+): ListItem => {
+	const value = coerceToTemplate(rawValue);
+	assertNestable(value);
+	const { instance, fragment } = mountInstance(value);
+	const tailMarker = document.createComment(LIST_MARKER_DATA);
+	const spanStart = fragment.firstChild ?? tailMarker;
+	after.after(fragment, tailMarker);
+	const parsed = getParsedTemplate(value.__templateStrings);
+	return {
+		tailMarker,
+		instance,
+		itemHash,
+		keyHash: keyHashOf(value, parsed),
+		spanStart,
+	};
+};
+
+const patchRowInPlace = (
+	row: ListItem,
+	value: TemplateValue,
+	itemHash: number,
+): void => {
+	assertNestable(value);
+	const mounted = reconcileInstance(row.instance, value);
+	if (mounted !== null)
+		replaceRowInstance(row, mounted.instance, mounted.fragment);
+	row.itemHash = itemHash;
+};
+
+const replaceRowInstance = (
+	row: ListItem,
+	instance: Instance,
+	fragment: DocumentFragment,
+): void => {
+	clearRowNodes(row);
+	row.spanStart = fragment.firstChild ?? row.tailMarker;
+	row.tailMarker.before(fragment);
+	row.instance = instance;
+};
+
+const moveRowAfter = (after: ChildNode, row: ListItem): void => {
+	let anchor = after;
+	forEachRowNode(row, (node) => {
+		anchor.after(node);
+		anchor = node;
+	});
+	anchor.after(row.tailMarker);
+};
+
+const removeRowNodes = (row: ListItem): void => {
+	forEachRowNode(row, (node) => node.remove());
+	row.tailMarker.remove();
+};
+
+const clearRowNodes = (row: ListItem): void => {
+	forEachRowNode(row, (node) => node.remove());
+};
+
+const isOpenMarkerData = (data: string): boolean =>
+	data.startsWith(COMMENT_IDENTIFIER + " ") &&
+	data[COMMENT_IDENTIFIER.length + 1] !== "/";
+
+const isCloseMarkerData = (data: string): boolean =>
+	data.startsWith(COMMENT_IDENTIFIER + " /");
+
+const findRowTail = (boundary: ChildNode, endMarker: Comment): Comment => {
+	let depth = 0;
+	let node = boundary.nextSibling;
+	while (node !== null && node !== endMarker) {
+		if (node.nodeType === Node.COMMENT_NODE) {
+			const data = (node as Comment).data;
+			if (data === LIST_MARKER_DATA && depth === 0) return node as Comment;
+			if (isOpenMarkerData(data)) depth++;
+			else if (isCloseMarkerData(data)) depth--;
+		}
+		node = node.nextSibling;
+	}
+	throw new Error("unterminated list row");
+};
+
+export const hydrateListItems = (
+	liveBinding: ContentLiveBinding,
+	values: Array<unknown>,
+): void => {
+	const list = liveBinding.content as ListContentState;
+	const items: Array<ListItem> = new Array(values.length);
+	let boundary: ChildNode = liveBinding.startMarker;
+	for (let index = 0; index < values.length; index++) {
+		const value = coerceToTemplate(values[index]);
+		assertNestable(value);
+		const tailMarker = findRowTail(boundary, liveBinding.endMarker);
+		const spanStart = boundary.nextSibling!;
+		const instance = hydrateInstance(value, boundary, tailMarker);
+		const parsed = getParsedTemplate(value.__templateStrings);
+		items[index] = {
+			tailMarker,
+			instance,
+			itemHash: hashValue(values[index]),
+			keyHash: keyHashOf(value, parsed),
+			spanStart,
+		};
+		boundary = tailMarker;
+	}
+	list.items = items;
+	list.aggregateHash = foldOrderedContentHashes(values);
 };

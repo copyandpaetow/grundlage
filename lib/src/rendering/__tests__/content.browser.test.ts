@@ -733,7 +733,7 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("rebuilds every list item when all values change (no hash match)", async () => {
+	test("patches every list item in place when all values change (no hash match)", async () => {
 		const tag = uniqueTag();
 		let items = [10, 20, 30, 40];
 
@@ -769,11 +769,12 @@ describe("content updates", () => {
 			element.shadowRoot!.querySelectorAll("span"),
 		);
 		expect(updatedItems.length).toBe(4);
-		// no hash matches anywhere, so each changed item is rebuilt rather than
-		// patched in place: every node is fresh and carries the new values
+		// no hash matches anywhere, but the structure is identical, so tier-2
+		// patches each row in place: node identity survives and the DOM carries
+		// the new values.
 		for (let index = 0; index < 4; index++) {
-			expect(updatedItems[index]).not.toBe(originalItems[index]);
-			expect(updatedSpans[index]).not.toBe(originalSpans[index]);
+			expect(updatedItems[index]).toBe(originalItems[index]);
+			expect(updatedSpans[index]).toBe(originalSpans[index]);
 		}
 		expect(updatedSpans[0].textContent).toBe("11");
 		expect(updatedSpans[3].textContent).toBe("41");
@@ -781,7 +782,7 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("keeps hash-matched items and rebuilds changed ones", async () => {
+	test("keeps hash-matched items and patches changed ones in place", async () => {
 		const tag = uniqueTag();
 		let items = ["alpha", "beta"];
 
@@ -800,8 +801,9 @@ describe("content updates", () => {
 			element.shadowRoot!.querySelectorAll("li"),
 		);
 
-		// alpha stays (hash match keeps its node), beta slot changes to "gamma"
-		// which has no match and is rebuilt as a fresh node.
+		// alpha stays (hash match keeps its node); beta's slot changes to "gamma",
+		// which has no content match but the same shape, so tier-2 patches betaNode
+		// in place.
 		items = ["alpha", "gamma"];
 		await element.update();
 		await sleep();
@@ -809,7 +811,7 @@ describe("content updates", () => {
 		const result = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(result.length).toBe(2);
 		expect(result[0]).toBe(alphaNode);
-		expect(result[1]).not.toBe(betaNode);
+		expect(result[1]).toBe(betaNode);
 		expect(result[1].textContent).toContain("gamma");
 
 		cleanup(element);
@@ -849,7 +851,7 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("rebuilds items when attribute values change on a same-structure list", async () => {
+	test("patches items in place when attribute values change on a same-structure list", async () => {
 		const tag = uniqueTag();
 		let items = [
 			{ width: 10, label: "first" },
@@ -881,10 +883,10 @@ describe("content updates", () => {
 		await sleep();
 
 		const updatedLis = Array.from(element.shadowRoot!.querySelectorAll("li"));
-		// width changed => no hash match => each item is rebuilt as a fresh node
-		// carrying the new attribute value
-		expect(updatedLis[0]).not.toBe(originalLis[0]);
-		expect(updatedLis[1]).not.toBe(originalLis[1]);
+		// width changed => no content match, but same shape => tier-2 patches each
+		// item in place, updating the attribute on the surviving node
+		expect(updatedLis[0]).toBe(originalLis[0]);
+		expect(updatedLis[1]).toBe(originalLis[1]);
 		expect(updatedLis[0].getAttribute("style")).toContain("15px");
 		expect(updatedLis[1].getAttribute("style")).toContain("25px");
 
@@ -951,10 +953,11 @@ describe("content updates", () => {
 		);
 
 		// Phase 2: inner reorder within one group, outer unchanged. The inner
-		// change folds into group b's hash, so b no longer hash-matches and the
-		// whole group is rebuilt (new outer node, fresh inner subtree). Group a
-		// is untouched, so its node and inner subtree keep identity. This also
-		// exercises re-entrant renderList without corrupting the sibling group.
+		// change folds into group b's hash, so b no longer content-matches, but its
+		// shape is unchanged, so tier-2 patches group b in place (its outer node
+		// survives) and the nested list reorders inside it. Group a is untouched.
+		// This also exercises re-entrant list reconciliation without corrupting the
+		// sibling group.
 		groups = [
 			{ name: "b", items: ["b2", "b1"] },
 			{ name: "a", items: ["a1", "a2"] },
@@ -965,7 +968,7 @@ describe("content updates", () => {
 		const outerLisAfterInnerSwap = Array.from(
 			outerUl.children,
 		) as Array<HTMLElement>;
-		expect(outerLisAfterInnerSwap[0]).not.toBe(bGroupNode);
+		expect(outerLisAfterInnerSwap[0]).toBe(bGroupNode);
 		expect(outerLisAfterInnerSwap[1]).toBe(aGroupNode);
 
 		const bInnerItemsAfter = Array.from(
@@ -1264,11 +1267,11 @@ describe("content updates", () => {
 		expect(afterMiddleSwap[1].textContent).toContain("m");
 		expect(afterMiddleSwap[2].textContent).toContain("n");
 		expect(afterMiddleSwap[3].textContent).toContain("o");
-		// the middle three have no hash match, so they are rebuilt as fresh nodes
-		// rather than patched in place — only the peeled ends keep identity
-		expect(afterMiddleSwap[1]).not.toBe(xNode);
-		expect(afterMiddleSwap[2]).not.toBe(yNode);
-		expect(afterMiddleSwap[3]).not.toBe(zNode);
+		// the middle three have no content match but the same shape, so tier-2
+		// patches them in place — every node keeps identity, ends included
+		expect(afterMiddleSwap[1]).toBe(xNode);
+		expect(afterMiddleSwap[2]).toBe(yNode);
+		expect(afterMiddleSwap[3]).toBe(zNode);
 
 		cleanup(element);
 	});

@@ -1,149 +1,140 @@
 import { describe, test, expect } from "vitest";
-import { html } from "../html";
-import { BINDING_TYPES } from "../types";
+import { getParsedTemplate } from "../html";
+import { html } from "../../template-value";
+import { BINDING, ContentStaticBinding } from "../types";
+
+const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
+	getParsedTemplate(strings);
+
+const valueIndices = (parsed: { bindings: Array<{ type: number }> }) =>
+	parsed.bindings.map((b) => (b as ContentStaticBinding).valueIndex);
 
 describe("html parser — content bindings", () => {
 	test("text expression creates a content binding", () => {
 		const name = "world";
-		const template = html` <div>${name}</div>`;
+		const parsed = parse` <div>${name}</div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
-		expect(template.currentExpressions).toEqual(["world"]);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
+		expect(html` <div>${name}</div>`.values).toEqual(["world"]);
 	});
 
 	test("multiple text expressions create separate bindings", () => {
 		const a = "hello";
 		const b = "world";
-		const template = html`<p>${a}</p>
+		const parsed = parse`<p>${a}</p>
 			<p>${b}</p>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
-		expect(template.parsedHTML.bindings[1].type).toBe(BINDING_TYPES.CONTENT);
-		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1]);
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.CONTENT,
+			BINDING.CONTENT,
+		]);
+		expect(valueIndices(parsed)).toEqual([0, 1]);
 	});
 
 	test("adjacent text expressions share no binding", () => {
 		const a = "hello";
 		const b = "world";
-		const template = html` <div>${a}${b}</div>`;
+		const parsed = parse` <div>${a}${b}</div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1]);
+		expect(parsed.bindings).toHaveLength(2);
+		expect(valueIndices(parsed)).toEqual([0, 1]);
 	});
 
 	test("expression between static text", () => {
 		const name = "world";
-		const template = html` <div>hello ${name} goodbye</div>`;
+		const parsed = parse` <div>hello ${name} goodbye</div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
 	test("nested template expression", () => {
 		const inner = html`<span>child</span>`;
-		const template = html` <div>${inner}</div>`;
+		const parsed = parse` <div>${inner}</div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
 	test("array expression", () => {
 		const items = [1, 2, 3];
-		const template = html` <ul>
+		const parsed = parse` <ul>
 			${items}
 		</ul>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
 	test("expression between two static text nodes in same element", () => {
 		const mid = "middle";
-		const template = html`<p>start ${mid} end</p>`;
+		const parsed = parse`<p>start ${mid} end</p>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
 	test("adjacent expressions with static text between them", () => {
 		const a = "hello";
 		const b = "world";
-		const template = html` <div>${a} and ${b}</div>`;
+		const parsed = parse` <div>${a} and ${b}</div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1]);
+		expect(parsed.bindings).toHaveLength(2);
+		expect(valueIndices(parsed)).toEqual([0, 1]);
 	});
 
 	test("expression as the only content (no wrapper element)", () => {
 		const val = "bare";
-		const template = html`${val}`;
+		const parsed = parse`${val}`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
 	test("three adjacent expressions", () => {
 		const a = "x";
 		const b = "y";
 		const c = "z";
-		const template = html`${a}${b}${c}`;
+		const parsed = parse`${a}${b}${c}`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(3);
-		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1, 2]);
+		expect(parsed.bindings).toHaveLength(3);
+		expect(valueIndices(parsed)).toEqual([0, 1, 2]);
 	});
 
 	test("expression after self-closing element", () => {
 		const val = "text";
-		const template = html`<br />${val}`;
+		const parsed = parse`<br />${val}`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
 	test("expression before and after an element", () => {
 		const before = "pre";
 		const after = "post";
-		const template = html`${before}
+		const parsed = parse`${before}
 			<div>static</div>
 			${after}`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
-		expect(template.parsedHTML.bindings[1].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.CONTENT,
+			BINDING.CONTENT,
+		]);
 	});
 
-	test("null expression", () => {
-		const val = null;
-		const template = html` <div>${val}</div>`;
-
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
-		expect(template.currentExpressions).toEqual([null]);
+	test("content binding is created regardless of value type", () => {
+		for (const val of [null, undefined, 42, false]) {
+			const parsed = parse` <div>${val}</div>`;
+			expect(parsed.bindings).toHaveLength(1);
+			expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
+		}
 	});
 
-	test("undefined expression", () => {
-		const val = undefined;
-		const template = html` <div>${val}</div>`;
-
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.currentExpressions).toEqual([undefined]);
-	});
-
-	test("numeric expression", () => {
-		const val = 42;
-		const template = html` <div>${val}</div>`;
-
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.currentExpressions).toEqual([42]);
-	});
-
-	test("boolean expression", () => {
-		const val = false;
-		const template = html` <div>${val}</div>`;
-
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.currentExpressions).toEqual([false]);
+	test("html captures raw content values verbatim, including nullish and false", () => {
+		expect(html` <div>${null}</div>`.values).toEqual([null]);
+		expect(html` <div>${undefined}</div>`.values).toEqual([undefined]);
+		expect(html` <div>${42}</div>`.values).toEqual([42]);
+		expect(html` <div>${false}</div>`.values).toEqual([false]);
 	});
 });

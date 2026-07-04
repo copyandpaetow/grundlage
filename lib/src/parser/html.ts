@@ -1,24 +1,21 @@
 import { stringHash } from "../utils/hashing";
-import { HTMLTemplate } from "../rendering/template-html";
 import {
 	ATTRIBUTE_NAME_KIND,
 	ATTRIBUTE_SHAPE,
 	AttributeBinding,
 	Binding,
+	BINDING,
 	BINDING_TYPES,
 	ContentBinding,
 	ParsedHTML,
+	ParsedTemplate,
+	Part,
 	RawContentBinding,
+	StaticBinding,
 	TagBinding,
-	ValueOf,
+	ValueOf
 } from "./types";
-import {
-	CHAR_CODE,
-	COMMENT_IDENTIFIER,
-	isQuoteCode,
-	isWhitespaceCode,
-	moveArrayContents,
-} from "./html-util";
+import { CHAR_CODE, COMMENT_IDENTIFIER, isQuoteCode, isWhitespaceCode, moveArrayContents } from "./html-util";
 
 type StateValue = ValueOf<typeof STATE>;
 type BufferArray = Array<string | number>;
@@ -70,6 +67,7 @@ interface ParserState {
 	sawTopLevelSibling: boolean;
 	hasOpenedAnyTag: boolean;
 	forceNoRootTemplate: boolean;
+	keyBindingIndex: number;
 	openTagBindings: Array<TagBinding | null>;
 	resultBuffer: BufferArray;
 	elementBuffer: BufferArray;
@@ -104,6 +102,7 @@ const createParser = (): ParserState => ({
 	sawTopLevelSibling: false,
 	hasOpenedAnyTag: false,
 	forceNoRootTemplate: false,
+	keyBindingIndex: -1,
 	openTagBindings: [],
 	resultBuffer: [],
 	elementBuffer: [],
@@ -140,6 +139,7 @@ const resetParser = (
 	parser.sawTopLevelSibling = false;
 	parser.hasOpenedAnyTag = false;
 	parser.forceNoRootTemplate = mode === PARSE_MODE.NO_ROOT_TEMPLATE;
+	parser.keyBindingIndex = -1;
 	parser.openTagBindings.length = 0;
 	parser.resultBuffer.length = 0;
 	parser.elementBuffer.length = 0;
@@ -152,15 +152,20 @@ const resetParser = (
 	parser.rawContentBuffer.length = 0;
 };
 
-const createComment = (parser: ParserState) =>
+const openComment = (parser: ParserState) =>
 	`<!--${COMMENT_IDENTIFIER} ${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}-->`;
+
+const closeComment = (parser: ParserState) =>
+	`<!--${COMMENT_IDENTIFIER} /${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}-->`;
+
+const isSingleContentHole = (values: Array<string | number>) =>
+	values.length === 1 && typeof values[0] === "number";
 
 const updateBinding = (parser: ParserState) => {
 	switch (parser.state) {
 		case STATE.TEXT: {
 			capture(parser, parser.contentBuffer, parser.splitIndex);
-			const marker = createComment(parser);
-			parser.contentBuffer.push(marker, marker);
+			parser.contentBuffer.push(openComment(parser), closeComment(parser));
 			(parser.activeBinding as ContentBinding).values.push(parser.index);
 			parser.activeBinding = null;
 			if (parser.openTagBindings.length === 0) {
@@ -250,12 +255,9 @@ const capture = (
 
 const completeComment = (parser: ParserState) => {
 	if (parser.activeBinding) {
-		moveArrayContents(
-			parser.commentBuffer,
-			(parser.activeBinding as ContentBinding).values,
-		);
-		const marker = createComment(parser);
-		parser.contentBuffer.push(marker, marker);
+		const values = (parser.activeBinding as ContentBinding).values;
+		moveArrayContents(parser.commentBuffer, values);
+		parser.contentBuffer.push(openComment(parser), closeComment(parser));
 	} else {
 		parser.contentBuffer.push("<!--");
 		moveArrayContents(parser.commentBuffer, parser.contentBuffer);
@@ -266,7 +268,7 @@ const completeComment = (parser: ParserState) => {
 
 const completeSpecialContent = (parser: ParserState) => {
 	if (parser.activeBinding) {
-		parser.resultBuffer.push(createComment(parser));
+		parser.resultBuffer.push(openComment(parser));
 		moveArrayContents(
 			parser.rawContentBuffer,
 			(parser.activeBinding as RawContentBinding).values,
@@ -292,7 +294,7 @@ const completeTag = (parser: ParserState) => {
 			(parser.activeBinding as TagBinding).values,
 		);
 		parser.elementBuffer.push(PLACEHOLDER_TAG);
-		parser.resultBuffer.push(createComment(parser));
+		parser.resultBuffer.push(openComment(parser));
 		parser.openTagBindings.push(parser.activeBinding as TagBinding);
 		parser.isRootTemplate = false;
 		parser.activeBinding = null;
@@ -409,6 +411,17 @@ const classifyAttributeName = (binding: AttributeBinding) => {
 		binding.eventName = name.slice(2).toLowerCase();
 	}
 };
+//todo: why abstracted?
+const recordKeyBinding = (
+	parser: ParserState,
+	attributeBinding: AttributeBinding,
+) => {
+	if (parser.keyBindingIndex !== -1) return;
+	if (parser.openTagBindings.length !== 1) return;
+	if (attributeBinding.keys.length !== 1 || attributeBinding.keys[0] !== "key")
+		return;
+	parser.keyBindingIndex = parser.bindings.length - 1;
+};
 
 const completeAttribute = (parser: ParserState) => {
 	if (parser.activeBinding) {
@@ -426,7 +439,8 @@ const completeAttribute = (parser: ParserState) => {
 		if (parser.isRootTemplate) {
 			parser.hostBindingOffset++;
 		} else {
-			parser.resultBuffer.push(createComment(parser));
+			parser.resultBuffer.push(openComment(parser));
+			recordKeyBinding(parser, attributeBinding);
 		}
 
 		parser.openTagBindings[
@@ -851,21 +865,85 @@ const parse = (
 		fragment: null,
 		templateHash: stringHash(result),
 		hostBindingOffset: parser.hostBindingOffset,
+		keyBindingIndex: parser.keyBindingIndex,
 	};
 };
 
+const isEventBinding = (binding: AttributeBinding): boolean =>
+	(binding.nameKind === ATTRIBUTE_NAME_KIND.NATIVE_EVENT ||
+		binding.nameKind === ATTRIBUTE_NAME_KIND.EXPLICIT_EVENT) &&
+	binding.values.length === 1 &&
+	typeof binding.values[0] === "number";
+
+const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
+	if (isEventBinding(binding)) {
+		return {
+			type: BINDING.EVENT,
+			eventType: binding.eventName,
+			valueIndex: binding.values[0] as number,
+		};
+	}
+	if (binding.shape === ATTRIBUTE_SHAPE.EXPANDABLE) {
+		return {
+			type: BINDING.DYNAMIC_ATTRIBUTE,
+			valueIndex: binding.values[0] as number,
+		};
+	}
+	if (binding.values.length === 1 && typeof binding.values[0] === "number") {
+		return {
+			type: BINDING.SINGLE_VALUE_ATTRIBUTE,
+			nameParts: binding.keys.slice(),
+			valueIndex: binding.values[0],
+		};
+	}
+	//todo: why abstracted?
+	const valueParts: Array<Part> =
+		binding.values.length > 0 ? binding.values.slice() : [""];
+	return {
+		type: BINDING.ATTRIBUTE,
+		nameParts: binding.keys.slice(),
+		valueParts,
+	};
+};
+
+const toStaticBinding = (binding: Binding): StaticBinding => {
+	switch (binding.type) {
+		case BINDING_TYPES.TAG:
+			return {
+				type: BINDING.TAG,
+				parts: binding.values.slice(),
+				relatedBindingIndices: binding.relatedAttributes.slice(),
+			};
+		case BINDING_TYPES.ATTR:
+			return toAttributeStaticBinding(binding);
+		case BINDING_TYPES.CONTENT:
+			return isSingleContentHole(binding.values)
+				? { type: BINDING.CONTENT, valueIndex: binding.values[0] as number }
+				: { type: BINDING.COMMENT, parts: binding.values.slice() };
+		case BINDING_TYPES.RAW_CONTENT:
+			return { type: BINDING.RAW_CONTENT, parts: binding.values.slice() };
+	}
+};
+
+const toParsedTemplate = (parsed: ParsedHTML): ParsedTemplate => ({
+	htmlWithMarkers: parsed.result,
+	bindings: parsed.bindings.map(toStaticBinding),
+	templateHash: parsed.templateHash,
+	fragmentCloneSource: null,
+	hostBindingCount: parsed.hostBindingOffset,
+	keyBindingIndex: parsed.keyBindingIndex,
+});
+
 const parser = createParser();
 
-const htmlCache = new WeakMap<TemplateStringsArray, ParsedHTML>();
+const parseCache = new WeakMap<TemplateStringsArray, ParsedTemplate>();
 
-export const html = (
-	tokens: TemplateStringsArray,
-	...dynamicValues: Array<unknown>
-): HTMLTemplate => {
-	let parsed = htmlCache.get(tokens);
-	if (!parsed) {
-		parsed = parse(parser, tokens);
-		htmlCache.set(tokens, parsed);
-	}
-	return new HTMLTemplate(parsed, dynamicValues);
+export const getParsedTemplate = (
+	templateStrings: TemplateStringsArray,
+): ParsedTemplate => {
+	const cached = parseCache.get(templateStrings);
+	if (cached !== undefined) return cached;
+	const parsed = toParsedTemplate(parse(parser, templateStrings));
+	parseCache.set(templateStrings, parsed);
+	return parsed;
 };

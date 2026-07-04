@@ -1,35 +1,34 @@
 import { describe, expect, test } from "vitest";
 import { render } from "../../index";
-//white-box test of the template hash, so we use the internal parser export (real type) rather than the opaque public html
-import { html } from "../../parser/html";
-import { hashTemplate } from "../template-html";
+import { html } from "../../template-value";
+import { hashValue } from "../../utils/hashing";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
-describe("HTMLTemplate.hash", () => {
+describe("template value hashing", () => {
 	test("is stable for identical expressions", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<p>${"a"}</p>`;
-		expect(hashTemplate(template1)).toBe(hashTemplate(template2));
+		expect(hashValue(template1)).toBe(hashValue(template2));
 	});
 
 	test("changes when expressions change", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<p>${"b"}</p>`;
-		expect(hashTemplate(template1)).not.toBe(hashTemplate(template2));
+		expect(hashValue(template1)).not.toBe(hashValue(template2));
 	});
 
 	test("differs between templates with different structure but same expressions", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<div>${"a"}</div>`;
-		expect(hashTemplate(template1)).not.toBe(hashTemplate(template2));
+		expect(hashValue(template1)).not.toBe(hashValue(template2));
 	});
 
 	test("is stable across repeated reads on the same instance", () => {
 		const template = html`<p class="${"x"}">${"y"}</p>`;
-		const first = hashTemplate(template);
-		const second = hashTemplate(template);
+		const first = hashValue(template);
+		const second = hashValue(template);
 		expect(first).toBe(second);
 	});
 
@@ -43,15 +42,15 @@ describe("HTMLTemplate.hash", () => {
 		const template2 = html`<div style="width:${50.10001}%"></div>`;
 		const template3 = html`<div style="width:${50.2}%"></div>`;
 		const hashes = new Set([
-			hashTemplate(template1),
-			hashTemplate(template2),
-			hashTemplate(template3),
+			hashValue(template1),
+			hashValue(template2),
+			hashValue(template3),
 		]);
 		expect(hashes.size).toBe(3);
 	});
 });
 
-describe("update() dirty-binding behaviour", () => {
+describe("update() change propagation", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-hash-${tagId++}-${Date.now()}`;
 

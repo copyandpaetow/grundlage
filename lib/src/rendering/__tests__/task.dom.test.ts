@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html } from "../../parser/html";
-import { HTMLTemplate } from "../template-html";
+import { html, TemplateValue } from "../../template-value";
 import {
 	nextOperation as step,
 	OPERATION,
@@ -21,7 +20,7 @@ tests/integration. depth-2 is a recursion in the shell, not a state here, so the
 machine to test: the inner simply yields a generator function and the table routes it to the parent.
 */
 
-const template = (): HTMLTemplate => html`<p>x</p>` as unknown as HTMLTemplate;
+const template = (): TemplateValue => html`<p>x</p>`;
 
 const makeTask = (overrides: Partial<Task> = {}): Task => ({
 	generator: (function* () {})(),

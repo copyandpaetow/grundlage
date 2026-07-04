@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html } from "../../parser/html";
-import { isComment, isPlainObject, isSameTemplate } from "../validators";
+import { isComment, isPlainObject } from "../validators";
 
 describe("isComment", () => {
 	test("returns true for a comment node", () => {
@@ -23,7 +22,6 @@ describe("isPlainObject", () => {
 	});
 
 	test("rejects class instances, arrays, Maps, Sets", () => {
-		//renderer uses this to decide whether to iterate keys vs. treat as opaque value
 		class Foo {}
 		expect(isPlainObject(new Foo())).toBe(false);
 		expect(isPlainObject([])).toBe(false);
@@ -40,24 +38,5 @@ describe("isPlainObject", () => {
 		expect(isPlainObject("string")).toBe(false);
 		expect(isPlainObject(42)).toBe(false);
 		expect(isPlainObject(true)).toBe(false);
-	});
-});
-
-describe("isSameTemplate", () => {
-	test("true when two templates come from the same tagged-template call site", () => {
-		const fromOneSite = (value: string) => html`<p>${value}</p>`;
-		expect(isSameTemplate(fromOneSite("a"), fromOneSite("b"))).toBe(true);
-	});
-
-	test("false for distinct literals even with identical static text", () => {
-		const a = html`<p>${"a"}</p>`;
-		const b = html`<p>${"b"}</p>`;
-		expect(isSameTemplate(a, b)).toBe(false);
-	});
-
-	test("false when structure differs", () => {
-		const a = html`<p>${"x"}</p>`;
-		const b = html`<span>${"x"}</span>`;
-		expect(isSameTemplate(a, b)).toBe(false);
 	});
 });

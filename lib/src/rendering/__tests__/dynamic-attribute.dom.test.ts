@@ -1,13 +1,13 @@
 import { describe, expect, test, vi } from "vitest";
-import { applyAttributeBinding } from "../attribute";
+import { applyDynamicAttribute } from "../dynamic-attribute";
 
-describe("applyAttributeBinding - event listeners", () => {
+describe("applyDynamicAttribute - event listeners", () => {
 	test("attaches an event listener for an on* key whose value is a function", () => {
 		const element = document.createElement("button");
 		const events: Array<string> = [];
 		const handler = () => events.push("clicked");
 
-		applyAttributeBinding(element, "onclick", handler);
+		applyDynamicAttribute(element, "onclick", handler);
 
 		// addEventListener path: the attribute itself must NOT be set.
 		expect(element.hasAttribute("onclick")).toBe(false);
@@ -22,8 +22,8 @@ describe("applyAttributeBinding - event listeners", () => {
 		const firstHandler = () => events.push("first");
 		const secondHandler = () => events.push("second");
 
-		applyAttributeBinding(element, "onclick", firstHandler);
-		applyAttributeBinding(element, "onclick", secondHandler, firstHandler);
+		applyDynamicAttribute(element, "onclick", firstHandler);
+		applyDynamicAttribute(element, "onclick", secondHandler, firstHandler);
 
 		element.click();
 		expect(events).toEqual(["second"]);
@@ -34,8 +34,8 @@ describe("applyAttributeBinding - event listeners", () => {
 		const events: Array<string> = [];
 		const handler = () => events.push("clicked");
 
-		applyAttributeBinding(element, "onclick", handler);
-		applyAttributeBinding(element, "onclick", null, handler);
+		applyDynamicAttribute(element, "onclick", handler);
+		applyDynamicAttribute(element, "onclick", null, handler);
 
 		element.click();
 		expect(events).toEqual([]);
@@ -48,7 +48,7 @@ describe("applyAttributeBinding - event listeners", () => {
 		const events: Array<string> = [];
 		const handler = () => events.push("clicked");
 
-		applyAttributeBinding(element, "onClick", handler);
+		applyDynamicAttribute(element, "onClick", handler);
 		element.click();
 		expect(events).toEqual(["clicked"]);
 	});
@@ -60,7 +60,7 @@ describe("applyAttributeBinding - event listeners", () => {
 		const element = document.createElement("div");
 		expect("ondata" in element).toBe(false);
 
-		applyAttributeBinding(element, "ondata", "payload");
+		applyDynamicAttribute(element, "ondata", "payload");
 		expect(element.getAttribute("ondata")).toBe("payload");
 	});
 
@@ -71,13 +71,13 @@ describe("applyAttributeBinding - event listeners", () => {
 		const element = document.createElement("div");
 		const payload = { nested: 1 };
 
-		applyAttributeBinding(element, "ondata", payload);
+		applyDynamicAttribute(element, "ondata", payload);
 		expect((element as unknown as { ondata: unknown }).ondata).toBe(payload);
 		expect(element.hasAttribute("ondata")).toBe(false);
 	});
 });
 
-describe("applyAttributeBinding - exotic event names and CustomEvent payloads", () => {
+describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", () => {
 	// The `on*` fast path keys on `lowerKey in element`, so any event that lives
 	// on HTMLElement.prototype should bind. These tests pin that contract for the
 	// less-common event surfaces we actually rely on (pointer, wheel, transition,
@@ -106,7 +106,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 			const received: Array<Event> = [];
 			const handler = (event: Event) => received.push(event);
 
-			applyAttributeBinding(element, attributeKey, handler);
+			applyDynamicAttribute(element, attributeKey, handler);
 			expect(element.hasAttribute(attributeKey)).toBe(false);
 
 			const dispatched = new Event(eventName);
@@ -122,7 +122,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 		const element = document.createElement("input");
 		const received: Array<{ detail: unknown; type: string }> = [];
 
-		applyAttributeBinding(element, "oninput", (event: Event) => {
+		applyDynamicAttribute(element, "oninput", (event: Event) => {
 			received.push({
 				detail: (event as CustomEvent<{ value: number }>).detail,
 				type: event.type,
@@ -142,7 +142,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 		parent.appendChild(child);
 
 		const received: Array<string> = [];
-		applyAttributeBinding(parent, "onclick", () => received.push("parent"));
+		applyDynamicAttribute(parent, "onclick", () => received.push("parent"));
 
 		child.dispatchEvent(new CustomEvent("click", { bubbles: true }));
 		expect(received).toEqual(["parent"]);
@@ -157,8 +157,8 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 		const firstHandler = () => received.push("first");
 		const secondHandler = () => received.push("second");
 
-		applyAttributeBinding(element, "onpointerdown", firstHandler);
-		applyAttributeBinding(
+		applyDynamicAttribute(element, "onpointerdown", firstHandler);
+		applyDynamicAttribute(
 			element,
 			"onpointerdown",
 			secondHandler,
@@ -174,8 +174,8 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 		const received: Array<Event> = [];
 		const handler = (event: Event) => received.push(event);
 
-		applyAttributeBinding(element, "ontransitionend", handler);
-		applyAttributeBinding(element, "ontransitionend", null, handler);
+		applyDynamicAttribute(element, "ontransitionend", handler);
+		applyDynamicAttribute(element, "ontransitionend", null, handler);
 
 		element.dispatchEvent(new Event("transitionend"));
 		expect(received).toEqual([]);
@@ -188,7 +188,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
-		applyAttributeBinding(element, "onPointerDown", (event: Event) =>
+		applyDynamicAttribute(element, "onPointerDown", (event: Event) =>
 			received.push(event.type),
 		);
 
@@ -208,7 +208,7 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 		const handler = () => {};
 		const addSpy = vi.spyOn(element, "addEventListener");
 
-		applyAttributeBinding(element, "onmycustomevent", handler);
+		applyDynamicAttribute(element, "onmycustomevent", handler);
 
 		expect(addSpy).not.toHaveBeenCalled();
 		expect(
@@ -219,21 +219,21 @@ describe("applyAttributeBinding - exotic event names and CustomEvent payloads", 
 
 	test("removes the listener via null even when only oldValue is a function", () => {
 		// On the very first call, value is null but oldValue is a function, so
-		// the entry guard in applyAttributeBinding still has to enter the on* branch
+		// the entry guard in applyDynamicAttribute still has to enter the on* branch
 		// so removeEventListener fires for the orphaned handler.
 		const element = document.createElement("div");
 		const received: Array<Event> = [];
 		const handler = (event: Event) => received.push(event);
 
 		element.addEventListener("wheel", handler);
-		applyAttributeBinding(element, "onwheel", null, handler);
+		applyDynamicAttribute(element, "onwheel", null, handler);
 
 		element.dispatchEvent(new Event("wheel"));
 		expect(received).toEqual([]);
 	});
 });
 
-describe("applyAttributeBinding - on- explicit listeners", () => {
+describe("applyDynamicAttribute - on- explicit listeners", () => {
 	test("binds a custom event with no IDL property, skipping the in-element gate", () => {
 		// the whole point of `on-`: `on-form-reset` has no prototype property, so
 		// the gated `on*` path would fall through. the dash marks it as a listener
@@ -244,7 +244,7 @@ describe("applyAttributeBinding - on- explicit listeners", () => {
 		const received: Array<string> = [];
 		const addSpy = vi.spyOn(element, "addEventListener");
 
-		applyAttributeBinding(element, "on-form-reset", (event: Event) =>
+		applyDynamicAttribute(element, "on-form-reset", (event: Event) =>
 			received.push(event.type),
 		);
 
@@ -263,7 +263,7 @@ describe("applyAttributeBinding - on- explicit listeners", () => {
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
-		applyAttributeBinding(element, "on-form-state-restore", (event: Event) =>
+		applyDynamicAttribute(element, "on-form-state-restore", (event: Event) =>
 			received.push(event.type),
 		);
 
@@ -277,8 +277,8 @@ describe("applyAttributeBinding - on- explicit listeners", () => {
 		const first = () => received.push("first");
 		const second = () => received.push("second");
 
-		applyAttributeBinding(element, "on-my-event", first);
-		applyAttributeBinding(element, "on-my-event", second, first);
+		applyDynamicAttribute(element, "on-my-event", first);
+		applyDynamicAttribute(element, "on-my-event", second, first);
 
 		element.dispatchEvent(new Event("my-event"));
 		expect(received).toEqual(["second"]);
@@ -289,8 +289,8 @@ describe("applyAttributeBinding - on- explicit listeners", () => {
 		const received: Array<Event> = [];
 		const handler = (event: Event) => received.push(event);
 
-		applyAttributeBinding(element, "on-my-event", handler);
-		applyAttributeBinding(element, "on-my-event", null, handler);
+		applyDynamicAttribute(element, "on-my-event", handler);
+		applyDynamicAttribute(element, "on-my-event", null, handler);
 
 		element.dispatchEvent(new Event("my-event"));
 		expect(received).toEqual([]);
@@ -303,7 +303,7 @@ describe("applyAttributeBinding - on- explicit listeners", () => {
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
-		applyAttributeBinding(element, "on-MyEvent", (event: Event) =>
+		applyDynamicAttribute(element, "on-MyEvent", (event: Event) =>
 			received.push(event.type),
 		);
 
@@ -312,7 +312,7 @@ describe("applyAttributeBinding - on- explicit listeners", () => {
 	});
 });
 
-describe("applyAttributeBinding - dead native handler warning", () => {
+describe("applyDynamicAttribute - dead native handler warning", () => {
 	test("warns when an on<name> function value finds no matching IDL property", () => {
 		// onClik is a typo'd onClick: no `onclik` IDL property, so the function
 		// would land as a dead property that never fires. that must be loud.
@@ -320,7 +320,7 @@ describe("applyAttributeBinding - dead native handler warning", () => {
 		expect("onclik" in element).toBe(false);
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		applyAttributeBinding(element, "onClik", () => {});
+		applyDynamicAttribute(element, "onClik", () => {});
 
 		expect(warn).toHaveBeenCalledTimes(1);
 		expect(warn.mock.calls[0][0]).toContain("onClik");
@@ -331,7 +331,7 @@ describe("applyAttributeBinding - dead native handler warning", () => {
 		const element = document.createElement("button");
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		applyAttributeBinding(element, "onclick", () => {});
+		applyDynamicAttribute(element, "onclick", () => {});
 
 		expect(warn).not.toHaveBeenCalled();
 		warn.mockRestore();
@@ -343,7 +343,7 @@ describe("applyAttributeBinding - dead native handler warning", () => {
 		const element = document.createElement("div");
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		applyAttributeBinding(element, "on-whatever", () => {});
+		applyDynamicAttribute(element, "on-whatever", () => {});
 
 		expect(warn).not.toHaveBeenCalled();
 		warn.mockRestore();
@@ -353,7 +353,7 @@ describe("applyAttributeBinding - dead native handler warning", () => {
 		const element = document.createElement("div");
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		applyAttributeBinding(element, "data-thing", () => {});
+		applyDynamicAttribute(element, "data-thing", () => {});
 
 		expect(warn).not.toHaveBeenCalled();
 		warn.mockRestore();
@@ -365,14 +365,14 @@ describe("applyAttributeBinding - dead native handler warning", () => {
 		const element = document.createElement("div");
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		applyAttributeBinding(element, "onmadeup", null, () => {});
+		applyDynamicAttribute(element, "onmadeup", null, () => {});
 
 		expect(warn).not.toHaveBeenCalled();
 		warn.mockRestore();
 	});
 });
 
-describe("applyAttributeBinding - removal", () => {
+describe("applyDynamicAttribute - removal", () => {
 	test.each([
 		["null", null],
 		["undefined", undefined],
@@ -381,21 +381,21 @@ describe("applyAttributeBinding - removal", () => {
 		const element = document.createElement("div");
 		element.setAttribute("title", "previous");
 
-		applyAttributeBinding(element, "title", value);
+		applyDynamicAttribute(element, "title", value);
 		expect(element.hasAttribute("title")).toBe(false);
 	});
 });
 
-describe("applyAttributeBinding - stringable values", () => {
+describe("applyDynamicAttribute - stringable values", () => {
 	test("sets a string attribute", () => {
 		const element = document.createElement("div");
-		applyAttributeBinding(element, "title", "hello");
+		applyDynamicAttribute(element, "title", "hello");
 		expect(element.getAttribute("title")).toBe("hello");
 	});
 
 	test("coerces a number to a string attribute", () => {
 		const element = document.createElement("input");
-		applyAttributeBinding(element, "tabindex", 5);
+		applyDynamicAttribute(element, "tabindex", 5);
 		expect(element.getAttribute("tabindex")).toBe("5");
 	});
 
@@ -403,13 +403,13 @@ describe("applyAttributeBinding - stringable values", () => {
 		// Matches the integration test "sets boolean true as empty attribute":
 		// String(true) === "true", and that's what lands on the attribute.
 		const element = document.createElement("button");
-		applyAttributeBinding(element, "disabled", true);
+		applyDynamicAttribute(element, "disabled", true);
 		expect(element.getAttribute("disabled")).toBe("true");
 	});
 
 	test("empty string is preserved as a present-but-empty attribute", () => {
 		const element = document.createElement("div");
-		applyAttributeBinding(element, "title", "");
+		applyDynamicAttribute(element, "title", "");
 		expect(element.hasAttribute("title")).toBe(true);
 		expect(element.getAttribute("title")).toBe("");
 	});
@@ -421,21 +421,21 @@ describe("applyAttributeBinding - stringable values", () => {
 		const element = document.createElement("div");
 		const previous = { nested: 1 };
 
-		applyAttributeBinding(element, "data", previous);
+		applyDynamicAttribute(element, "data", previous);
 		expect((element as unknown as { data: unknown }).data).toBe(previous);
 
-		applyAttributeBinding(element, "data", "plain", previous);
+		applyDynamicAttribute(element, "data", "plain", previous);
 		expect(element.getAttribute("data")).toBe("plain");
 		expect(Object.prototype.hasOwnProperty.call(element, "data")).toBe(false);
 	});
 });
 
-describe("applyAttributeBinding - non-stringable values", () => {
+describe("applyDynamicAttribute - non-stringable values", () => {
 	test("assigns a complex value as a JS property without setting the attribute", () => {
 		const element = document.createElement("div");
 		const payload = { nested: { value: 1 } };
 
-		applyAttributeBinding(element, "data", payload);
+		applyDynamicAttribute(element, "data", payload);
 		expect((element as unknown as { data: unknown }).data).toBe(payload);
 		expect(element.hasAttribute("data")).toBe(false);
 	});
@@ -444,7 +444,7 @@ describe("applyAttributeBinding - non-stringable values", () => {
 		const element = document.createElement("div");
 		const items = [1, 2, 3];
 
-		applyAttributeBinding(element, "items", items);
+		applyDynamicAttribute(element, "items", items);
 		expect((element as unknown as { items: unknown }).items).toBe(items);
 	});
 
@@ -458,7 +458,7 @@ describe("applyAttributeBinding - non-stringable values", () => {
 		const updateSpy = vi.fn();
 		element.update = updateSpy;
 
-		applyAttributeBinding(element, "config", { nested: 1 });
+		applyDynamicAttribute(element, "config", { nested: 1 });
 		expect(updateSpy).toHaveBeenCalledTimes(1);
 	});
 
@@ -472,12 +472,12 @@ describe("applyAttributeBinding - non-stringable values", () => {
 		const updateSpy = vi.fn();
 		element.update = updateSpy;
 
-		applyAttributeBinding(element, "title", "hello");
+		applyDynamicAttribute(element, "title", "hello");
 		expect(updateSpy).not.toHaveBeenCalled();
 	});
 });
 
-describe("applyAttributeBinding - stringable to non-stringable transition", () => {
+describe("applyDynamicAttribute - stringable to non-stringable transition", () => {
 	//we previously wrote the stringable value as a real attribute (line 49 in attribute.ts); now the new value is non-stringable, so the code assigns to the JS property
 	//=> nothing removes the prior attribute, which means a child custom element reading `getAttribute("config")` after the transition still sees the stale stringified previous value
 	//these tests document the current behavior so the user can decide whether the missing removeAttribute call is intentional or a latent bug
@@ -485,8 +485,8 @@ describe("applyAttributeBinding - stringable to non-stringable transition", () =
 		const element = document.createElement("div");
 		const payload = { nested: 1 };
 
-		applyAttributeBinding(element, "config", "previous-string");
-		applyAttributeBinding(element, "config", payload, "previous-string");
+		applyDynamicAttribute(element, "config", "previous-string");
+		applyDynamicAttribute(element, "config", payload, "previous-string");
 
 		expect((element as unknown as { config: unknown }).config).toBe(payload);
 	});
@@ -496,10 +496,10 @@ describe("applyAttributeBinding - stringable to non-stringable transition", () =
 		//going the other direction leaves the attribute behind. If this surprises a future caller, the fix is a `removeAttribute(key)` in the else branch of attribute.ts before the property assignment.
 		const element = document.createElement("div");
 
-		applyAttributeBinding(element, "config", "previous-string");
+		applyDynamicAttribute(element, "config", "previous-string");
 		expect(element.getAttribute("config")).toBe("previous-string");
 
-		applyAttributeBinding(element, "config", { nested: 1 }, "previous-string");
+		applyDynamicAttribute(element, "config", { nested: 1 }, "previous-string");
 		expect(element.getAttribute("config")).toBe("previous-string");
 	});
 
@@ -511,10 +511,10 @@ describe("applyAttributeBinding - stringable to non-stringable transition", () =
 		const updateSpy = vi.fn();
 		element.update = updateSpy;
 
-		applyAttributeBinding(element, "config", "before");
+		applyDynamicAttribute(element, "config", "before");
 		expect(updateSpy).not.toHaveBeenCalled();
 
-		applyAttributeBinding(element, "config", { x: 1 }, "before");
+		applyDynamicAttribute(element, "config", { x: 1 }, "before");
 		expect(updateSpy).toHaveBeenCalledTimes(1);
 	});
 });

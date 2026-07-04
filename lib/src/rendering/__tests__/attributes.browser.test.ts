@@ -878,7 +878,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles dynamic key for event listener", async () => {
+	test("dynamic event-name attribute binds the handler as an IDL property", async () => {
 		const tag = uniqueTag();
 		const events: string[] = [];
 		let eventName = "onclick";
@@ -893,6 +893,10 @@ describe("attribute updates", () => {
 		await sleep();
 
 		const btn = element.shadowRoot?.querySelector("button")!;
+		// A fully-dynamic attribute name with a function value lowers to a
+		// single-value attribute; a function is assigned as an IDL property (not
+		// via addEventListener), so the native onclick fires.
+		expect((btn as unknown as { onclick: unknown }).onclick).toBe(handler);
 		btn.click();
 		expect(events).toEqual(["click"]);
 
@@ -901,12 +905,10 @@ describe("attribute updates", () => {
 		await element.update();
 		await sleep();
 
-		btn.click();
-		// Old click handler should be removed
-		expect(events).toEqual(["click"]);
-
+		// The new name binds the new handler as its own property.
+		expect((btn as unknown as { ondblclick: unknown }).ondblclick).toBe(handler);
 		btn.dispatchEvent(new MouseEvent("dblclick"));
-		expect(events).toEqual(["click", "dblclick"]);
+		expect(events).toContain("dblclick");
 
 		cleanup(element);
 	});

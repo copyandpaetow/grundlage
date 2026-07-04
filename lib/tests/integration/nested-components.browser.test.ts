@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, props, render } from "../../src/index";
-import { hashTemplate, HTMLTemplate } from "../../src/rendering/template-html";
+import { html, props, render, type Template } from "../../src/index";
+import { hashValue } from "../../src/utils/hashing";
 import { BaseComponent, ComponentGenerator } from "../../src/types";
 
 const sleep = (duration = 0) =>
@@ -358,10 +358,10 @@ describe("nested components", () => {
 });
 
 describe("shared template generator functions", () => {
-	//a template generator function returns an HTMLTemplate so it can be embedded
+	//a template generator function returns an Template so it can be embedded
 	//as a child expression in any other template — reuse without recompiling.
 
-	const card = (title: string, body: string): HTMLTemplate =>
+	const card = (title: string, body: string): Template =>
 		html`<article class="card">
 			<h2>${title}</h2>
 			<p>${body}</p>
@@ -369,8 +369,8 @@ describe("shared template generator functions", () => {
 
 	const list = <Item>(
 		items: ReadonlyArray<Item>,
-		row: (item: Item) => HTMLTemplate,
-	): HTMLTemplate =>
+		row: (item: Item) => Template,
+	): Template =>
 		html`<ul>
 			${items.map((item) => html`<li>${row(item)}</li>`)}
 		</ul>`;
@@ -378,13 +378,13 @@ describe("shared template generator functions", () => {
 	test("same helper produces identical hashes for identical inputs", () => {
 		const first = card("Hi", "World");
 		const second = card("Hi", "World");
-		expect(hashTemplate(first)).toBe(hashTemplate(second));
+		expect(hashValue(first)).toBe(hashValue(second));
 	});
 
 	test("same helper produces different hashes when inputs differ", () => {
 		const first = card("Hi", "World");
 		const second = card("Bye", "World");
-		expect(hashTemplate(first)).not.toBe(hashTemplate(second));
+		expect(hashValue(first)).not.toBe(hashValue(second));
 	});
 
 	test("two components using the same helper render consistently", async () => {
@@ -459,7 +459,7 @@ describe("shared template generator functions", () => {
 	test("nested helper composition (helper calls helper)", async () => {
 		const tag = uniqueTag("shared-compose");
 
-		const labeled = (label: string, inner: HTMLTemplate) =>
+		const labeled = (label: string, inner: Template) =>
 			html`<section><strong>${label}</strong>${inner}</section>`;
 
 		const ComponentClass = render(function* () {
@@ -1023,7 +1023,7 @@ describe("framework-parity patterns", () => {
 	test("render-prop pattern: parent passes a row renderer to a list child", async () => {
 		//React's render-prop / Vue scoped-slot equivalent: the child consumes a
 		//template factory supplied by the parent through a property binding.
-		type RowRenderer = (item: string) => HTMLTemplate;
+		type RowRenderer = (item: string) => Template;
 
 		const listTag = uniqueTag("renderprop-list");
 		customElements.define(

@@ -1,4 +1,5 @@
-import { hashTemplate, isTemplate } from "../rendering/template-html";
+import { getParsedTemplate } from "../parser/html";
+import { isTemplate, TemplateValue } from "../template-value";
 
 export const stringHash = (str: string): number => {
 	let hash = 0;
@@ -57,6 +58,15 @@ const referenceId = (value: Object): number => {
 	return mix(TAG_REFERENCE, id);
 };
 
+const hashTemplateValue = (value: TemplateValue): number => {
+	const values = value.values;
+	let hash = values.length;
+	for (let index = 0; index < values.length; index++) {
+		hash = (Math.imul(hash, 31) + hashValue(values[index])) | 0;
+	}
+	return getParsedTemplate(value.__templateStrings).templateHash ^ Math.imul(hash, 31);
+};
+
 const hashChild = (child: unknown, depth: number): number => {
 	const type = typeof child;
 	if (type === "string") return mix(TAG_STRING, stringHash(child as string));
@@ -72,7 +82,7 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 	if (type === "number") return hashNumber(value as number);
 	if (type === "boolean") return mix(TAG_BOOLEAN, value ? 1 : 0);
 	if (type === "function") return referenceId(value as Object);
-	if (isTemplate(value)) return hashTemplate(value);
+	if (isTemplate(value)) return hashTemplateValue(value);
 
 	if (depth >= MAX_DEPTH) return TAG_TRUNCATED;
 	const childDepth = depth + 1;
