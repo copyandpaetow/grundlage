@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
+import { BINDING } from "../constants";
 import {
-	BINDING,
 	SingleValueAttributeStaticBinding,
 	StaticBinding,
 	TagStaticBinding,

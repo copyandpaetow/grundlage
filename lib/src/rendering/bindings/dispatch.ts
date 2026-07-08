@@ -1,4 +1,5 @@
-import { BINDING, StaticBinding } from "../../parser/types";
+import { BINDING } from "../../parser/constants";
+import { StaticBinding } from "../../parser/types";
 import { combinedPartsHash } from "../compose";
 import { ATTR_MODE, CONTENT_KIND, combineOrderedHash, UNSET_HASH } from "../constants";
 import { commitAttribute } from "./attribute";

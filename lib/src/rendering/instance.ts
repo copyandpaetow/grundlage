@@ -1,4 +1,4 @@
-import { BINDING, COMMENT_IDENTIFIER } from "../parser/types";
+import { BINDING, COMMENT_IDENTIFIER } from "../parser/constants";
 import { getParsedTemplate } from "../parser/html";
 import { TemplateValue } from "../template";
 import {

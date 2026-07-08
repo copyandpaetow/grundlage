@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { isWhitespaceCode, isQuoteCode } from "../chars";
-import { COMMENT_IDENTIFIER } from "../types";
+import { COMMENT_IDENTIFIER } from "../constants";
 
 //the parser hot loop reads char codes, so we test against `.charCodeAt(0)` of the
 //literal character to keep the intent readable while exercising the numeric predicate

@@ -1,9 +1,5 @@
-import {
-	AttributeStaticBinding,
-	BINDING,
-	COMMENT_IDENTIFIER,
-	ParsedTemplate,
-} from "../../parser/types";
+import { BINDING, COMMENT_IDENTIFIER } from "../../parser/constants";
+import { AttributeStaticBinding, ParsedTemplate } from "../../parser/types";
 import { getParsedTemplate } from "../../parser/html";
 import { coerceToTemplate, TemplateValue } from "../../template";
 import { hashValue, stringHash } from "../../utils/hashing";

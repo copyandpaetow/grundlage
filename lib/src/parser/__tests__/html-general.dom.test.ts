@@ -2,7 +2,8 @@ import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { html } from "../../template";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING, SingleValueAttributeStaticBinding } from "../types";
+import { BINDING } from "../constants";
+import { SingleValueAttributeStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);

@@ -1,9 +1,9 @@
 import { describe, test, expect } from "vitest";
 import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
+import { BINDING } from "../constants";
 import {
 	AttributeStaticBinding,
-	BINDING,
 	EventStaticBinding,
 	SingleValueAttributeStaticBinding,
 } from "../types";

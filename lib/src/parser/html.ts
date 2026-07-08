@@ -2,16 +2,18 @@ import { stringHash } from "../utils/hashing";
 import {
 	ATTRIBUTE_NAME_KIND,
 	ATTRIBUTE_SHAPE,
-	AttributeBinding,
-	Binding,
 	BINDING,
 	BINDING_TYPES,
+	COMMENT_IDENTIFIER,
+} from "./constants";
+import {
+	AttributeBinding,
+	Binding,
 	ContentBinding,
 	ParsedHTML,
 	ParsedTemplate,
 	Part,
 	RawContentBinding,
-	COMMENT_IDENTIFIER,
 	StaticBinding,
 	TagBinding,
 	ValueOf

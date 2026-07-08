@@ -1,4 +1,4 @@
-import { BINDING } from "../../parser/types";
+import { BINDING } from "../../parser/constants";
 import { combinedPartsHash, composeParts } from "../compose";
 import { targetElement } from "../dom";
 import { reapplyOnSwap as reapplyDynamicOnSwap } from "./attribute-dynamic";

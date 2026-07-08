@@ -1,30 +1,11 @@
+import {
+	ATTRIBUTE_NAME_KIND,
+	ATTRIBUTE_SHAPE,
+	BINDING,
+	BINDING_TYPES,
+} from "./constants";
+
 export type ValueOf<T> = T[keyof T];
-
-export const COMMENT_IDENTIFIER = "^.^";
-
-export const BINDING_TYPES = {
-	TAG: 0,
-	ATTR: 1,
-	CONTENT: 2,
-	RAW_CONTENT: 3,
-} as const;
-
-export const ATTRIBUTE_SHAPE = {
-	STATIC: 0,
-	STATIC_NAME_SINGLE_VALUE: 1,
-	STATIC_NAME_MULTI_VALUE: 2,
-	DYNAMIC_NAME_BOOLEAN: 3,
-	DYNAMIC_NAME_SINGLE_VALUE: 4,
-	DYNAMIC_NAME_MULTI_VALUE: 5,
-	EXPANDABLE: 6,
-} as const;
-
-export const ATTRIBUTE_NAME_KIND = {
-	UNKNOWN: 0,
-	PLAIN: 1,
-	NATIVE_EVENT: 2,
-	EXPLICIT_EVENT: 3,
-} as const;
 
 export type AttributeBinding = {
 	type: typeof BINDING_TYPES.ATTR;
@@ -65,17 +46,6 @@ export type ParsedHTML = {
 	hostBindingOffset: number;
 	keyBindingIndex: number;
 };
-
-export const BINDING = {
-	TAG: 0,
-	ATTRIBUTE: 1,
-	DYNAMIC_ATTRIBUTE: 2,
-	EVENT: 3,
-	CONTENT: 4,
-	RAW_CONTENT: 5,
-	COMMENT: 6,
-	SINGLE_VALUE_ATTRIBUTE: 7,
-} as const;
 
 export type Part = string | number;
 
