@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ListItem } from "../instance";
+import { ListItem } from "../bindings/types";
 import { clearNodeRange, forEachRowNode } from "../range";
 
 const comment = (data: string): Comment => document.createComment(data);

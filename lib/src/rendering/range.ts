@@ -1,6 +1,4 @@
-import { ListItem } from "./instance";
-
-//todo: the file name is not great here, it doesnt tell us what is happening in here
+import { ListItem } from "./bindings/types";
 
 export const clearNodeRange = (
 	startMarker: Comment,

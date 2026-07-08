@@ -1,5 +1,5 @@
 import { getParsedTemplate } from "../parser/html";
-import { isTemplate, TemplateValue } from "../template-value";
+import { isTemplate, TemplateValue } from "../template";
 
 export const stringHash = (str: string): number => {
 	let hash = 0;

@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { getParsedTemplate } from "../html";
-import { html } from "../../template-value";
+import { html } from "../../template";
 import { BINDING, ContentStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>

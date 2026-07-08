@@ -1,13 +1,14 @@
 import { describe, expect, test } from "vitest";
-import { html, TemplateValue } from "../../template-value";
+import { html, TemplateValue } from "../../template";
 import { hashValue } from "../../utils/hashing";
 import { getParsedTemplate } from "../../parser/html";
 import {
 	assertNestable,
 	hydrateInstance,
 	mountInstance,
-} from "../mount-hydrate";
-import { patchInstance, reconcileInstance } from "../instance";
+	patchInstance,
+	reconcileInstance,
+} from "../instance";
 
 const mountIntoShadow = (value: TemplateValue) => {
 	const host = document.createElement("div");

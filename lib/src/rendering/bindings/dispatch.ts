@@ -1,0 +1,199 @@
+import { BINDING, StaticBinding } from "../../parser/types";
+import { combinedPartsHash } from "../compose";
+import { ATTR_MODE, CONTENT_KIND, combineOrderedHash, UNSET_HASH } from "../constants";
+import { commitAttribute } from "./attribute";
+import {
+	applyDynamicAttribute,
+	commitDynamic,
+	seedDynamic,
+} from "./attribute-dynamic";
+import {
+	commitSingleValue,
+	revertAttributeMode,
+	seedOrCommitSingleValue,
+} from "./attribute-single-value";
+import { commitComment } from "./comment";
+import { commitContent, seedContentByAdoption } from "./content";
+import { commitRawContent } from "./content-raw";
+import { commitEvent } from "./event";
+import { commitTag } from "./tag";
+import {
+	AttributeLiveBinding,
+	CommentLiveBinding,
+	ContentLiveBinding,
+	DynamicAttributeLiveBinding,
+	EventLiveBinding,
+	LiveBinding,
+	RawContentLiveBinding,
+	SingleValueAttributeLiveBinding,
+	TagLiveBinding,
+} from "./types";
+
+const NO_SIBLINGS: Array<LiveBinding> = [];
+
+export const createLiveBinding = (
+	staticBinding: StaticBinding,
+	markerComment: Comment | null,
+	hostElement: Element | null,
+	endMarker: Comment | null = null,
+): LiveBinding => {
+	switch (staticBinding.type) {
+		case BINDING.TAG:
+			return {
+				staticBinding,
+				markerComment: markerComment!,
+				valueHash: UNSET_HASH,
+			};
+		case BINDING.ATTRIBUTE:
+			return {
+				staticBinding,
+				markerComment,
+				hostElement,
+				valueHash: UNSET_HASH,
+				lastComposedName: "",
+			};
+		case BINDING.SINGLE_VALUE_ATTRIBUTE:
+			return {
+				staticBinding,
+				markerComment,
+				hostElement,
+				valueHash: UNSET_HASH,
+				lastComposedName: "",
+				appliedMode: ATTR_MODE.ABSENT,
+			};
+		case BINDING.DYNAMIC_ATTRIBUTE:
+			return {
+				staticBinding,
+				markerComment,
+				hostElement,
+				appliedAttributes: new Map(),
+				lastValueHash: UNSET_HASH,
+			};
+		case BINDING.EVENT:
+			return { staticBinding, markerComment, hostElement, eventHandler: null };
+		case BINDING.CONTENT:
+			return {
+				staticBinding,
+				startMarker: markerComment!,
+				endMarker: endMarker!,
+				content: { kind: CONTENT_KIND.UNRESOLVED },
+			};
+		case BINDING.RAW_CONTENT:
+			return {
+				staticBinding,
+				markerComment: markerComment!,
+				valueHash: UNSET_HASH,
+			};
+		case BINDING.COMMENT:
+			return {
+				staticBinding,
+				markerComment: markerComment!,
+				valueHash: UNSET_HASH,
+			};
+	}
+};
+
+export const commitLiveBinding = (
+	liveBinding: LiveBinding,
+	values: Array<unknown>,
+	siblings: Array<LiveBinding> = NO_SIBLINGS,
+): void => {
+	switch (liveBinding.staticBinding.type) {
+		case BINDING.TAG:
+			return commitTag(liveBinding as TagLiveBinding, values, siblings);
+		case BINDING.ATTRIBUTE:
+			return commitAttribute(liveBinding as AttributeLiveBinding, values);
+		case BINDING.SINGLE_VALUE_ATTRIBUTE:
+			return commitSingleValue(
+				liveBinding as SingleValueAttributeLiveBinding,
+				values,
+			);
+		case BINDING.DYNAMIC_ATTRIBUTE:
+			return commitDynamic(liveBinding as DynamicAttributeLiveBinding, values);
+		case BINDING.EVENT:
+			return commitEvent(liveBinding as EventLiveBinding, values);
+		case BINDING.CONTENT:
+			return commitContent(liveBinding as ContentLiveBinding, values);
+		case BINDING.RAW_CONTENT:
+			return commitRawContent(liveBinding as RawContentLiveBinding, values);
+		case BINDING.COMMENT:
+			return commitComment(liveBinding as CommentLiveBinding, values);
+	}
+};
+
+export const seedLiveBinding = (
+	liveBinding: LiveBinding,
+	values: Array<unknown>,
+): void => {
+	switch (liveBinding.staticBinding.type) {
+		case BINDING.EVENT:
+			return commitLiveBinding(liveBinding, values);
+		case BINDING.SINGLE_VALUE_ATTRIBUTE:
+			return seedOrCommitSingleValue(
+				liveBinding as SingleValueAttributeLiveBinding,
+				values,
+			);
+		case BINDING.DYNAMIC_ATTRIBUTE:
+			return seedDynamic(liveBinding as DynamicAttributeLiveBinding, values);
+		case BINDING.CONTENT:
+			return seedContentByAdoption(liveBinding as ContentLiveBinding, values);
+		default:
+			(liveBinding as { valueHash: number }).valueHash = computeGateHash(
+				liveBinding,
+				values,
+			);
+	}
+};
+
+export const computeGateHash = (
+	liveBinding: LiveBinding,
+	values: Array<unknown>,
+): number => {
+	const staticBinding = liveBinding.staticBinding;
+	switch (staticBinding.type) {
+		case BINDING.ATTRIBUTE:
+			return combineOrderedHash(
+				combinedPartsHash(staticBinding.nameParts, values),
+				combinedPartsHash(staticBinding.valueParts, values),
+			);
+		case BINDING.TAG:
+		case BINDING.RAW_CONTENT:
+		case BINDING.COMMENT:
+			return combinedPartsHash(staticBinding.parts, values);
+		default:
+			return UNSET_HASH;
+	}
+};
+
+export const revertHostBinding = (liveBinding: LiveBinding): void => {
+	switch (liveBinding.staticBinding.type) {
+		case BINDING.ATTRIBUTE: {
+			const attribute = liveBinding as AttributeLiveBinding;
+			if (attribute.hostElement !== null && attribute.lastComposedName !== "")
+				attribute.hostElement.removeAttribute(attribute.lastComposedName);
+			return;
+		}
+		case BINDING.SINGLE_VALUE_ATTRIBUTE: {
+			const single = liveBinding as SingleValueAttributeLiveBinding;
+			if (single.hostElement !== null)
+				revertAttributeMode(single.hostElement, single);
+			return;
+		}
+		case BINDING.DYNAMIC_ATTRIBUTE: {
+			const dynamic = liveBinding as DynamicAttributeLiveBinding;
+			if (dynamic.hostElement === null) return;
+			for (const [name, entry] of dynamic.appliedAttributes)
+				applyDynamicAttribute(dynamic.hostElement, name, null, entry.value);
+			return;
+		}
+		case BINDING.EVENT: {
+			const event = liveBinding as EventLiveBinding;
+			if (event.hostElement !== null && event.eventHandler !== null)
+				event.hostElement.removeEventListener(
+					event.staticBinding.eventType,
+					event.eventHandler,
+				);
+			return;
+		}
+	}
+};

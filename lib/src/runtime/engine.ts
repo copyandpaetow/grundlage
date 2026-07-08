@@ -1,0 +1,129 @@
+import { ValueOf } from "../parser/types";
+import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
+import { Painter } from "./painter";
+import {
+	createStepOutcome,
+	ROLE,
+	STEP_OUTCOME,
+	StepOutcome,
+	Task,
+	TASK_STATE,
+} from "./task";
+
+export interface Engine {
+	readonly host: BaseComponent;
+	readonly componentGenerator: ComponentGenerator;
+	painter: Painter;
+	outer: Task | null;
+	inner: Task | null;
+	renderer: ComponentGenerator | RenderFunction | null;
+	scheduled: boolean;
+	pendingUpdate: PromiseWithResolvers<void> | null;
+}
+
+export const createEngine = (
+	host: BaseComponent,
+	painter: Painter,
+	componentGenerator: ComponentGenerator,
+): Engine => ({
+	host,
+	componentGenerator,
+	painter,
+	outer: null,
+	inner: null,
+	renderer: null,
+	scheduled: false,
+	pendingUpdate: null,
+});
+
+export const MODE = { SEND: 0, THROW: 1 } as const;
+
+export type SteppedTask = StepOutcome | Promise<IteratorResult<unknown>>;
+
+export const createRenderTask = (
+	role: ValueOf<typeof ROLE>,
+	generator: Generator | AsyncGenerator,
+): Task => ({
+	generator,
+	role,
+	state: TASK_STATE.DRIVING,
+	cleanup: null,
+});
+
+export const isTaskLive = (engine: Engine, task: Task): boolean =>
+	(task.role === ROLE.INNER ? engine.inner : engine.outer) === task;
+
+export const resetInnerTask = (
+	engine: Engine,
+	source: ComponentGenerator,
+): Task => {
+	cancelTaskAndRunCleanup(engine.inner);
+	const inner = createRenderTask(ROLE.INNER, source(engine.host));
+	engine.inner = inner;
+	return inner;
+};
+
+export const cancelTaskAndRunCleanup = (task: Task | null): void => {
+	if (task === null) return;
+	let ending: unknown;
+	try {
+		ending = task.generator.return?.(undefined);
+	} catch {}
+	if (ending instanceof Promise) ending.catch(console.warn);
+	const cleanup = task.cleanup;
+	if (cleanup !== null) {
+		task.cleanup = null;
+		cleanup();
+	}
+};
+
+export const createCleanStepOutcome = (
+	result: IteratorResult<unknown>,
+): StepOutcome =>
+	result.done
+		? createStepOutcome(STEP_OUTCOME.RETURNED, result.value)
+		: createStepOutcome(STEP_OUTCOME.YIELDED, result.value);
+
+export const nextTaskStep = (
+	task: Task,
+	mode: ValueOf<typeof MODE>,
+	value: unknown,
+): SteppedTask => {
+	let stepped: IteratorResult<unknown> | Promise<IteratorResult<unknown>>;
+	try {
+		stepped =
+			mode === MODE.THROW
+				? (task.generator as Generator).throw!(value)
+				: task.generator.next(value);
+	} catch (error) {
+		return createStepOutcome(STEP_OUTCOME.THREW, error);
+	}
+	return stepped instanceof Promise ? stepped : createCleanStepOutcome(stepped);
+};
+
+const writeFatalErrorIntoShadow = (
+	host: BaseComponent,
+	error: unknown,
+): void => {
+	console.warn(error);
+	host.shadowRoot!.textContent = `${error}`;
+};
+
+export const cancelEngineAndNotifyHost = (
+	engine: Engine,
+	error: unknown,
+): void => {
+	const { inner, outer } = engine;
+	engine.inner = engine.outer = engine.renderer = null;
+	cancelTaskAndRunCleanup(inner);
+	cancelTaskAndRunCleanup(outer);
+	writeFatalErrorIntoShadow(engine.host, error);
+	resolvePendingUpdatePromise(engine);
+};
+
+export const resolvePendingUpdatePromise = (engine: Engine): void => {
+	const updatePromise = engine.pendingUpdate;
+	if (updatePromise === null) return;
+	engine.pendingUpdate = null;
+	updatePromise.resolve();
+};

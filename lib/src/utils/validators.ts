@@ -1,6 +1,0 @@
-export const isComment = (node: Node): node is Comment =>
-	node.nodeType === Node.COMMENT_NODE;
-
-export const isPlainObject = (
-	entry: unknown,
-): entry is Record<string, unknown> => entry?.constructor === Object;

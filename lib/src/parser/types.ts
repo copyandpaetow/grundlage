@@ -1,5 +1,7 @@
 export type ValueOf<T> = T[keyof T];
 
+export const COMMENT_IDENTIFIER = "^.^";
+
 export const BINDING_TYPES = {
 	TAG: 0,
 	ATTR: 1,
@@ -46,7 +48,6 @@ export type RawContentBinding = {
 export type TagBinding = {
 	type: typeof BINDING_TYPES.TAG;
 	values: Array<number | string>;
-	relatedAttributes: Array<number>;
 };
 
 export type Binding =
@@ -81,7 +82,6 @@ export type Part = string | number;
 export interface TagStaticBinding {
 	type: typeof BINDING.TAG;
 	parts: Array<Part>;
-	relatedBindingIndices: Array<number>;
 }
 
 export interface AttributeStaticBinding {

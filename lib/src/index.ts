@@ -1,5 +1,5 @@
-import { applyDynamicAttribute } from "./rendering/dynamic-attribute";
-import { html as htmlValue } from "./template-value";
+import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
+import { html as htmlValue } from "./template";
 import {
 	BaseComponent,
 	ComponentConstructor,
@@ -7,27 +7,32 @@ import {
 	ComponentOptions,
 	Template,
 } from "./types";
-import { defaultOptions } from "./utils/constants";
-import { isServer } from "./utils/is-server";
-import { createPainter } from "./rendering/painter";
+import { isServer } from "./utils/guards";
+import { createPainter } from "./runtime/painter";
+import { createEngine, Engine } from "./runtime/engine";
 import {
-	createEngine,
-	Engine,
 	hasRenderer,
 	scheduleNextUpdate,
 	startEngine,
-	startServerEngine,
 	stopEngine,
-} from "./rendering/engine";
-import { FormBase } from "./forms/form-base";
+} from "./runtime/engine-client";
+import { startServerEngine } from "./runtime/engine-server";
+import { FormBase } from "./forms";
 
-export { props } from "./validator/props";
+export { props } from "./props";
 export {
 	type ComponentOptions,
 	type BaseComponent,
 	type Template,
 } from "./types";
-export { load, type LoadOptions } from "./loader/load";
+export { load, type LoadOptions } from "./load";
+
+const defaultOptions: ComponentOptions = {
+	clonable: true,
+	delegatesFocus: true,
+	mode: "open",
+	serializable: true,
+} as const;
 
 export const html = htmlValue as unknown as (
 	tokens: TemplateStringsArray,

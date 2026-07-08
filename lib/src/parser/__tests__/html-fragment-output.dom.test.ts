@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
-import { buildFragment } from "../../rendering/build-fragment";
+import { buildFragment } from "../../rendering/dom";
 import { AttributeStaticBinding, BINDING } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>

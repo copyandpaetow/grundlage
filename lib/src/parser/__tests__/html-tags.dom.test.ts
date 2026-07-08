@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
-import { buildFragment } from "../../rendering/build-fragment";
+import { buildFragment } from "../../rendering/dom";
 import {
 	BINDING,
 	SingleValueAttributeStaticBinding,
@@ -24,17 +24,6 @@ describe("html parser — tag bindings", () => {
 		const binding = parsed.bindings[0] as TagStaticBinding;
 		expect(binding.type).toBe(BINDING.TAG);
 		expect(binding.parts).toEqual([0]);
-	});
-
-	test("dynamic tag with attributes tracks related bindings", () => {
-		const tag = "div";
-		const cls = "red";
-		const parsed = parse`
-			<${tag} class="${cls}">content</${tag}>`;
-
-		const tagBinding = parsed.bindings[0] as TagStaticBinding;
-		expect(tagBinding.type).toBe(BINDING.TAG);
-		expect(tagBinding.relatedBindingIndices.length).toBeGreaterThan(0);
 	});
 
 	test("dynamic open and close collapse to a single tag binding", () => {
@@ -89,7 +78,6 @@ describe("html parser — tag bindings", () => {
 
 		const tagBinding = parsed.bindings[0] as TagStaticBinding;
 		expect(tagBinding.type).toBe(BINDING.TAG);
-		expect(tagBinding.relatedBindingIndices).toEqual([1]);
 
 		const attrBinding = parsed.bindings[1] as SingleValueAttributeStaticBinding;
 		expect(attrBinding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
@@ -105,7 +93,8 @@ describe("html parser — tag bindings", () => {
 
 		const tagBinding = parsed.bindings[0] as TagStaticBinding;
 		expect(tagBinding.type).toBe(BINDING.TAG);
-		expect(tagBinding.relatedBindingIndices).toEqual([1, 2]);
+		expect(parsed.bindings[1].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[2].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
 	});
 
 	test("dynamic tag with boolean (spread) attribute", () => {
@@ -116,7 +105,6 @@ describe("html parser — tag bindings", () => {
 
 		const tagBinding = parsed.bindings[0] as TagStaticBinding;
 		expect(tagBinding.type).toBe(BINDING.TAG);
-		expect(tagBinding.relatedBindingIndices).toEqual([1]);
 		expect(parsed.bindings[1].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
 	});
 

@@ -11,14 +11,22 @@ import {
 	ParsedTemplate,
 	Part,
 	RawContentBinding,
+	COMMENT_IDENTIFIER,
 	StaticBinding,
 	TagBinding,
 	ValueOf
 } from "./types";
-import { CHAR_CODE, COMMENT_IDENTIFIER, isQuoteCode, isWhitespaceCode, moveArrayContents } from "./html-util";
+import { CHAR_CODE, isQuoteCode, isWhitespaceCode } from "./chars";
 
 type StateValue = ValueOf<typeof STATE>;
 type BufferArray = Array<string | number>;
+
+const moveArrayContents = (from: Array<unknown>, to: Array<unknown>) => {
+	for (let arrIndex = 0; arrIndex < from.length; arrIndex++) {
+		to.push(from[arrIndex]);
+	}
+	from.length = 0;
+};
 
 const PLACEHOLDER_TAG = "div";
 const TEMPLATE_TAG = "template";
@@ -232,7 +240,6 @@ const createBinding = (parser: ParserState) => {
 			return {
 				type: BINDING_TYPES.TAG,
 				values: [],
-				relatedAttributes: [],
 			} satisfies TagBinding;
 
 		default:
@@ -257,7 +264,9 @@ const completeComment = (parser: ParserState) => {
 	if (parser.activeBinding) {
 		const values = (parser.activeBinding as ContentBinding).values;
 		moveArrayContents(parser.commentBuffer, values);
-		parser.contentBuffer.push(openComment(parser), closeComment(parser));
+		if (isSingleContentHole(values))
+			parser.contentBuffer.push(openComment(parser), closeComment(parser));
+		else parser.contentBuffer.push(openComment(parser), "<!---->");
 	} else {
 		parser.contentBuffer.push("<!--");
 		moveArrayContents(parser.commentBuffer, parser.contentBuffer);
@@ -442,10 +451,6 @@ const completeAttribute = (parser: ParserState) => {
 			parser.resultBuffer.push(openComment(parser));
 			recordKeyBinding(parser, attributeBinding);
 		}
-
-		parser.openTagBindings[
-			parser.openTagBindings.length - 1
-		]?.relatedAttributes.push(parser.bindings.length - 1);
 	} else if (parser.attributeKeyBuffer.length) {
 		if (parser.isRootTemplate) {
 			const staticBinding: AttributeBinding = {
@@ -912,7 +917,6 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 			return {
 				type: BINDING.TAG,
 				parts: binding.values.slice(),
-				relatedBindingIndices: binding.relatedAttributes.slice(),
 			};
 		case BINDING_TYPES.ATTR:
 			return toAttributeStaticBinding(binding);

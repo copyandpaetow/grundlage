@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { render } from "../../index";
-import { html } from "../../template-value";
+import { html } from "../../template";
 import { hashValue } from "../../utils/hashing";
 
 const sleep = (duration = 0) =>

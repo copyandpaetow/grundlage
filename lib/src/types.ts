@@ -1,4 +1,4 @@
-import { TemplateValue } from "./template-value";
+import { TemplateValue } from "./template";
 
 declare const templateMarker: unique symbol;
 
