@@ -1,3 +1,15 @@
+export const MARKUP = {
+	TAG_OPEN: "<",
+	TAG_CLOSE: ">",
+	END_TAG_OPEN: "</",
+	COMMENT_OPEN: "<!--",
+	COMMENT_CLOSE: "-->",
+	EMPTY_COMMENT: "<!---->",
+	ATTR_SEPARATOR: " ",
+	ATTR_ASSIGN: "=",
+	ATTR_QUOTE: "'",
+} as const;
+
 export const CHAR_CODE = {
 	TAB: 9,
 	LINE_FEED: 10,

@@ -5,6 +5,7 @@ import {
 	BINDING,
 	BINDING_TYPES,
 	COMMENT_IDENTIFIER,
+	NO_KEY_BINDING,
 } from "./constants";
 import {
 	AttributeBinding,
@@ -17,10 +18,9 @@ import {
 	TagBinding,
 	ValueOf
 } from "./types";
-import { CHAR_CODE, isQuoteCode, isWhitespaceCode } from "./chars";
+import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
 
 type StateValue = ValueOf<typeof STATE>;
-type BufferArray = Array<string | number>;
 
 const moveArrayContents = (from: Array<unknown>, to: Array<unknown>) => {
 	for (let arrIndex = 0; arrIndex < from.length; arrIndex++) {
@@ -34,9 +34,13 @@ const TEMPLATE_TAG = "template";
 const SCRIPT_TAG = "script";
 const TEXTAREA_TAG = "textarea";
 const STYLE_TAG = "style";
-const isSpecialElementTag = (parser: ParserState, tag: string) => {
+const COMMENT_OPEN_LENGTH = MARKUP.COMMENT_OPEN.length;
+const END_TAG_OPEN_LENGTH = MARKUP.END_TAG_OPEN.length;
+const parsesContentAsRaw = (parser: ParserState, tag: string) => {
 	if (tag === TEMPLATE_TAG) {
-		return parser.forceNoRootTemplate || !parser.isRootTemplate;
+		const isNestedTemplate =
+			parser.forceNoRootTemplate || !parser.isRootTemplate;
+		return isNestedTemplate;
 	}
 
 	return tag === STYLE_TAG || tag === TEXTAREA_TAG || tag === SCRIPT_TAG;
@@ -77,15 +81,15 @@ interface ParserState {
 	forceNoRootTemplate: boolean;
 	keyBindingIndex: number;
 	openTagBindings: Array<TagBinding | null>;
-	resultBuffer: BufferArray;
-	elementBuffer: BufferArray;
-	tagBuffer: BufferArray;
-	endTagBuffer: BufferArray;
-	contentBuffer: BufferArray;
-	commentBuffer: BufferArray;
-	attributeKeyBuffer: BufferArray;
-	attributeValueBuffer: BufferArray;
-	rawContentBuffer: BufferArray;
+	resultBuffer: Array<Part>;
+	elementBuffer: Array<Part>;
+	tagBuffer: Array<Part>;
+	endTagBuffer: Array<Part>;
+	contentBuffer: Array<Part>;
+	commentBuffer: Array<Part>;
+	attributeKeyBuffer: Array<Part>;
+	attributeValueBuffer: Array<Part>;
+	rawContentBuffer: Array<Part>;
 }
 
 const EMPTY_TEMPLATES = [] as unknown as TemplateStringsArray;
@@ -109,7 +113,7 @@ const createParser = (): ParserState => ({
 	sawTopLevelSibling: false,
 	hasOpenedAnyTag: false,
 	forceNoRootTemplate: false,
-	keyBindingIndex: -1,
+	keyBindingIndex: NO_KEY_BINDING,
 	openTagBindings: [],
 	resultBuffer: [],
 	elementBuffer: [],
@@ -145,7 +149,7 @@ const resetParser = (
 	parser.sawTopLevelSibling = false;
 	parser.hasOpenedAnyTag = false;
 	parser.forceNoRootTemplate = mode === PARSE_MODE.NO_ROOT_TEMPLATE;
-	parser.keyBindingIndex = -1;
+	parser.keyBindingIndex = NO_KEY_BINDING;
 	parser.openTagBindings.length = 0;
 	parser.resultBuffer.length = 0;
 	parser.elementBuffer.length = 0;
@@ -159,10 +163,10 @@ const resetParser = (
 };
 
 const openComment = (parser: ParserState) =>
-	`<!--${COMMENT_IDENTIFIER} ${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}-->`;
+	`${MARKUP.COMMENT_OPEN}${COMMENT_IDENTIFIER} ${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}${MARKUP.COMMENT_CLOSE}`;
 
 const closeComment = (parser: ParserState) =>
-	`<!--${COMMENT_IDENTIFIER} /${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}-->`;
+	`${MARKUP.COMMENT_OPEN}${COMMENT_IDENTIFIER} /${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}${MARKUP.COMMENT_CLOSE}`;
 
 const isSingleHole = (parts: Array<string | number>) =>
 	parts.length === 1 && typeof parts[0] === "number";
@@ -249,7 +253,7 @@ const createBinding = (parser: ParserState) => {
 
 const capture = (
 	parser: ParserState,
-	buffer: BufferArray,
+	buffer: Array<Part>,
 	start: number,
 	end?: number,
 ) => {
@@ -264,11 +268,11 @@ const completeComment = (parser: ParserState) => {
 		moveArrayContents(parser.commentBuffer, values);
 		if (isSingleHole(values))
 			parser.contentBuffer.push(openComment(parser), closeComment(parser));
-		else parser.contentBuffer.push(openComment(parser), "<!---->");
+		else parser.contentBuffer.push(openComment(parser), MARKUP.EMPTY_COMMENT);
 	} else {
-		parser.contentBuffer.push("<!--");
+		parser.contentBuffer.push(MARKUP.COMMENT_OPEN);
 		moveArrayContents(parser.commentBuffer, parser.contentBuffer);
-		parser.contentBuffer.push("-->");
+		parser.contentBuffer.push(MARKUP.COMMENT_CLOSE);
 	}
 	parser.activeBinding = null;
 };
@@ -352,9 +356,9 @@ const completeEndTag = (parser: ParserState) => {
 			"Asymmetric tag: static end tag cannot pair with a dynamic <${...}> open tag — make the close dynamic too.",
 		);
 	}
-	parser.resultBuffer.push("</");
+	parser.resultBuffer.push(MARKUP.END_TAG_OPEN);
 	moveArrayContents(parser.endTagBuffer, parser.resultBuffer);
-	parser.resultBuffer.push(">");
+	parser.resultBuffer.push(MARKUP.TAG_CLOSE);
 	parser.activeBinding = null;
 };
 
@@ -435,7 +439,7 @@ const recordKeyBinding = (
 	parser: ParserState,
 	attributeBinding: AttributeBinding,
 ) => {
-	if (parser.keyBindingIndex !== -1) return;
+	if (parser.keyBindingIndex !== NO_KEY_BINDING) return;
 	if (parser.openTagBindings.length !== 1) return;
 	if (attributeBinding.keys.length !== 1 || attributeBinding.keys[0] !== "key")
 		return;
@@ -481,12 +485,12 @@ const completeAttribute = (parser: ParserState) => {
 			parser.bindings.push(staticBinding);
 			parser.hostBindingOffset++;
 		} else {
-			parser.elementBuffer.push(" ");
+			parser.elementBuffer.push(MARKUP.ATTR_SEPARATOR);
 			moveArrayContents(parser.attributeKeyBuffer, parser.elementBuffer);
 			if (parser.attributeValueBuffer.length) {
-				parser.elementBuffer.push("=", "'");
+				parser.elementBuffer.push(MARKUP.ATTR_ASSIGN, MARKUP.ATTR_QUOTE);
 				moveArrayContents(parser.attributeValueBuffer, parser.elementBuffer);
-				parser.elementBuffer.push("'");
+				parser.elementBuffer.push(MARKUP.ATTR_QUOTE);
 			}
 		}
 	}
@@ -509,11 +513,11 @@ const flushElement = (parser: ParserState) => {
 		return;
 	}
 
-	parser.resultBuffer.push("<");
+	parser.resultBuffer.push(MARKUP.TAG_OPEN);
 	moveArrayContents(parser.elementBuffer, parser.resultBuffer);
-	parser.resultBuffer.push(">");
+	parser.resultBuffer.push(MARKUP.TAG_CLOSE);
 	if (parser.selfClosing) {
-		parser.resultBuffer.push("</", parser.currentTagName, ">");
+		parser.resultBuffer.push(MARKUP.END_TAG_OPEN, parser.currentTagName, MARKUP.TAG_CLOSE);
 	}
 	moveArrayContents(parser.contentBuffer, parser.resultBuffer);
 
@@ -528,7 +532,7 @@ const closeOpenTag = (parser: ParserState) => {
 		parser.selfClosing = true;
 		flushElement(parser);
 		parser.state = STATE.TEXT;
-	} else if (isSpecialElementTag(parser, parser.currentTagName)) {
+	} else if (parsesContentAsRaw(parser, parser.currentTagName)) {
 		parser.state = STATE.RAW_CONTENT;
 	} else {
 		parser.state = STATE.TEXT;
@@ -536,7 +540,7 @@ const closeOpenTag = (parser: ParserState) => {
 	parser.splitIndex = parser.charIndex + 1;
 };
 
-const endAttribute = (parser: ParserState, buffer: BufferArray) => {
+const endAttribute = (parser: ParserState, buffer: Array<Part>) => {
 	capture(parser, buffer, parser.splitIndex, parser.charIndex);
 	completeAttribute(parser);
 	parser.state = STATE.ELEMENT;
@@ -583,14 +587,15 @@ const parse = (
 
 					if (nextCode === CHAR_CODE.BANG) {
 						parser.state = STATE.COMMENT;
-						parser.splitIndex = parser.charIndex + 4;
+						parser.splitIndex = parser.charIndex + COMMENT_OPEN_LENGTH;
+						// resume on the "--" so an empty <!----> still matches its "-->"
 						parser.charIndex += 2;
 						continue;
 					}
 
 					if (nextCode === CHAR_CODE.SLASH) {
 						parser.state = STATE.END_TAG;
-						parser.splitIndex = parser.charIndex + 2;
+						parser.splitIndex = parser.charIndex + END_TAG_OPEN_LENGTH;
 						parser.charIndex++;
 						continue;
 					}
@@ -601,14 +606,14 @@ const parse = (
 					continue;
 				}
 
-				case STATE.COMMENT:
-					if (
-						code !== CHAR_CODE.GREATER_THAN ||
-						parser.activeTemplate.charCodeAt(parser.charIndex - 1) !==
-							CHAR_CODE.DASH ||
-						parser.activeTemplate.charCodeAt(parser.charIndex - 2) !==
-							CHAR_CODE.DASH
-					) {
+				case STATE.COMMENT: {
+					const isCommentEnd =
+						code === CHAR_CODE.GREATER_THAN &&
+						parser.activeTemplate.charCodeAt(parser.charIndex - 1) ===
+							CHAR_CODE.DASH &&
+						parser.activeTemplate.charCodeAt(parser.charIndex - 2) ===
+							CHAR_CODE.DASH;
+					if (!isCommentEnd) {
 						continue;
 					}
 
@@ -623,22 +628,22 @@ const parse = (
 					parser.state = STATE.TEXT;
 
 					continue;
+				}
 
-				case STATE.RAW_CONTENT:
-					if (
-						code !== CHAR_CODE.LESS_THAN ||
-						parser.activeTemplate.charCodeAt(parser.charIndex + 1) !==
-							CHAR_CODE.SLASH
-					) {
+				case STATE.RAW_CONTENT: {
+					const isCloseTagStart =
+						code === CHAR_CODE.LESS_THAN &&
+						parser.activeTemplate.charCodeAt(parser.charIndex + 1) ===
+							CHAR_CODE.SLASH;
+					if (!isCloseTagStart) {
 						continue;
 					}
 
-					if (
-						parser.activeTemplate.startsWith(
-							parser.currentTagName,
-							parser.charIndex + 2,
-						)
-					) {
+					const closesCurrentElement = parser.activeTemplate.startsWith(
+						parser.currentTagName,
+						parser.charIndex + END_TAG_OPEN_LENGTH,
+					);
+					if (closesCurrentElement) {
 						capture(
 							parser,
 							parser.rawContentBuffer,
@@ -646,25 +651,25 @@ const parse = (
 							parser.charIndex,
 						);
 						parser.splitIndex =
-							parser.charIndex + 2 + parser.currentTagName.length;
+							parser.charIndex + END_TAG_OPEN_LENGTH + parser.currentTagName.length;
 						parser.charIndex += 1;
 						completeSpecialContent(parser);
 						parser.state = STATE.END_TAG;
 						parser.endTagBuffer.push(parser.currentTagName);
 					}
 					continue;
+				}
 
 				case STATE.TAG: {
 					if (code !== CHAR_CODE.GREATER_THAN && !isWhitespaceCode(code)) {
 						continue;
 					}
 
-					const tagEnd =
+					const isSelfClosing =
 						code === CHAR_CODE.GREATER_THAN &&
 						parser.activeTemplate.charCodeAt(parser.charIndex - 1) ===
-							CHAR_CODE.SLASH
-							? parser.charIndex - 1
-							: parser.charIndex;
+							CHAR_CODE.SLASH;
+					const tagEnd = isSelfClosing ? parser.charIndex - 1 : parser.charIndex;
 					capture(parser, parser.tagBuffer, parser.splitIndex, tagEnd);
 					parser.splitIndex = parser.charIndex;
 					completeTag(parser);

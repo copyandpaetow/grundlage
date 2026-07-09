@@ -1,5 +1,7 @@
 export const COMMENT_IDENTIFIER = "^.^";
 
+export const NO_KEY_BINDING = -1;
+
 export const BINDING_TYPES = {
 	TAG: 0,
 	ATTR: 1,
