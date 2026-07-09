@@ -164,8 +164,8 @@ const openComment = (parser: ParserState) =>
 const closeComment = (parser: ParserState) =>
 	`<!--${COMMENT_IDENTIFIER} /${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}-->`;
 
-const isSingleContentHole = (values: Array<string | number>) =>
-	values.length === 1 && typeof values[0] === "number";
+const isSingleHole = (parts: Array<string | number>) =>
+	parts.length === 1 && typeof parts[0] === "number";
 
 const updateBinding = (parser: ParserState) => {
 	switch (parser.state) {
@@ -262,7 +262,7 @@ const completeComment = (parser: ParserState) => {
 	if (parser.activeBinding) {
 		const values = (parser.activeBinding as ContentBinding).values;
 		moveArrayContents(parser.commentBuffer, values);
-		if (isSingleContentHole(values))
+		if (isSingleHole(values))
 			parser.contentBuffer.push(openComment(parser), closeComment(parser));
 		else parser.contentBuffer.push(openComment(parser), "<!---->");
 	} else {
@@ -371,6 +371,20 @@ const rangeHasNonWhitespace = (
 	return false;
 };
 
+const markTopLevelTextSibling = (
+	parser: ParserState,
+	start: number,
+	end: number,
+) => {
+	capture(parser, parser.contentBuffer, start, end);
+	if (
+		parser.openTagBindings.length === 0 &&
+		rangeHasNonWhitespace(parser, start, end)
+	) {
+		parser.sawTopLevelSibling = true;
+	}
+};
+
 const classifyAttributeShape = (
 	binding: AttributeBinding,
 ): ValueOf<typeof ATTRIBUTE_SHAPE> => {
@@ -385,8 +399,7 @@ const classifyAttributeShape = (
 			: ATTRIBUTE_SHAPE.DYNAMIC_NAME_BOOLEAN;
 	}
 
-	const singleDynamicValue =
-		values.length === 1 && typeof values[0] === "number";
+	const singleDynamicValue = isSingleHole(values);
 
 	if (dynamicName) {
 		return singleDynamicValue
@@ -429,18 +442,24 @@ const recordKeyBinding = (
 	parser.keyBindingIndex = parser.bindings.length - 1;
 };
 
+const finalizeAttributeBinding = (
+	parser: ParserState,
+	binding: AttributeBinding,
+) => {
+	moveArrayContents(parser.attributeKeyBuffer, binding.keys);
+	moveArrayContents(parser.attributeValueBuffer, binding.values);
+	binding.shape = classifyAttributeShape(binding);
+	classifyAttributeName(binding);
+	if (binding.shape === ATTRIBUTE_SHAPE.EXPANDABLE) {
+		binding.values.push(binding.keys[0]);
+		binding.keys.length = 0;
+	}
+};
+
 const completeAttribute = (parser: ParserState) => {
 	if (parser.activeBinding) {
 		const attributeBinding = parser.activeBinding as AttributeBinding;
-		moveArrayContents(parser.attributeKeyBuffer, attributeBinding.keys);
-		moveArrayContents(parser.attributeValueBuffer, attributeBinding.values);
-		attributeBinding.shape = classifyAttributeShape(attributeBinding);
-		classifyAttributeName(attributeBinding);
-
-		if (attributeBinding.shape === ATTRIBUTE_SHAPE.EXPANDABLE) {
-			attributeBinding.values.push(attributeBinding.keys[0]);
-			attributeBinding.keys.length = 0;
-		}
+		finalizeAttributeBinding(parser, attributeBinding);
 
 		if (parser.isRootTemplate) {
 			parser.hostBindingOffset++;
@@ -458,10 +477,7 @@ const completeAttribute = (parser: ParserState) => {
 				nameKind: ATTRIBUTE_NAME_KIND.UNKNOWN,
 				eventName: "",
 			};
-			moveArrayContents(parser.attributeKeyBuffer, staticBinding.keys);
-			moveArrayContents(parser.attributeValueBuffer, staticBinding.values);
-			staticBinding.shape = classifyAttributeShape(staticBinding);
-			classifyAttributeName(staticBinding);
+			finalizeAttributeBinding(parser, staticBinding);
 			parser.bindings.push(staticBinding);
 			parser.hostBindingOffset++;
 		} else {
@@ -504,6 +520,28 @@ const flushElement = (parser: ParserState) => {
 	resetElementScope(parser);
 };
 
+const closeOpenTag = (parser: ParserState) => {
+	if (
+		parser.activeTemplate.charCodeAt(parser.charIndex - 1) === CHAR_CODE.SLASH
+	) {
+		parser.openTagBindings.pop();
+		parser.selfClosing = true;
+		flushElement(parser);
+		parser.state = STATE.TEXT;
+	} else if (isSpecialElementTag(parser, parser.currentTagName)) {
+		parser.state = STATE.RAW_CONTENT;
+	} else {
+		parser.state = STATE.TEXT;
+	}
+	parser.splitIndex = parser.charIndex + 1;
+};
+
+const endAttribute = (parser: ParserState, buffer: BufferArray) => {
+	capture(parser, buffer, parser.splitIndex, parser.charIndex);
+	completeAttribute(parser);
+	parser.state = STATE.ELEMENT;
+};
+
 const parse = (
 	parser: ParserState,
 	strings: TemplateStringsArray,
@@ -532,18 +570,11 @@ const parse = (
 					if (code !== CHAR_CODE.LESS_THAN) {
 						continue;
 					}
-					capture(
+					markTopLevelTextSibling(
 						parser,
-						parser.contentBuffer,
 						parser.splitIndex,
 						parser.charIndex,
 					);
-					if (
-						parser.openTagBindings.length === 0 &&
-						rangeHasNonWhitespace(parser, parser.splitIndex, parser.charIndex)
-					) {
-						parser.sawTopLevelSibling = true;
-					}
 					parser.splitIndex = parser.charIndex + 1;
 
 					const nextCode = parser.activeTemplate.charCodeAt(
@@ -644,23 +675,7 @@ const parse = (
 						continue;
 					}
 
-					if (
-						parser.activeTemplate.charCodeAt(parser.charIndex - 1) ===
-						CHAR_CODE.SLASH
-					) {
-						parser.openTagBindings.pop();
-						parser.selfClosing = true;
-						flushElement(parser);
-						parser.state = STATE.TEXT;
-						parser.splitIndex = parser.charIndex + 1;
-						continue;
-					}
-
-					parser.state = isSpecialElementTag(parser, parser.currentTagName)
-						? STATE.RAW_CONTENT
-						: STATE.TEXT;
-
-					parser.splitIndex = parser.charIndex + 1;
+					closeOpenTag(parser);
 					continue;
 				}
 
@@ -671,20 +686,7 @@ const parse = (
 					}
 
 					if (code === CHAR_CODE.GREATER_THAN) {
-						if (
-							parser.activeTemplate.charCodeAt(parser.charIndex - 1) ===
-							CHAR_CODE.SLASH
-						) {
-							parser.openTagBindings.pop();
-							parser.selfClosing = true;
-							flushElement(parser);
-							parser.state = STATE.TEXT;
-						} else if (isSpecialElementTag(parser, parser.currentTagName)) {
-							parser.state = STATE.RAW_CONTENT;
-						} else {
-							parser.state = STATE.TEXT;
-						}
-						parser.splitIndex = parser.charIndex + 1;
+						closeOpenTag(parser);
 						continue;
 					}
 
@@ -709,38 +711,17 @@ const parse = (
 						parser.splitIndex = parser.charIndex + 1;
 						parser.state = STATE.ATTRIBUTE_VALUE;
 					} else if (isWhitespaceCode(code)) {
-						capture(
-							parser,
-							parser.attributeKeyBuffer,
-							parser.splitIndex,
-							parser.charIndex,
-						);
+						endAttribute(parser, parser.attributeKeyBuffer);
 						parser.splitIndex = parser.charIndex;
-						completeAttribute(parser);
-						parser.state = STATE.ELEMENT;
 						parser.charIndex--;
 					} else if (
 						code === CHAR_CODE.SLASH &&
 						parser.activeTemplate.charCodeAt(parser.charIndex + 1) ===
 							CHAR_CODE.GREATER_THAN
 					) {
-						capture(
-							parser,
-							parser.attributeKeyBuffer,
-							parser.splitIndex,
-							parser.charIndex,
-						);
-						completeAttribute(parser);
-						parser.state = STATE.ELEMENT;
+						endAttribute(parser, parser.attributeKeyBuffer);
 					} else if (code === CHAR_CODE.GREATER_THAN) {
-						capture(
-							parser,
-							parser.attributeKeyBuffer,
-							parser.splitIndex,
-							parser.charIndex,
-						);
-						completeAttribute(parser);
-						parser.state = STATE.ELEMENT;
+						endAttribute(parser, parser.attributeKeyBuffer);
 						parser.charIndex--;
 					}
 					continue;
@@ -753,38 +734,17 @@ const parse = (
 						parser.attributeQuoteCode &&
 						code === parser.attributeQuoteCode
 					) {
-						capture(
-							parser,
-							parser.attributeValueBuffer,
-							parser.splitIndex,
-							parser.charIndex,
-						);
+						endAttribute(parser, parser.attributeValueBuffer);
 						parser.splitIndex = parser.charIndex + 1;
-						completeAttribute(parser);
-						parser.state = STATE.ELEMENT;
 					} else if (!parser.attributeQuoteCode && isWhitespaceCode(code)) {
-						capture(
-							parser,
-							parser.attributeValueBuffer,
-							parser.splitIndex,
-							parser.charIndex,
-						);
+						endAttribute(parser, parser.attributeValueBuffer);
 						parser.splitIndex = parser.charIndex;
-						completeAttribute(parser);
-						parser.state = STATE.ELEMENT;
 						parser.charIndex--;
 					} else if (
 						!parser.attributeQuoteCode &&
 						code === CHAR_CODE.GREATER_THAN
 					) {
-						capture(
-							parser,
-							parser.attributeValueBuffer,
-							parser.splitIndex,
-							parser.charIndex,
-						);
-						completeAttribute(parser);
-						parser.state = STATE.ELEMENT;
+						endAttribute(parser, parser.attributeValueBuffer);
 						parser.charIndex--;
 					}
 					continue;
@@ -832,19 +792,11 @@ const parse = (
 		parser.state === STATE.TEXT &&
 		parser.splitIndex < parser.activeTemplate.length
 	) {
-		const trailingStart = parser.splitIndex;
-		capture(
+		markTopLevelTextSibling(
 			parser,
-			parser.contentBuffer,
-			trailingStart,
+			parser.splitIndex,
 			parser.activeTemplate.length,
 		);
-		if (
-			parser.openTagBindings.length === 0 &&
-			rangeHasNonWhitespace(parser, trailingStart, parser.activeTemplate.length)
-		) {
-			parser.sawTopLevelSibling = true;
-		}
 	}
 	flushElement(parser);
 
@@ -867,8 +819,7 @@ const parse = (
 const isEventBinding = (binding: AttributeBinding): boolean =>
 	(binding.nameKind === ATTRIBUTE_NAME_KIND.NATIVE_EVENT ||
 		binding.nameKind === ATTRIBUTE_NAME_KIND.EXPLICIT_EVENT) &&
-	binding.values.length === 1 &&
-	typeof binding.values[0] === "number";
+	isSingleHole(binding.values);
 
 const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
 	if (isEventBinding(binding)) {
@@ -884,11 +835,11 @@ const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
 			valueIndex: binding.values[0] as number,
 		};
 	}
-	if (binding.values.length === 1 && typeof binding.values[0] === "number") {
+	if (isSingleHole(binding.values)) {
 		return {
 			type: BINDING.SINGLE_VALUE_ATTRIBUTE,
 			nameParts: binding.keys.slice(),
-			valueIndex: binding.values[0],
+			valueIndex: binding.values[0] as number,
 		};
 	}
 	const valueParts: Array<Part> =
@@ -910,7 +861,7 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 		case BINDING_TYPES.ATTR:
 			return toAttributeStaticBinding(binding);
 		case BINDING_TYPES.CONTENT:
-			return isSingleContentHole(binding.values)
+			return isSingleHole(binding.values)
 				? { type: BINDING.CONTENT, valueIndex: binding.values[0] as number }
 				: { type: BINDING.COMMENT, parts: binding.values.slice() };
 		case BINDING_TYPES.RAW_CONTENT:
