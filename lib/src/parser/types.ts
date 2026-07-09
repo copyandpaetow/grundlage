@@ -37,16 +37,6 @@ export type Binding =
 	| ContentBinding
 	| RawContentBinding;
 
-export type ParsedHTML = {
-	expressionToBinding: Array<number>;
-	bindings: Array<Binding>;
-	result: string;
-	fragment: DocumentFragment | null;
-	templateHash: number;
-	hostBindingOffset: number;
-	keyBindingIndex: number;
-};
-
 export type Part = string | number;
 
 export interface TagStaticBinding {

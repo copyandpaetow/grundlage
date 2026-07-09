@@ -10,7 +10,6 @@ import {
 	AttributeBinding,
 	Binding,
 	ContentBinding,
-	ParsedHTML,
 	ParsedTemplate,
 	Part,
 	RawContentBinding,
@@ -60,7 +59,6 @@ type ParseMode = (typeof PARSE_MODE)[keyof typeof PARSE_MODE];
 interface ParserState {
 	state: StateValue;
 	bindings: Array<Binding>;
-	expressionToBinding: Array<number>;
 	templates: TemplateStringsArray;
 	index: number;
 	activeTemplate: string;
@@ -95,7 +93,6 @@ const EMPTY_TEMPLATES = [] as unknown as TemplateStringsArray;
 const createParser = (): ParserState => ({
 	state: STATE.TEXT,
 	bindings: [],
-	expressionToBinding: [],
 	templates: EMPTY_TEMPLATES,
 	index: 0,
 	activeTemplate: "",
@@ -132,7 +129,6 @@ const resetParser = (
 ) => {
 	parser.state = STATE.TEXT;
 	parser.bindings = [];
-	parser.expressionToBinding = [];
 	parser.templates = strings;
 	parser.index = 0;
 	parser.activeTemplate = strings[0];
@@ -422,7 +418,6 @@ const classifyAttributeName = (binding: AttributeBinding) => {
 		binding.eventName = name.slice(2).toLowerCase();
 	}
 };
-//todo: why abstracted?
 const recordKeyBinding = (
 	parser: ParserState,
 	attributeBinding: AttributeBinding,
@@ -513,7 +508,7 @@ const parse = (
 	parser: ParserState,
 	strings: TemplateStringsArray,
 	mode: ParseMode = PARSE_MODE.OPTIMISTIC_ROOT,
-): ParsedHTML => {
+): ParsedTemplate => {
 	resetParser(parser, strings, mode);
 
 	for (
@@ -826,15 +821,9 @@ const parse = (
 				}
 				parser.activeBinding = opener;
 			}
-			parser.expressionToBinding.push(
-				parser.bindings.indexOf(parser.activeBinding as TagBinding),
-			);
-		} else {
-			if (!parser.activeBinding) {
-				parser.activeBinding = createBinding(parser);
-				parser.bindings.push(parser.activeBinding);
-			}
-			parser.expressionToBinding.push(parser.bindings.length - 1);
+		} else if (!parser.activeBinding) {
+			parser.activeBinding = createBinding(parser);
+			parser.bindings.push(parser.activeBinding);
 		}
 
 		updateBinding(parser);
@@ -866,12 +855,11 @@ const parse = (
 	const result = parser.resultBuffer.join("");
 
 	return {
-		expressionToBinding: parser.expressionToBinding,
-		bindings: parser.bindings,
-		result,
-		fragment: null,
+		htmlWithMarkers: result,
+		bindings: parser.bindings.map(toStaticBinding),
 		templateHash: stringHash(result),
-		hostBindingOffset: parser.hostBindingOffset,
+		fragmentCloneSource: null,
+		hostBindingCount: parser.hostBindingOffset,
 		keyBindingIndex: parser.keyBindingIndex,
 	};
 };
@@ -903,7 +891,6 @@ const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
 			valueIndex: binding.values[0],
 		};
 	}
-	//todo: why abstracted?
 	const valueParts: Array<Part> =
 		binding.values.length > 0 ? binding.values.slice() : [""];
 	return {
@@ -931,15 +918,6 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 	}
 };
 
-const toParsedTemplate = (parsed: ParsedHTML): ParsedTemplate => ({
-	htmlWithMarkers: parsed.result,
-	bindings: parsed.bindings.map(toStaticBinding),
-	templateHash: parsed.templateHash,
-	fragmentCloneSource: null,
-	hostBindingCount: parsed.hostBindingOffset,
-	keyBindingIndex: parsed.keyBindingIndex,
-});
-
 const parser = createParser();
 
 const parseCache = new WeakMap<TemplateStringsArray, ParsedTemplate>();
@@ -949,7 +927,7 @@ export const getParsedTemplate = (
 ): ParsedTemplate => {
 	const cached = parseCache.get(templateStrings);
 	if (cached !== undefined) return cached;
-	const parsed = toParsedTemplate(parse(parser, templateStrings));
+	const parsed = parse(parser, templateStrings);
 	parseCache.set(templateStrings, parsed);
 	return parsed;
 };

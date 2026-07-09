@@ -22,7 +22,7 @@ const ensureDefined = (): Promise<void> => {
 	if (definedPromise) return definedPromise;
 	definedPromise = (async () => {
 		const { html, render } = await import("../lib/src");
-		const { load } = await import("../lib/src/loader/load");
+		const { load } = await import("../lib/src/load");
 
 		customElements.define(
 			TAGS.loadSingle,
