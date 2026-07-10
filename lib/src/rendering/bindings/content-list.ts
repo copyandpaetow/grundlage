@@ -1,4 +1,4 @@
-import { BINDING, COMMENT_IDENTIFIER } from "../../parser/constants";
+import { BINDING, NO_KEY_BINDING } from "../../parser/constants";
 import { AttributeStaticBinding, ParsedTemplate } from "../../parser/types";
 import { getParsedTemplate } from "../../parser/html";
 import { coerceToTemplate, TemplateValue } from "../../template";
@@ -9,11 +9,10 @@ import {
 	LIST_HASH_SEED,
 	LIST_MARKER_DATA,
 	NO_KEY,
-	NO_KEY_BINDING,
 } from "../constants";
 import {
 	assertNestable,
-	hydrateInstance,
+	hydrateRow,
 	Instance,
 	mountInstance,
 	reconcileInstance,
@@ -231,41 +230,18 @@ const clearRowNodes = (row: ListItem): void => {
 	forEachRowNode(row, (node) => node.remove());
 };
 
-const isOpenMarkerData = (data: string): boolean =>
-	data.startsWith(COMMENT_IDENTIFIER + " ") &&
-	data[COMMENT_IDENTIFIER.length + 1] !== "/";
-
-const isCloseMarkerData = (data: string): boolean =>
-	data.startsWith(COMMENT_IDENTIFIER + " /");
-
-const findRowTail = (boundary: ChildNode, endMarker: Comment): Comment => {
-	let depth = 0;
-	let node = boundary.nextSibling;
-	while (node !== null && node !== endMarker) {
-		if (node.nodeType === Node.COMMENT_NODE) {
-			const data = (node as Comment).data;
-			if (data === LIST_MARKER_DATA && depth === 0) return node as Comment;
-			if (isOpenMarkerData(data)) depth++;
-			else if (isCloseMarkerData(data)) depth--;
-		}
-		node = node.nextSibling;
-	}
-	throw new Error("unterminated list row");
-};
-
 export const hydrateListItems = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
 	const list = liveBinding.content as ListContentState;
 	const items: Array<ListItem> = new Array(values.length);
-	let boundary: ChildNode = liveBinding.startMarker;
+	let rowStart: Node = liveBinding.startMarker;
 	for (let index = 0; index < values.length; index++) {
 		const value = coerceToTemplate(values[index]);
 		assertNestable(value);
-		const tailMarker = findRowTail(boundary, liveBinding.endMarker);
-		const spanStart = boundary.nextSibling!;
-		const instance = hydrateInstance(value, boundary, tailMarker);
+		const spanStart = rowStart.nextSibling!;
+		const { instance, tailMarker } = hydrateRow(value, rowStart);
 		const parsed = getParsedTemplate(value.__templateStrings);
 		items[index] = {
 			tailMarker,
@@ -274,7 +250,7 @@ export const hydrateListItems = (
 			keyHash: keyHashOf(value, parsed),
 			spanStart,
 		};
-		boundary = tailMarker;
+		rowStart = tailMarker;
 	}
 	list.items = items;
 	list.aggregateHash = foldOrderedContentHashes(values);

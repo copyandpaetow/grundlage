@@ -105,7 +105,6 @@ export const seedContentByAdoption = (
 			(liveBinding.content as BranchContentState).instance = hydrateInstance(
 				value as TemplateValue,
 				liveBinding.startMarker,
-				liveBinding.endMarker,
 			);
 			return;
 		case CONTENT_KIND.LIST:

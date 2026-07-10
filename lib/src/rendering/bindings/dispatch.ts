@@ -1,7 +1,12 @@
 import { BINDING } from "../../parser/constants";
 import { StaticBinding } from "../../parser/types";
-import { combinedPartsHash } from "../compose";
-import { ATTR_MODE, CONTENT_KIND, combineOrderedHash, UNSET_HASH } from "../constants";
+import { combinedPartsHash, composeParts } from "../compose";
+import {
+	ATTR_MODE,
+	combineOrderedHash,
+	CONTENT_KIND,
+	UNSET_HASH,
+} from "../constants";
 import { commitAttribute } from "./attribute";
 import {
 	applyDynamicAttribute,
@@ -138,6 +143,15 @@ export const seedLiveBinding = (
 			return seedDynamic(liveBinding as DynamicAttributeLiveBinding, values);
 		case BINDING.CONTENT:
 			return seedContentByAdoption(liveBinding as ContentLiveBinding, values);
+		case BINDING.ATTRIBUTE: {
+			const attribute = liveBinding as AttributeLiveBinding;
+			attribute.lastComposedName = composeParts(
+				attribute.staticBinding.nameParts,
+				values,
+			);
+			attribute.valueHash = computeGateHash(liveBinding, values);
+			return;
+		}
 		default:
 			(liveBinding as { valueHash: number }).valueHash = computeGateHash(
 				liveBinding,

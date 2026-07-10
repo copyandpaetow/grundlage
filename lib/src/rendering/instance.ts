@@ -1,4 +1,4 @@
-import { BINDING, COMMENT_IDENTIFIER } from "../parser/constants";
+import { BINDING } from "../parser/constants";
 import { getParsedTemplate } from "../parser/html";
 import { TemplateValue } from "../template";
 import {
@@ -7,7 +7,9 @@ import {
 	seedLiveBinding,
 } from "./bindings/dispatch";
 import { LiveBinding } from "./bindings/types";
+import { LIST_MARKER_DATA } from "./constants";
 import { buildFragment } from "./dom";
+import { closeOf, isOpenMarker } from "./range";
 
 export interface Instance {
 	templateHash: number;
@@ -18,6 +20,9 @@ export const patchInstance = (
 	instance: Instance,
 	values: Array<unknown>,
 ): void => {
+	// Commit in parser marker order: an element's TAG binding precedes its attribute/event
+	// bindings, so a tag swap runs before siblings re-read the new element via targetElement.
+	// Reordering this loop (or the marker emission) breaks tag swaps silently.
 	const { liveBindings } = instance;
 	for (let index = 0; index < liveBindings.length; index++)
 		commitLiveBinding(liveBindings[index], values, liveBindings);
@@ -37,13 +42,6 @@ export const reconcileInstance = (
 
 const isRangeType = (type: number): boolean => type === BINDING.CONTENT;
 
-const isOpenMarker = (data: string): boolean =>
-	data.startsWith(COMMENT_IDENTIFIER + " ") &&
-	data[COMMENT_IDENTIFIER.length + 1] !== "/";
-
-const closeOf = (openData: string): string =>
-	openData.replace(COMMENT_IDENTIFIER + " ", COMMENT_IDENTIFIER + " /");
-
 export const assertNestable = (value: TemplateValue): void => {
 	if (getParsedTemplate(value.__templateStrings).hostBindingCount > 0)
 		throw new Error(
@@ -57,7 +55,9 @@ export const mountInstance = (
 ): { instance: Instance; fragment: DocumentFragment } => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	parsed.fragmentCloneSource ??= buildFragment(parsed.htmlWithMarkers);
-	const fragment = parsed.fragmentCloneSource.cloneNode(true) as DocumentFragment;
+	const fragment = parsed.fragmentCloneSource.cloneNode(
+		true,
+	) as DocumentFragment;
 
 	const { bindings, hostBindingCount } = parsed;
 	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
@@ -103,36 +103,27 @@ const scanToClose = (walker: TreeWalker, open: Comment): Comment => {
 	throw new Error("unterminated content marker");
 };
 
-const nextOpenMarker = (
-	walker: TreeWalker,
-	rangeEnd: Comment | null,
-): Comment | null => {
+const nextOpenMarker = (walker: TreeWalker): Comment => {
 	let node: Comment | null;
-	while ((node = walker.nextNode() as Comment | null)) {
-		if (node === rangeEnd) return null;
+	while ((node = walker.nextNode() as Comment | null))
 		if (isOpenMarker(node.data)) return node;
-	}
-	return null;
+	throw new Error("hydration marker mismatch: fewer markers than bindings");
 };
 
-export const hydrateInstance = (
-	value: TemplateValue,
-	rangeStart: Node,
-	rangeEnd: Comment | null = null,
-): Instance => {
+const nextListTail = (walker: TreeWalker): Comment => {
+	let node: Comment | null;
+	while ((node = walker.nextNode() as Comment | null))
+		if (node.data === LIST_MARKER_DATA) return node;
+	throw new Error("unterminated list row");
+};
+
+const seedInstance = (walker: TreeWalker, value: TemplateValue): Instance => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	const { bindings, hostBindingCount } = parsed;
 	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
 
-	const walker = document.createTreeWalker(
-		rootOf(rangeStart),
-		NodeFilter.SHOW_COMMENT,
-	);
-	walker.currentNode = rangeStart;
-	let bindingIndex = hostBindingCount;
-
-	let open: Comment | null;
-	while ((open = nextOpenMarker(walker, rangeEnd))) {
+	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length; ) {
+		const open = nextOpenMarker(walker);
 		const staticBinding = bindings[bindingIndex];
 
 		if (!isRangeType(staticBinding.type)) {
@@ -150,4 +141,27 @@ export const hydrateInstance = (
 	}
 
 	return { templateHash: parsed.templateHash, liveBindings };
+};
+
+const walkerFrom = (rangeStart: Node): TreeWalker => {
+	const walker = document.createTreeWalker(
+		rootOf(rangeStart),
+		NodeFilter.SHOW_COMMENT,
+	);
+	walker.currentNode = rangeStart;
+	return walker;
+};
+
+export const hydrateInstance = (
+	value: TemplateValue,
+	rangeStart: Node,
+): Instance => seedInstance(walkerFrom(rangeStart), value);
+
+export const hydrateRow = (
+	value: TemplateValue,
+	rowStart: Node,
+): { instance: Instance; tailMarker: Comment } => {
+	const walker = walkerFrom(rowStart);
+	const instance = seedInstance(walker, value);
+	return { instance, tailMarker: nextListTail(walker) };
 };

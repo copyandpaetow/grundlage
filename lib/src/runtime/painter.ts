@@ -56,7 +56,7 @@ const paintRoot = (painter: Painter, value: TemplateValue): void => {
 
 const hydrateRoot = (painter: Painter, value: TemplateValue): void => {
 	const parsed = getParsedTemplate(value.__templateStrings);
-	const instance = hydrateInstance(value, painter.shadowRoot, null);
+	const instance = hydrateInstance(value, painter.shadowRoot);
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
 		const live = createLiveBinding(parsed.bindings[index], null, painter.host);
 		commitLiveBinding(live, value.values);

@@ -133,7 +133,7 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		const serverTextNode = textNodeOf(paragraph);
 		expect(serverTextNode.data).toBe("server-text");
 
-		hydrateInstance(html`<p>${"client-text"}</p>`, shadowRoot, null);
+		hydrateInstance(html`<p>${"client-text"}</p>`, shadowRoot);
 
 		expect(textNodeOf(paragraph)).toBe(serverTextNode);
 		expect(serverTextNode.data).toBe("server-text");
@@ -147,7 +147,7 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		expect(span.getAttribute("class")).toBe("server-class");
 		span.setAttribute("class", "stale-from-dom");
 
-		hydrateInstance(html`<span class="${"client-class"}"></span>`, shadowRoot, null);
+		hydrateInstance(html`<span class="${"client-class"}"></span>`, shadowRoot);
 
 		expect(span.getAttribute("class")).toBe("stale-from-dom");
 	});
@@ -157,7 +157,6 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		const instance = hydrateInstance(
 			html`<p>${"client-text"}</p>`,
 			shadowRoot,
-			null,
 		);
 		expect(shadowRoot.querySelector("p")?.textContent).toBe("server-text");
 
@@ -173,10 +172,43 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		const instance = hydrateInstance(
 			html`<span class="${"client-class"}"></span>`,
 			shadowRoot,
-			null,
 		);
 
 		patchInstance(instance, ["updated-class"]);
 		expect(span.getAttribute("class")).toBe("updated-class");
+	});
+
+	test("hydrates a list whose rows carry a non-content binding", () => {
+		//each row's attribute emits a single (unclosed) marker as a top-level sibling of the row —
+		//the row-tail walk must not mistake it for an open content range
+		const rows = (labels: Array<string>) =>
+			html`<ul>${labels.map((label) => html`<li class=${label}>${label}</li>`)}</ul>`;
+		const { shadowRoot } = mountIntoShadow(rows(["a", "b"]));
+
+		expect(() => hydrateInstance(rows(["a", "b"]), shadowRoot)).not.toThrow();
+
+		const items = shadowRoot.querySelectorAll("li");
+		expect(items.length).toBe(2);
+		expect(items[0].getAttribute("class")).toBe("a");
+		expect(items[1].getAttribute("class")).toBe("b");
+	});
+
+	test("hydrates a list with a nested list inside each row", () => {
+		//nested rows contribute their own *.* tails; the outer row-tail walk must skip them via
+		//the nested content range, not stop at the first one it sees
+		const rows = (groups: Array<Array<string>>) =>
+			html`<ul>${groups.map(
+				(group) => html`<li>${group.map((cell) => html`<span>${cell}</span>`)}</li>`,
+			)}</ul>`;
+		const tree = [
+			["a", "b"],
+			["c", "d"],
+		];
+		const { shadowRoot } = mountIntoShadow(rows(tree));
+
+		expect(() => hydrateInstance(rows(tree), shadowRoot)).not.toThrow();
+
+		expect(shadowRoot.querySelectorAll("li").length).toBe(2);
+		expect(shadowRoot.querySelectorAll("span").length).toBe(4);
 	});
 });
