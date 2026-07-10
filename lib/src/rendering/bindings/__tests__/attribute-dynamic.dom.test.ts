@@ -234,6 +234,36 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 		element.dispatchEvent(new Event("wheel"));
 		expect(received).toEqual([]);
 	});
+
+	test("function → non-function on an event key detaches the listener and writes nothing", () => {
+		const element = document.createElement("button");
+		const events: Array<string> = [];
+		const handler = () => events.push("clicked");
+
+		applyDynamicAttribute(element, "onclick", handler);
+		applyDynamicAttribute(element, "onclick", "alert(1)", handler);
+
+		//no live native handler was created, and the old listener is gone
+		expect(element.hasAttribute("onclick")).toBe(false);
+		element.click();
+		expect(events).toEqual([]);
+	});
+
+	test("non-function → function on an event key binds once, with no leftover attribute", () => {
+		const element = document.createElement("button");
+		const events: Array<string> = [];
+		const handler = () => events.push("clicked");
+
+		//a string on an event key writes nothing (functions-only, like the static path)
+		applyDynamicAttribute(element, "onclick", "alert(1)");
+		expect(element.hasAttribute("onclick")).toBe(false);
+
+		applyDynamicAttribute(element, "onclick", handler, "alert(1)");
+		expect(element.hasAttribute("onclick")).toBe(false);
+
+		element.click();
+		expect(events).toEqual(["clicked"]);
+	});
 });
 
 describe("applyDynamicAttribute - on- explicit listeners", () => {
@@ -449,6 +479,17 @@ describe("applyDynamicAttribute - non-stringable values", () => {
 
 		applyDynamicAttribute(element, "items", items);
 		expect((element as unknown as { items: unknown }).items).toBe(items);
+	});
+
+	test("removing a property-mode entry deletes the JS property (not just the attribute)", () => {
+		const element = document.createElement("div");
+		const items = [1, 2, 3];
+
+		applyDynamicAttribute(element, "items", items);
+		applyDynamicAttribute(element, "items", null, items);
+
+		expect("items" in element).toBe(false);
+		expect((element as unknown as { items: unknown }).items).toBeUndefined();
 	});
 
 	test("calls update() when the receiver exposes one (custom-element handoff)", () => {

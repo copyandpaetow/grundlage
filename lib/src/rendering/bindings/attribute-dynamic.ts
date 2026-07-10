@@ -1,9 +1,5 @@
 import { hashValue } from "../../utils/hashing";
-import {
-	assertPrimitiveString,
-	isPlainObject,
-	isStringable,
-} from "../../utils/guards";
+import { assertPrimitiveString, isPlainObject, isStringable } from "../../utils/guards";
 import { hasValueChanged } from "../compose";
 import { nudgeComponent, targetElement } from "../dom";
 import { AppliedAttribute, DynamicAttributeLiveBinding } from "./types";
@@ -40,27 +36,28 @@ export const applyDynamicAttribute = (
 	value: unknown,
 	oldValue?: unknown,
 ): void => {
-	const valueIsFunction = typeof value === "function";
-	const oldValueIsFunction = typeof oldValue === "function";
-	if (valueIsFunction || oldValueIsFunction) {
-		const listenerName = resolveEventNameFromKey(key, element);
-		if (listenerName !== null) {
-			if (oldValueIsFunction)
-				element.removeEventListener(listenerName, oldValue as EventListener);
-			if (valueIsFunction)
-				element.addEventListener(listenerName, value as EventListener);
-			return;
-		}
-		if (valueIsFunction) warnIfDeadNativeHandler(key, element);
+	const listenerName = resolveEventNameFromKey(key, element);
+	if (listenerName !== null) {
+		if (typeof oldValue === "function")
+			element.removeEventListener(listenerName, oldValue as EventListener);
+		if (typeof value === "function")
+			element.addEventListener(listenerName, value as EventListener);
+		return;
 	}
 
+	if (typeof value === "function") warnIfDeadNativeHandler(key, element);
+
+	const clearsProperty = oldValue !== undefined && !isStringable(oldValue);
+
 	if (value === null || value === undefined || value === false) {
+		if (clearsProperty)
+			delete (element as unknown as Record<string, unknown>)[key];
 		element.removeAttribute(key);
 		return;
 	}
 
 	if (isStringable(value)) {
-		if (oldValue !== undefined && !isStringable(oldValue))
+		if (clearsProperty)
 			delete (element as unknown as Record<string, unknown>)[key];
 		element.setAttribute(key, String(value));
 		return;
