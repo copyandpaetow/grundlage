@@ -125,16 +125,11 @@ const runTask = (
 				const dismissed =
 					!(reaction instanceof Promise) &&
 					reaction.kind === STEP_OUTCOME.RETURNED;
-				if (dismissed) {
-					parent.cleanup =
-						typeof reaction.payload === "function"
-							? (reaction.payload as VoidFunction)
-							: null;
-					cancelTaskAndRunCleanup(parent);
-					engine.outer = null;
-				} else {
-					runTask(engine, parent, reaction);
-				}
+				//run the outer to whatever it did next: a re-yield paints a fallback, a
+				//return completes it (cleanup captured, deferred to disconnect like COMPLETED)
+				runTask(engine, parent, reaction);
+				//a return left no live renderer — drop the dead child so update() can't re-run it
+				if (dismissed) engine.renderer = null;
 				return OUTCOME.THREW_UP;
 			}
 

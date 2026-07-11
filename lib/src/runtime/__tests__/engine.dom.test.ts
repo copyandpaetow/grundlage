@@ -93,3 +93,40 @@ describe("engine terminal", () => {
 		element.remove();
 	});
 });
+
+describe("dismissed child errors", () => {
+	test("outer catching a child error by returning: never fatal, cleanup deferred to disconnect, update() a no-op", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		let cleanupCalls = 0;
+		const element = mount(
+			render(function* () {
+				try {
+					yield function* () {
+						yield () => {
+							throw new Error("child-boom");
+						};
+					};
+				} catch {
+					return () => {
+						cleanupCalls++;
+					};
+				}
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+
+		//the outer swallowed the error: never a fatal, and cleanup is NOT run yet
+		expect(warn).not.toHaveBeenCalled();
+		expect(cleanupCalls).toBe(0);
+
+		//the dead child renderer was dropped: update() no-ops (does not re-run/re-throw)
+		await element.update();
+		expect(warn).not.toHaveBeenCalled();
+		expect(cleanupCalls).toBe(0);
+
+		//cleanup runs exactly once, at disconnect
+		element.remove();
+		await sleep();
+		expect(cleanupCalls).toBe(1);
+	});
+});

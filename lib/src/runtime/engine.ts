@@ -1,6 +1,6 @@
 import { ValueOf } from "../parser/types";
 import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
-import { Painter } from "./painter";
+import { Painter, teardownPainter } from "./painter";
 import {
 	createStepOutcome,
 	ROLE,
@@ -120,6 +120,9 @@ export const cancelEngineAndNotifyHost = (
 	engine.inner = engine.outer = engine.renderer = null;
 	cancelTaskAndRunCleanup(inner);
 	cancelTaskAndRunCleanup(outer);
+	//release the attribute observer here: disconnect() nulls engine.outer, so the
+	//disconnectedCallback guard would otherwise skip stopEngine and leak it forever
+	teardownPainter(engine.painter);
 	writeFatalErrorIntoShadow(engine.painter.shadowRoot, error);
 	resolvePendingUpdatePromise(engine);
 };
