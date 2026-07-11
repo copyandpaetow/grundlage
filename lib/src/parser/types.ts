@@ -14,6 +14,11 @@ export type ContentBinding = {
 	values: Array<number | string>;
 };
 
+export type CommentBinding = {
+	type: typeof BINDING_TYPES.COMMENT;
+	values: Array<number | string>;
+};
+
 export type RawContentBinding = {
 	type: typeof BINDING_TYPES.RAW_CONTENT;
 	values: Array<number | string>;
@@ -28,6 +33,7 @@ export type Binding =
 	| TagBinding
 	| AttributeBinding
 	| ContentBinding
+	| CommentBinding
 	| RawContentBinding;
 
 export type Part = string | number;

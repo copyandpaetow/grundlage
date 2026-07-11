@@ -3,6 +3,7 @@ import { ATTRIBUTE_SHAPE, BINDING, BINDING_TYPES, COMMENT_IDENTIFIER, NO_KEY_BIN
 import {
 	AttributeBinding,
 	Binding,
+	CommentBinding,
 	ContentBinding,
 	ParsedTemplate,
 	Part,
@@ -219,6 +220,10 @@ const createBinding = (parser: ParserState) => {
 				keys: [],
 			} satisfies AttributeBinding;
 		case STATE.COMMENT:
+			return {
+				type: BINDING_TYPES.COMMENT,
+				values: [],
+			} satisfies CommentBinding;
 		case STATE.TEXT:
 			return {
 				type: BINDING_TYPES.CONTENT,
@@ -255,11 +260,9 @@ const capture = (
 
 const completeComment = (parser: ParserState) => {
 	if (parser.activeBinding) {
-		const values = (parser.activeBinding as ContentBinding).values;
+		const values = (parser.activeBinding as CommentBinding).values;
 		moveArrayContents(parser.commentBuffer, values);
-		if (isSingleHole(values))
-			parser.contentBuffer.push(openComment(parser), closeComment(parser));
-		else parser.contentBuffer.push(openComment(parser), MARKUP.EMPTY_COMMENT);
+		parser.contentBuffer.push(openComment(parser), MARKUP.EMPTY_COMMENT);
 	} else {
 		parser.contentBuffer.push(MARKUP.COMMENT_OPEN);
 		moveArrayContents(parser.commentBuffer, parser.contentBuffer);
@@ -841,9 +844,9 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 		case BINDING_TYPES.ATTR:
 			return toAttributeStaticBinding(binding);
 		case BINDING_TYPES.CONTENT:
-			return isSingleHole(binding.values)
-				? { type: BINDING.CONTENT, valueIndex: binding.values[0] as number }
-				: { type: BINDING.COMMENT, parts: binding.values.slice() };
+			return { type: BINDING.CONTENT, valueIndex: binding.values[0] as number };
+		case BINDING_TYPES.COMMENT:
+			return { type: BINDING.COMMENT, parts: binding.values.slice() };
 		case BINDING_TYPES.RAW_CONTENT:
 			return { type: BINDING.RAW_CONTENT, parts: binding.values.slice() };
 	}

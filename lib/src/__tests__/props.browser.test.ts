@@ -224,6 +224,20 @@ describe("props", () => {
 			const { id } = props(element, { id: String });
 			expect(id).toBe("my-id");
 		});
+
+		it("does not let a built-in reflected prop (title) mask the declared default", () => {
+			const element = document.createElement("div");
+			// no `title` attribute; element.title reads the prototype accessor as ""
+			const { title } = props(element, { title: [String, "fallback"] });
+			expect(title).toBe("fallback");
+		});
+
+		it("throws required for a built-in reflected prop when neither attr nor own prop is set", () => {
+			const element = document.createElement("div");
+			expect(() => props(element, { lang: String })).toThrow(
+				'Missing required prop: "lang"',
+			);
+		});
 	});
 
 	describe("mixed schema", () => {

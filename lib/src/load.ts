@@ -56,7 +56,10 @@ export const load = <Value>(
 		skipSsr = options.skipSsr === true;
 	}
 
-	if (isServer()) return collectOnServer(host as ServerHost, fetcher, key);
+	if (isServer()) {
+		if (skipSsr) return fetcher();
+		return collectOnServer(host as ServerHost, fetcher, key);
+	}
 
 	if (!skipSsr && host.shadowRoot !== null) {
 		const script = findReplayScript(host.shadowRoot, key);

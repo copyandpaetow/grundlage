@@ -156,6 +156,19 @@ describe("flushHostPayload writes server-collected values into the shadow root",
 		expect(host.shadowRoot!.children.length).toBe(1);
 	});
 
+	test("a skipSsr load runs the fetcher but emits no script — nothing to replay on the client", async () => {
+		const host = createHostWithShadow();
+		const fetcher = vi.fn(() => Promise.resolve("server-only"));
+		const value = await withoutWindow(() =>
+			load(host, fetcher, { skipSsr: true }),
+		);
+		flushHostPayload(host);
+
+		expect(value).toBe("server-only");
+		expect(fetcher).toHaveBeenCalledTimes(1);
+		expect(host.shadowRoot!.querySelector("script[data-ssr]")).toBeNull();
+	});
+
 	test("escapes `<` so a value containing `</script>` cannot break out of the inline script context", async () => {
 		const host = createHostWithShadow();
 		const payload = { body: "</script><script>alert(1)</script>" };

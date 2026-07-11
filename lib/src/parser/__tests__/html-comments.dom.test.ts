@@ -107,10 +107,13 @@ describe("html parser — comment bindings", () => {
 		).toBeNull();
 	});
 
-	test("a single-hole comment with no surrounding whitespace lowers to content", () => {
+	test("a single-hole comment stays a comment — whitespace does not flip its semantics", () => {
 		const msg = "x";
-		const parsed = parse`<!--${msg}-->`;
-		expect(parsed.bindings).toHaveLength(1);
-		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
+		const tight = parse`<!--${msg}-->`;
+		expect(tight.bindings).toHaveLength(1);
+		expect(tight.bindings[0].type).toBe(BINDING.COMMENT);
+
+		const spaced = parse`<!-- ${msg} -->`;
+		expect(spaced.bindings[0].type).toBe(BINDING.COMMENT);
 	});
 });

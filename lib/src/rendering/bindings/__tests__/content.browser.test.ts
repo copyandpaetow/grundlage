@@ -1566,6 +1566,43 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
+	test("a tight <!--${x}--> stays a comment node and never leaks visible text", async () => {
+		// whitespace must not flip the semantics: `<!--${x}-->` is the same comment
+		// binding as `<!-- ${x} -->`, so the value lands in comment data, not as
+		// rendered content in the section.
+		const tag = uniqueTag();
+		let note = "hidden";
+
+		const MyElement = render(function* () {
+			yield () => html`<section><!--${note}--></section>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const section = element.shadowRoot!.querySelector("section")!;
+		const commentData = Array.from(section.childNodes)
+			.filter((node) => node.nodeType === Node.COMMENT_NODE)
+			.map((node) => (node as Comment).data);
+
+		expect(commentData).toContain("hidden");
+		expect(section.textContent).not.toContain("hidden");
+
+		note = "still-hidden";
+		await element.update();
+		await sleep();
+
+		expect(section.textContent).not.toContain("still-hidden");
+		expect(
+			Array.from(section.childNodes)
+				.filter((node) => node.nodeType === Node.COMMENT_NODE)
+				.map((node) => (node as Comment).data),
+		).toContain("still-hidden");
+
+		cleanup(element);
+	});
+
 	test("updates one expression in a multi-expression comment binding", async () => {
 		// `<!-- ${a} and ${b} -->` folds both expressions into a single comment
 		// binding; changing one must re-render the comment with both current values.

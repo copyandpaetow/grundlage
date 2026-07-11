@@ -7,6 +7,7 @@ export const BINDING_TYPES = {
 	ATTR: 1,
 	CONTENT: 2,
 	RAW_CONTENT: 3,
+	COMMENT: 4,
 } as const;
 
 export const ATTRIBUTE_SHAPE = {
