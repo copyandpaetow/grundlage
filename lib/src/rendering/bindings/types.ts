@@ -85,6 +85,7 @@ export interface ListContentState {
 	kind: typeof CONTENT_KIND.LIST;
 	items: Array<ListItem>;
 	aggregateHash: number;
+	itemHashes: Array<number>;
 }
 
 export interface RawContentLiveBinding {

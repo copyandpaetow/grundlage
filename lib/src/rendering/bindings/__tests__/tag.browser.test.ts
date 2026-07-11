@@ -273,10 +273,9 @@ describe("tag updates", () => {
 		cleanup(element);
 	});
 
-	test("event handler set as a JS property is reattached after a concurrent tag swap", async () => {
-		//JS property bindings (the on* fast path) do not transfer when we copy attributes from the old element to the new one
-		//=> tag.ts marks every related-attribute binding dirty so the next flush re-installs the listener on the new element
-		//if dirty bookkeeping were off, the new element would render but never receive clicks
+	test("event handler is reattached after a tag swap that also changes the handler", async () => {
+		//`onclick="${fn}"` compiles to a static EVENT binding (addEventListener); listeners are not copyable off element.attributes
+		//=> swapElement carries the EVENT binding onto the new element, and commitEvent's changed-handler path installs the new one
 		const tag = uniqueTag();
 		let tagName = "button";
 		const clicks: string[] = [];
@@ -302,6 +301,73 @@ describe("tag updates", () => {
 
 		element.shadowRoot?.querySelector("div")?.click();
 		expect(clicks).toEqual(["first", "second"]);
+
+		cleanup(element);
+	});
+
+	test("static event listener survives a tag swap when the handler reference is unchanged", async () => {
+		//the load-bearing case for reapplyOnSwap: with an identical handler, commitEvent's gate returns early,
+		//so the listener only lands on the new element if swapElement carried the EVENT binding across
+		const tag = uniqueTag();
+		let tagName = "button";
+		const clicks: string[] = [];
+		const handler = () => clicks.push("hit"); //same reference before and after the swap
+
+		const MyElement = render(function* () {
+			yield () =>
+				html`<${tagName} onclick="${handler}">click me</${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		element.shadowRoot?.querySelector("button")?.click();
+		expect(clicks).toEqual(["hit"]);
+
+		tagName = "div";
+		await element.update();
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("button")).toBeNull();
+		element.shadowRoot?.querySelector("div")?.click();
+		expect(clicks).toEqual(["hit", "hit"]);
+
+		cleanup(element);
+	});
+
+	test("an unchanged handler is not detached and re-added on a plain update", async () => {
+		//the gate: a no-op update must do zero listener ops on the stable element
+		const tag = uniqueTag();
+		const handler = () => {};
+
+		const MyElement = render(function* () {
+			yield () => html`<button onclick="${handler}">click me</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const button = element.shadowRoot?.querySelector("button")!;
+		let adds = 0;
+		let removes = 0;
+		const realAdd = button.addEventListener.bind(button);
+		const realRemove = button.removeEventListener.bind(button);
+		button.addEventListener = ((...args: Parameters<typeof realAdd>) => {
+			adds++;
+			return realAdd(...args);
+		}) as typeof button.addEventListener;
+		button.removeEventListener = ((...args: Parameters<typeof realRemove>) => {
+			removes++;
+			return realRemove(...args);
+		}) as typeof button.removeEventListener;
+
+		await element.update();
+		await sleep();
+
+		expect(adds).toBe(0);
+		expect(removes).toBe(0);
 
 		cleanup(element);
 	});

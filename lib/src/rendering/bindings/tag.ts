@@ -4,18 +4,21 @@ import { targetElement } from "../dom";
 import { reapplyOnSwap } from "./dispatch";
 import {
 	DynamicAttributeLiveBinding,
+	EventLiveBinding,
 	LiveBinding,
 	SingleValueAttributeLiveBinding,
 	TagLiveBinding,
 } from "./types";
 
-const carriesProperty = (
+const reappliesOnSwap = (
 	liveBinding: LiveBinding,
 ): liveBinding is
 	| SingleValueAttributeLiveBinding
-	| DynamicAttributeLiveBinding =>
+	| DynamicAttributeLiveBinding
+	| EventLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE ||
-	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
+	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE ||
+	liveBinding.staticBinding.type === BINDING.EVENT;
 
 const swapElement = (
 	element: Element,
@@ -24,13 +27,15 @@ const swapElement = (
 	values: Array<unknown>,
 ): void => {
 	const carried: Array<
-		SingleValueAttributeLiveBinding | DynamicAttributeLiveBinding
+		| SingleValueAttributeLiveBinding
+		| DynamicAttributeLiveBinding
+		| EventLiveBinding
 	> = [];
 	for (let index = 0; index < siblings.length; index++) {
 		const sibling = siblings[index];
 		if (
 			sibling !== undefined &&
-			carriesProperty(sibling) &&
+			reappliesOnSwap(sibling) &&
 			targetElement(sibling) === element
 		)
 			carried.push(sibling);

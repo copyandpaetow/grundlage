@@ -23,7 +23,7 @@ import {
 import { commitComment } from "./comment";
 import { commitContent, seedContentByAdoption } from "./content";
 import { commitRawContent } from "./content-raw";
-import { commitEvent } from "./event";
+import { commitEvent, reapplyOnSwap as reapplyEventOnSwap } from "./event";
 import { commitTag } from "./tag";
 import {
 	AttributeLiveBinding,
@@ -183,17 +183,27 @@ const computeGateHash = (
 };
 
 export const reapplyOnSwap = (
-	liveBinding: SingleValueAttributeLiveBinding | DynamicAttributeLiveBinding,
+	liveBinding:
+		| SingleValueAttributeLiveBinding
+		| DynamicAttributeLiveBinding
+		| EventLiveBinding,
 	element: Element,
 	values: Array<unknown>,
 ): void => {
+	//todo: should be a switch statement
 	if (liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE)
 		reapplySingleValueOnSwap(
 			liveBinding as SingleValueAttributeLiveBinding,
 			element,
 			values,
 		);
-	else reapplyDynamicOnSwap(liveBinding as DynamicAttributeLiveBinding, element, values);
+	else if (liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE)
+		reapplyDynamicOnSwap(
+			liveBinding as DynamicAttributeLiveBinding,
+			element,
+			values,
+		);
+	else reapplyEventOnSwap(liveBinding as EventLiveBinding, element);
 };
 
 export const revertHostBinding = (liveBinding: LiveBinding): void => {
