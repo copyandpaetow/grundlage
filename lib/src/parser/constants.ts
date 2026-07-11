@@ -19,18 +19,11 @@ export const ATTRIBUTE_SHAPE = {
 	EXPANDABLE: 6,
 } as const;
 
-export const ATTRIBUTE_NAME_KIND = {
-	UNKNOWN: 0,
-	PLAIN: 1,
-	NATIVE_EVENT: 2,
-	EXPLICIT_EVENT: 3,
-} as const;
-
 export const BINDING = {
 	TAG: 0,
 	ATTRIBUTE: 1,
 	DYNAMIC_ATTRIBUTE: 2,
-	EVENT: 3,
+	NAMED_DYNAMIC: 3,
 	CONTENT: 4,
 	RAW_CONTENT: 5,
 	COMMENT: 6,

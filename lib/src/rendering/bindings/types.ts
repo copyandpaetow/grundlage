@@ -3,7 +3,7 @@ import {
 	CommentStaticBinding,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
-	EventStaticBinding,
+	NamedDynamicStaticBinding,
 	RawContentStaticBinding,
 	SingleValueAttributeStaticBinding,
 	TagStaticBinding,
@@ -47,11 +47,12 @@ export interface DynamicAttributeLiveBinding {
 	lastValueHash: number;
 }
 
-export interface EventLiveBinding {
-	staticBinding: EventStaticBinding;
+export interface NamedDynamicLiveBinding {
+	staticBinding: NamedDynamicStaticBinding;
 	markerComment: Comment | null;
 	hostElement: Element | null;
-	eventHandler: EventListener | null;
+	valueHash: number;
+	lastValue: unknown;
 }
 
 export interface ContentLiveBinding {
@@ -105,7 +106,7 @@ export type LiveBinding =
 	| AttributeLiveBinding
 	| SingleValueAttributeLiveBinding
 	| DynamicAttributeLiveBinding
-	| EventLiveBinding
+	| NamedDynamicLiveBinding
 	| ContentLiveBinding
 	| RawContentLiveBinding
 	| CommentLiveBinding;

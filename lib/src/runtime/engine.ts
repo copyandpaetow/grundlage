@@ -94,12 +94,13 @@ export const nextTaskStep = (
 	return stepped instanceof Promise ? stepped : createCleanStepOutcome(stepped);
 };
 
-const writeFatalErrorIntoShadow = (
-	shadowRoot: ShadowRoot,
-	error: unknown,
-): void => {
+const writeFatalErrorIntoShadow = (painter: Painter, error: unknown): void => {
 	console.warn(error);
-	shadowRoot.textContent = `${error}`;
+	painter.shadowRoot.textContent = `${error}`;
+	// the error text replaces the DOM these referenced; a reconnect must remount, not
+	// patch the now-detached instance in place (same-hash reconcile would stay stuck)
+	painter.instance = null;
+	painter.hostBindingCount = 0;
 };
 
 export const cancelEngineAndNotifyHost = (
@@ -110,7 +111,7 @@ export const cancelEngineAndNotifyHost = (
 	//release the attribute observer here: disconnect() nulls engine.outer, so the
 	//disconnectedCallback guard would otherwise skip stopEngine and leak it forever
 	teardownPainter(engine.painter);
-	writeFatalErrorIntoShadow(engine.painter.shadowRoot, error);
+	writeFatalErrorIntoShadow(engine.painter, error);
 	resolvePendingUpdatePromise(engine);
 };
 

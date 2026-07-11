@@ -4,7 +4,7 @@ import { buildFragment } from "../../rendering/dom";
 import { BINDING } from "../constants";
 import {
 	AttributeStaticBinding,
-	EventStaticBinding,
+	NamedDynamicStaticBinding,
 	SingleValueAttributeStaticBinding,
 } from "../types";
 
@@ -67,14 +67,14 @@ describe("html parser — attribute bindings", () => {
 		]);
 	});
 
-	test("event handler attribute lowers to an event binding", () => {
+	test("event handler attribute lowers to a named-dynamic binding", () => {
 		const handler = () => {};
 		const parsed = parse` <button onclick="${handler}"></button>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as EventStaticBinding;
-		expect(binding.type).toBe(BINDING.EVENT);
-		expect(binding.eventType).toBe("click");
+		const binding = parsed.bindings[0] as NamedDynamicStaticBinding;
+		expect(binding.type).toBe(BINDING.NAMED_DYNAMIC);
+		expect(binding.name).toBe("onclick");
 		expect(binding.valueIndex).toBe(0);
 	});
 
@@ -239,14 +239,28 @@ describe("html parser — attribute edge cases", () => {
 		expect(binding.valueParts).toEqual(["prefix-", 0, "-suffix"]);
 	});
 
-	test("event handler without quotes", () => {
+	test("event handler without quotes lowers to a named-dynamic binding", () => {
 		const handler = () => {};
 		const parsed = parse` <button onclick=${handler}></button>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as EventStaticBinding;
-		expect(binding.type).toBe(BINDING.EVENT);
-		expect(binding.eventType).toBe("click");
+		const binding = parsed.bindings[0] as NamedDynamicStaticBinding;
+		expect(binding.type).toBe(BINDING.NAMED_DYNAMIC);
+		expect(binding.name).toBe("onclick");
+	});
+
+	test("an on-prefixed non-handler keeps its whole name (no eventType slice)", () => {
+		const value = () => {};
+		//the whole name survives to commit-time resolution; the old bug sliced "once" → event "ce"
+		const once = parse` <button once=${value}></button>`
+			.bindings[0] as NamedDynamicStaticBinding;
+		expect(once.type).toBe(BINDING.NAMED_DYNAMIC);
+		expect(once.name).toBe("once");
+
+		const online = parse` <button online=${value}></button>`
+			.bindings[0] as NamedDynamicStaticBinding;
+		expect(online.type).toBe(BINDING.NAMED_DYNAMIC);
+		expect(online.name).toBe("online");
 	});
 });
 

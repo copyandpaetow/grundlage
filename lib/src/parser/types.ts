@@ -1,9 +1,4 @@
-import {
-	ATTRIBUTE_NAME_KIND,
-	ATTRIBUTE_SHAPE,
-	BINDING,
-	BINDING_TYPES,
-} from "./constants";
+import { ATTRIBUTE_SHAPE, BINDING, BINDING_TYPES } from "./constants";
 
 export type ValueOf<T> = T[keyof T];
 
@@ -12,8 +7,6 @@ export type AttributeBinding = {
 	shape: ValueOf<typeof ATTRIBUTE_SHAPE>;
 	values: Array<number | string>;
 	keys: Array<number | string>;
-	nameKind: ValueOf<typeof ATTRIBUTE_NAME_KIND>;
-	eventName: string;
 };
 
 export type ContentBinding = {
@@ -61,9 +54,9 @@ export interface DynamicAttributeStaticBinding {
 	valueIndex: number;
 }
 
-export interface EventStaticBinding {
-	type: typeof BINDING.EVENT;
-	eventType: string;
+export interface NamedDynamicStaticBinding {
+	type: typeof BINDING.NAMED_DYNAMIC;
+	name: string;
 	valueIndex: number;
 }
 
@@ -87,7 +80,7 @@ export type StaticBinding =
 	| AttributeStaticBinding
 	| SingleValueAttributeStaticBinding
 	| DynamicAttributeStaticBinding
-	| EventStaticBinding
+	| NamedDynamicStaticBinding
 	| ContentStaticBinding
 	| RawContentStaticBinding
 	| CommentStaticBinding;

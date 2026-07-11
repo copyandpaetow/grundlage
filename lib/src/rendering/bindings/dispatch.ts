@@ -23,14 +23,17 @@ import {
 import { commitComment } from "./comment";
 import { commitContent, seedContentByAdoption } from "./content";
 import { commitRawContent } from "./content-raw";
-import { commitEvent, reapplyOnSwap as reapplyEventOnSwap } from "./event";
+import {
+	commitNamedDynamic,
+	reapplyOnSwap as reapplyNamedDynamicOnSwap,
+} from "./named-dynamic";
 import { commitTag } from "./tag";
 import {
 	AttributeLiveBinding,
 	CommentLiveBinding,
 	ContentLiveBinding,
 	DynamicAttributeLiveBinding,
-	EventLiveBinding,
+	NamedDynamicLiveBinding,
 	LiveBinding,
 	RawContentLiveBinding,
 	SingleValueAttributeLiveBinding,
@@ -77,8 +80,14 @@ export const createLiveBinding = (
 				appliedAttributes: new Map(),
 				lastValueHash: UNSET_HASH,
 			};
-		case BINDING.EVENT:
-			return { staticBinding, markerComment, hostElement, eventHandler: null };
+		case BINDING.NAMED_DYNAMIC:
+			return {
+				staticBinding,
+				markerComment,
+				hostElement,
+				valueHash: UNSET_HASH,
+				lastValue: undefined,
+			};
 		case BINDING.CONTENT:
 			return {
 				staticBinding,
@@ -118,8 +127,11 @@ export const commitLiveBinding = (
 			);
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return commitDynamic(liveBinding as DynamicAttributeLiveBinding, values);
-		case BINDING.EVENT:
-			return commitEvent(liveBinding as EventLiveBinding, values);
+		case BINDING.NAMED_DYNAMIC:
+			return commitNamedDynamic(
+				liveBinding as NamedDynamicLiveBinding,
+				values,
+			);
 		case BINDING.CONTENT:
 			return commitContent(liveBinding as ContentLiveBinding, values);
 		case BINDING.RAW_CONTENT:
@@ -134,7 +146,7 @@ export const seedLiveBinding = (
 	values: Array<unknown>,
 ): void => {
 	switch (liveBinding.staticBinding.type) {
-		case BINDING.EVENT:
+		case BINDING.NAMED_DYNAMIC:
 			return commitLiveBinding(liveBinding, values);
 		case BINDING.SINGLE_VALUE_ATTRIBUTE:
 			return seedOrCommitSingleValue(
@@ -186,7 +198,7 @@ export const reapplyOnSwap = (
 	liveBinding:
 		| SingleValueAttributeLiveBinding
 		| DynamicAttributeLiveBinding
-		| EventLiveBinding,
+		| NamedDynamicLiveBinding,
 	element: Element,
 	values: Array<unknown>,
 ): void => {
@@ -203,7 +215,7 @@ export const reapplyOnSwap = (
 			element,
 			values,
 		);
-	else reapplyEventOnSwap(liveBinding as EventLiveBinding, element);
+	else reapplyNamedDynamicOnSwap(liveBinding as NamedDynamicLiveBinding, element);
 };
 
 export const revertHostBinding = (liveBinding: LiveBinding): void => {
@@ -227,12 +239,14 @@ export const revertHostBinding = (liveBinding: LiveBinding): void => {
 				applyDynamicAttribute(dynamic.hostElement, name, null, entry.value);
 			return;
 		}
-		case BINDING.EVENT: {
-			const event = liveBinding as EventLiveBinding;
-			if (event.hostElement !== null && event.eventHandler !== null)
-				event.hostElement.removeEventListener(
-					event.staticBinding.eventType,
-					event.eventHandler,
+		case BINDING.NAMED_DYNAMIC: {
+			const named = liveBinding as NamedDynamicLiveBinding;
+			if (named.hostElement !== null)
+				applyDynamicAttribute(
+					named.hostElement,
+					named.staticBinding.name,
+					null,
+					named.lastValue,
 				);
 			return;
 		}

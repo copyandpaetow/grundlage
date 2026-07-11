@@ -92,6 +92,34 @@ describe("engine terminal", () => {
 		expect(element.shadowRoot?.textContent).toContain("boom");
 		element.remove();
 	});
+
+	test("reconnect after a fatal error remounts instead of patching the detached error text", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		let boom = false;
+		const element = mount(
+			render(function* () {
+				yield () => {
+					if (boom) throw new Error("late-boom");
+					return html`<p>alive</p>`;
+				};
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(element.shadowRoot?.textContent).toContain("alive");
+
+		boom = true;
+		await element.update(); //fatal: the shadow shows the error, the stale instance is dropped
+		expect(element.shadowRoot?.textContent).toContain("late-boom");
+
+		boom = false;
+		element.remove();
+		document.body.appendChild(element); //reconnect restarts the engine on the same painter
+		await sleep();
+		//same-hash re-render must NOT patch the detached error text; it must remount live DOM
+		expect(element.shadowRoot?.textContent).toContain("alive");
+		expect(element.shadowRoot?.textContent).not.toContain("late-boom");
+		element.remove();
+	});
 });
 
 describe("dismissed child errors", () => {

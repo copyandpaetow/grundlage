@@ -124,6 +124,46 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
+	test("camelCase onClick binds as a native event", async () => {
+		const tag = uniqueTag();
+		const clicks: string[] = [];
+		const handler = () => clicks.push("hit");
+
+		const MyElement = render(function* () {
+			yield () => html`<button onClick="${handler}">click</button>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		element.shadowRoot!.querySelector("button")!.click();
+		expect(clicks).toEqual(["hit"]);
+
+		cleanup(element);
+	});
+
+	test("an on-prefixed word that is not a DOM handler (once) is not an event, and warns", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const tag = uniqueTag();
+		const handler = () => {};
+
+		const MyElement = render(function* () {
+			yield () => html`<button once="${handler}">x</button>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const btn = element.shadowRoot!.querySelector("button")!;
+		//the old bug read "once" as an event and did addEventListener("ce"); now it resolves as a
+		//non-handler and is assigned as a dead property (matches the spread path), never a listener
+		expect((btn as unknown as { once: unknown }).once).toBe(handler);
+		expect(warn).toHaveBeenCalled();
+
+		warn.mockRestore();
+		cleanup(element);
+	});
+
 	test("expands an array into boolean attributes", async () => {
 		const tag = uniqueTag();
 		let attrs = ["disabled", "hidden"];

@@ -1,12 +1,5 @@
 import { stringHash } from "../utils/hashing";
-import {
-	ATTRIBUTE_NAME_KIND,
-	ATTRIBUTE_SHAPE,
-	BINDING,
-	BINDING_TYPES,
-	COMMENT_IDENTIFIER,
-	NO_KEY_BINDING,
-} from "./constants";
+import { ATTRIBUTE_SHAPE, BINDING, BINDING_TYPES, COMMENT_IDENTIFIER, NO_KEY_BINDING } from "./constants";
 import {
 	AttributeBinding,
 	Binding,
@@ -224,8 +217,6 @@ const createBinding = (parser: ParserState) => {
 				shape: ATTRIBUTE_SHAPE.STATIC,
 				values: [],
 				keys: [],
-				nameKind: ATTRIBUTE_NAME_KIND.UNKNOWN,
-				eventName: "",
 			} satisfies AttributeBinding;
 		case STATE.COMMENT:
 		case STATE.TEXT:
@@ -418,23 +409,6 @@ const classifyAttributeShape = (
 		: ATTRIBUTE_SHAPE.STATIC_NAME_MULTI_VALUE;
 };
 
-const classifyAttributeName = (binding: AttributeBinding) => {
-	const keys = binding.keys;
-	if (keys.length !== 1 || typeof keys[0] !== "string") return;
-
-	const name = keys[0];
-	if (name.charCodeAt(0) !== 111 || name.charCodeAt(1) !== 110) {
-		binding.nameKind = ATTRIBUTE_NAME_KIND.PLAIN;
-		return;
-	}
-	if (name.charCodeAt(2) === 45) {
-		binding.nameKind = ATTRIBUTE_NAME_KIND.EXPLICIT_EVENT;
-		binding.eventName = name.slice(3).toLowerCase();
-	} else {
-		binding.nameKind = ATTRIBUTE_NAME_KIND.NATIVE_EVENT;
-		binding.eventName = name.slice(2).toLowerCase();
-	}
-};
 const recordKeyBinding = (
 	parser: ParserState,
 	attributeBinding: AttributeBinding,
@@ -453,7 +427,6 @@ const finalizeAttributeBinding = (
 	moveArrayContents(parser.attributeKeyBuffer, binding.keys);
 	moveArrayContents(parser.attributeValueBuffer, binding.values);
 	binding.shape = classifyAttributeShape(binding);
-	classifyAttributeName(binding);
 	if (binding.shape === ATTRIBUTE_SHAPE.EXPANDABLE) {
 		binding.values.push(binding.keys[0]);
 		binding.keys.length = 0;
@@ -478,8 +451,6 @@ const completeAttribute = (parser: ParserState) => {
 				shape: ATTRIBUTE_SHAPE.STATIC,
 				keys: [],
 				values: [],
-				nameKind: ATTRIBUTE_NAME_KIND.UNKNOWN,
-				eventName: "",
 			};
 			finalizeAttributeBinding(parser, staticBinding);
 			parser.bindings.push(staticBinding);
@@ -517,7 +488,11 @@ const flushElement = (parser: ParserState) => {
 	moveArrayContents(parser.elementBuffer, parser.resultBuffer);
 	parser.resultBuffer.push(MARKUP.TAG_CLOSE);
 	if (parser.selfClosing) {
-		parser.resultBuffer.push(MARKUP.END_TAG_OPEN, parser.currentTagName, MARKUP.TAG_CLOSE);
+		parser.resultBuffer.push(
+			MARKUP.END_TAG_OPEN,
+			parser.currentTagName,
+			MARKUP.TAG_CLOSE,
+		);
 	}
 	moveArrayContents(parser.contentBuffer, parser.resultBuffer);
 
@@ -574,11 +549,7 @@ const parse = (
 					if (code !== CHAR_CODE.LESS_THAN) {
 						continue;
 					}
-					markTopLevelTextSibling(
-						parser,
-						parser.splitIndex,
-						parser.charIndex,
-					);
+					markTopLevelTextSibling(parser, parser.splitIndex, parser.charIndex);
 					parser.splitIndex = parser.charIndex + 1;
 
 					const nextCode = parser.activeTemplate.charCodeAt(
@@ -651,7 +622,9 @@ const parse = (
 							parser.charIndex,
 						);
 						parser.splitIndex =
-							parser.charIndex + END_TAG_OPEN_LENGTH + parser.currentTagName.length;
+							parser.charIndex +
+							END_TAG_OPEN_LENGTH +
+							parser.currentTagName.length;
 						parser.charIndex += 1;
 						completeSpecialContent(parser);
 						parser.state = STATE.END_TAG;
@@ -669,7 +642,9 @@ const parse = (
 						code === CHAR_CODE.GREATER_THAN &&
 						parser.activeTemplate.charCodeAt(parser.charIndex - 1) ===
 							CHAR_CODE.SLASH;
-					const tagEnd = isSelfClosing ? parser.charIndex - 1 : parser.charIndex;
+					const tagEnd = isSelfClosing
+						? parser.charIndex - 1
+						: parser.charIndex;
 					capture(parser, parser.tagBuffer, parser.splitIndex, tagEnd);
 					parser.splitIndex = parser.charIndex;
 					completeTag(parser);
@@ -821,16 +796,16 @@ const parse = (
 	};
 };
 
-const isEventBinding = (binding: AttributeBinding): boolean =>
-	(binding.nameKind === ATTRIBUTE_NAME_KIND.NATIVE_EVENT ||
-		binding.nameKind === ATTRIBUTE_NAME_KIND.EXPLICIT_EVENT) &&
+const isHandlerName = (binding: AttributeBinding): boolean =>
+	typeof binding.keys[0] === "string" &&
+	binding.keys[0].startsWith("on") &&
 	isSingleHole(binding.values);
 
 const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
-	if (isEventBinding(binding)) {
+	if (isHandlerName(binding)) {
 		return {
-			type: BINDING.EVENT,
-			eventType: binding.eventName,
+			type: BINDING.NAMED_DYNAMIC,
+			name: binding.keys[0] as string,
 			valueIndex: binding.values[0] as number,
 		};
 	}

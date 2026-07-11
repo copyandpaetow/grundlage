@@ -4,7 +4,7 @@ import { targetElement } from "../dom";
 import { reapplyOnSwap } from "./dispatch";
 import {
 	DynamicAttributeLiveBinding,
-	EventLiveBinding,
+	NamedDynamicLiveBinding,
 	LiveBinding,
 	SingleValueAttributeLiveBinding,
 	TagLiveBinding,
@@ -15,10 +15,10 @@ const reappliesOnSwap = (
 ): liveBinding is
 	| SingleValueAttributeLiveBinding
 	| DynamicAttributeLiveBinding
-	| EventLiveBinding =>
+	| NamedDynamicLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE ||
 	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE ||
-	liveBinding.staticBinding.type === BINDING.EVENT;
+	liveBinding.staticBinding.type === BINDING.NAMED_DYNAMIC;
 
 const swapElement = (
 	element: Element,
@@ -29,7 +29,7 @@ const swapElement = (
 	const carried: Array<
 		| SingleValueAttributeLiveBinding
 		| DynamicAttributeLiveBinding
-		| EventLiveBinding
+		| NamedDynamicLiveBinding
 	> = [];
 	for (let index = 0; index < siblings.length; index++) {
 		const sibling = siblings[index];

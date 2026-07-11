@@ -456,7 +456,7 @@ describe("html parser — mixed scenarios", () => {
 		const types = parsed.bindings.map((b) => b.type);
 		expect(types).toContain(BINDING.RAW_CONTENT);
 		expect(types).toContain(BINDING.SINGLE_VALUE_ATTRIBUTE);
-		expect(types).toContain(BINDING.EVENT);
+		expect(types).toContain(BINDING.NAMED_DYNAMIC);
 		expect(types).toContain(BINDING.CONTENT);
 	});
 });
