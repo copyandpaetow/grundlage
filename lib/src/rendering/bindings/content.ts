@@ -31,7 +31,12 @@ const freshContentState = (contentKind: number): ContentState => {
 		case CONTENT_KIND.BRANCH:
 			return { kind: CONTENT_KIND.BRANCH, instance: null };
 		case CONTENT_KIND.LIST:
-			return { kind: CONTENT_KIND.LIST, items: [], aggregateHash: UNSET_HASH };
+			return {
+				kind: CONTENT_KIND.LIST,
+				items: [],
+				aggregateHash: UNSET_HASH,
+				itemHashes: [],
+			};
 		default:
 			return { kind: CONTENT_KIND.UNRESOLVED };
 	}

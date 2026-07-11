@@ -38,22 +38,23 @@ const keyHashOf = (value: TemplateValue, parsed: ParsedTemplate): number =>
 const shapeOrKeyHash = (templateHash: number, keyHash: number): number =>
 	keyHash === NO_KEY ? templateHash : keyHash;
 
-const foldOrderedContentHashes = (values: Array<unknown>): number => {
-	let aggregateHash = LIST_HASH_SEED;
-	for (let index = 0; index < values.length; index++)
-		aggregateHash = combineOrderedHash(aggregateHash, hashValue(values[index]));
-	return aggregateHash;
-};
-
 export const patchListContent = (
 	content: ContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
 	const list = content.content as ListContentState;
-	const aggregateHash = foldOrderedContentHashes(values);
+	const count = values.length;
+	if (list.itemHashes.length < count) list.itemHashes = new Array(count);
+	const itemHashes = list.itemHashes;
+	let aggregateHash = LIST_HASH_SEED;
+	for (let index = 0; index < count; index++) {
+		const itemHash = hashValue(values[index]);
+		itemHashes[index] = itemHash;
+		aggregateHash = combineOrderedHash(aggregateHash, itemHash);
+	}
 	if (aggregateHash === list.aggregateHash) return;
 	list.aggregateHash = aggregateHash;
-	reconcileRows(content, list, values);
+	reconcileRows(content, list, values, itemHashes, count);
 };
 
 type RowsByHash = Map<number, Array<ListItem>>;
@@ -109,27 +110,25 @@ const reconcileRows = (
 	content: ContentLiveBinding,
 	list: ListContentState,
 	values: Array<unknown>,
+	itemHashes: Array<number>,
+	count: number,
 ): void => {
 	const previousByContentHash = groupRowsByContentHash(
 		list.items,
 		content.startMarker,
 	);
-	const resolvedRows: Array<ListItem | undefined> = new Array(values.length);
-	const newHashes: Array<number> = new Array(values.length);
+	const resolvedRows: Array<ListItem | undefined> = new Array(count);
 
-	for (let index = 0; index < values.length; index++) {
-		const itemHash = hashValue(values[index]);
-		newHashes[index] = itemHash;
+	for (let index = 0; index < count; index++)
 		resolvedRows[index] = claimLeftmostUnclaimedRow(
 			previousByContentHash,
-			itemHash,
+			itemHashes[index],
 		);
-	}
 
 	const leftoverByShapeOrKey = groupRowsByShapeOrKey(
 		unclaimedRows(previousByContentHash),
 	);
-	for (let index = 0; index < values.length; index++) {
+	for (let index = 0; index < count; index++) {
 		if (resolvedRows[index] !== undefined) continue;
 		const value = coerceToTemplate(values[index]);
 		const parsed = getParsedTemplate(value.__templateStrings);
@@ -139,28 +138,28 @@ const reconcileRows = (
 		);
 		const reusableRow = claimLeftmostUnclaimedRow(leftoverByShapeOrKey, matchHash);
 		if (reusableRow === undefined) continue;
-		patchRowInPlace(reusableRow, value, newHashes[index]);
+		patchRowInPlace(reusableRow, value, itemHashes[index]);
 		resolvedRows[index] = reusableRow;
 	}
 
 	for (const removedRow of unclaimedRows(leftoverByShapeOrKey))
 		removeRowNodes(removedRow);
 
-	list.items = placeRows(content, resolvedRows, values, newHashes);
+	list.items = placeRows(content, resolvedRows, values, itemHashes);
 };
 
 const placeRows = (
 	content: ContentLiveBinding,
 	resolvedRows: Array<ListItem | undefined>,
 	values: Array<unknown>,
-	newHashes: Array<number>,
+	itemHashes: Array<number>,
 ): Array<ListItem> => {
 	const finalRows: Array<ListItem> = new Array(resolvedRows.length);
 	let cursor: ChildNode = content.startMarker;
 	for (let index = 0; index < resolvedRows.length; index++) {
 		let row = resolvedRows[index];
 		if (row === undefined)
-			row = mountRowAfter(cursor, values[index], newHashes[index]);
+			row = mountRowAfter(cursor, values[index], itemHashes[index]);
 		else if (cursor.nextSibling !== row.spanStart) moveRowAfter(cursor, row);
 		cursor = row.tailMarker;
 		finalRows[index] = row;
@@ -235,23 +234,30 @@ export const hydrateListItems = (
 	values: Array<unknown>,
 ): void => {
 	const list = liveBinding.content as ListContentState;
-	const items: Array<ListItem> = new Array(values.length);
+	const count = values.length;
+	const items: Array<ListItem> = new Array(count);
+	if (list.itemHashes.length < count) list.itemHashes = new Array(count);
+	const itemHashes = list.itemHashes;
+	let aggregateHash = LIST_HASH_SEED;
 	let rowStart: Node = liveBinding.startMarker;
-	for (let index = 0; index < values.length; index++) {
+	for (let index = 0; index < count; index++) {
 		const value = coerceToTemplate(values[index]);
 		assertNestable(value);
 		const spanStart = rowStart.nextSibling!;
 		const { instance, tailMarker } = hydrateRow(value, rowStart);
 		const parsed = getParsedTemplate(value.__templateStrings);
+		const itemHash = hashValue(values[index]);
+		itemHashes[index] = itemHash;
+		aggregateHash = combineOrderedHash(aggregateHash, itemHash);
 		items[index] = {
 			tailMarker,
 			instance,
-			itemHash: hashValue(values[index]),
+			itemHash,
 			keyHash: keyHashOf(value, parsed),
 			spanStart,
 		};
 		rowStart = tailMarker;
 	}
 	list.items = items;
-	list.aggregateHash = foldOrderedContentHashes(values);
+	list.aggregateHash = aggregateHash;
 };
