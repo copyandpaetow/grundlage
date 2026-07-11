@@ -68,7 +68,10 @@ export const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	let ending: unknown;
 	try {
 		ending = task.generator.return?.(undefined);
-	} catch {}
+	} catch {
+		/* a generator that throws on return() is already dead; nothing left to salvage */
+	}
+	// the engine is being torn down, so there is no live onError channel to route to
 	if (ending instanceof Promise) ending.catch(console.warn);
 	const cleanup = task.cleanup;
 	if (cleanup !== null) {
@@ -102,11 +105,11 @@ export const nextTaskStep = (
 };
 
 const writeFatalErrorIntoShadow = (
-	host: BaseComponent,
+	shadowRoot: ShadowRoot,
 	error: unknown,
 ): void => {
 	console.warn(error);
-	host.shadowRoot!.textContent = `${error}`;
+	shadowRoot.textContent = `${error}`;
 };
 
 export const cancelEngineAndNotifyHost = (
@@ -117,7 +120,7 @@ export const cancelEngineAndNotifyHost = (
 	engine.inner = engine.outer = engine.renderer = null;
 	cancelTaskAndRunCleanup(inner);
 	cancelTaskAndRunCleanup(outer);
-	writeFatalErrorIntoShadow(engine.host, error);
+	writeFatalErrorIntoShadow(engine.painter.shadowRoot, error);
 	resolvePendingUpdatePromise(engine);
 };
 

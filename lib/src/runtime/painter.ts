@@ -1,4 +1,5 @@
 import { getParsedTemplate } from "../parser/html";
+import { ParsedTemplate } from "../parser/types";
 import { flushHostPayload } from "../load";
 import { coerceToTemplate, TemplateValue } from "../template";
 import { BaseComponent } from "../types";
@@ -31,7 +32,7 @@ export const createPainter = (
 	hostBindingCount: 0,
 });
 
-const clearShadowRoot = (painter: Painter): void => {
+const revertHostBindings = (painter: Painter): void => {
 	const instance = painter.instance;
 	if (instance === null) return;
 	const liveBindings = instance.liveBindings;
@@ -39,11 +40,14 @@ const clearShadowRoot = (painter: Painter): void => {
 		revertHostBinding(liveBindings[index]);
 };
 
-const paintRoot = (painter: Painter, value: TemplateValue): void => {
+const paintRoot = (
+	painter: Painter,
+	value: TemplateValue,
+	parsed: ParsedTemplate,
+): void => {
 	const mounted = reconcileInstance(painter.instance, value);
 	if (mounted === null) return;
-	clearShadowRoot(painter);
-	const parsed = getParsedTemplate(value.__templateStrings);
+	revertHostBindings(painter);
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
 		const live = createLiveBinding(parsed.bindings[index], null, painter.host);
 		commitLiveBinding(live, value.values);
@@ -54,8 +58,11 @@ const paintRoot = (painter: Painter, value: TemplateValue): void => {
 	painter.hostBindingCount = parsed.hostBindingCount;
 };
 
-const hydrateRoot = (painter: Painter, value: TemplateValue): void => {
-	const parsed = getParsedTemplate(value.__templateStrings);
+const hydrateRoot = (
+	painter: Painter,
+	value: TemplateValue,
+	parsed: ParsedTemplate,
+): void => {
 	const instance = hydrateInstance(value, painter.shadowRoot);
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
 		const live = createLiveBinding(parsed.bindings[index], null, painter.host);
@@ -74,10 +81,10 @@ export const paint = (painter: Painter, value: unknown): void => {
 	if (touchesHost) painter.attributeObserver?.disconnect();
 	try {
 		if (painter.hydratePending) {
-			hydrateRoot(painter, templateValue);
+			hydrateRoot(painter, templateValue, parsed);
 			painter.hydratePending = false;
 		} else {
-			paintRoot(painter, templateValue);
+			paintRoot(painter, templateValue, parsed);
 		}
 	} finally {
 		if (touchesHost)
@@ -86,7 +93,12 @@ export const paint = (painter: Painter, value: unknown): void => {
 };
 
 export const serverPaint = (painter: Painter, value: unknown): void => {
-	paintRoot(painter, coerceToTemplate(value));
+	const templateValue = coerceToTemplate(value);
+	paintRoot(
+		painter,
+		templateValue,
+		getParsedTemplate(templateValue.__templateStrings),
+	);
 	flushHostPayload(painter.host);
 };
 

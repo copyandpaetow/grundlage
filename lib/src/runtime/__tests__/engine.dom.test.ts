@@ -44,6 +44,35 @@ describe("engine terminal", () => {
 		element.remove();
 	});
 
+	test("a fatal error displays in closed shadow mode (host.shadowRoot is null)", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		const attachShadow = HTMLElement.prototype.attachShadow;
+		let closedRoot: ShadowRoot | undefined;
+		vi.spyOn(HTMLElement.prototype, "attachShadow").mockImplementation(
+			function (this: HTMLElement, init: ShadowRootInit) {
+				closedRoot = attachShadow.call(this, init);
+				return closedRoot;
+			},
+		);
+
+		const element = mount(
+			render(
+				function* () {
+					yield () => {
+						throw new Error("closed-boom");
+					};
+				},
+				{ mode: "closed" },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot).toBeNull(); //closed: the host exposes no root
+		//...yet the engine still displayed the error, via painter.shadowRoot not host.shadowRoot!
+		expect(closedRoot?.textContent).toContain("closed-boom");
+		element.remove();
+	});
+
 	test("update() after a terminal error is a no-op (the renderer was cleared)", async () => {
 		vi.spyOn(console, "warn").mockImplementation(() => {});
 		let shouldThrow = true;
