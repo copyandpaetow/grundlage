@@ -164,7 +164,7 @@ export const stopEngine = (engine: Engine): void => {
 
 const rerunCurrentRenderer = (engine: Engine): void => {
 	const renderer = engine.renderer;
-	if (renderer === null) return;
+	if (renderer === null) return resolvePendingUpdatePromise(engine);
 	if (!isGeneratorFunction(renderer)) {
 		try {
 			paint(engine.painter, (renderer as RenderFunction)(engine.host));

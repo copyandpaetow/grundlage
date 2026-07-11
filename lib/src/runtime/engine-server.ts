@@ -1,5 +1,4 @@
 import { RenderFunction } from "../types";
-import { TemplateValue } from "../template";
 import { serverPaint } from "./painter";
 import {
 	cancelBothTasks,
@@ -50,17 +49,16 @@ const runServerTask = (
 		switch (operation.kind) {
 			case OPERATION.PAINT:
 			case OPERATION.PAINT_FROM: {
-				let template: TemplateValue;
 				try {
-					template =
+					const template =
 						operation.kind === OPERATION.PAINT
 							? operation.payload
 							: (operation.payload as RenderFunction)(engine.host);
+					serverPaint(engine.painter, template);
 				} catch (error) {
 					next = createStepOutcome(STEP_OUTCOME.THREW, error);
 					break;
 				}
-				serverPaint(engine.painter, template);
 				return cancelBothTasks(engine);
 			}
 

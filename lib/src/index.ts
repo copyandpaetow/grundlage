@@ -43,6 +43,7 @@ export const render = (
 	componentGenerator: ComponentGenerator,
 	options: ComponentOptions = defaultOptions,
 ): ComponentConstructor => {
+	const mergedOptions = { ...defaultOptions, ...options };
 	const ParentClass: typeof HTMLElement = options.formAssociated
 		? FormBase
 		: HTMLElement;
@@ -50,8 +51,6 @@ export const render = (
 	class BaseElement extends ParentClass implements BaseComponent {
 		#engine: Engine | null = null;
 		#hydratePending: boolean;
-		//todo: captured here for shadowRoot close mode. But would it help to inline the engine in here?
-		//todo: this currently is very little here
 		#shadowRoot: ShadowRoot;
 
 		constructor() {
@@ -59,7 +58,7 @@ export const render = (
 			const prerendered = this.shadowRoot !== null;
 			this.#shadowRoot = prerendered
 				? this.shadowRoot!
-				: this.attachShadow(options);
+				: this.attachShadow(mergedOptions);
 			this.#hydratePending = prerendered;
 		}
 

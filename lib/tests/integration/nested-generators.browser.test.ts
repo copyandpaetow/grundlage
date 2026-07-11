@@ -237,7 +237,7 @@ describe("inner generator error contracts", () => {
 		element.remove();
 	});
 
-	test("outer catches and returns a cleanup: prior view persists, cleanup runs immediately", async () => {
+	test("outer catches and returns a cleanup: prior view persists, cleanup deferred to disconnect", async () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const tag = uniqueTag("catch-return");
 		const events: string[] = [];
@@ -245,8 +245,8 @@ describe("inner generator error contracts", () => {
 		// Outer commits a static view first, then installs an inner that
 		// throws. Outer is parked at the inner-install yield when the error
 		// propagates, so its catch fires and it returns a cleanup. Per the
-		// error contract: #mountedTemplate (the static) persists and the captured outer
-		// cleanup runs synchronously inside #onError.
+		// error contract: the static view persists, the outer completes like any
+		// returning generator, and its captured cleanup is deferred to disconnect.
 		customElements.define(
 			tag,
 			render(function* () {
@@ -267,12 +267,17 @@ describe("inner generator error contracts", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("before");
-		expect(events).toEqual(["outer-cleanup-after-catch"]);
+		// cleanup is captured but not run while still mounted
+		expect(events).toEqual([]);
 		// Recovery path is silent — no terminal warning.
 		expect(warnSpy).not.toHaveBeenCalled();
 
-		warnSpy.mockRestore();
 		element.remove();
+		await sleep();
+		// cleanup runs once, at disconnect
+		expect(events).toEqual(["outer-cleanup-after-catch"]);
+
+		warnSpy.mockRestore();
 	});
 
 	test("uncaught inner error becomes a terminal: warning + error text in shadow", async () => {

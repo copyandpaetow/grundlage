@@ -1,8 +1,9 @@
 import { BaseComponent } from "../types";
 
-const parserHost = document.createElement("template");
+let parserHost: HTMLTemplateElement | null = null;
 
 export const buildFragment = (result: string): DocumentFragment => {
+	parserHost ??= document.createElement("template");
 	parserHost.innerHTML = result;
 	const fragment = document.createDocumentFragment();
 	while (parserHost.content.firstChild) {
