@@ -54,8 +54,10 @@ export const applyDynamicAttribute = (
 	const clearsProperty = oldValue !== undefined && !isStringable(oldValue);
 
 	if (value === null || value === undefined || value === false) {
-		if (clearsProperty)
+		if (clearsProperty) {
 			delete (element as unknown as Record<string, unknown>)[key];
+			nudgeComponent(element);
+		}
 		element.removeAttribute(key);
 		return;
 	}

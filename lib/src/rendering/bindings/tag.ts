@@ -70,6 +70,6 @@ export const commitTag = (
 	liveBinding.valueHash = valueHash;
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const newTag = composeParts(parts, values);
-	if (newTag === element.tagName.toLowerCase()) return;
+	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
 	swapElement(element, newTag, siblings, values);
 };

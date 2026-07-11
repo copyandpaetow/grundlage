@@ -73,7 +73,7 @@ const readStringableProp = (
 	const raw = element.getAttribute(key);
 	const isAbsent = raw === null || (constructorValue === Number && raw === "");
 	if (isAbsent) {
-	if (!Object.hasOwn(element, key)) return undefined;
+		if (!Object.hasOwn(element, key)) return undefined;
 		return element[key as keyof typeof element] ?? undefined;
 	}
 	const coerced = constructorValue(raw);

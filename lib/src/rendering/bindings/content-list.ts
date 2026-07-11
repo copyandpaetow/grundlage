@@ -2,34 +2,30 @@ import { BINDING, NO_KEY_BINDING } from "../../parser/constants";
 import { AttributeStaticBinding, ParsedTemplate } from "../../parser/types";
 import { getParsedTemplate } from "../../parser/html";
 import { coerceToTemplate, TemplateValue } from "../../template";
-import { hashValue, stringHash } from "../../utils/hashing";
+import { hashValue } from "../../utils/hashing";
 import { composeParts } from "../compose";
-import {
-	combineOrderedHash,
-	LIST_HASH_SEED,
-	LIST_MARKER_DATA,
-	NO_KEY,
-} from "../constants";
-import {
-	assertNestable,
-	hydrateRow,
-	Instance,
-	mountInstance,
-	reconcileInstance,
-} from "../instance";
+import { combineOrderedHash, LIST_HASH_SEED, LIST_MARKER_DATA, NO_KEY } from "../constants";
+import { assertNestable, hydrateRow, Instance, mountInstance, reconcileInstance } from "../instance";
 import { forEachRowNode } from "../range";
 import { ContentLiveBinding, ListContentState, ListItem } from "./types";
 
 const isKeyed = (parsed: ParsedTemplate): boolean =>
 	parsed.keyBindingIndex !== NO_KEY_BINDING;
 
-const evaluateKeyHash = (value: TemplateValue, parsed: ParsedTemplate): number => {
+const evaluateKeyHash = (
+	value: TemplateValue,
+	parsed: ParsedTemplate,
+): number => {
 	const binding = parsed.bindings[parsed.keyBindingIndex];
-	const rendered =
+	const keyValue =
 		binding.type === BINDING.SINGLE_VALUE_ATTRIBUTE
-			? String(value.values[binding.valueIndex])
-			: composeParts((binding as AttributeStaticBinding).valueParts, value.values);
-	return stringHash(rendered);
+			? value.values[binding.valueIndex]
+			: composeParts(
+					(binding as AttributeStaticBinding).valueParts,
+					value.values,
+				);
+
+	return hashValue(keyValue);
 };
 
 const keyHashOf = (value: TemplateValue, parsed: ParsedTemplate): number =>
@@ -89,7 +85,10 @@ const groupUnclaimedByShapeOrKey = (previous: RowsByHash): RowsByHash => {
 		for (let index = 0; index < group.length; index++)
 			addRowToGroup(
 				groups,
-				shapeOrKeyHash(group[index].instance.templateHash, group[index].keyHash),
+				shapeOrKeyHash(
+					group[index].instance.templateHash,
+					group[index].keyHash,
+				),
 				group[index],
 			);
 	return groups;
@@ -125,7 +124,9 @@ const reconcileRows = (
 			itemHashes[index],
 		);
 
-	const leftoverByShapeOrKey = groupUnclaimedByShapeOrKey(previousByContentHash);
+	const leftoverByShapeOrKey = groupUnclaimedByShapeOrKey(
+		previousByContentHash,
+	);
 	for (let index = 0; index < count; index++) {
 		if (resolvedRows[index] !== undefined) continue;
 		const value = coerceToTemplate(values[index]);
@@ -134,7 +135,10 @@ const reconcileRows = (
 			parsed.templateHash,
 			keyHashOf(value, parsed),
 		);
-		const reusableRow = claimLeftmostUnclaimedRow(leftoverByShapeOrKey, matchHash);
+		const reusableRow = claimLeftmostUnclaimedRow(
+			leftoverByShapeOrKey,
+			matchHash,
+		);
 		if (reusableRow === undefined) continue;
 		patchRowInPlace(reusableRow, value, itemHashes[index]);
 		resolvedRows[index] = reusableRow;
