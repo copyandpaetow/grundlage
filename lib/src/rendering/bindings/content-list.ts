@@ -17,7 +17,7 @@ import {
 	mountInstance,
 	reconcileInstance,
 } from "../instance";
-import { forEachRowNode } from "../range";
+import { forEachInRange } from "../range";
 import { ContentLiveBinding, ListContentState, ListItem } from "./types";
 
 const isKeyed = (parsed: ParsedTemplate): boolean =>
@@ -225,7 +225,7 @@ const replaceRowInstance = (
 
 const moveRowAfter = (after: ChildNode, row: ListItem): void => {
 	let anchor = after;
-	forEachRowNode(row, (node) => {
+	forEachInRange(row.spanStart, row.tailMarker, (node) => {
 		anchor.after(node);
 		anchor = node;
 	});
@@ -233,12 +233,12 @@ const moveRowAfter = (after: ChildNode, row: ListItem): void => {
 };
 
 const removeRowNodes = (row: ListItem): void => {
-	forEachRowNode(row, (node) => node.remove());
+	forEachInRange(row.spanStart, row.tailMarker, (node) => node.remove());
 	row.tailMarker.remove();
 };
 
 const clearRowNodes = (row: ListItem): void => {
-	forEachRowNode(row, (node) => node.remove());
+	forEachInRange(row.spanStart, row.tailMarker, (node) => node.remove());
 };
 
 export const hydrateListItems = (

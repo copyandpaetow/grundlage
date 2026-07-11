@@ -1,24 +1,24 @@
 import { describe, expect, test } from "vitest";
-import { ListItem } from "../bindings/types";
-import { clearNodeRange, forEachRowNode } from "../range";
+import { forEachInRange } from "../range";
 
 const comment = (data: string): Comment => document.createComment(data);
 
-describe("clearNodeRange", () => {
-	test("removes every node strictly between the markers, leaving the markers", () => {
+describe("forEachInRange", () => {
+	test("visits every node from first up to but not including end", () => {
 		const parent = document.createElement("div");
 		const start = comment("start");
+		const p = document.createElement("p");
+		const text = document.createTextNode("x");
 		const end = comment("end");
-		parent.append(start, document.createElement("p"), document.createTextNode("x"), end);
+		parent.append(start, p, text, end);
 
-		clearNodeRange(start, end);
+		const visited: Array<Node> = [];
+		forEachInRange(start.nextSibling, end, (node) => visited.push(node));
 
-		expect(start.nextSibling).toBe(end);
-		expect(parent.contains(start)).toBe(true);
-		expect(parent.contains(end)).toBe(true);
+		expect(visited).toEqual([p, text]);
 	});
 
-	test("leaves nodes outside the range untouched", () => {
+	test("removal visitor clears the range, leaving the boundaries", () => {
 		const parent = document.createElement("div");
 		const before = document.createElement("header");
 		const start = comment("start");
@@ -26,52 +26,44 @@ describe("clearNodeRange", () => {
 		const after = document.createElement("footer");
 		parent.append(before, start, document.createElement("p"), end, after);
 
-		clearNodeRange(start, end);
+		forEachInRange(start.nextSibling, end, (node) => node.remove());
 
+		expect(start.nextSibling).toBe(end);
 		expect(parent.firstChild).toBe(before);
 		expect(parent.lastChild).toBe(after);
 	});
 
-	test("an empty range (adjacent markers) is a no-op", () => {
+	test("an empty range (first === end) is a no-op", () => {
 		const parent = document.createElement("div");
 		const start = comment("start");
 		const end = comment("end");
 		parent.append(start, end);
 
-		clearNodeRange(start, end);
+		const visited: Array<Node> = [];
+		forEachInRange(start.nextSibling, end, (node) => visited.push(node));
 
+		expect(visited).toEqual([]);
 		expect(start.nextSibling).toBe(end);
 	});
-});
 
-describe("forEachRowNode", () => {
-	test("visits nodes from spanStart up to but not including the tail marker", () => {
+	test("a null first is a no-op", () => {
+		const visited: Array<Node> = [];
+		forEachInRange(null, comment("end"), (node) => visited.push(node));
+
+		expect(visited).toEqual([]);
+	});
+
+	test("stops at the end of the sibling chain when end is never reached", () => {
 		const parent = document.createElement("div");
 		const first = document.createElement("span");
 		const second = document.createElement("b");
-		const tailMarker = comment("tail");
-		parent.append(first, second, tailMarker);
+		parent.append(first, second);
 
 		const visited: Array<Node> = [];
-		forEachRowNode(
-			{ spanStart: first, tailMarker } as unknown as ListItem,
-			(node) => visited.push(node),
+		forEachInRange(first, comment("detached-end"), (node) =>
+			visited.push(node),
 		);
 
 		expect(visited).toEqual([first, second]);
-	});
-
-	test("visits nothing when spanStart is the tail marker itself", () => {
-		const parent = document.createElement("div");
-		const tailMarker = comment("tail");
-		parent.append(tailMarker);
-
-		const visited: Array<Node> = [];
-		forEachRowNode(
-			{ spanStart: tailMarker, tailMarker } as unknown as ListItem,
-			(node) => visited.push(node),
-		);
-
-		expect(visited).toEqual([]);
 	});
 });

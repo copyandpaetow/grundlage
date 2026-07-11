@@ -8,7 +8,7 @@ import {
 	hydrateInstance,
 	reconcileInstance,
 } from "../instance";
-import { clearNodeRange } from "../range";
+import { forEachInRange } from "../range";
 import { hydrateListItems, patchListContent } from "./content-list";
 import {
 	BranchContentState,
@@ -46,7 +46,11 @@ const switchContentKind = (
 	liveBinding: ContentLiveBinding,
 	contentKind: number,
 ): void => {
-	clearNodeRange(liveBinding.startMarker, liveBinding.endMarker);
+	forEachInRange(
+		liveBinding.startMarker.nextSibling,
+		liveBinding.endMarker,
+		(node) => node.remove(),
+	);
 	liveBinding.content = freshContentState(contentKind);
 };
 
@@ -71,7 +75,11 @@ const patchBranch = (
 	const branch = liveBinding.content as BranchContentState;
 	const mounted = reconcileInstance(branch.instance, value);
 	if (mounted === null) return;
-	clearNodeRange(liveBinding.startMarker, liveBinding.endMarker);
+	forEachInRange(
+		liveBinding.startMarker.nextSibling,
+		liveBinding.endMarker,
+		(node) => node.remove(),
+	);
 	liveBinding.startMarker.after(mounted.fragment);
 	branch.instance = mounted.instance;
 };
@@ -103,7 +111,8 @@ export const seedContentByAdoption = (
 	liveBinding.content = freshContentState(kind);
 	switch (kind) {
 		case CONTENT_KIND.TEXT:
-			(liveBinding.content as TextContentState).lastValueHash = hashValue(value);
+			(liveBinding.content as TextContentState).lastValueHash =
+				hashValue(value);
 			return;
 		case CONTENT_KIND.BRANCH:
 			assertNestable(value as TemplateValue);
