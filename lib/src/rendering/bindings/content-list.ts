@@ -83,14 +83,15 @@ const groupRowsByContentHash = (
 	return groups;
 };
 
-const groupRowsByShapeOrKey = (rows: Array<ListItem>): RowsByHash => {
+const groupUnclaimedByShapeOrKey = (previous: RowsByHash): RowsByHash => {
 	const groups: RowsByHash = new Map();
-	for (let index = 0; index < rows.length; index++)
-		addRowToGroup(
-			groups,
-			shapeOrKeyHash(rows[index].instance.templateHash, rows[index].keyHash),
-			rows[index],
-		);
+	for (const group of previous.values())
+		for (let index = 0; index < group.length; index++)
+			addRowToGroup(
+				groups,
+				shapeOrKeyHash(group[index].instance.templateHash, group[index].keyHash),
+				group[index],
+			);
 	return groups;
 };
 
@@ -99,11 +100,10 @@ const claimLeftmostUnclaimedRow = (
 	hash: number,
 ): ListItem | undefined => groups.get(hash)?.shift();
 
-const unclaimedRows = (groups: RowsByHash): Array<ListItem> => {
-	const remaining: Array<ListItem> = [];
+const removeUnclaimedRows = (groups: RowsByHash): void => {
 	for (const group of groups.values())
-		for (let index = 0; index < group.length; index++) remaining.push(group[index]);
-	return remaining;
+		for (let index = 0; index < group.length; index++)
+			removeRowNodes(group[index]);
 };
 
 const reconcileRows = (
@@ -125,9 +125,7 @@ const reconcileRows = (
 			itemHashes[index],
 		);
 
-	const leftoverByShapeOrKey = groupRowsByShapeOrKey(
-		unclaimedRows(previousByContentHash),
-	);
+	const leftoverByShapeOrKey = groupUnclaimedByShapeOrKey(previousByContentHash);
 	for (let index = 0; index < count; index++) {
 		if (resolvedRows[index] !== undefined) continue;
 		const value = coerceToTemplate(values[index]);
@@ -142,8 +140,7 @@ const reconcileRows = (
 		resolvedRows[index] = reusableRow;
 	}
 
-	for (const removedRow of unclaimedRows(leftoverByShapeOrKey))
-		removeRowNodes(removedRow);
+	removeUnclaimedRows(leftoverByShapeOrKey);
 
 	list.items = placeRows(content, resolvedRows, values, itemHashes);
 };

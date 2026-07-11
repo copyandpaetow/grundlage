@@ -90,19 +90,24 @@ export const applyAttributeMap = (
 	element: Element,
 	applied: Map<string, AppliedAttribute>,
 	desired: Map<string, unknown>,
-): Map<string, AppliedAttribute> => {
+): void => {
 	for (const [name, prev] of applied)
-		if (!desired.has(name))
+		if (!desired.has(name)) {
 			applyDynamicAttribute(element, name, null, prev.value);
-	const next = new Map<string, AppliedAttribute>();
+			applied.delete(name);
+		}
 	for (const [name, newValue] of desired) {
-		const prev = applied.get(name);
 		const hash = hashValue(newValue);
-		if (prev === undefined || prev.hash !== hash)
-			applyDynamicAttribute(element, name, newValue, prev?.value);
-		next.set(name, { value: newValue, hash });
+		const prev = applied.get(name);
+		if (prev === undefined) {
+			applyDynamicAttribute(element, name, newValue);
+			applied.set(name, { value: newValue, hash });
+		} else if (prev.hash !== hash) {
+			applyDynamicAttribute(element, name, newValue, prev.value);
+			prev.value = newValue;
+			prev.hash = hash;
+		}
 	}
-	return next;
 };
 
 const snapshotAttributeMap = (
@@ -121,11 +126,10 @@ export const commitDynamic = (
 	const value = values[liveBinding.staticBinding.valueIndex];
 	if (!hasValueChanged(liveBinding, value)) return;
 	const element = targetElement(liveBinding);
-	const desired = normalizeToAttributeMap(value);
-	liveBinding.appliedAttributes = applyAttributeMap(
+	applyAttributeMap(
 		element,
 		liveBinding.appliedAttributes,
-		desired,
+		normalizeToAttributeMap(value),
 	);
 };
 
