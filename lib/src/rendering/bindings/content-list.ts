@@ -4,8 +4,19 @@ import { getParsedTemplate } from "../../parser/html";
 import { coerceToTemplate, TemplateValue } from "../../template";
 import { hashValue } from "../../utils/hashing";
 import { composeParts } from "../compose";
-import { combineOrderedHash, LIST_HASH_SEED, LIST_MARKER_DATA, NO_KEY } from "../constants";
-import { assertNestable, hydrateRow, Instance, mountInstance, reconcileInstance } from "../instance";
+import {
+	combineOrderedHash,
+	LIST_HASH_SEED,
+	LIST_MARKER_DATA,
+	NO_KEY,
+} from "../constants";
+import {
+	assertNestable,
+	hydrateRow,
+	Instance,
+	mountInstance,
+	reconcileInstance,
+} from "../instance";
 import { forEachRowNode } from "../range";
 import { ContentLiveBinding, ListContentState, ListItem } from "./types";
 

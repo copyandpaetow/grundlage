@@ -219,4 +219,38 @@ describe("raw content updates", () => {
 
 		cleanup(element);
 	});
+
+	test("nested template hole populates .content as markup, not light children", async () => {
+		const tag = uniqueTag();
+		let label = "first";
+
+		const MyElement = render(function* () {
+			yield () => html`<div><template><p>${label}</p></template></div>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const template =
+			element.shadowRoot!.querySelector<HTMLTemplateElement>("template")!;
+		// Markup must live in .content — the render/serialize surface — not in
+		// light children, which never render and never serialize.
+		expect(template.childNodes.length).toBe(0);
+		expect(normalizeWhitespace(template.content.querySelector("p")!.textContent))
+			.toBe("first");
+
+		// The template serializes from .content, so a round-trip must survive.
+		expect(template.outerHTML).toContain("<p>first</p>");
+
+		label = "second";
+		await element.update();
+		await sleep();
+
+		expect(normalizeWhitespace(template.content.querySelector("p")!.textContent))
+			.toBe("second");
+		expect(template.childNodes.length).toBe(0);
+
+		cleanup(element);
+	});
 });
