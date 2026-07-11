@@ -1,15 +1,15 @@
 import { hashValue } from "../../utils/hashing";
 import { isStringable } from "../../utils/guards";
 import { combinedPartsHash, composeParts } from "../compose";
-import { ATTR_MODE, combineOrderedHash } from "../constants";
+import { ATTRIBUTE_MODE, combineOrderedHash } from "../constants";
 import { nudgeComponent, targetElement } from "../dom";
 import { SingleValueAttributeLiveBinding } from "./types";
 
 export const attributeModeOf = (value: unknown): number => {
 	if (value === null || value === undefined || value === false)
-		return ATTR_MODE.ABSENT;
-	if (isStringable(value)) return ATTR_MODE.ATTRIBUTE;
-	return ATTR_MODE.PROPERTY;
+		return ATTRIBUTE_MODE.ABSENT;
+	if (isStringable(value)) return ATTRIBUTE_MODE.ATTRIBUTE;
+	return ATTRIBUTE_MODE.PROPERTY;
 };
 
 export const revertAttributeMode = (
@@ -17,17 +17,17 @@ export const revertAttributeMode = (
 	liveBinding: SingleValueAttributeLiveBinding,
 ): void => {
 	switch (liveBinding.appliedMode) {
-		case ATTR_MODE.ATTRIBUTE:
+		case ATTRIBUTE_MODE.ATTRIBUTE:
 			element.removeAttribute(liveBinding.lastComposedName);
 			break;
-		case ATTR_MODE.PROPERTY:
+		case ATTRIBUTE_MODE.PROPERTY:
 			delete (element as unknown as Record<string, unknown>)[
 				liveBinding.lastComposedName
 			];
 			nudgeComponent(element);
 			break;
 	}
-	liveBinding.appliedMode = ATTR_MODE.ABSENT;
+	liveBinding.appliedMode = ATTRIBUTE_MODE.ABSENT;
 };
 
 export const commitSingleValue = (
@@ -54,13 +54,13 @@ export const commitSingleValue = (
 	if (nextMode !== liveBinding.appliedMode)
 		revertAttributeMode(element, liveBinding);
 	switch (nextMode) {
-		case ATTR_MODE.ATTRIBUTE: {
+		case ATTRIBUTE_MODE.ATTRIBUTE: {
 			const stringValue = String(value);
 			if (element.getAttribute(name) !== stringValue)
 				element.setAttribute(name, stringValue);
 			break;
 		}
-		case ATTR_MODE.PROPERTY:
+		case ATTRIBUTE_MODE.PROPERTY:
 			(element as unknown as Record<string, unknown>)[name] = value;
 			nudgeComponent(element);
 			break;
@@ -82,7 +82,7 @@ export const seedOrCommitSingleValue = (
 		combinedPartsHash(nameParts, values),
 		hashValue(value),
 	);
-	if (mode === ATTR_MODE.PROPERTY) {
+	if (mode === ATTRIBUTE_MODE.PROPERTY) {
 		const element = targetElement(liveBinding);
 		(element as unknown as Record<string, unknown>)[name] = value;
 		nudgeComponent(element);
@@ -94,7 +94,7 @@ export const reapplyOnSwap = (
 	element: Element,
 	values: Array<unknown>,
 ): void => {
-	if (liveBinding.appliedMode !== ATTR_MODE.PROPERTY) return;
+	if (liveBinding.appliedMode !== ATTRIBUTE_MODE.PROPERTY) return;
 	const value = values[liveBinding.staticBinding.valueIndex];
 	(element as unknown as Record<string, unknown>)[liveBinding.lastComposedName] =
 		value;

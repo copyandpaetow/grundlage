@@ -2,7 +2,7 @@ import { BINDING } from "../../parser/constants";
 import { StaticBinding } from "../../parser/types";
 import { combinedPartsHash, composeParts } from "../compose";
 import {
-	ATTR_MODE,
+	ATTRIBUTE_MODE,
 	combineOrderedHash,
 	CONTENT_KIND,
 	UNSET_HASH,
@@ -70,7 +70,7 @@ export const createLiveBinding = (
 				hostElement,
 				valueHash: UNSET_HASH,
 				lastComposedName: "",
-				appliedMode: ATTR_MODE.ABSENT,
+				appliedMode: ATTRIBUTE_MODE.ABSENT,
 			};
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return {
@@ -128,10 +128,7 @@ export const commitLiveBinding = (
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return commitDynamic(liveBinding as DynamicAttributeLiveBinding, values);
 		case BINDING.NAMED_DYNAMIC:
-			return commitNamedDynamic(
-				liveBinding as NamedDynamicLiveBinding,
-				values,
-			);
+			return commitNamedDynamic(liveBinding as NamedDynamicLiveBinding, values);
 		case BINDING.CONTENT:
 			return commitContent(liveBinding as ContentLiveBinding, values);
 		case BINDING.RAW_CONTENT:
@@ -202,20 +199,25 @@ export const reapplyOnSwap = (
 	element: Element,
 	values: Array<unknown>,
 ): void => {
-	//todo: should be a switch statement
-	if (liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE)
-		reapplySingleValueOnSwap(
-			liveBinding as SingleValueAttributeLiveBinding,
-			element,
-			values,
-		);
-	else if (liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE)
-		reapplyDynamicOnSwap(
-			liveBinding as DynamicAttributeLiveBinding,
-			element,
-			values,
-		);
-	else reapplyNamedDynamicOnSwap(liveBinding as NamedDynamicLiveBinding, element);
+	switch (liveBinding.staticBinding.type) {
+		case BINDING.SINGLE_VALUE_ATTRIBUTE:
+			return reapplySingleValueOnSwap(
+				liveBinding as SingleValueAttributeLiveBinding,
+				element,
+				values,
+			);
+		case BINDING.DYNAMIC_ATTRIBUTE:
+			return reapplyDynamicOnSwap(
+				liveBinding as DynamicAttributeLiveBinding,
+				element,
+				values,
+			);
+		default:
+			return reapplyNamedDynamicOnSwap(
+				liveBinding as NamedDynamicLiveBinding,
+				element,
+			);
+	}
 };
 
 export const revertHostBinding = (liveBinding: LiveBinding): void => {

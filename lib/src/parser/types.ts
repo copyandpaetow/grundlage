@@ -3,7 +3,7 @@ import { ATTRIBUTE_SHAPE, BINDING, BINDING_TYPES } from "./constants";
 export type ValueOf<T> = T[keyof T];
 
 export type AttributeBinding = {
-	type: typeof BINDING_TYPES.ATTR;
+	type: typeof BINDING_TYPES.ATTRIBUTE;
 	shape: ValueOf<typeof ATTRIBUTE_SHAPE>;
 	values: Array<number | string>;
 	keys: Array<number | string>;

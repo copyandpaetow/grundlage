@@ -19,6 +19,7 @@ interface ServerHost extends Element {
 const SSR_ATTRIBUTE = "data-ssr";
 const KEY_ATTRIBUTE = "data-key";
 const UNKEYED_SELECTOR = `script[${SSR_ATTRIBUTE}]:not([${KEY_ATTRIBUTE}])`;
+const ANY_SSR_SELECTOR = `script[${SSR_ATTRIBUTE}]`;
 const ANGLE_BRACKET = /</g;
 
 const findReplayScript = (
@@ -71,6 +72,16 @@ export const load = <Value>(
 	}
 
 	return fetcher();
+};
+
+export const warnOnUnclaimedReplay = (shadowRoot: ShadowRoot): void => {
+	const leftover = shadowRoot.querySelectorAll(ANY_SSR_SELECTOR);
+	if (leftover.length === 0) return;
+	console.warn(
+		`grundlage: ${leftover.length} SSR load() payload(s) went unclaimed during hydration. ` +
+			"A conditional or reordered load() call can hand the wrong data to the wrong load() " +
+			"— pass a stable key to the affected load() calls to opt out of positional replay.",
+	);
 };
 
 export const flushHostPayload = (host: Element): void => {

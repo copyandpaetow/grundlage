@@ -1,6 +1,6 @@
 import { getParsedTemplate } from "../parser/html";
 import { ParsedTemplate } from "../parser/types";
-import { flushHostPayload } from "../load";
+import { flushHostPayload, warnOnUnclaimedReplay } from "../load";
 import { coerceToTemplate, TemplateValue } from "../template";
 import { BaseComponent } from "../types";
 import {
@@ -83,6 +83,7 @@ export const paint = (painter: Painter, value: unknown): void => {
 		if (painter.hydratePending) {
 			hydrateRoot(painter, templateValue, parsed);
 			painter.hydratePending = false;
+			warnOnUnclaimedReplay(painter.shadowRoot);
 		} else {
 			paintRoot(painter, templateValue, parsed);
 		}

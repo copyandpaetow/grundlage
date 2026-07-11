@@ -214,7 +214,7 @@ const createBinding = (parser: ParserState) => {
 		case STATE.ATTRIBUTE_KEY:
 		case STATE.ATTRIBUTE_VALUE:
 			return {
-				type: BINDING_TYPES.ATTR,
+				type: BINDING_TYPES.ATTRIBUTE,
 				shape: ATTRIBUTE_SHAPE.STATIC,
 				values: [],
 				keys: [],
@@ -450,7 +450,7 @@ const completeAttribute = (parser: ParserState) => {
 	} else if (parser.attributeKeyBuffer.length) {
 		if (parser.isRootTemplate) {
 			const staticBinding: AttributeBinding = {
-				type: BINDING_TYPES.ATTR,
+				type: BINDING_TYPES.ATTRIBUTE,
 				shape: ATTRIBUTE_SHAPE.STATIC,
 				keys: [],
 				values: [],
@@ -459,12 +459,15 @@ const completeAttribute = (parser: ParserState) => {
 			parser.bindings.push(staticBinding);
 			parser.hostBindingOffset++;
 		} else {
-			parser.elementBuffer.push(MARKUP.ATTR_SEPARATOR);
+			parser.elementBuffer.push(MARKUP.ATTRIBUTE_SEPARATOR);
 			moveArrayContents(parser.attributeKeyBuffer, parser.elementBuffer);
 			if (parser.attributeValueBuffer.length) {
-				parser.elementBuffer.push(MARKUP.ATTR_ASSIGN, MARKUP.ATTR_QUOTE);
+				parser.elementBuffer.push(
+					MARKUP.ATTRIBUTE_ASSIGN,
+					MARKUP.ATTRIBUTE_QUOTE,
+				);
 				moveArrayContents(parser.attributeValueBuffer, parser.elementBuffer);
-				parser.elementBuffer.push(MARKUP.ATTR_QUOTE);
+				parser.elementBuffer.push(MARKUP.ATTRIBUTE_QUOTE);
 			}
 		}
 	}
@@ -841,7 +844,7 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 				type: BINDING.TAG,
 				parts: binding.values.slice(),
 			};
-		case BINDING_TYPES.ATTR:
+		case BINDING_TYPES.ATTRIBUTE:
 			return toAttributeStaticBinding(binding);
 		case BINDING_TYPES.CONTENT:
 			return { type: BINDING.CONTENT, valueIndex: binding.values[0] as number };

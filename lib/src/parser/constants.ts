@@ -4,7 +4,7 @@ export const NO_KEY_BINDING = -1;
 
 export const BINDING_TYPES = {
 	TAG: 0,
-	ATTR: 1,
+	ATTRIBUTE: 1,
 	CONTENT: 2,
 	RAW_CONTENT: 3,
 	COMMENT: 4,

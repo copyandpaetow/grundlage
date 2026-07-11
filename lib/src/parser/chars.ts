@@ -5,9 +5,9 @@ export const MARKUP = {
 	COMMENT_OPEN: "<!--",
 	COMMENT_CLOSE: "-->",
 	EMPTY_COMMENT: "<!---->",
-	ATTR_SEPARATOR: " ",
-	ATTR_ASSIGN: "=",
-	ATTR_QUOTE: "'",
+	ATTRIBUTE_SEPARATOR: " ",
+	ATTRIBUTE_ASSIGN: "=",
+	ATTRIBUTE_QUOTE: "'",
 } as const;
 
 export const CHAR_CODE = {

@@ -63,7 +63,10 @@ describe("painter — DOM commit (B1/B2)", () => {
 		host.shadowRoot!.innerHTML = "<p>hi</p>";
 
 		const painter = createPainter(host, host.shadowRoot!, true);
-		paint(painter, html`<template class="${"client-class"}"><p>hi</p></template>`);
+		paint(
+			painter,
+			html`<template class="${"client-class"}"><p>hi</p></template>`,
+		);
 
 		expect(host.getAttribute("class")).toBe("client-class");
 	});
@@ -80,6 +83,23 @@ describe("painter — DOM commit (B1/B2)", () => {
 
 		expect(setSpy).not.toHaveBeenCalled();
 		expect(host.getAttribute("class")).toBe("same");
+	});
+
+	test("hydrate warns when an SSR load() payload goes unclaimed", () => {
+		const host = makeHost();
+		host.shadowRoot!.innerHTML = "<p>hi</p>";
+		const script = document.createElement("script");
+		script.setAttribute("type", "application/json");
+		script.setAttribute("data-ssr", "");
+		script.textContent = JSON.stringify("orphaned");
+		host.shadowRoot!.append(script);
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const painter = createPainter(host, host.shadowRoot!, true);
+		paint(painter, html`<p>hi</p>`);
+
+		expect(warnSpy).toHaveBeenCalledTimes(1);
+		warnSpy.mockRestore();
 	});
 
 	test("teardownPainter disconnects the observer", () => {

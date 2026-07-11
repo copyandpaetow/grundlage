@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { flushHostPayload, load } from "../load";
+import { flushHostPayload, load, warnOnUnclaimedReplay } from "../load";
 
 //happy-dom env — `window` is defined here, so load takes the client path
 //these tests cover the DOM-as-queue behavior plus the round-trip via flushHostPayload
@@ -103,6 +103,49 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		const value = await load(host, fetcher, { skipSsr: true });
 		expect(value).toBe("forced");
 		expect(host.shadowRoot!.querySelector("script[data-ssr]")).not.toBeNull();
+	});
+});
+
+describe("warnOnUnclaimedReplay flags drift between server and client load() calls", () => {
+	test("warns with a count when unclaimed data-ssr scripts remain after hydration", async () => {
+		const host = createHostWithShadow();
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const first = document.createElement("script");
+		first.setAttribute("type", "application/json");
+		first.setAttribute("data-ssr", "");
+		first.textContent = JSON.stringify("posts");
+		const second = document.createElement("script");
+		second.setAttribute("type", "application/json");
+		second.setAttribute("data-ssr", "");
+		second.setAttribute("data-key", "user");
+		second.textContent = JSON.stringify("user");
+		host.shadowRoot!.append(first, second);
+
+		//simulates a conditional load() call that never ran on the client this time
+		await load(host, () => Promise.resolve("fallback"));
+
+		warnOnUnclaimedReplay(host.shadowRoot!);
+
+		expect(warnSpy).toHaveBeenCalledTimes(1);
+		expect(warnSpy.mock.calls[0][0]).toContain("1 SSR load()");
+		warnSpy.mockRestore();
+	});
+
+	test("does not warn once every replayed script has been claimed", async () => {
+		const host = createHostWithShadow();
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const script = document.createElement("script");
+		script.setAttribute("type", "application/json");
+		script.setAttribute("data-ssr", "");
+		script.textContent = JSON.stringify("posts");
+		host.shadowRoot!.append(script);
+
+		await load(host, () => Promise.resolve("fallback"));
+
+		warnOnUnclaimedReplay(host.shadowRoot!);
+
+		expect(warnSpy).not.toHaveBeenCalled();
+		warnSpy.mockRestore();
 	});
 });
 
