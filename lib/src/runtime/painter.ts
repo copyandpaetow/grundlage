@@ -102,6 +102,16 @@ export const serverPaint = (painter: Painter, value: unknown): void => {
 	flushHostPayload(painter.host);
 };
 
+export const setupAttributeObserver = (
+	painter: Painter,
+	onChange: () => void,
+): void => {
+	painter.attributeObserver?.disconnect();
+	const observer = new MutationObserver(onChange);
+	observer.observe(painter.host, { attributes: true });
+	painter.attributeObserver = observer;
+};
+
 export const teardownPainter = (painter: Painter): void => {
 	painter.attributeObserver?.disconnect();
 };

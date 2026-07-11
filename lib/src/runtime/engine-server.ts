@@ -2,10 +2,10 @@ import { RenderFunction } from "../types";
 import { TemplateValue } from "../template";
 import { serverPaint } from "./painter";
 import {
+	cancelBothTasks,
 	cancelEngineAndNotifyHost,
 	cancelTaskAndRunCleanup,
 	createCleanStepOutcome,
-	createRenderTask,
 	Engine,
 	MODE,
 	nextTaskStep,
@@ -13,6 +13,7 @@ import {
 	SteppedTask,
 } from "./engine";
 import {
+	createRenderTask,
 	createStepOutcome,
 	nextOperation,
 	OPERATION,
@@ -60,7 +61,7 @@ const runServerTask = (
 					break;
 				}
 				serverPaint(engine.painter, template);
-				return finishServerRenderAndCancel(engine);
+				return cancelBothTasks(engine);
 			}
 
 			case OPERATION.INSTALL:
@@ -96,7 +97,7 @@ const runServerTask = (
 			}
 
 			case OPERATION.COMPLETED:
-				return finishServerRenderAndCancel(engine);
+				return cancelBothTasks(engine);
 
 			case OPERATION.FAIL:
 				return cancelEngineAndNotifyHost(engine, operation.payload);
@@ -105,10 +106,4 @@ const runServerTask = (
 				return;
 		}
 	}
-};
-
-const finishServerRenderAndCancel = (engine: Engine): void => {
-	cancelTaskAndRunCleanup(engine.inner);
-	cancelTaskAndRunCleanup(engine.outer);
-	engine.inner = engine.outer = engine.renderer = null;
 };

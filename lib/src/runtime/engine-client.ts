@@ -3,10 +3,10 @@ import { ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/guards";
 import { paint, teardownPainter } from "./painter";
 import {
+	cancelBothTasks,
 	cancelEngineAndNotifyHost,
 	cancelTaskAndRunCleanup,
 	createCleanStepOutcome,
-	createRenderTask,
 	Engine,
 	isTaskLive,
 	MODE,
@@ -16,6 +16,7 @@ import {
 	SteppedTask,
 } from "./engine";
 import {
+	createRenderTask,
 	createStepOutcome,
 	nextOperation,
 	OPERATION,
@@ -156,10 +157,7 @@ export const startEngine = (engine: Engine): void => {
 };
 
 export const stopEngine = (engine: Engine): void => {
-	const { inner, outer } = engine;
-	engine.inner = engine.outer = engine.renderer = null;
-	cancelTaskAndRunCleanup(inner);
-	cancelTaskAndRunCleanup(outer);
+	cancelBothTasks(engine);
 	teardownPainter(engine.painter);
 	resolvePendingUpdatePromise(engine);
 };

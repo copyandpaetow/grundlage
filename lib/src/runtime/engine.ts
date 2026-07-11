@@ -1,14 +1,7 @@
 import { ValueOf } from "../parser/types";
 import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
 import { Painter, teardownPainter } from "./painter";
-import {
-	createStepOutcome,
-	ROLE,
-	STEP_OUTCOME,
-	StepOutcome,
-	Task,
-	TASK_STATE,
-} from "./task";
+import { createRenderTask, createStepOutcome, ROLE, STEP_OUTCOME, StepOutcome, Task } from "./task";
 
 export interface Engine {
 	readonly host: BaseComponent;
@@ -40,16 +33,6 @@ export const MODE = { SEND: 0, THROW: 1 } as const;
 
 export type SteppedTask = StepOutcome | Promise<IteratorResult<unknown>>;
 
-export const createRenderTask = (
-	role: ValueOf<typeof ROLE>,
-	generator: Generator | AsyncGenerator,
-): Task => ({
-	generator,
-	role,
-	state: TASK_STATE.DRIVING,
-	cleanup: null,
-});
-
 export const isTaskLive = (engine: Engine, task: Task): boolean =>
 	(task.role === ROLE.INNER ? engine.inner : engine.outer) === task;
 
@@ -78,6 +61,13 @@ export const cancelTaskAndRunCleanup = (task: Task | null): void => {
 		task.cleanup = null;
 		cleanup();
 	}
+};
+
+export const cancelBothTasks = (engine: Engine): void => {
+	const { inner, outer } = engine;
+	engine.inner = engine.outer = engine.renderer = null;
+	cancelTaskAndRunCleanup(inner);
+	cancelTaskAndRunCleanup(outer);
 };
 
 export const createCleanStepOutcome = (
@@ -116,10 +106,7 @@ export const cancelEngineAndNotifyHost = (
 	engine: Engine,
 	error: unknown,
 ): void => {
-	const { inner, outer } = engine;
-	engine.inner = engine.outer = engine.renderer = null;
-	cancelTaskAndRunCleanup(inner);
-	cancelTaskAndRunCleanup(outer);
+	cancelBothTasks(engine);
 	//release the attribute observer here: disconnect() nulls engine.outer, so the
 	//disconnectedCallback guard would otherwise skip stopEngine and leak it forever
 	teardownPainter(engine.painter);

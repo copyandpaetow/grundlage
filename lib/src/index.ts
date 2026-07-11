@@ -8,7 +8,7 @@ import {
 	Template,
 } from "./types";
 import { isServer } from "./utils/guards";
-import { createPainter } from "./runtime/painter";
+import { createPainter, setupAttributeObserver } from "./runtime/painter";
 import { createEngine, Engine } from "./runtime/engine";
 import {
 	hasRenderer,
@@ -71,7 +71,7 @@ export const render = (
 				componentGenerator,
 			);
 			if (isServer()) return startServerEngine(this.#engine);
-			this.#watchAttributes();
+			setupAttributeObserver(this.#engine.painter, () => this.update());
 			startEngine(this.#engine);
 		}
 
@@ -86,14 +86,6 @@ export const render = (
 		setProperty(name: string, value: unknown, oldValue?: unknown) {
 			applyDynamicAttribute(this, name, value, oldValue);
 			this.update();
-		}
-
-		#watchAttributes() {
-			const painter = this.#engine!.painter;
-			painter.attributeObserver?.disconnect();
-			const observer = new MutationObserver(() => this.update());
-			observer.observe(this, { attributes: true });
-			painter.attributeObserver = observer;
 		}
 
 		update(): Promise<void> {

@@ -41,6 +41,16 @@ export interface Task {
 	cleanup: VoidFunction | null;
 }
 
+export const createRenderTask = (
+	role: ValueOf<typeof ROLE>,
+	generator: Generator | AsyncGenerator,
+): Task => ({
+	generator,
+	role,
+	state: TASK_STATE.DRIVING,
+	cleanup: null,
+});
+
 export type Operation =
 	| { kind: typeof OPERATION.PAINT; payload: TemplateValue }
 	| { kind: typeof OPERATION.PAINT_FROM; payload: RenderFunction }
