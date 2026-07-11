@@ -1,5 +1,9 @@
 import { hashValue } from "../../utils/hashing";
-import { assertPrimitiveString, isPlainObject, isStringable } from "../../utils/guards";
+import {
+	assertPrimitiveString,
+	isPlainObject,
+	isStringable,
+} from "../../utils/guards";
 import { hasValueChanged } from "../compose";
 import { nudgeComponent, targetElement } from "../dom";
 import { AppliedAttribute, DynamicAttributeLiveBinding } from "./types";
@@ -101,7 +105,7 @@ export const applyAttributeMap = (
 	return next;
 };
 
-export const snapshotAttributeMap = (
+const snapshotAttributeMap = (
 	desired: Map<string, unknown>,
 ): Map<string, AppliedAttribute> => {
 	const applied = new Map<string, AppliedAttribute>();

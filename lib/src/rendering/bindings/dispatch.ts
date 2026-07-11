@@ -11,10 +11,12 @@ import { commitAttribute } from "./attribute";
 import {
 	applyDynamicAttribute,
 	commitDynamic,
+	reapplyOnSwap as reapplyDynamicOnSwap,
 	seedDynamic,
 } from "./attribute-dynamic";
 import {
 	commitSingleValue,
+	reapplyOnSwap as reapplySingleValueOnSwap,
 	revertAttributeMode,
 	seedOrCommitSingleValue,
 } from "./attribute-single-value";
@@ -160,7 +162,7 @@ export const seedLiveBinding = (
 	}
 };
 
-export const computeGateHash = (
+const computeGateHash = (
 	liveBinding: LiveBinding,
 	values: Array<unknown>,
 ): number => {
@@ -178,6 +180,20 @@ export const computeGateHash = (
 		default:
 			return UNSET_HASH;
 	}
+};
+
+export const reapplyOnSwap = (
+	liveBinding: SingleValueAttributeLiveBinding | DynamicAttributeLiveBinding,
+	element: Element,
+	values: Array<unknown>,
+): void => {
+	if (liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE)
+		reapplySingleValueOnSwap(
+			liveBinding as SingleValueAttributeLiveBinding,
+			element,
+			values,
+		);
+	else reapplyDynamicOnSwap(liveBinding as DynamicAttributeLiveBinding, element, values);
 };
 
 export const revertHostBinding = (liveBinding: LiveBinding): void => {

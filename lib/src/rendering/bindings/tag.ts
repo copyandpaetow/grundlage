@@ -1,8 +1,7 @@
 import { BINDING } from "../../parser/constants";
 import { combinedPartsHash, composeParts } from "../compose";
 import { targetElement } from "../dom";
-import { reapplyOnSwap as reapplyDynamicOnSwap } from "./attribute-dynamic";
-import { reapplyOnSwap as reapplySingleValueOnSwap } from "./attribute-single-value";
+import { reapplyOnSwap } from "./dispatch";
 import {
 	DynamicAttributeLiveBinding,
 	LiveBinding,
@@ -10,32 +9,13 @@ import {
 	TagLiveBinding,
 } from "./types";
 
-export const carriesProperty = (
+const carriesProperty = (
 	liveBinding: LiveBinding,
 ): liveBinding is
 	| SingleValueAttributeLiveBinding
 	| DynamicAttributeLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE ||
 	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
-
-const reapplyCarried = (
-	liveBinding: SingleValueAttributeLiveBinding | DynamicAttributeLiveBinding,
-	element: Element,
-	values: Array<unknown>,
-): void => {
-	if (liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE)
-		reapplySingleValueOnSwap(
-			liveBinding as SingleValueAttributeLiveBinding,
-			element,
-			values,
-		);
-	else
-		reapplyDynamicOnSwap(
-			liveBinding as DynamicAttributeLiveBinding,
-			element,
-			values,
-		);
-};
 
 const swapElement = (
 	element: Element,
@@ -71,7 +51,7 @@ const swapElement = (
 	focusElement?.focus();
 
 	for (let index = 0; index < carried.length; index++)
-		reapplyCarried(carried[index], newElement, values);
+		reapplyOnSwap(carried[index], newElement, values);
 };
 
 export const commitTag = (

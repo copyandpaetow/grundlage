@@ -17,14 +17,14 @@ import {
 	TextContentState,
 } from "./types";
 
-export const contentKindOf = (value: unknown): number =>
+const contentKindOf = (value: unknown): number =>
 	isTemplate(value)
 		? CONTENT_KIND.BRANCH
 		: Array.isArray(value)
 			? CONTENT_KIND.LIST
 			: CONTENT_KIND.TEXT;
 
-export const freshContentState = (contentKind: number): ContentState => {
+const freshContentState = (contentKind: number): ContentState => {
 	switch (contentKind) {
 		case CONTENT_KIND.TEXT:
 			return { kind: CONTENT_KIND.TEXT, lastValueHash: UNSET_HASH };

@@ -7,9 +7,13 @@ import {
 	seedLiveBinding,
 } from "./bindings/dispatch";
 import { LiveBinding } from "./bindings/types";
-import { LIST_MARKER_DATA } from "./constants";
 import { buildFragment } from "./dom";
-import { closeOf, isOpenMarker } from "./range";
+import {
+	isOpenMarker,
+	nextListTail,
+	nextOpenMarker,
+	scanToClose,
+} from "./range";
 
 export interface Instance {
 	templateHash: number;
@@ -89,34 +93,6 @@ export const mountInstance = (
 	};
 };
 
-const rootOf = (node: Node): Node => node.getRootNode();
-
-const scanToClose = (walker: TreeWalker, open: Comment): Comment => {
-	const openData = open.data;
-	const closeData = closeOf(openData);
-	let depth = 1;
-	let node: Comment | null;
-	while ((node = walker.nextNode() as Comment | null)) {
-		if (node.data === openData) depth++;
-		else if (node.data === closeData && --depth === 0) return node;
-	}
-	throw new Error("unterminated content marker");
-};
-
-const nextOpenMarker = (walker: TreeWalker): Comment => {
-	let node: Comment | null;
-	while ((node = walker.nextNode() as Comment | null))
-		if (isOpenMarker(node.data)) return node;
-	throw new Error("hydration marker mismatch: fewer markers than bindings");
-};
-
-const nextListTail = (walker: TreeWalker): Comment => {
-	let node: Comment | null;
-	while ((node = walker.nextNode() as Comment | null))
-		if (node.data === LIST_MARKER_DATA) return node;
-	throw new Error("unterminated list row");
-};
-
 const seedInstance = (walker: TreeWalker, value: TemplateValue): Instance => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	const { bindings, hostBindingCount } = parsed;
@@ -145,7 +121,7 @@ const seedInstance = (walker: TreeWalker, value: TemplateValue): Instance => {
 
 const walkerFrom = (rangeStart: Node): TreeWalker => {
 	const walker = document.createTreeWalker(
-		rootOf(rangeStart),
+		rangeStart.getRootNode(),
 		NodeFilter.SHOW_COMMENT,
 	);
 	walker.currentNode = rangeStart;
