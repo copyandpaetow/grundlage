@@ -1,21 +1,10 @@
 import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
 import { html as htmlValue } from "./template";
-import {
-	BaseComponent,
-	ComponentConstructor,
-	ComponentGenerator,
-	ComponentOptions,
-	Template,
-} from "./types";
+import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions, Template } from "./types";
 import { isServer } from "./utils/guards";
 import { createPainter, setupAttributeObserver } from "./runtime/painter";
 import { createEngine, Engine } from "./runtime/engine";
-import {
-	hasRenderer,
-	scheduleNextUpdate,
-	startEngine,
-	stopEngine,
-} from "./runtime/engine-client";
+import { hasRenderer, scheduleNextUpdate, startEngine, stopEngine } from "./runtime/engine-client";
 import { startServerEngine } from "./runtime/engine-server";
 import { FormBase } from "./forms";
 
@@ -52,14 +41,20 @@ export const render = (
 		#engine: Engine | null = null;
 		#hydratePending: boolean;
 		#shadowRoot: ShadowRoot;
+		#internals: ElementInternals | null = null;
+
+		get internals(): ElementInternals | null {
+			return (this.#internals ??= this.attachInternals?.() ?? null);
+		}
 
 		constructor() {
 			super();
-			const prerendered = this.shadowRoot !== null;
-			this.#shadowRoot = prerendered
-				? this.shadowRoot!
-				: this.attachShadow(mergedOptions);
-			this.#hydratePending = prerendered;
+			const existingRoot =
+				this.shadowRoot ??
+				(mergedOptions.mode === "closed" ? this.internals?.shadowRoot : null) ??
+				null;
+			this.#hydratePending = existingRoot !== null;
+			this.#shadowRoot = existingRoot ?? this.attachShadow(mergedOptions);
 		}
 
 		connectedCallback() {

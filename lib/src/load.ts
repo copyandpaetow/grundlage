@@ -1,4 +1,9 @@
 import { isServer } from "./utils/guards";
+import { BaseComponent } from "./types";
+
+// A closed shadow root is absent from host.shadowRoot; internals is its only handle.
+const resolveShadowRoot = (host: Element): ShadowRoot | null =>
+	host.shadowRoot ?? (host as BaseComponent).internals?.shadowRoot ?? null;
 
 export interface LoadOptions {
 	key?: string;
@@ -62,8 +67,9 @@ export const load = <Value>(
 		return collectOnServer(host as ServerHost, fetcher, key);
 	}
 
-	if (!skipSsr && host.shadowRoot !== null) {
-		const script = findReplayScript(host.shadowRoot, key);
+	const shadowRoot = resolveShadowRoot(host);
+	if (!skipSsr && shadowRoot !== null) {
+		const script = findReplayScript(shadowRoot, key);
 		if (script !== null) {
 			const value = JSON.parse(script.textContent || "null") as Value;
 			script.remove();
@@ -92,7 +98,7 @@ export const flushHostPayload = (host: Element): void => {
 	if (collected.length === 0) return;
 
 	const ownerDocument = host.ownerDocument;
-	const shadowRoot = host.shadowRoot;
+	const shadowRoot = resolveShadowRoot(host);
 	if (ownerDocument == null || shadowRoot == null) return;
 
 	for (let index = 0; index < collected.length; index++) {

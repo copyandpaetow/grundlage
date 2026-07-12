@@ -8,9 +8,6 @@ export const FORM_EVENTS = {
 export class FormBase extends HTMLElement {
 	static formAssociated = true;
 
-	internals: ElementInternals | null =
-		typeof this.attachInternals === "function" ? this.attachInternals() : null;
-
 	formAssociatedCallback(form: HTMLFormElement | null) {
 		this.dispatchEvent(
 			new CustomEvent(FORM_EVENTS.associated, { detail: { form } }),

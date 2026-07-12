@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { FORM_EVENTS, FormBase } from "../forms";
-import { html, render } from "../index";
+import { html, render, type BaseComponent } from "../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -37,13 +37,18 @@ describe("FormBase - static surface", () => {
 		]);
 	});
 
-	test("attachInternals guard never throws and leaves internals null-or-object", () => {
-		// happy-dom has no attachInternals, so the guard must keep construction
+	test("the internals getter's attachInternals guard never throws and yields null-or-object", () => {
+		// happy-dom has no attachInternals, so the lazy getter must keep the read
 		// alive on the server. internals is null here; a live browser fills it in.
-		const field = makeField();
-		expect(
-			field.internals === null || typeof field.internals === "object",
-		).toBe(true);
+		const tag = uniqueTag("guarded-field");
+		customElements.define(
+			tag,
+			render(function* () {}, { mode: "open", formAssociated: true }),
+		);
+		const el = document.createElement(tag) as BaseComponent;
+		expect(el.internals === null || typeof el.internals === "object").toBe(
+			true,
+		);
 	});
 });
 
