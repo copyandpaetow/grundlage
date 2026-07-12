@@ -1,4 +1,4 @@
-import { html, render } from "../../../../lib/src";
+import { html, component } from "../../../../lib/src";
 import { GROUND_HALF_UNITS, GROUND_SIZE, UNIT_SIZE } from "../scene-shared";
 
 // <scene-ground> — the placement floor. A flat, world-axis-aligned grid sheet on Y=0
@@ -14,7 +14,7 @@ import { GROUND_HALF_UNITS, GROUND_SIZE, UNIT_SIZE } from "../scene-shared";
 
 customElements.define(
 	"scene-ground",
-	render(function* (element) {
+	component(function* (element) {
 		// Map the local hit on the flat sheet to a world point, in grid units, and hand
 		// it out. We emit the raw (unsnapped) point: snapping to the authoring lattice is
 		// the editor's policy, not the floor's.

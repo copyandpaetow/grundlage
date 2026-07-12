@@ -16,14 +16,14 @@ npm install grundlage
 
 Components are defined using generator functions. This gives you explicit control over the component lifecycle: setup runs until you yield a render function, the host element is passed in as the first argument, and the return value is your cleanup.
 
-`render(generator, options?)` returns a custom element constructor — register it with `customElements.define`.
+`component(generator, options?)` returns a custom element constructor — register it with `customElements.define`.
 
 ```javascript
-import { render, html } from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
 	"async-component",
-	render(async function* (host) {
+	component(async function* (host) {
 		yield html`<p>loading</p>`;
 
 		try {
@@ -43,7 +43,7 @@ customElements.define(
 Each `yield` evaluates to the host element, so inner generators or render functions can capture it without closing over the outer parameter:
 
 ```javascript
-render(function* () {
+component(function* () {
 	const host = yield () => html`<p>hello</p>`;
 	host.addEventListener("click", () => host.update());
 });
@@ -52,7 +52,7 @@ render(function* () {
 Yielded inner generators and render functions also receive the host element as their first argument — handy for nested rendering without re-capturing scope.
 
 ```javascript
-render(function* (host) {
+component(function* (host) {
 	yield function* (innerHost) {
 		// innerHost === host
 		yield html`<p>nested</p>`;
@@ -80,7 +80,7 @@ They will be used for typing and validating the input regardless of attribute or
 If the value is missing, a fallback can be provided.
 
 ```javascript
-render(function* (host) {
+component(function* (host) {
 	const result = props(host, {
 		label: String,
 		count: Number,
@@ -108,7 +108,7 @@ Supported bindings:
 When the outermost element of a component's render output is a `<template>`, its attributes are applied to the host element itself and the wrapper is unwrapped — its children become the shadow DOM. This is how a component sets its own `class`, `id`, `role`, or event handlers from the inside.
 
 ```javascript
-render(function* (host) {
+component(function* (host) {
 	yield () => html`
 		<template class="card" role="${role}" on-form-reset=${reset}>
 			<p>content</p>
@@ -135,7 +135,7 @@ This means:
 - DOM updates only happen for expressions that changed
 
 ```javascript
-render(function* (host) {
+component(function* (host) {
 	const items = [];
 
 	const add = (text) => {
@@ -156,7 +156,7 @@ render(function* (host) {
 `load(host, fetcher, options?)` fetches what a component needs before its first render. During SSR the fetcher runs and its result is serialized into the markup; on the client that result is replayed once during hydration, then the fetcher runs as normal. A string in place of options is shorthand for `{ key }`.
 
 ```javascript
-render(async function* (host) {
+component(async function* (host) {
 	const user = await load(host, () => fetch("/api/user").then((r) => r.json()));
 	yield html`<p>${user.name}</p>`;
 });
@@ -171,7 +171,7 @@ Pass `{ formAssociated: true }` so the component participates in forms. The host
 ```javascript
 customElements.define(
 	"text-field",
-	render(
+	component(
 		function* (host) {
 			host.internals.setFormValue("");
 			host.addEventListener("form-reset", () =>

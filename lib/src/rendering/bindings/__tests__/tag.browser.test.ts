@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../../index";
+import { html, component } from "../../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -22,7 +22,7 @@ describe("tag updates", () => {
 		const tag = uniqueTag();
 		let tagName = "div";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`
                 <${tagName}>hello</${tagName}>`;
 		});
@@ -42,7 +42,7 @@ describe("tag updates", () => {
 		const tag = uniqueTag();
 		let tagName = "div";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`
                 <${tagName}>content</${tagName}>`;
 		});
@@ -69,7 +69,7 @@ describe("tag updates", () => {
 		const tag = uniqueTag();
 		let tagName = "div";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`
                 <${tagName} class="box" id="main">text</${tagName}>`;
 		});
@@ -98,7 +98,7 @@ describe("tag updates", () => {
 		const tag = uniqueTag();
 		let tagName = "div";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`
                     <${tagName}><span>child1</span><span>child2</span></${tagName}>`;
@@ -129,7 +129,7 @@ describe("tag updates", () => {
 		const clicks: string[] = [];
 		const handler = () => clicks.push("clicked");
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`
                     <${tagName} onclick="${handler}">click me</${tagName}>`;
@@ -160,7 +160,7 @@ describe("tag updates", () => {
 			const tag = uniqueTag();
 			let tagName = "div";
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () =>
 					html`
                     <${tagName}><input type="text"/></${tagName}>`;
@@ -190,7 +190,7 @@ describe("tag updates", () => {
 		const tag = uniqueTag();
 		const tagName = "div";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`
                 <${tagName}>stable</${tagName}>`;
 		});
@@ -216,7 +216,7 @@ describe("tag updates", () => {
 		let tagName = "div";
 		let label = "first";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`
                 <${tagName} data-label="${label}">content</${tagName}>`;
 		});
@@ -248,7 +248,7 @@ describe("tag updates", () => {
 		let tagName = "div";
 		let text = "before";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`
                 <${tagName}>${text}</${tagName}>`;
 		});
@@ -281,7 +281,7 @@ describe("tag updates", () => {
 		const clicks: string[] = [];
 		let handler = () => clicks.push("first");
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`
                     <${tagName} onclick="${handler}">click me</${tagName}>`;
@@ -313,9 +313,8 @@ describe("tag updates", () => {
 		const clicks: string[] = [];
 		const handler = () => clicks.push("hit"); //same reference before and after the swap
 
-		const MyElement = render(function* () {
-			yield () =>
-				html`<${tagName} onclick="${handler}">click me</${tagName}>`;
+		const MyElement = component(function* () {
+			yield () => html`<${tagName} onclick="${handler}">click me</${tagName}>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -341,7 +340,7 @@ describe("tag updates", () => {
 		const tag = uniqueTag();
 		const handler = () => {};
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button onclick="${handler}">click me</button>`;
 		});
 
@@ -376,7 +375,7 @@ describe("tag updates", () => {
 		const tag = uniqueTag();
 		let tagName = "h1";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`
                 <${tagName}>heading</${tagName}>`;
 		});

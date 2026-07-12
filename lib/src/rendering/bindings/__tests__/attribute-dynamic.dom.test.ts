@@ -565,7 +565,9 @@ describe("applyDynamicAttribute - stringable to non-stringable transition", () =
 
 describe("normalizeToAttributeMap - scalar bare value", () => {
 	test("a non-empty string is a single boolean attribute name", () => {
-		expect([...normalizeToAttributeMap("disabled")]).toEqual([["disabled", ""]]);
+		expect([...normalizeToAttributeMap("disabled")]).toEqual([
+			["disabled", ""],
+		]);
 	});
 
 	test("an empty string yields no attribute — the conditional-boolean idiom", () => {

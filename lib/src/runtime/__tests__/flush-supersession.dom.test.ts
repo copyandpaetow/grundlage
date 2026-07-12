@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../index";
+import { html, component } from "../../index";
 
 /*
 spec for the flush scheduler's supersession semantic. an update() that arrives while a previous render
@@ -36,7 +36,7 @@ describe("flush supersession", () => {
 		const tailRan: string[] = [];
 
 		const element = mount(
-			render(function* () {
+			component(function* () {
 				yield function* current() {
 					const snapshot = value;
 					yield () => html`<p>${snapshot}</p>`;
@@ -83,7 +83,7 @@ describe("flush supersession", () => {
 		let value = "A";
 
 		const element = mount(
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					//inner / current renderer
 					yield () => html`<p>${value}</p>`;
@@ -119,7 +119,7 @@ describe("flush supersession", () => {
 		const gate = Promise.withResolvers<void>();
 
 		const element = mount(
-			render(function* () {
+			component(function* () {
 				yield function* current() {
 					const willSuspend = suspend;
 					yield () => html`<p>body</p>`;
@@ -153,7 +153,7 @@ describe("flush supersession", () => {
 		let cleanupRan = false;
 
 		const element = mount(
-			render(function* () {
+			component(function* () {
 				yield () => {
 					renders++;
 					return html`<p>live</p>`;

@@ -1,8 +1,8 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 customElements.define(
 	"generator-nesting",
-	render(function* (host) {
+	component(function* (host) {
 		let items = [1, 2, 3];
 
 		const shuffle = () => {

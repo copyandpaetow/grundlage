@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 import {
 	type Baseline,
 	clearBaseline,
@@ -92,7 +92,7 @@ const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline";
 
 customElements.define(
 	"krausest-bench",
-	render(function* (element) {
+	component(function* (element) {
 		let rows: Array<Row> = [];
 		let selectedIdentifier: number | null = null;
 		let nextIdentifier = 1;

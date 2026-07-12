@@ -21,12 +21,12 @@ let definedPromise: Promise<void> | null = null;
 const ensureDefined = (): Promise<void> => {
 	if (definedPromise) return definedPromise;
 	definedPromise = (async () => {
-		const { html, render } = await import("../lib/src");
+		const { html, component } = await import("../lib/src");
 		const { load } = await import("../lib/src/load");
 
 		customElements.define(
 			TAGS.loadSingle,
-			render(async function* (host) {
+			component(async function* (host) {
 				const value = await load(host, () => Promise.resolve({ name: "Ada" }));
 				yield () => html`<p>${value.name}</p>`;
 			}),
@@ -34,7 +34,7 @@ const ensureDefined = (): Promise<void> => {
 
 		customElements.define(
 			TAGS.loadShared,
-			render(async function* (host) {
+			component(async function* (host) {
 				const id = host.getAttribute("data-id") ?? "?";
 				//per-host serialization — each instance gets its own data-ssr script in its shadow root
 				const value = await load(host, () => Promise.resolve(`payload-${id}`));
@@ -44,7 +44,7 @@ const ensureDefined = (): Promise<void> => {
 
 		customElements.define(
 			TAGS.simple,
-			render(function* () {
+			component(function* () {
 				yield () => html`<p>simple-first</p>`;
 				yield () => html`<p>simple-second</p>`;
 			}),
@@ -52,7 +52,7 @@ const ensureDefined = (): Promise<void> => {
 
 		customElements.define(
 			TAGS.withAttrs,
-			render(function* (host) {
+			component(function* (host) {
 				yield () =>
 					html`<p>label=${host.getAttribute("data-label") ?? "none"}</p>`;
 			}),
@@ -60,7 +60,7 @@ const ensureDefined = (): Promise<void> => {
 
 		customElements.define(
 			TAGS.asyncPreYield,
-			render(function* () {
+			component(function* () {
 				const value = yield Promise.resolve("resolved-value");
 				yield () => html`<p>${value as string}</p>`;
 			}),
@@ -68,35 +68,35 @@ const ensureDefined = (): Promise<void> => {
 
 		customElements.define(
 			TAGS.falsePositive,
-			render(function* () {
+			component(function* () {
 				yield () => html`<p>should-not-render</p>`;
 			}),
 		);
 
 		customElements.define(
 			TAGS.multiInstance,
-			render(function* (host) {
+			component(function* (host) {
 				yield () => html`<p>${host.getAttribute("data-id") ?? "?"}</p>`;
 			}),
 		);
 
 		customElements.define(
 			TAGS.customSentinel,
-			render(function* () {
+			component(function* () {
 				yield () => html`<p>custom-rendered</p>`;
 			}),
 		);
 
 		customElements.define(
 			TAGS.unmarked,
-			render(function* () {
+			component(function* () {
 				yield () => html`<p>unmarked-rendered</p>`;
 			}),
 		);
 
 		customElements.define(
 			TAGS.noSentinel,
-			render(function* () {
+			component(function* () {
 				yield () => html`<p>no-sentinel-rendered</p>`;
 			}),
 		);

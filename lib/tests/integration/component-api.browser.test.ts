@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../src/index";
+import { html, component } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
-describe("BaseComponent.setProperty", () => {
+describe("BaseComponent.setProp", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-set-prop-${tagId++}-${Date.now()}`;
 
@@ -17,7 +17,7 @@ describe("BaseComponent.setProperty", () => {
 	test("applies a string value as an attribute and triggers a re-render", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* (element) {
+		const MyElement = component(function* (element) {
 			yield () =>
 				html`<span>${element.getAttribute("data-label") ?? "none"}</span>`;
 		});
@@ -28,7 +28,7 @@ describe("BaseComponent.setProperty", () => {
 
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("none");
 
-		element.setProperty("data-label", "hello");
+		element.setProp("data-label", "hello");
 		await sleep(50);
 
 		expect(element.getAttribute("data-label")).toBe("hello");
@@ -42,7 +42,7 @@ describe("BaseComponent.setProperty", () => {
 	test("assigns complex values as element properties", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>data</p>`;
 		});
 
@@ -53,7 +53,7 @@ describe("BaseComponent.setProperty", () => {
 		await sleep();
 
 		const config = { nested: { value: 1 } };
-		element.setProperty("config", config);
+		element.setProp("config", config);
 		await sleep();
 
 		expect(element.config).toBe(config);
@@ -73,7 +73,7 @@ describe("dynamic comment bindings", () => {
 		let left = "foo";
 		let right = "bar";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div><!-- ${left} and ${right} --></div>`;
 		});
 

@@ -5,7 +5,7 @@ Server-rendered and hydrated on the client. `npm install grundlage`.
 
 ## Mental model
 
-A component is a generator function passed to `render`. It runs ONCE when the element
+A component is a generator function passed to `component`. It runs ONCE when the element
 mounts and runs to completion (never `while (true)`): setup code runs, you `yield`
 something renderable (a render function, an `html` template, or an inner generator), and
 the host element is both the first argument and the value every `yield` returns. The
@@ -16,11 +16,11 @@ because the yielded render function closes over it; the generator itself does no
 ## Complete example
 
 ```javascript
-import { render, html, props } from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
 	"click-counter",
-	render(function* (host) {
+	component(function* (host) {
 		const { start } = props(host, { start: [Number, 0] });
 		let count = start; // lives in the generator, which runs once — persists across updates
 
@@ -36,10 +36,13 @@ customElements.define(
 
 ## API
 
-`render(generator, options?) => CustomElementConstructor`
+`component(generator, options?) => CustomElementConstructor`
   Register the return value with `customElements.define`. `options` extends
   `ShadowRootInit` (default `{ mode: "open" }`); set `formAssociated: true` for form
-  components. The generator may be sync or async.
+  components. The generator may be sync or async. `{ mode: "closed" }` hydrates and
+  replays `load` data like an open root — the closed shadow root is reached through
+  `attachInternals().shadowRoot` instead of `host.shadowRoot`, so server output is reused
+  rather than re-rendered.
 
 `` html`...` `` => `Template` (opaque)
   Tagged template literal. Parsed once and cached; later renders only touch dynamic
@@ -95,16 +98,24 @@ yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>�
 - `host.update()` is the ONLY re-render trigger (no reactive primitive). It re-fires what
   you last yielded: a render function is re-called, a yielded INNER generator restarts
   from scratch, a yielded static `html` template does not re-run. The root never re-runs.
-- `yield` evaluates to the host element: `const host = yield () => html`…``. Yielded inner
-  generators and render functions also receive the host as their first argument.
+- `await host.update()` resolves when the re-rendered thing has FINISHED: right after paint
+  for a template or render function (both synchronous), and — for an async inner generator —
+  only once its full run completes, so `await update()` waits for the settled UI, not an
+  intermediate frame. A reentrant `update()` called during an in-flight pass coalesces onto
+  that pass's promise.
+- `yield` returns the host element for a renderable (`html` template, render function, inner
+  generator): `const host = yield () => html`…``. A yielded promise returns its resolved
+  value (`const data = yield fetch(...)`); any other plain value is echoed back. Yielded
+  inner generators and render functions also receive the host as their first argument.
 - Components render into SHADOW DOM by default. Light-DOM selectors won't reach inside.
+- Don't write literal `<!--^.^ …-->` or `<!--*.*-->` comments in template HTML — those
+  prefixes are reserved for internal markers and a collision silently misaligns hydration.
 - Events bind in markup as `onEventName=${handler}` (e.g. `onClick`, `onInput`) — not
   `addEventListener` strings and not lowercase `onclick=""`.
-- Change detection is HASH-BASED and SHALLOW for arrays/objects: mutate-then-`update()`
-  is fine, but a deep change to a nested object the parent already holds may not be seen.
+- Change detection is HASH-BASED for arrays/objects: mutate-then-`update()` we will detect.
 - Read inputs with `props(host, schema)`. Don't read attributes directly — they're strings
   and skip the type coercion/defaults `props` gives you.
 - `load` replays SSR data on hydration; don't add your own fetch-once cache around it.
-- Form components: `render(gen, { formAssociated: true })` exposes `host.internals`
+- Form components: `component(gen, { formAssociated: true })` exposes `host.internals`
   (`null` on the server) and re-dispatches lifecycle as events `form-associated`,
   `form-disabled`, `form-reset`, `form-state-restore` (or declarative `on-form-*` attrs).

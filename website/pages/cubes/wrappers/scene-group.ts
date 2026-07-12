@@ -1,4 +1,4 @@
-import { html, render } from "../../../../lib/src";
+import { html, component } from "../../../../lib/src";
 import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 // <scene-group> — a transform carrier. It contributes a transform and nothing
@@ -17,7 +17,7 @@ import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 customElements.define(
 	"scene-group",
-	render(function* (element) {
+	component(function* (element) {
 		yield () => {
 			// A group has no size of its own (scaling would distort its children),
 			// so we resolve all three triples and simply ignore the size.

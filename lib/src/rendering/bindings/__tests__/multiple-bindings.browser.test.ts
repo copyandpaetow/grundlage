@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../../index";
+import { html, component } from "../../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -24,7 +24,7 @@ describe("multiple bindings", () => {
 		let b = "beta";
 		let c = "gamma";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<p>${a}</p>
 					<p>${b}</p>
@@ -58,7 +58,7 @@ describe("multiple bindings", () => {
 		let text = "content";
 		let handler = () => {};
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <div class="${cls}" onclick="${handler}">${text}</div>`;
 		});
 
@@ -86,7 +86,7 @@ describe("multiple bindings", () => {
 		let value = 0;
 		let renderCount = 0;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				renderCount++;
 				return html`<span>${value}</span>`;

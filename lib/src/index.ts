@@ -1,10 +1,21 @@
 import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
 import { html as htmlValue } from "./template";
-import { BaseComponent, ComponentConstructor, ComponentGenerator, ComponentOptions, Template } from "./types";
+import {
+	BaseComponent,
+	ComponentConstructor,
+	ComponentGenerator,
+	ComponentOptions,
+	Template,
+} from "./types";
 import { isServer } from "./utils/guards";
 import { createPainter, setupAttributeObserver } from "./runtime/painter";
 import { createEngine, Engine } from "./runtime/engine";
-import { hasRenderer, scheduleNextUpdate, startEngine, stopEngine } from "./runtime/engine-client";
+import {
+	hasRenderer,
+	scheduleNextUpdate,
+	startEngine,
+	stopEngine,
+} from "./runtime/engine-client";
 import { startServerEngine } from "./runtime/engine-server";
 import { FormBase } from "./forms";
 
@@ -28,7 +39,7 @@ export const html = htmlValue as unknown as (
 	...dynamicValues: Array<unknown>
 ) => Template;
 
-export const render = (
+export const component = (
 	componentGenerator: ComponentGenerator,
 	options: ComponentOptions = defaultOptions,
 ): ComponentConstructor => {
@@ -77,7 +88,7 @@ export const render = (
 			stopEngine(engine);
 		}
 
-		setProperty(name: string, value: unknown, oldValue?: unknown) {
+		setProp(name: string, value: unknown, oldValue?: unknown) {
 			applyDynamicAttribute(this, name, value, oldValue);
 			this.update();
 		}

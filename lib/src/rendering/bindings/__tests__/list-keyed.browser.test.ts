@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../../index";
+import { html, component } from "../../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -22,7 +22,7 @@ describe("keyed lists (key= escape hatch)", () => {
 
 	const define = (read: () => Array<Row>) => {
 		const tag = uniqueTag();
-		const Element = render(function* () {
+		const Element = component(function* () {
 			yield () =>
 				html`<ul>
 					${read().map((row) => html`<li key="${row.id}">${row.text}</li>`)}

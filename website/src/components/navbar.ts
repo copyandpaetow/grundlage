@@ -1,8 +1,8 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 customElements.define(
 	"nav-bar",
-	render(function* () {
+	component(function* () {
 		yield html`
 			<nav>
 				<a href="/grundlage">home</a>

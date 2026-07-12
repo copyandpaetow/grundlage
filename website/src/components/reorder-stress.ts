@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 /*
     Measures how expensive list reorders are with the current reconciliation
@@ -68,7 +68,7 @@ const mutateValues = (rows: Array<Row>) => {
 
 customElements.define(
 	"reorder-stress",
-	render(function* (element) {
+	component(function* (element) {
 		let itemCount = Number(element.getAttribute("items") ?? 1000);
 		let rows: Array<Row> = buildRows(itemCount);
 		const measurements = new Map<string, Measurement>();

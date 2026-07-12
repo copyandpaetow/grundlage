@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 import {
 	clearBaseline,
 	formatDelta,
@@ -42,7 +42,7 @@ const classWhenLowerIsBetter = (current: number, previous: number): string =>
 
 customElements.define(
 	"perf-harness",
-	render(function* (element) {
+	component(function* (element) {
 		const busyValues = Array.from({ length: 20 }, (_, index) => index * 0.123);
 
 		let frame = 0;

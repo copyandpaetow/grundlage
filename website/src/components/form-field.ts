@@ -1,11 +1,11 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 import { type ComponentConstructor } from "../../../lib/src/types";
 
 // form-associated custom element. it submits through ElementInternals.setFormValue
 // and reacts to the form's lifecycle declaratively: FormBase re-broadcasts the
 // browser's formResetCallback / formDisabledCallback as on-form-reset /
 // on-form-disabled listeners on this host.
-const component = render(
+const FormField = component(
 	function* (host) {
 		let value = "";
 		let disabled = false;
@@ -49,10 +49,10 @@ const component = render(
 	{ mode: "open", formAssociated: true },
 ) as ComponentConstructor;
 
-customElements.define("form-field", component);
+customElements.define("form-field", FormField);
 
 declare global {
 	interface HTMLElementTagNameMap {
-		"form-field": InstanceType<typeof component>;
+		"form-field": InstanceType<typeof FormField>;
 	}
 }

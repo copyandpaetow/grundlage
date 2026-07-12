@@ -1,8 +1,8 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 customElements.define(
 	"raf-animation",
-	render(function* (element) {
+	component(function* (element) {
 		let time = 0;
 		let remainingFrames = 30_000;
 

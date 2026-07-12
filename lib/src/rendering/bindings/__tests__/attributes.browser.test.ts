@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, render } from "../../../index";
+import { html, component } from "../../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -22,7 +22,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let cls = "red";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <div class="${cls}"></div>`;
 		});
 
@@ -50,7 +50,7 @@ describe("attribute updates", () => {
 		let first = "hello";
 		let second = "world";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <div class="${first} ${second}"></div>`;
 		});
 
@@ -77,7 +77,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let disabled = true;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <button disabled="${disabled}">click</button>`;
 		});
 
@@ -102,7 +102,7 @@ describe("attribute updates", () => {
 		const clicks: string[] = [];
 		let handler = () => clicks.push("first");
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <button onclick="${handler}">click</button>`;
 		});
 
@@ -129,7 +129,7 @@ describe("attribute updates", () => {
 		const clicks: string[] = [];
 		const handler = () => clicks.push("hit");
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button onClick="${handler}">click</button>`;
 		});
 		customElements.define(tag, MyElement);
@@ -147,7 +147,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		const handler = () => {};
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button once="${handler}">x</button>`;
 		});
 		customElements.define(tag, MyElement);
@@ -168,7 +168,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let attrs = ["disabled", "hidden"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <button ${attrs}>click</button>`;
 		});
 
@@ -194,7 +194,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let enabled = true;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button ${enabled ? "" : "disabled"}>click</button>`;
 		});
 
@@ -224,7 +224,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = { class: "red", id: "main" };
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <div ${attrs}>content</div>`;
 		});
 
@@ -251,7 +251,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let value: string | null = "visible";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div title="${value}">text</div>`;
 		});
 
@@ -275,7 +275,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let value: string | undefined = "visible";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div title="${value}">text</div>`;
 		});
 
@@ -299,7 +299,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let value: string | false = "yes";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div aria-hidden="${value}">text</div>`;
 		});
 
@@ -323,7 +323,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let value = 5;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<input tabindex="${value}" />`;
 		});
 
@@ -348,7 +348,7 @@ describe("attribute updates", () => {
 		const clicks: string[] = [];
 		let handler: (() => void) | null = () => clicks.push("clicked");
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button onclick="${handler}">click</button>`;
 		});
 
@@ -375,7 +375,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		const events: string[] = [];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<button
 					onclick="${() => events.push("click")}"
@@ -402,7 +402,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		const data = { nested: { value: 42 } };
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data="${data}">text</div>`;
 		});
 
@@ -420,7 +420,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let data: Record<string, unknown> = { nested: { value: 42 } };
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data="${data}">text</div>`;
 		});
 
@@ -444,7 +444,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let value: string | Record<string, unknown> = "simple";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data="${value}">text</div>`;
 		});
 
@@ -468,7 +468,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let value: string | Record<string, unknown> = { nested: true };
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data="${value}">text</div>`;
 		});
 
@@ -492,7 +492,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let items = [1, 2, 3];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div items="${items}">text</div>`;
 		});
 
@@ -516,7 +516,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let data: Record<string, unknown> | null = { key: "value" };
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data="${data}">text</div>`;
 		});
 
@@ -540,7 +540,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let value: string | null = "visible";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div title="${value}">text</div>`;
 		});
 
@@ -570,7 +570,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let value = "";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div title="${value}">text</div>`;
 		});
 
@@ -594,7 +594,7 @@ describe("attribute updates", () => {
 	test("sets boolean true as empty attribute", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button disabled="${true}">click</button>`;
 		});
 
@@ -613,7 +613,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let attrName = "title";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div ${attrName}="hello">text</div>`;
 		});
 
@@ -631,7 +631,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let attrName = "title";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div ${attrName}="hello">text</div>`;
 		});
 
@@ -660,7 +660,7 @@ describe("attribute updates", () => {
 			onclick: () => clicks.push("clicked"),
 		};
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button ${attrs}>click</button>`;
 		});
 
@@ -696,7 +696,7 @@ describe("attribute updates", () => {
 		const handler = () => {};
 		let attrs: Record<string, unknown> = { class: "a", onclick: handler };
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button ${attrs}>x</button>`;
 		});
 
@@ -724,7 +724,7 @@ describe("attribute updates", () => {
 		let cls = "red";
 		let title = "hello";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div class="${cls}" title="${title}">text</div>`;
 		});
 
@@ -757,7 +757,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let suffix = "color";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data-${suffix}="red">text</div>`;
 		});
 
@@ -775,7 +775,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let suffix = "color";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data-${suffix}="red">text</div>`;
 		});
 
@@ -801,7 +801,7 @@ describe("attribute updates", () => {
 		let suffix = "color";
 		let value = "red";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data-${suffix}="${value}">text</div>`;
 		});
 
@@ -834,7 +834,7 @@ describe("attribute updates", () => {
 		let key = "title";
 		let value: string | null = "hello";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div ${key}="${value}">text</div>`;
 		});
 
@@ -861,7 +861,7 @@ describe("attribute updates", () => {
 		let prefix = "data";
 		let suffix = "value";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div ${prefix}-${suffix}="test">text</div>`;
 		});
 
@@ -889,7 +889,7 @@ describe("attribute updates", () => {
 		let a = "foo";
 		let b = "bar";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div ${key}="${a}-${b}">text</div>`;
 		});
 
@@ -922,7 +922,7 @@ describe("attribute updates", () => {
 		let key = "title";
 		let value: string | null = "hello";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div ${key}="${value}">text</div>`;
 		});
 
@@ -954,7 +954,7 @@ describe("attribute updates", () => {
 		let eventName = "onclick";
 		let handler = () => events.push("click");
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button ${eventName}="${handler}">btn</button>`;
 		});
 
@@ -976,7 +976,9 @@ describe("attribute updates", () => {
 		await sleep();
 
 		// The new name binds the new handler as its own property.
-		expect((btn as unknown as { ondblclick: unknown }).ondblclick).toBe(handler);
+		expect((btn as unknown as { ondblclick: unknown }).ondblclick).toBe(
+			handler,
+		);
 		btn.dispatchEvent(new MouseEvent("dblclick"));
 		expect(events).toContain("dblclick");
 
@@ -988,7 +990,7 @@ describe("attribute updates", () => {
 		let suffix = "hidden";
 		let value: string | false = "true";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div aria-${suffix}="${value}">text</div>`;
 		});
 
@@ -1012,7 +1014,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let attrs: string[] | Record<string, string> = ["disabled"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <button ${attrs}>click</button>`;
 		});
 
@@ -1041,7 +1043,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let attribute: string = "disabled";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button ${attribute}>click</button>`;
 		});
 
@@ -1070,7 +1072,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let attributes: string | Array<string> = "disabled";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<button ${attributes}>click</button>`;
 		});
 
@@ -1108,7 +1110,7 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 		let suffix = "ready";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div data-${suffix}>text</div>`;
 		});
 

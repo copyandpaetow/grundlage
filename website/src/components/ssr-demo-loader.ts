@@ -1,4 +1,4 @@
-import { html, load, render } from "../../../lib/src";
+import { html, load, component } from "../../../lib/src";
 
 //deterministic so server and client compute the same payload; in a real app the server fetch would land in the SSR HTML and the client would skip the loading state
 const fetchUser = (delayMilliseconds: number) =>
@@ -11,7 +11,7 @@ const fetchUser = (delayMilliseconds: number) =>
 
 customElements.define(
 	"demo-loader",
-	render(async function* (host) {
+	component(async function* (host) {
 		const label = host.getAttribute("data-label") ?? "?";
 		const delayMilliseconds = parseInt(
 			host.getAttribute("data-delay-ms") ?? "0",

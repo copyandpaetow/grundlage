@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 // <scene-camera> — the navigation wrapper. It owns the camera *state* and every
 // input that moves it (WASD free-fly, Alt-drag look, wheel zoom, free/orbit mode)
@@ -47,7 +47,7 @@ const clamp = (value: number, minimum: number, maximum: number): number =>
 
 customElements.define(
 	"scene-camera",
-	render(function* (element) {
+	component(function* (element) {
 		const camera: CameraState = { x: 0, y: -160, z: 600, yaw: 0, pitch: 0 };
 		const pressedKeys = new Set<string>();
 		let animationFrame = 0;

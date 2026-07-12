@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 import {
 	clearBaseline,
 	formatDelta,
@@ -42,7 +42,7 @@ const classWhenLowerIsBetter = (current: number, previous: number): string =>
 
 customElements.define(
 	"raf-animation-list",
-	render(function* (element) {
+	component(function* (element) {
 		const barCount = Number(element.getAttribute("bars") ?? 20);
 		const phases = Array.from({ length: barCount }, (_, index) => index * 0.3);
 

@@ -8,7 +8,7 @@ export interface Template {
 
 export interface BaseComponent extends HTMLElement {
 	update(): Promise<void>;
-	setProperty(name: string, value: unknown, oldValue?: unknown): void;
+	setProp(name: string, value: unknown, oldValue?: unknown): void;
 	internals?: ElementInternals | null;
 }
 

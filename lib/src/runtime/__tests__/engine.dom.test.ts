@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { html, render } from "../../index";
+import { html, component } from "../../index";
 
 /*
 engine-level invariants that aren't a pure-step property (so they live here, not in vm.dom.test) but are
 narrower than the integration oracles: the terminal warns EXACTLY once (the linear recover->fail path
 replaces the old nested re-entrancy that could double-warn), and a torn-down generation neither paints
-nor resolves a late update() past disconnect. driven through the public render() surface.
+nor resolves a late update() past disconnect. driven through the public component() surface.
 */
 
 let counter = 0;
@@ -29,7 +29,7 @@ describe("engine terminal", () => {
 	test("an uncaught error warns exactly once", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const element = mount(
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					yield () => {
 						throw new Error("once");
@@ -56,7 +56,7 @@ describe("engine terminal", () => {
 		);
 
 		const element = mount(
-			render(
+			component(
 				function* () {
 					yield () => {
 						throw new Error("closed-boom");
@@ -77,7 +77,7 @@ describe("engine terminal", () => {
 		vi.spyOn(console, "warn").mockImplementation(() => {});
 		let shouldThrow = true;
 		const element = mount(
-			render(function* () {
+			component(function* () {
 				yield () => {
 					if (shouldThrow) throw new Error("boom");
 					return html`<p>recovered</p>`;
@@ -97,7 +97,7 @@ describe("engine terminal", () => {
 		vi.spyOn(console, "warn").mockImplementation(() => {});
 		let boom = false;
 		const element = mount(
-			render(function* () {
+			component(function* () {
 				yield () => {
 					if (boom) throw new Error("late-boom");
 					return html`<p>alive</p>`;
@@ -127,7 +127,7 @@ describe("dismissed child errors", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		let cleanupCalls = 0;
 		const element = mount(
-			render(function* () {
+			component(function* () {
 				try {
 					yield function* () {
 						yield () => {

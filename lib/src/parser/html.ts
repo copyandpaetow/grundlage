@@ -1,5 +1,11 @@
 import { stringHash } from "../utils/hashing";
-import { ATTRIBUTE_SHAPE, BINDING, BINDING_TYPES, COMMENT_IDENTIFIER, NO_KEY_BINDING } from "./constants";
+import {
+	ATTRIBUTE_SHAPE,
+	BINDING,
+	BINDING_TYPES,
+	COMMENT_IDENTIFIER,
+	NO_KEY_BINDING,
+} from "./constants";
 import {
 	AttributeBinding,
 	Binding,
@@ -10,7 +16,7 @@ import {
 	RawContentBinding,
 	StaticBinding,
 	TagBinding,
-	ValueOf
+	ValueOf,
 } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { render } from "../../index";
+import { component } from "../../index";
 import { html } from "../../template";
 import { hashValue } from "../../utils/hashing";
 
@@ -67,7 +67,7 @@ describe("update() change propagation", () => {
 		// for primitives, we must still mark the binding dirty on `!==`.
 		const tag = uniqueTag();
 		let value = 1;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${value}</p>`;
 		});
 		customElements.define(tag, MyElement);
@@ -86,7 +86,7 @@ describe("update() change propagation", () => {
 	test("updates DOM across successive tiny decimal changes", async () => {
 		const tag = uniqueTag();
 		let value = 50.1;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${value}</p>`;
 		});
 		customElements.define(tag, MyElement);
@@ -121,7 +121,7 @@ describe("update() change propagation", () => {
 		let width = 50.1;
 		let hue = 120.5;
 		let opacity = 0.4;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<div
 					style="width:${width}%;background:hsl(${hue},70%,50%);opacity:${opacity}"
@@ -154,7 +154,7 @@ describe("update() change propagation", () => {
 		// to the previous, so the engine should reuse the old DOM subtree.
 		const tag = uniqueTag();
 		let outer = 1;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<section>
 					<h1>${outer}</h1>
@@ -184,7 +184,7 @@ describe("update() change propagation", () => {
 		// regresses the lazy getter, list items should still match by content.
 		const tag = uniqueTag();
 		let items = ["one", "two", "three"];
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -226,7 +226,7 @@ describe("update() change propagation", () => {
 		// mark it dirty, but the resulting DOM must still be empty either way.
 		const tag = uniqueTag();
 		let value: unknown = null;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>before${value}after</p>`;
 		});
 		customElements.define(tag, MyElement);
@@ -250,7 +250,7 @@ describe("update() change propagation", () => {
 		// node identity must not change.
 		const tag = uniqueTag();
 		let outer = 0;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<section>
 					<h1>${outer}</h1>

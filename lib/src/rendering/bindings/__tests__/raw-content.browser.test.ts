@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../../index";
+import { html, component } from "../../../index";
 
 const normalizeWhitespace = (string: string) =>
 	string.replace(/\s+/g, " ").trim();
@@ -25,7 +25,7 @@ describe("raw content updates", () => {
 		const tag = uniqueTag();
 		let color = "red";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<style>
 						p {
@@ -49,7 +49,7 @@ describe("raw content updates", () => {
 		const tag = uniqueTag();
 		let color = "red";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<style>
 						p {
@@ -79,7 +79,7 @@ describe("raw content updates", () => {
 		const tag = uniqueTag();
 		let content = "initial text";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<textarea>${content}</textarea>`;
 		});
 
@@ -104,7 +104,7 @@ describe("raw content updates", () => {
 		let color = "red";
 		let size = "16px";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<style>
 						p {
@@ -140,7 +140,7 @@ describe("raw content updates", () => {
 		const tag = uniqueTag();
 		const injection = "<script>alert('xss')</script>";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<style>
 					${injection}
@@ -164,7 +164,7 @@ describe("raw content updates", () => {
 		const tag = uniqueTag();
 		const css = "p { color: red; }";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<style>
 						${css}
@@ -191,7 +191,7 @@ describe("raw content updates", () => {
 		const tag = uniqueTag();
 		let size = 16;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<style>
 					p {
@@ -224,8 +224,11 @@ describe("raw content updates", () => {
 		const tag = uniqueTag();
 		let label = "first";
 
-		const MyElement = render(function* () {
-			yield () => html`<div><template><p>${label}</p></template></div>`;
+		const MyElement = component(function* () {
+			yield () =>
+				html`<div>
+					<template><p>${label}</p></template>
+				</div>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -237,8 +240,9 @@ describe("raw content updates", () => {
 		// Markup must live in .content — the render/serialize surface — not in
 		// light children, which never render and never serialize.
 		expect(template.childNodes.length).toBe(0);
-		expect(normalizeWhitespace(template.content.querySelector("p")!.textContent))
-			.toBe("first");
+		expect(
+			normalizeWhitespace(template.content.querySelector("p")!.textContent),
+		).toBe("first");
 
 		// The template serializes from .content, so a round-trip must survive.
 		expect(template.outerHTML).toContain("<p>first</p>");
@@ -247,8 +251,9 @@ describe("raw content updates", () => {
 		await element.update();
 		await sleep();
 
-		expect(normalizeWhitespace(template.content.querySelector("p")!.textContent))
-			.toBe("second");
+		expect(
+			normalizeWhitespace(template.content.querySelector("p")!.textContent),
+		).toBe("second");
 		expect(template.childNodes.length).toBe(0);
 
 		cleanup(element);

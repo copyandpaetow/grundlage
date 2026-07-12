@@ -1,4 +1,4 @@
-import { html, render } from "../../../../lib/src";
+import { html, component } from "../../../../lib/src";
 import {
 	blocksBoundsPx,
 	eulerFromMatrix,
@@ -59,7 +59,7 @@ const addPx = (point: Vector3, delta: Vector3): Vector3 => [
 
 customElements.define(
 	"scene-gizmo",
-	render(function* (element) {
+	component(function* (element) {
 		// The handle frame, in screen-px world space: where the knobs sit (the child's bbox
 		// centre) and how far out each axis reaches (its half-extent + margin). These are the
 		// closure state the render reads; a non-drag render re-measures them from the child, a

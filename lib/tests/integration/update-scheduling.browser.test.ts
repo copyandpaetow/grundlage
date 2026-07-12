@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../src/index";
+import { html, component } from "../../src/index";
 
 /*
 The update() scheduling contract (ADR-0003): update() resolves once the DOM reflects this
@@ -34,7 +34,7 @@ describe("update() scheduling contract", () => {
 		// async work happens BEFORE the yield, so the DOM lands a macrotask later. the
 		// old machine resolved update() at the synchronous dispatch boundary — this would
 		// then observe the stale count without a trailing sleep
-		const Counter = render(function* () {
+		const Counter = component(function* () {
 			yield async function* () {
 				const snapshot = count;
 				await sleep(10);
@@ -60,7 +60,7 @@ describe("update() scheduling contract", () => {
 		let renders = 0;
 		let count = 0;
 
-		const Counter = render(function* () {
+		const Counter = component(function* () {
 			yield () => {
 				renders++;
 				return html`<span>${count}</span>`;
@@ -88,7 +88,7 @@ describe("update() scheduling contract", () => {
 		const tag = uniqueTag();
 		let renders = 0;
 
-		const Counter = render(function* () {
+		const Counter = component(function* () {
 			yield () => {
 				renders++;
 				return html`<span>${renders}</span>`;
@@ -112,7 +112,7 @@ describe("update() scheduling contract", () => {
 		let renders = 0;
 		let phase = "a";
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield async function* () {
 				renders++;
 				const snapshot = phase;
@@ -149,7 +149,7 @@ describe("update() scheduling contract", () => {
 		let renders = 0;
 		let triggerOnce = true;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield (host) => {
 				renders++;
 				if (triggerOnce) {
@@ -175,7 +175,7 @@ describe("update() scheduling contract", () => {
 	test("update() on a static template current resolves immediately as a no-op", async () => {
 		const tag = uniqueTag();
 
-		const Static = render(function* () {
+		const Static = component(function* () {
 			yield html`<p>static</p>`;
 		});
 		customElements.define(tag, Static);
@@ -195,7 +195,7 @@ describe("update() scheduling contract", () => {
 		const tag = uniqueTag();
 		let renders = 0;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield () => {
 				renders++;
 				return html`<span>x</span>`;
@@ -216,7 +216,7 @@ describe("update() scheduling contract", () => {
 		const tag = uniqueTag();
 		let shouldThrow = false;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield async function* () {
 				if (shouldThrow) {
 					await sleep(10);
@@ -243,7 +243,7 @@ describe("update() scheduling contract", () => {
 		const tag = uniqueTag();
 		let value = "old";
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield async function* () {
 				const snapshot = value;
 				await sleep(20);

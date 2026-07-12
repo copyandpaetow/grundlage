@@ -8,7 +8,11 @@ import {
 	createLiveBinding,
 	revertHostBinding,
 } from "../rendering/bindings/dispatch";
-import { hydrateInstance, Instance, reconcileInstance } from "../rendering/instance";
+import {
+	hydrateInstance,
+	Instance,
+	reconcileInstance,
+} from "../rendering/instance";
 
 export interface Painter {
 	host: BaseComponent;

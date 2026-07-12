@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../../index";
+import { html, component } from "../../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -20,7 +20,7 @@ describe("root-template host attributes", () => {
 
 	test("static host attribute lands on the component element", async () => {
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template class="card"><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -36,7 +36,7 @@ describe("root-template host attributes", () => {
 
 	test("dynamic host attribute lands on the component element", async () => {
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template id="${"host-1"}"><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -51,7 +51,7 @@ describe("root-template host attributes", () => {
 	test("dynamic host attribute updates between renders", async () => {
 		const tag = uniqueTag();
 		let role = "dialog";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template role="${role}"><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -72,7 +72,7 @@ describe("root-template host attributes", () => {
 	test("static and dynamic host attributes coexist on the host", async () => {
 		const tag = uniqueTag();
 		let dynamicId = "first";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<template class="card" id="${dynamicId}" role="region"
 					><p>hi</p></template
@@ -99,7 +99,7 @@ describe("root-template host attributes", () => {
 
 	test("boolean static host attribute lands as a present attribute", async () => {
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template hidden><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -115,7 +115,7 @@ describe("root-template host attributes", () => {
 		const tag = uniqueTag();
 		let first = "alpha";
 		let second = "beta";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<template class="${first} ${second}"><p>hi</p></template>`;
 		});
@@ -137,7 +137,7 @@ describe("root-template host attributes", () => {
 	test("expandable object host binding fans out into individual attributes", async () => {
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = { id: "first", role: "dialog" };
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template ${attrs}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -159,7 +159,7 @@ describe("root-template host attributes", () => {
 
 	test("host attribute does not leak into the shadow DOM", async () => {
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template class="card"><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -174,7 +174,7 @@ describe("root-template host attributes", () => {
 
 	test("inner element with a class attribute is not confused with the host", async () => {
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<template class="host-cls"><p class="inner-cls">hi</p></template>`;
 		});
@@ -192,7 +192,7 @@ describe("root-template host attributes", () => {
 
 	test("templates without a root template do not touch the host", async () => {
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div class="just-a-child"></div>`;
 		});
 		customElements.define(tag, MyElement);
@@ -225,7 +225,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	test("static host attribute from the previous template is removed when the new template does not declare it", async () => {
 		const tag = uniqueTag();
 		let showFirst = true;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template class="card"><p>a</p></template>`
@@ -251,7 +251,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	test("multiple static host attributes are all cleared when the next template carries none of them", async () => {
 		const tag = uniqueTag();
 		let showFirst = true;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template class="card" role="dialog" data-kind="x"
@@ -284,7 +284,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		//the post-swap value must be the new template's value, not stale from the previous one
 		const tag = uniqueTag();
 		let showFirst = true;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template class="card"><p>a</p></template>`
@@ -310,7 +310,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		let showFirst = true;
 		const dynamicId = "first";
 		const dynamicRole = "alertdialog";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template id="${dynamicId}"><p>a</p></template>`
@@ -336,7 +336,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	test("swap from a root template to a non-root template removes every host attribute", async () => {
 		const tag = uniqueTag();
 		let showRoot = true;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showRoot
 					? html`<template class="card" role="dialog"><p>a</p></template>`
@@ -362,7 +362,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	test("swap from a non-root template to a root template applies the new host attributes", async () => {
 		const tag = uniqueTag();
 		let showRoot = false;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showRoot
 					? html`<template class="card" role="dialog"><p>a</p></template>`
@@ -389,7 +389,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		let showFirst = true;
 		const firstAttrs: Record<string, string> = { id: "first", role: "dialog" };
 		const secondAttrs: Record<string, string> = { "aria-label": "other" };
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template ${firstAttrs}><p>a</p></template>`
@@ -416,7 +416,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	test("boolean static host attribute from the previous template is removed on swap", async () => {
 		const tag = uniqueTag();
 		let showFirst = true;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template hidden><p>a</p></template>`
@@ -443,7 +443,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		let showFirst = true;
 		const firstAttrs = ["hidden", "inert"];
 		const secondAttrs = ["draggable"];
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template ${firstAttrs}><p>a</p></template>`
@@ -473,7 +473,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		let showFirst = true;
 		const firstAttr = "hidden";
 		const secondAttr = "inert";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template ${firstAttr}><p>a</p></template>`
@@ -500,7 +500,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		let showFirst = true;
 		const prefix = "data";
 		const suffix = "key";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template ${prefix}-${suffix}="value"><p>a</p></template>`
@@ -526,7 +526,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const flagName = "hidden";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template ${flagName}><p>a</p></template>`
@@ -559,7 +559,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 			role: "dialog",
 			tabindex: "0",
 		};
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template
@@ -602,7 +602,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		//A → B → C: each transition must clear the prior template's host attrs without leaking
 		const tag = uniqueTag();
 		let stage = 0;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				if (stage === 0) return html`<template class="a"><p>a</p></template>`;
 				if (stage === 1) return html`<template role="b"><p>b</p></template>`;
@@ -634,7 +634,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		//A → B → A: pin that returning to a previously-rendered template reapplies its host attrs and clears B's
 		const tag = uniqueTag();
 		let showFirst = true;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst
 					? html`<template class="card" role="dialog"><p>a</p></template>`
@@ -667,7 +667,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		//the outer-generator → render-function path is what every other test exercises; this one routes through a nested-generator active source so dispatchCSRUpdate restarts the generator rather than the render-function re-call path
 		const tag = uniqueTag();
 		let showFirst = true;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield function* () {
 				yield showFirst
 					? html`<template class="card"><p>a</p></template>`
@@ -709,7 +709,7 @@ describe("root-template host attribute updates within a single template (refacto
 	test("expandable object loses a key between renders and the dropped key is removed", async () => {
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = { id: "first", role: "dialog" };
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template ${attrs}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -732,7 +732,7 @@ describe("root-template host attribute updates within a single template (refacto
 	test("expandable array loses a name between renders and the dropped name is removed", async () => {
 		const tag = uniqueTag();
 		let attrs: Array<string> = ["hidden", "inert"];
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template ${attrs}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -756,7 +756,7 @@ describe("root-template host attribute updates within a single template (refacto
 		const tag = uniqueTag();
 		let prefix = "data";
 		let suffix = "key";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<template ${prefix}-${suffix}="value"><p>hi</p></template>`;
 		});
@@ -780,7 +780,7 @@ describe("root-template host attribute updates within a single template (refacto
 	test("boolean dynamic host attribute name change removes the previous name", async () => {
 		const tag = uniqueTag();
 		let name = "hidden";
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template ${name}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -806,7 +806,7 @@ describe("root-template host attribute updates within a single template (refacto
 			role: "dialog",
 			"data-x": "y",
 		};
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<template ${attrs}><p>hi</p></template>`;
 		});
 		customElements.define(tag, MyElement);
@@ -848,7 +848,7 @@ describe("root-template host attribute writes do not feed back through the Mutat
 	test("initial render with static host attrs causes exactly one render pass", async () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				renderCount++;
 				return html`<template class="card" role="dialog"><p>hi</p></template>`;
@@ -868,7 +868,7 @@ describe("root-template host attribute writes do not feed back through the Mutat
 	test("initial render with dynamic host attrs causes exactly one render pass", async () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				renderCount++;
 				return html`<template id="${"hero"}" role="${"dialog"}"
@@ -889,7 +889,7 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		const tag = uniqueTag();
 		let renderCount = 0;
 		let showFirst = true;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				renderCount++;
 				return showFirst
@@ -918,7 +918,7 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		//regression guard: we must suppress the MO only for framework-driven writes, not disable it entirely
 		const tag = uniqueTag();
 		let renderCount = 0;
-		const MyElement = render(function* (host) {
+		const MyElement = component(function* (host) {
 			yield () => {
 				renderCount++;
 				return html`<template class="card"
@@ -964,7 +964,7 @@ describe("root-template host attributes are rejected when nested inside content"
 
 	test("a root template inside a parent's content surfaces the error to the user", async () => {
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<div>${html`<template class="leak"><p>x</p></template>`}</div>`;
 		});
@@ -983,7 +983,7 @@ describe("root-template host attributes are rejected when nested inside content"
 
 	test("a root template inside a list item also throws", async () => {
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${[html`<template class="leak"><p>x</p></template>`]}

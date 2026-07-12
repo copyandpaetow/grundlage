@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, render } from "../../src/index";
+import { html, component } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -21,7 +21,7 @@ describe("async generator components", () => {
 	test("mounts and renders from an async generator", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield () => html`<p>async hello</p>`;
 		});
 
@@ -40,7 +40,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		let count = 0;
 
-		const Counter = render(async function* () {
+		const Counter = component(async function* () {
 			yield () => html`<span>${count}</span>`;
 		});
 
@@ -63,7 +63,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		let data = "loading";
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield new Promise<void>((resolve) => {
 				setTimeout(() => {
 					data = "loaded";
@@ -89,7 +89,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		let cleaned = false;
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield () => html`<p>temp</p>`;
 			return () => {
 				cleaned = true;
@@ -109,7 +109,7 @@ describe("async generator components", () => {
 	test("replaces multiple render functions in sequence", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield () => html`<p>first</p>`;
 			yield () => html`<p>second</p>`;
 		});
@@ -127,7 +127,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		const order: string[] = [];
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield new Promise<void>((resolve) => {
 				setTimeout(() => {
 					order.push("first");
@@ -158,7 +158,7 @@ describe("async generator components", () => {
 	test("yields a static HTMLTemplate from async generator", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield html`<p>async static</p>`;
 		});
 
@@ -177,7 +177,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		let data = "loading";
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			// Show nothing initially, wait for data
 			yield new Promise<void>((resolve) => {
 				setTimeout(() => {
@@ -213,7 +213,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		let receivedElement: HTMLElement | null = null;
 
-		const MyElement = render(async function* (el) {
+		const MyElement = component(async function* (el) {
 			receivedElement = el;
 			yield () => html`<p>check</p>`;
 		});
@@ -231,7 +231,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		const cleanupOrder: string[] = [];
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield new Promise<void>((resolve) => setTimeout(resolve, 10));
 			yield () => html`<p>content</p>`;
 			return () => {
@@ -270,7 +270,7 @@ describe("error handling", () => {
 		const tag = uniqueTag();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				throw new Error("sync render error");
 			};
@@ -289,7 +289,7 @@ describe("error handling", () => {
 		const tag = uniqueTag();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield () => {
 				throw new Error("async render error");
 			};
@@ -308,7 +308,7 @@ describe("error handling", () => {
 		const tag = uniqueTag();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>works</p>`;
 			yield () => {
 				throw new Error("second yield error");
@@ -328,7 +328,7 @@ describe("error handling", () => {
 		const tag = uniqueTag();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const MyElement = render(async function* () {
+		const MyElement = component(async function* () {
 			yield () => html`<p>works</p>`;
 			yield () => {
 				throw new Error("second yield error");
@@ -349,7 +349,7 @@ describe("error handling", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		let shouldThrow = false;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				if (shouldThrow) throw new Error("update error");
 				return html`<p>ok</p>`;
@@ -375,7 +375,7 @@ describe("error handling", () => {
 		const tag = uniqueTag();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield Promise.reject(new Error("promise rejection"));
 		});
 
@@ -392,7 +392,7 @@ describe("error handling", () => {
 		const tag = uniqueTag();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				throw new Error("fatal");
 			};

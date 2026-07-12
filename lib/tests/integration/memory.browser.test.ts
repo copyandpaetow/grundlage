@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../src/index";
+import { html, component } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -35,7 +35,7 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 		const tag = uniqueTag();
 		let items = Array.from({ length: 50 }, (_, index) => `item-${index}`);
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((value) => html`<li>${value}</li>`)}
@@ -68,7 +68,7 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 		//the whole BaseElement instance should be reachable only from document.body while mounted; after .remove() and the cleanup tick, the only retainer should be our local variable
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>x</p>`;
 		});
 		customElements.define(tag, MyElement);
@@ -91,7 +91,7 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 		//if any global registry (cache, observer registration, listener) keeps a strong reference to the host element, this loop would leak one instance per cycle
 		//we cap at a small N so the test stays fast; the asymmetry (we collect after the loop) is what surfaces the leak
 		const tag = uniqueTag();
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>cycle</p>`;
 		});
 		customElements.define(tag, MyElement);

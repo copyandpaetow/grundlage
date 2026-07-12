@@ -29,5 +29,9 @@ export const reapplyOnSwap = (
 	// swapElement copies attributes onto the new element, so only listeners and properties
 	// (non-stringable values) need re-applying — mirrors the dynamic-spread reapply path.
 	if (isStringable(liveBinding.lastValue)) return;
-	applyDynamicAttribute(element, liveBinding.staticBinding.name, liveBinding.lastValue);
+	applyDynamicAttribute(
+		element,
+		liveBinding.staticBinding.name,
+		liveBinding.lastValue,
+	);
 };

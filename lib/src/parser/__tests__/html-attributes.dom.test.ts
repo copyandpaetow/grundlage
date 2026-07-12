@@ -40,9 +40,7 @@ describe("html parser — attribute bindings", () => {
 
 		expect(parsed.bindings).toHaveLength(1);
 		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
-		expect(
-			(parsed.bindings[0] as { valueIndex: number }).valueIndex,
-		).toBe(0);
+		expect((parsed.bindings[0] as { valueIndex: number }).valueIndex).toBe(0);
 	});
 
 	test("dynamic attribute name with static prefix and static value", () => {
@@ -95,9 +93,9 @@ describe("html parser — attribute bindings", () => {
 			BINDING.DYNAMIC_ATTRIBUTE,
 			BINDING.SINGLE_VALUE_ATTRIBUTE,
 		]);
-		expect((parsed.bindings[1] as SingleValueAttributeStaticBinding).nameParts).toEqual(
-			["class"],
-		);
+		expect(
+			(parsed.bindings[1] as SingleValueAttributeStaticBinding).nameParts,
+		).toEqual(["class"]);
 	});
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { FORM_EVENTS, FormBase } from "../forms";
-import { html, render, type BaseComponent } from "../index";
+import { html, component, type BaseComponent } from "../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -43,7 +43,7 @@ describe("FormBase - static surface", () => {
 		const tag = uniqueTag("guarded-field");
 		customElements.define(
 			tag,
-			render(function* () {}, { mode: "open", formAssociated: true }),
+			component(function* () {}, { mode: "open", formAssociated: true }),
 		);
 		const el = document.createElement(tag) as BaseComponent;
 		expect(el.internals === null || typeof el.internals === "object").toBe(
@@ -120,13 +120,13 @@ describe("FormBase - lifecycle callbacks re-broadcast as events", () => {
 	});
 });
 
-describe("render(..., { formAssociated }) parent selection", () => {
+describe("component(..., { formAssociated }) parent selection", () => {
 	// formAssociated replaces the default options, so a full ShadowRootInit comes with it
 	const formOptions = { mode: "open", formAssociated: true } as const;
 
 	test("opting in inherits FormBase and its static flag", () => {
 		const tag = uniqueTag("opt-in");
-		const Element = render(function* () {
+		const Element = component(function* () {
 			yield () => html`<p>field</p>`;
 		}, formOptions);
 		customElements.define(tag, Element);
@@ -139,7 +139,7 @@ describe("render(..., { formAssociated }) parent selection", () => {
 
 	test("the default component is a plain element, never form-associated", () => {
 		const tag = uniqueTag("plain");
-		const Element = render(function* () {
+		const Element = component(function* () {
 			yield () => html`<p>field</p>`;
 		});
 		customElements.define(tag, Element);
@@ -155,7 +155,7 @@ describe("render(..., { formAssociated }) parent selection", () => {
 		// root-template `on-form-reset` mirror binds the handler onto the host.
 		const tag = uniqueTag("form-field");
 		const onReset = vi.fn();
-		const Element = render(function* () {
+		const Element = component(function* () {
 			yield () => html`
 				<template on-form-reset="${onReset}"><input /></template>
 			`;

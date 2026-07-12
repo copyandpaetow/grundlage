@@ -1,7 +1,14 @@
 import { ValueOf } from "../parser/types";
 import { BaseComponent, ComponentGenerator, RenderFunction } from "../types";
 import { Painter, teardownPainter } from "./painter";
-import { createRenderTask, createStepOutcome, ROLE, STEP_OUTCOME, StepOutcome, Task } from "./task";
+import {
+	createRenderTask,
+	createStepOutcome,
+	ROLE,
+	STEP_OUTCOME,
+	StepOutcome,
+	Task,
+} from "./task";
 
 export interface Engine {
 	readonly host: BaseComponent;

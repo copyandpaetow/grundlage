@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 /*
     Measures list mutations that should hit the head/tail peel fast paths:
@@ -31,7 +31,7 @@ const buildRows = (count: number): Array<Row> => {
 
 customElements.define(
 	"mutation-stress",
-	render(function* (element) {
+	component(function* (element) {
 		let itemCount = Number(element.getAttribute("items") ?? 1000);
 		let rows: Array<Row> = buildRows(itemCount);
 		let nextIdentifier = itemCount;

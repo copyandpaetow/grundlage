@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, render } from "../../src/index";
+import { html, component } from "../../src/index";
 import { BaseComponent, ComponentGenerator } from "../../src/types";
 
 const sleep = (duration = 0) =>
@@ -20,7 +20,7 @@ describe("outer yields a generator function (nested generator)", () => {
 		const tag = uniqueTag("render");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					yield () => html`<p>inner</p>`;
 				};
@@ -38,7 +38,7 @@ describe("outer yields a generator function (nested generator)", () => {
 		const tag = uniqueTag("static");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					yield html`<p>inner-static</p>`;
 				};
@@ -58,7 +58,7 @@ describe("outer yields a generator function (nested generator)", () => {
 		const tag = uniqueTag("async-inner");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield async function* () {
 					yield new Promise<void>((resolve) => setTimeout(resolve, 10));
 					yield () => html`<p>async-ready</p>`;
@@ -79,7 +79,7 @@ describe("outer yields a generator function (nested generator)", () => {
 		const tag = uniqueTag("static-then-gen");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield html`<p>outer-static</p>`;
 				yield function* () {
 					yield () => html`<p>inner</p>`;
@@ -100,7 +100,7 @@ describe("outer yields a generator function (nested generator)", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					yield function* () {
 						yield () => html`<p>too-deep</p>`;
@@ -126,7 +126,7 @@ describe("update() with an active inner generator", () => {
 		const innerStarts: number[] = [];
 		let counter = 0;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield function* () {
 				const id = ++counter;
 				innerStarts.push(id);
@@ -156,7 +156,7 @@ describe("update() with an active inner generator", () => {
 		const tag = uniqueTag("inner-cleanup");
 		const events: string[] = [];
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield function* () {
 				events.push("inner-start");
 				yield () => html`<span>x</span>`;
@@ -186,7 +186,7 @@ describe("disconnect cleanup with nested generators", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					yield () => html`<span>x</span>`;
 					return () => events.push("inner-cleanup");
@@ -212,7 +212,7 @@ describe("inner generator error contracts", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				try {
 					yield function* () {
 						yield () => {
@@ -249,7 +249,7 @@ describe("inner generator error contracts", () => {
 		// returning generator, and its captured cleanup is deferred to disconnect.
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				try {
 					yield html`<p>before</p>`;
 					yield function* () {
@@ -286,7 +286,7 @@ describe("inner generator error contracts", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					yield () => {
 						throw new Error("uncaught-inner");
@@ -313,7 +313,7 @@ describe("inner generator error contracts", () => {
 		const tag = uniqueTag("terminal-noop");
 		let shouldThrow = true;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield function* () {
 				yield () => {
 					if (shouldThrow) throw new Error("terminal-boom");
@@ -345,7 +345,7 @@ describe("yield resumes the generator with the host element", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				received = yield html`<p>static</p>`;
 			}),
 		);
@@ -363,7 +363,7 @@ describe("yield resumes the generator with the host element", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				received = yield () => html`<p>renderer</p>`;
 			}),
 		);
@@ -381,7 +381,7 @@ describe("yield resumes the generator with the host element", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				received = yield function* () {
 					yield () => html`<p>inner</p>`;
 				};
@@ -401,7 +401,7 @@ describe("yield resumes the generator with the host element", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				// A resolved promise is unwrapped by the driver; the resolved
 				// value flows back as the yield result without being treated as
 				// a render target. Confirms host-replacement only fires on
@@ -424,7 +424,7 @@ describe("yield resumes the generator with the host element", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					received = yield html`<p>inner-static</p>`;
 				};
@@ -444,7 +444,7 @@ describe("yield resumes the generator with the host element", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					received = yield () => html`<p>inner-renderer</p>`;
 				};
@@ -458,11 +458,11 @@ describe("yield resumes the generator with the host element", () => {
 		element.remove();
 	});
 
-	test("host received from yield exposes the BaseComponent surface (update / setProperty)", async () => {
+	test("host received from yield exposes the BaseComponent surface (update / setProp)", async () => {
 		const tag = uniqueTag("host-api");
 		let counter = 0;
 
-		const ComponentClass = render(async function* () {
+		const ComponentClass = component(async function* () {
 			const host = (yield () => html`<span>${counter}</span>`) as BaseComponent;
 			// Re-rendering through the received host proves it really is the
 			// element instance and not just structurally similar.
@@ -486,7 +486,7 @@ describe("renderer and inner generator receive the host as their first argument"
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield (host: BaseComponent) => {
 					received.push(host);
 					return html`<p>${host.tagName.toLowerCase()}</p>`;
@@ -506,7 +506,7 @@ describe("renderer and inner generator receive the host as their first argument"
 		const tag = uniqueTag("renderer-arg-stable");
 		const received: unknown[] = [];
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield (host: BaseComponent) => {
 				received.push(host);
 				return html`<span>${received.length}</span>`;
@@ -534,7 +534,7 @@ describe("renderer and inner generator receive the host as their first argument"
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					yield (host: BaseComponent) => {
 						received.push(host);
@@ -557,7 +557,7 @@ describe("renderer and inner generator receive the host as their first argument"
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* (host: BaseComponent) {
 					received = host;
 					yield () => html`<p>${host.tagName.toLowerCase()}</p>`;
@@ -579,7 +579,7 @@ describe("renderer and inner generator receive the host as their first argument"
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield async function* (host: BaseComponent) {
 					received = host;
 					yield () => html`<p>async</p>`;
@@ -598,7 +598,7 @@ describe("renderer and inner generator receive the host as their first argument"
 		const tag = uniqueTag("inner-gen-arg-restart");
 		const received: unknown[] = [];
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield function* (host: BaseComponent) {
 				received.push(host);
 				yield () => html`<span>${received.length}</span>`;
@@ -631,7 +631,7 @@ describe("identity and isolation", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield innerGen;
 			}),
 		);
@@ -664,7 +664,7 @@ describe("inner generator post-yield work and cancellation", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield async function* () {
 					yield () => html`<p>ready</p>`;
 					try {
@@ -703,7 +703,7 @@ describe("inner generator post-yield work and cancellation", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield async function* () {
 					yield () => html`<p>ready</p>`;
 					await Promise.resolve();
@@ -731,7 +731,7 @@ describe("inner generator post-yield work and cancellation", () => {
 		let resolveSlow: (() => void) | null = null;
 		let attempt = 0;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield async function* () {
 				const id = ++attempt;
 				yield () => html`<span>attempt-${id}</span>`;
@@ -779,7 +779,7 @@ describe("inner generator post-yield work and cancellation", () => {
 		const tag = uniqueTag("inner-finally-restart");
 		const events: string[] = [];
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield function* () {
 				try {
 					yield () => html`<p>parked</p>`;
@@ -808,7 +808,7 @@ describe("inner generator post-yield work and cancellation", () => {
 
 		customElements.define(
 			tag,
-			render(async function* () {
+			component(async function* () {
 				yield function* () {
 					yield () => html`<p>inner-from-async-outer</p>`;
 				};
@@ -839,7 +839,7 @@ describe("rapid restart with in-flight inner async work", () => {
 		let releaseLive!: () => void;
 		let attempt = 0;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield async function* () {
 				const id = ++attempt;
 				if (id === 1) {
@@ -905,7 +905,7 @@ describe("rapid restart with in-flight inner async work", () => {
 		let phase = "first";
 		let attempt = 0;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield async function* () {
 				const id = ++attempt;
 				if (id === 1) {
@@ -965,7 +965,7 @@ describe("cleanup contract for inner async generators on cancel", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield async function* () {
 					yield () => html`<span>parked</span>`;
 					await new Promise<void>((resolve) => {
@@ -1000,7 +1000,7 @@ describe("cleanup contract for inner async generators on cancel", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield async function* () {
 					yield () => html`<span>parked</span>`;
 					try {
@@ -1039,7 +1039,7 @@ describe("cleanup contract for inner async generators on cancel", () => {
 
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield function* () {
 					yield () => html`<span>done</span>`;
 					return cleanupSpy;

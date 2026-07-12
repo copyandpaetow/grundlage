@@ -65,17 +65,19 @@ describe("assertNestable: host binding requirement", () => {
 
 	test("mounting a list whose item is a root template throws", () => {
 		const items = [html`<template class="leak"><p>x</p></template>`];
-		expect(() => mountInstance(html`<ul>${items}</ul>`)).toThrow(
-			/top level of a component's render output/,
-		);
+		expect(() =>
+			mountInstance(
+				html`<ul>
+					${items}
+				</ul>`,
+			),
+		).toThrow(/top level of a component's render output/);
 	});
 });
 
 describe("mountInstance: fragment + live-binding wiring", () => {
 	test("produces a DocumentFragment with the parsed shape", () => {
-		const { fragment } = mountInstance(
-			html`<section><p>${"hi"}</p></section>`,
-		);
+		const { fragment } = mountInstance(html`<section><p>${"hi"}</p></section>`);
 		expect(fragment.querySelector("section")).not.toBeNull();
 		expect(fragment.querySelector("p")?.textContent).toContain("hi");
 	});
@@ -98,7 +100,9 @@ describe("reconcileInstance: patch vs rebuild", () => {
 
 	test("rebuilds when the structure differs", () => {
 		const { instance } = mountInstance(html`<p>${"a"}</p>`);
-		expect(reconcileInstance(instance, html`<span>${"a"}</span>`)).not.toBeNull();
+		expect(
+			reconcileInstance(instance, html`<span>${"a"}</span>`),
+		).not.toBeNull();
 	});
 });
 
@@ -154,10 +158,7 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 
 	test("a patch after hydrate refreshes content to the current values", () => {
 		const { shadowRoot } = mountIntoShadow(html`<p>${"server-text"}</p>`);
-		const instance = hydrateInstance(
-			html`<p>${"client-text"}</p>`,
-			shadowRoot,
-		);
+		const instance = hydrateInstance(html`<p>${"client-text"}</p>`, shadowRoot);
 		expect(shadowRoot.querySelector("p")?.textContent).toBe("server-text");
 
 		patchInstance(instance, ["refreshed"]);
@@ -182,7 +183,9 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		//each row's attribute emits a single (unclosed) marker as a top-level sibling of the row —
 		//the row-tail walk must not mistake it for an open content range
 		const rows = (labels: Array<string>) =>
-			html`<ul>${labels.map((label) => html`<li class=${label}>${label}</li>`)}</ul>`;
+			html`<ul>
+				${labels.map((label) => html`<li class=${label}>${label}</li>`)}
+			</ul>`;
 		const { shadowRoot } = mountIntoShadow(rows(["a", "b"]));
 
 		expect(() => hydrateInstance(rows(["a", "b"]), shadowRoot)).not.toThrow();
@@ -197,9 +200,12 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		//nested rows contribute their own *.* tails; the outer row-tail walk must skip them via
 		//the nested content range, not stop at the first one it sees
 		const rows = (groups: Array<Array<string>>) =>
-			html`<ul>${groups.map(
-				(group) => html`<li>${group.map((cell) => html`<span>${cell}</span>`)}</li>`,
-			)}</ul>`;
+			html`<ul>
+				${groups.map(
+					(group) =>
+						html`<li>${group.map((cell) => html`<span>${cell}</span>`)}</li>`,
+				)}
+			</ul>`;
 		const tree = [
 			["a", "b"],
 			["c", "d"],

@@ -96,7 +96,8 @@ export const reapplyOnSwap = (
 ): void => {
 	if (liveBinding.appliedMode !== ATTRIBUTE_MODE.PROPERTY) return;
 	const value = values[liveBinding.staticBinding.valueIndex];
-	(element as unknown as Record<string, unknown>)[liveBinding.lastComposedName] =
-		value;
+	(element as unknown as Record<string, unknown>)[
+		liveBinding.lastComposedName
+	] = value;
 	nudgeComponent(element);
 };

@@ -1,4 +1,4 @@
-import { html, render } from "../../../../lib/src";
+import { html, component } from "../../../../lib/src";
 import {
 	formatNumber,
 	POSITION_SPECIFIC,
@@ -55,7 +55,7 @@ const FIELD_SPECIFIC: Record<
 
 customElements.define(
 	"scene-editor",
-	render(function* (element) {
+	component(function* (element) {
 		// The editor is transparent: it renders the palette chrome over the slotted
 		// scene. `:host` is a positioned block so the absolutely-placed palette anchors
 		// to the viewport; the slot keeps the wrapped camera/world in flow with
@@ -106,7 +106,7 @@ customElements.define(
 		const updateInspector = (): void => {
 			const block = primaryBlock(state);
 			if (block === null) {
-				palette.setProperty("inspector", {
+				palette.setProp("inspector", {
 					visible: false,
 					position: [0, 0, 0],
 					rotation: [0, 0, 0],
@@ -116,7 +116,7 @@ customElements.define(
 				return;
 			}
 			const { position, rotation, size } = resolveBlockTransform(block);
-			palette.setProperty("inspector", {
+			palette.setProp("inspector", {
 				visible: true,
 				position,
 				rotation,
@@ -141,7 +141,7 @@ customElements.define(
 		});
 
 		// The palette talks to the editor through this fixed handler bag; the inspector
-		// snapshot we push separately through setProperty as the selection changes.
+		// snapshot we push separately through setProp as the selection changes.
 		const handlers: PaletteHandlers = {
 			onAdd: placement.enterPlacement,
 			onExport: () => exportScene(host),
@@ -183,7 +183,7 @@ customElements.define(
 		}
 
 		// Handlers never change, so we hand them over as a plain property before mounting;
-		// the inspector snapshot we push through setProperty as the selection changes.
+		// the inspector snapshot we push through setProp as the selection changes.
 		palette.handlers = handlers;
 		element.shadowRoot?.appendChild(palette);
 

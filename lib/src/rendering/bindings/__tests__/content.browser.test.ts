@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../../index";
+import { html, component } from "../../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -22,7 +22,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let text = "before";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${text}</p>`;
 		});
 
@@ -49,7 +49,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let inner = "child-v1";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html` <div>${html`<span>${inner}</span>`}</div>`;
 		});
 
@@ -74,7 +74,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "b", "c"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html` <ul>
 					${items.map((i) => html` <li>${i}</li>`)}
@@ -108,7 +108,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let value: unknown = null;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${value}</p>`;
 		});
 
@@ -126,7 +126,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let value: unknown = undefined;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${value}</p>`;
 		});
 
@@ -145,7 +145,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let value: unknown = false;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${value}</p>`;
 		});
 
@@ -162,7 +162,7 @@ describe("content updates", () => {
 	test("renders boolean true as text", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${true}</p>`;
 		});
 
@@ -179,7 +179,7 @@ describe("content updates", () => {
 	test("renders a number as text", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${42}</p>`;
 		});
 
@@ -196,7 +196,7 @@ describe("content updates", () => {
 	test("renders zero as text", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${0}</p>`;
 		});
 
@@ -214,7 +214,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let useTemplate = false;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<div>
 					${useTemplate ? html`<span>nested</span>` : "plain text"}
@@ -245,7 +245,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let useTemplate = true;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<div>
 					${useTemplate ? html`<span>nested</span>` : "plain text"}
@@ -276,7 +276,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let useArray = false;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<div>
 					${useArray
@@ -306,7 +306,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let useArray = true;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<div>
 					${useArray
@@ -337,7 +337,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items: string[] = [];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<div>${items.map((i) => html`<span>${i}</span>`)}</div>`;
 		});
 
@@ -366,7 +366,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let inner = "deep";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<div>${html`<section>${html`<p>${inner}</p>`}</section>`}</div>`;
 		});
@@ -398,7 +398,7 @@ describe("content updates", () => {
 			{ id: 3, text: "three" },
 		];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((i) => html`<li>${i.text}</li>`)}
@@ -435,7 +435,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["x"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html` <div>${items.map((i) => html`<span>${i}</span>`)}</div>`;
 		});
@@ -466,7 +466,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["alpha", "beta", "gamma"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -497,7 +497,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["one", "two", "three"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -526,7 +526,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "c"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -560,7 +560,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "b", "c"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -595,7 +595,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["tail"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -627,7 +627,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["alpha", "beta", "gamma"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li><input data-name="${item}" /></li>`)}
@@ -657,7 +657,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let value = 1.5;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${value}</p>`;
 		});
 
@@ -691,7 +691,7 @@ describe("content updates", () => {
 		let value = 0;
 		let renderCount = 0;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				renderCount++;
 				return html`<p>${value}</p>`;
@@ -737,7 +737,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = [10, 20, 30, 40];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map(
@@ -786,7 +786,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["alpha", "beta"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((value) => html`<li>${value}</li>`)}
@@ -821,7 +821,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "c"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((value) => html`<li>${value}</li>`)}
@@ -858,7 +858,7 @@ describe("content updates", () => {
 			{ width: 20, label: "second" },
 		];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map(
@@ -900,7 +900,7 @@ describe("content updates", () => {
 			{ name: "b", items: ["b1", "b2"] },
 		];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${groups.map(
@@ -991,7 +991,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "a", "b"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1041,7 +1041,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items: Array<string> = ["a", "b", "c"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1081,7 +1081,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "b"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1117,7 +1117,7 @@ describe("content updates", () => {
 			{ kind: "item", value: "two" },
 		];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((entry) =>
@@ -1170,7 +1170,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "b", "c", "d"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1203,7 +1203,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "b", "c", "d"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1236,7 +1236,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "x", "y", "z", "d"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1284,7 +1284,7 @@ describe("content updates", () => {
 		// middle bookkeeping.
 		let items = ["a", "b", "c"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1314,7 +1314,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "b"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1348,7 +1348,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["d", "e"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1384,7 +1384,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items = ["a", "b", "c", "d", "e"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -1421,7 +1421,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let items: Array<string | number> = ["alpha", 2, "gamma"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items}
@@ -1455,7 +1455,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		const items: Array<string> = ["a", "b", "c"];
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items}
@@ -1499,7 +1499,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let label = "first";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<section><!-- author note -->${label}</section>`;
 		});
 
@@ -1538,7 +1538,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let note = "first";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<section><!-- ${note} --></section>`;
 		});
 
@@ -1573,7 +1573,7 @@ describe("content updates", () => {
 		const tag = uniqueTag();
 		let note = "hidden";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<section><!--${note}--></section>`;
 		});
 
@@ -1610,7 +1610,7 @@ describe("content updates", () => {
 		let left = "a";
 		let right = "b";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<section><!-- ${left} and ${right} --></section>`;
 		});
 

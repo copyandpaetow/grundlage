@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { FORM_EVENTS, type FormBase } from "../forms";
-import { html, render } from "../index";
+import { html, component } from "../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -32,7 +32,7 @@ describe("form-associated component in a live form", () => {
 			let captured: ElementInternals | null | undefined;
 			customElements.define(
 				tag,
-				render(function* (host) {
+				component(function* (host) {
 					captured = host.internals;
 					yield () => html`<template><input /></template>`;
 				}, formOptions),
@@ -54,7 +54,7 @@ describe("form-associated component in a live form", () => {
 			const tag = uniqueTag();
 			customElements.define(
 				tag,
-				render(function* (host) {
+				component(function* (host) {
 					host.internals?.setFormValue("ada");
 					yield () => html`<template><input /></template>`;
 				}, formOptions),
@@ -76,7 +76,7 @@ describe("form-associated component in a live form", () => {
 			const tag = uniqueTag();
 			customElements.define(
 				tag,
-				render(function* () {
+				component(function* () {
 					yield () => html`<template><input /></template>`;
 				}, formOptions),
 			);
@@ -100,7 +100,7 @@ describe("form-associated component in a live form", () => {
 			const tag = uniqueTag();
 			customElements.define(
 				tag,
-				render(function* () {
+				component(function* () {
 					yield () => html`<template><input /></template>`;
 				}, formOptions),
 			);

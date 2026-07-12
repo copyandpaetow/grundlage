@@ -1,4 +1,4 @@
-import { html, props, render } from "../../../../lib/src";
+import { html, props, component } from "../../../../lib/src";
 import type { BaseComponent } from "../../../../lib/src/types";
 
 // <scene-palette> — the editor's 2D chrome: the toolbar (add / group / camera /
@@ -47,7 +47,7 @@ export interface ScenePaletteElement extends BaseComponent {
 
 customElements.define(
 	"scene-palette",
-	render(function* (element) {
+	component(function* (element) {
 		const host = element as ScenePaletteElement;
 		// Handlers arrive as a JS property before we mount, and never change — read
 		// them once rather than on every render.

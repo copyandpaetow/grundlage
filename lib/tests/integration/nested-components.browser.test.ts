@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, props, render, type Template } from "../../src/index";
+import { html, props, component, type Template } from "../../src/index";
 import { hashValue } from "../../src/utils/hashing";
 import { BaseComponent, ComponentGenerator } from "../../src/types";
 
@@ -22,13 +22,13 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<span>child-content</span>`;
 			}),
 		);
 		customElements.define(
 			parentTag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<section><${childTag}></${childTag}></section>`;
 			}),
 		);
@@ -51,14 +51,14 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			render(function* (element) {
+			component(function* (element) {
 				yield () =>
 					html`<span>${element.getAttribute("label") ?? "empty"}</span>`;
 			}),
 		);
 
 		let label = "first";
-		const ParentClass = render(function* () {
+		const ParentClass = component(function* () {
 			yield () => html`<${childTag} label=${label}></${childTag}>`;
 		});
 		customElements.define(parentTag, ParentClass);
@@ -87,7 +87,7 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			render(function* (element) {
+			component(function* (element) {
 				yield () => {
 					const data = (element as Child).data;
 					return html`<span>${data ? data.value : "none"}</span>`;
@@ -96,7 +96,7 @@ describe("nested components", () => {
 		);
 
 		let payload: { value: number } = { value: 1 };
-		const ParentClass = render(function* () {
+		const ParentClass = component(function* () {
 			yield () => html`<${childTag} data=${payload}></${childTag}>`;
 		});
 		customElements.define(parentTag, ParentClass);
@@ -124,7 +124,7 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			render(function* (element) {
+			component(function* (element) {
 				const emit = () => {
 					element.dispatchEvent(
 						new CustomEvent("pinged", {
@@ -139,7 +139,7 @@ describe("nested components", () => {
 		);
 
 		const received: number[] = [];
-		const ParentClass = render(function* (element) {
+		const ParentClass = component(function* (element) {
 			element.addEventListener("pinged", (event) => {
 				received.push((event as CustomEvent<number>).detail);
 			});
@@ -166,14 +166,14 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			render(function* (element) {
+			component(function* (element) {
 				yield () =>
 					html`<span>${element.getAttribute("label") ?? "none"}</span>`;
 			}),
 		);
 
 		let label = "a";
-		const ParentClass = render(function* () {
+		const ParentClass = component(function* () {
 			yield () => html`<div><${childTag} label=${label}></${childTag}></div>`;
 		});
 		customElements.define(parentTag, ParentClass);
@@ -203,13 +203,13 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			render(function* (element) {
+			component(function* (element) {
 				yield () => html`<span>${element.getAttribute("value") ?? ""}</span>`;
 			}),
 		);
 
 		let items = ["x", "y", "z"];
-		const ParentClass = render(function* () {
+		const ParentClass = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map(
@@ -252,19 +252,19 @@ describe("nested components", () => {
 
 		customElements.define(
 			leafTag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<em>leaf</em>`;
 			}),
 		);
 		customElements.define(
 			middleTag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<div><${leafTag}></${leafTag}></div>`;
 			}),
 		);
 		customElements.define(
 			rootTag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<section><${middleTag}></${middleTag}></section>`;
 			}),
 		);
@@ -286,7 +286,7 @@ describe("nested components", () => {
 		let cleanedChild = false;
 		customElements.define(
 			childTag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<span>temp</span>`;
 				return () => {
 					cleanedChild = true;
@@ -295,7 +295,7 @@ describe("nested components", () => {
 		);
 		customElements.define(
 			parentTag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<${childTag}></${childTag}>`;
 			}),
 		);
@@ -316,13 +316,13 @@ describe("nested components", () => {
 		let counterInternal = 0;
 		customElements.define(
 			childTag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<span>${counterInternal}</span>`;
 			}),
 		);
 
 		let parentLabel = "one";
-		const ParentClass = render(function* () {
+		const ParentClass = component(function* () {
 			yield () =>
 				html`<div>
 					<h1>${parentLabel}</h1>
@@ -391,10 +391,10 @@ describe("shared template generator functions", () => {
 		const tagA = uniqueTag("shared-a");
 		const tagB = uniqueTag("shared-b");
 
-		const ComponentA = render(function* () {
+		const ComponentA = component(function* () {
 			yield () => card("from-a", "body-a");
 		});
-		const ComponentB = render(function* () {
+		const ComponentB = component(function* () {
 			yield () => card("from-b", "body-b");
 		});
 		customElements.define(tagA, ComponentA);
@@ -424,7 +424,7 @@ describe("shared template generator functions", () => {
 			{ title: "beta", body: "two" },
 		];
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield () => list(rows, (row) => card(row.title, row.body));
 		});
 		customElements.define(tag, ComponentClass);
@@ -462,7 +462,7 @@ describe("shared template generator functions", () => {
 		const labeled = (label: string, inner: Template) =>
 			html`<section><strong>${label}</strong>${inner}</section>`;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield () => labeled("heading", card("title", "body"));
 		});
 		customElements.define(tag, ComponentClass);
@@ -491,7 +491,7 @@ describe("shared template generator functions", () => {
 
 		let state: "idle" | "loading" | "error" = "loading";
 		let message = "fetching";
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield () => status(state, message);
 		});
 		customElements.define(tag, ComponentClass);
@@ -529,7 +529,7 @@ describe("shared template generator functions", () => {
 	test("helper reused across multiple call sites in one template", async () => {
 		const tag = uniqueTag("shared-multi-site");
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield () =>
 				html`<main>
 					${card("first", "one")}${card("second", "two")}${card(
@@ -563,7 +563,7 @@ describe("shared template generator functions", () => {
 
 		customElements.define(
 			childTag,
-			render(function* (element) {
+			component(function* (element) {
 				yield () =>
 					card(
 						element.getAttribute("title") ?? "",
@@ -572,7 +572,7 @@ describe("shared template generator functions", () => {
 			}),
 		);
 
-		const ParentClass = render(function* () {
+		const ParentClass = component(function* () {
 			yield () => html`<div>
 				${card("parent-card", "outer")}
 				<${childTag} title="child-card" body="inner"></${childTag}>
@@ -597,7 +597,7 @@ describe("shared template generator functions", () => {
 });
 
 describe("shared generator functions", () => {
-	test("same generator passed to two render() calls produces independent components", async () => {
+	test("same generator passed to two component() calls produces independent components", async () => {
 		let mountCount = 0;
 		const counterGenerator: ComponentGenerator = function* () {
 			const id = ++mountCount;
@@ -606,8 +606,8 @@ describe("shared generator functions", () => {
 
 		const firstTag = uniqueTag("shared-gen-a");
 		const secondTag = uniqueTag("shared-gen-b");
-		customElements.define(firstTag, render(counterGenerator));
-		customElements.define(secondTag, render(counterGenerator));
+		customElements.define(firstTag, component(counterGenerator));
+		customElements.define(secondTag, component(counterGenerator));
 
 		const first = mount(firstTag);
 		const second = mount(secondTag);
@@ -631,7 +631,7 @@ describe("shared generator functions", () => {
 			});
 			yield () => html`<span>${count}</span>`;
 		};
-		customElements.define(tag, render(stateGenerator));
+		customElements.define(tag, component(stateGenerator));
 
 		const first = mount(tag) as BaseComponent;
 		const second = mount(tag) as BaseComponent;
@@ -661,7 +661,7 @@ describe("shared generator functions", () => {
 		const tag = uniqueTag("delegated");
 		customElements.define(
 			tag,
-			render(function* (host) {
+			component(function* (host) {
 				yield* loadingThenData(host);
 			}),
 		);
@@ -693,7 +693,7 @@ describe("shared generator functions", () => {
 		};
 
 		const tag = uniqueTag("higher-order");
-		customElements.define(tag, render(withLifecycleLog("A", body)));
+		customElements.define(tag, component(withLifecycleLog("A", body)));
 
 		const element = mount(tag);
 		await sleep();
@@ -720,7 +720,7 @@ describe("shared generator functions", () => {
 		const tag = uniqueTag("manual-iter");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				for (const step of loadSteps()) {
 					visited.push(step);
 				}
@@ -749,7 +749,7 @@ describe("shared generator functions", () => {
 		const tag = uniqueTag("async-delegate");
 		customElements.define(
 			tag,
-			render(async function* (element) {
+			component(async function* (element) {
 				yield* loadInTwoStages(element);
 			}),
 		);
@@ -770,7 +770,7 @@ describe("framework-parity patterns", () => {
 		const tag = uniqueTag("slotted");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<section><slot></slot></section>`;
 			}),
 		);
@@ -793,7 +793,7 @@ describe("framework-parity patterns", () => {
 		const tag = uniqueTag("named-slots");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield () =>
 					html`<div>
 						<header><slot name="title"></slot></header>
@@ -826,7 +826,7 @@ describe("framework-parity patterns", () => {
 
 	test("two-way-style input binding: user input updates state and triggers re-render", async () => {
 		const tag = uniqueTag("two-way");
-		const ComponentClass = render(function* (element) {
+		const ComponentClass = component(function* (element) {
 			let value = "";
 			const onInput = (event: Event) => {
 				value = (event.target as HTMLInputElement).value;
@@ -865,7 +865,7 @@ describe("framework-parity patterns", () => {
 		const providerTag = uniqueTag("theme-provider");
 		customElements.define(
 			providerTag,
-			render(function* (element) {
+			component(function* (element) {
 				element.addEventListener("request-theme", (event) => {
 					(event as CustomEvent<ThemeRequest>).detail.theme = "dark";
 					event.stopPropagation();
@@ -877,7 +877,7 @@ describe("framework-parity patterns", () => {
 		const consumerTag = uniqueTag("theme-consumer");
 		customElements.define(
 			consumerTag,
-			render(function* (element) {
+			component(function* (element) {
 				//defer one microtask: connectedCallback order is only guaranteed
 				//in tree order in spec-compliant engines, and the provider's
 				//listener must be registered before we dispatch. Yielding a
@@ -919,7 +919,7 @@ describe("framework-parity patterns", () => {
 		};
 		let captured: ValidatedProps | null = null;
 
-		const ComponentClass = render(function* (element) {
+		const ComponentClass = component(function* (element) {
 			captured = props(element, {
 				label: String,
 				count: Number,
@@ -953,7 +953,7 @@ describe("framework-parity patterns", () => {
 
 	test("component instances mounted from the same class keep state isolated", async () => {
 		const tag = uniqueTag("instance-isolation");
-		const ComponentClass = render(function* (element) {
+		const ComponentClass = component(function* (element) {
 			let count = 0;
 			element.addEventListener("bump", () => {
 				count++;
@@ -987,7 +987,7 @@ describe("framework-parity patterns", () => {
 		const tag = uniqueTag("conditional-null");
 		let show = true;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield () =>
 				html`<div>
 					<header>stable</header>
@@ -1028,7 +1028,7 @@ describe("framework-parity patterns", () => {
 		const listTag = uniqueTag("renderprop-list");
 		customElements.define(
 			listTag,
-			render(function* (element) {
+			component(function* (element) {
 				yield () => {
 					const rows =
 						(element as HTMLElement & { items?: string[] }).items ?? [];
@@ -1045,7 +1045,7 @@ describe("framework-parity patterns", () => {
 		const hostTag = uniqueTag("renderprop-host");
 		customElements.define(
 			hostTag,
-			render(function* () {
+			component(function* () {
 				const items = ["one", "two", "three"];
 				const row: RowRenderer = (item) =>
 					html`<li class="custom">item:${item}</li>`;
@@ -1072,7 +1072,7 @@ describe("framework-parity patterns", () => {
 		const tag = uniqueTag("slot-fallback");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield () =>
 					html`<section>
 						<slot><em>nothing-here</em></slot>
@@ -1115,7 +1115,7 @@ describe("framework-parity patterns", () => {
 		const tag = uniqueTag("slot-named-fallback");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield () => html`
 					<header>
 						<slot name="title"><h1>default-title</h1></slot>
@@ -1156,7 +1156,7 @@ describe("framework-parity patterns", () => {
 		const tag = uniqueTag("slot-reproject");
 		customElements.define(
 			tag,
-			render(function* () {
+			component(function* () {
 				yield () => html`<section><slot></slot></section>`;
 			}),
 		);
@@ -1196,14 +1196,14 @@ describe("framework-parity patterns", () => {
 			const childTag = uniqueTag("focus-child");
 			customElements.define(
 				childTag,
-				render(function* () {
+				component(function* () {
 					yield () => html`<input type="text" />`;
 				}),
 			);
 
 			const parentTag = uniqueTag("focus-parent");
 			let label = "one";
-			const ParentClass = render(function* () {
+			const ParentClass = component(function* () {
 				yield () =>
 					html`<div><h1>${label}</h1><${childTag}></${childTag}></div>`;
 			});
@@ -1241,7 +1241,7 @@ describe("framework-parity patterns", () => {
 		let shouldChildThrow = true;
 		customElements.define(
 			childTag,
-			render(function* () {
+			component(function* () {
 				yield () => {
 					if (shouldChildThrow) {
 						throw new Error("child-boom");
@@ -1253,7 +1253,7 @@ describe("framework-parity patterns", () => {
 
 		const parentTag = uniqueTag("err-parent");
 		let parentLabel = "alpha";
-		const ParentClass = render(function* () {
+		const ParentClass = component(function* () {
 			yield () =>
 				html`<div>
 					<h1>${parentLabel}</h1>

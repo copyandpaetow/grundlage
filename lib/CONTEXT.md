@@ -46,7 +46,7 @@ _Avoid_: inner generator (the runtime term), effect/hook (there is no hook API).
 An input to a component. Crosses the web-component boundary as **either** an HTML
 attribute (always a string) **or** a JS property — Grundlage hides which. Read inside a
 component with `props(host, schema)`; written from a parent with `host.setProp(name, value)`.
-_Avoid_: attribute (only one of the two channels), property (likewise), setProperty (old
+_Avoid_: attribute (only one of the two channels), property (likewise), setProp (old
 name for the writer — it is the write-twin of `props`, so it shares the `prop` vocabulary).
 
 **Attribute-vs-property rule**:

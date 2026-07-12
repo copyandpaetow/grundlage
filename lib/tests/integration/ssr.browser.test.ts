@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../src/index";
+import { html, component } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -68,7 +68,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		test("renders into a serializable shadow root", async () => {
 			const tag = uniqueTag();
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () => html`<p>hello</p>`;
 			});
 
@@ -88,7 +88,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const tag = uniqueTag();
 			let count = 42;
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () => html`<span>${count}</span>`;
 			});
 
@@ -108,7 +108,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		test("serializes nested templates", async () => {
 			const tag = uniqueTag();
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () => html` <div>${html`<span>nested</span>`}</div>`;
 			});
 
@@ -127,7 +127,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const tag = uniqueTag();
 			const items = ["apple", "banana", "cherry"];
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () =>
 					html` <ul>
 						${items.map((item) => html` <li>${item}</li>`)}
@@ -150,7 +150,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		test("serializes attributes on rendered elements", async () => {
 			const tag = uniqueTag();
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () =>
 					html` <div class="container" id="main"><p>content</p></div>`;
 			});
@@ -175,7 +175,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const serverTag = uniqueTag();
 				let yieldCount = 0;
 
-				const ServerComponent = render(function* () {
+				const ServerComponent = component(function* () {
 					yieldCount++;
 					yield () => html`<p>loading</p>`;
 					yieldCount++;
@@ -199,7 +199,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				let phase: "loading" | "loaded" = "loading";
 
 				const makeComponent = () =>
-					render(function* () {
+					component(function* () {
 						yield () => html`<p>${phase}</p>`;
 					});
 
@@ -239,7 +239,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				let counter = 0;
 
 				const makeComponent = () =>
-					render(function* () {
+					component(function* () {
 						yield () => html`<span>count: ${counter}</span>`;
 					});
 
@@ -274,7 +274,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				let clientPostYieldRan = false;
 				let serverPostYieldRan = false;
 
-				const ServerComponent = render(function* () {
+				const ServerComponent = component(function* () {
 					yield () => html`<p>shared</p>`;
 					serverPostYieldRan = true;
 				});
@@ -283,7 +283,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				expect(serverPostYieldRan).toBe(false);
 
 				//separate factory + flag so we can prove the client ran its own post-yield body
-				const ClientComponent = render(function* () {
+				const ClientComponent = component(function* () {
 					yield () => html`<p>shared</p>`;
 					clientPostYieldRan = true;
 				});
@@ -309,7 +309,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const clientTag = uniqueTag();
 				let innerSecondYielded = false;
 
-				const ServerComponent = render(function* () {
+				const ServerComponent = component(function* () {
 					yield function* inner() {
 						yield () => html`<p>inner-first</p>`;
 						innerSecondYielded = true;
@@ -322,7 +322,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				expect(serialized).not.toContain("inner-second");
 				expect(innerSecondYielded).toBe(false);
 
-				const ClientComponent = render(function* () {
+				const ClientComponent = component(function* () {
 					yield function* inner() {
 						yield () => html`<p>inner-first</p>`;
 					};
@@ -348,14 +348,14 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 
-				const ServerComponent = render(function* () {
+				const ServerComponent = component(function* () {
 					yield () =>
 						html`<template class="${"server-class"}"><p>hi</p></template>`;
 				});
 				const serialized = await serverRender(serverTag, ServerComponent);
 				expect(serialized).toContain("server-class");
 
-				const ClientComponent = render(function* () {
+				const ClientComponent = component(function* () {
 					yield () =>
 						html`<template class="${"client-class"}"><p>hi</p></template>`;
 				});
@@ -376,7 +376,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const serverTag = uniqueTag();
 				let postYieldRan = false;
 
-				const Component = render(function* () {
+				const Component = component(function* () {
 					const data = yield Promise.resolve("server-data");
 					yield () => html`<p>${data as string}</p>`;
 					postYieldRan = true;
@@ -396,7 +396,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				let renderFunctionCalls = 0;
 				let secondYieldRan = false;
 
-				const Component = render(function* (host) {
+				const Component = component(function* (host) {
 					yield () => {
 						renderFunctionCalls++;
 						queueMicrotask(() => host.update());
@@ -418,7 +418,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const clientTag = uniqueTag();
 				let firstYield = true;
 
-				const ClientComponent = render(function* () {
+				const ClientComponent = component(function* () {
 					yield () => html`<p>${firstYield ? "a" : "b"}</p>`;
 				});
 
@@ -443,7 +443,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		test("detects pre-existing shadow root and skips attachShadow", async () => {
 			const tag = uniqueTag();
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () => html`<p>content</p>`;
 			});
 
@@ -465,7 +465,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			let text = "server text";
 
 			const makeComponent = () =>
-				render(function* () {
+				component(function* () {
 					yield () => html`<p>${text}</p>`;
 				});
 
@@ -492,7 +492,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			let count = 0;
 
 			const makeComponent = () =>
-				render(function* () {
+				component(function* () {
 					yield () => html`<span>${count}</span>`;
 				});
 
@@ -524,7 +524,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const clientTag = uniqueTag();
 
 			const makeComponent = () =>
-				render(function* () {
+				component(function* () {
 					yield () =>
 						html` <div>
 							<h1>title</h1>
@@ -559,7 +559,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 			const serialized = await serverRender(
 				serverTag,
-				render(function* () {
+				component(function* () {
 					yield () => html`<p>content</p>`;
 				}),
 			);
@@ -571,7 +571,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 			customElements.define(
 				clientTag,
-				render(function* () {
+				component(function* () {
 					yield () => html`<p>content</p>`;
 					return () => {
 						cleaned = true;
@@ -591,7 +591,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const clientTag = uniqueTag();
 
 			const makeComponent = () =>
-				render(function* (element) {
+				component(function* (element) {
 					yield () =>
 						html`<span>${element.getAttribute("data-label") ?? "none"}</span>`;
 				});
@@ -622,7 +622,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 			const serialized = await serverRender(
 				serverTag,
-				render(function* () {
+				component(function* () {
 					yield () => html`<p>content</p>`;
 				}),
 			);
@@ -634,7 +634,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 			customElements.define(
 				clientTag,
-				render(function* () {
+				component(function* () {
 					const host = yield () => html`<p>content</p>`;
 					receivedHost = host as HTMLElement;
 				}),
@@ -652,7 +652,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
-			const ServerComponent = render(function* () {
+			const ServerComponent = component(function* () {
 				yield () => html`<p>${"server-value"}</p>`;
 			});
 			const serialized = await serverRender(serverTag, ServerComponent);
@@ -661,7 +661,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				clientTag,
 			);
 
-			const ClientComponent = render(function* () {
+			const ClientComponent = component(function* () {
 				yield () => html`<p>${"client-value"}</p>`;
 			});
 			const element = hydrateFromHTML(clientHTML);
@@ -683,7 +683,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
-			const ServerComponent = render(function* () {
+			const ServerComponent = component(function* () {
 				yield () =>
 					html`<template class="${"server-class"}"><p>hi</p></template>`;
 			});
@@ -693,7 +693,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				clientTag,
 			);
 
-			const ClientComponent = render(function* () {
+			const ClientComponent = component(function* () {
 				yield () =>
 					html`<template class="${"client-class"}"><p>hi</p></template>`;
 			});
@@ -712,7 +712,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			let useList = false;
 
 			const makeComponent = () =>
-				render(function* () {
+				component(function* () {
 					yield () =>
 						useList
 							? html` <ul>
