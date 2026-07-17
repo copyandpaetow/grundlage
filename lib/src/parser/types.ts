@@ -22,6 +22,8 @@ export type CommentBinding = {
 export type RawContentBinding = {
 	type: typeof BINDING_TYPES.RAW_CONTENT;
 	values: Array<number | string>;
+	tag: string;
+	cssPlan: CssPlan | null;
 };
 
 export type TagBinding = {
@@ -37,6 +39,18 @@ export type Binding =
 	| RawContentBinding;
 
 export type Part = string | number;
+
+export interface CssValueGroup {
+	ordinal: number; //the group's first expression index — the name's tail
+	valueParts: Array<Part>;
+}
+
+export interface CssPlan {
+	namePrefix: string; //"--<templateHash unsigned base36>-"
+	groupNames: Array<string>; //base names (namePrefix + ordinal), shared by the first mount per host
+	sheetParts: Array<string | number>; //number = group index, resolved to var(--name)
+	groups: Array<CssValueGroup>;
+}
 
 export interface TagStaticBinding {
 	type: typeof BINDING.TAG;
@@ -74,6 +88,7 @@ export interface ContentStaticBinding {
 export interface RawContentStaticBinding {
 	type: typeof BINDING.RAW_CONTENT;
 	parts: Array<Part>;
+	cssPlan: CssPlan | null;
 }
 
 export interface CommentStaticBinding {
@@ -98,4 +113,5 @@ export interface ParsedTemplate {
 	fragmentCloneSource: DocumentFragment | null;
 	hostBindingCount: number;
 	keyBindingIndex: number;
+	hostStyleIsBound: boolean;
 }

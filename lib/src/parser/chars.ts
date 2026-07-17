@@ -23,6 +23,19 @@ export const CHAR_CODE = {
 	EQUALS: 61,
 	GREATER_THAN: 62,
 	BANG: 33,
+	OPEN_PAREN: 40,
+	CLOSE_PAREN: 41,
+	ASTERISK: 42,
+	COLON: 58,
+	SEMICOLON: 59,
+	AT: 64,
+	UPPERCASE_A: 65,
+	UPPERCASE_Z: 90,
+	BACKSLASH: 92,
+	LOWERCASE_A: 97,
+	LOWERCASE_Z: 122,
+	OPEN_BRACE: 123,
+	CLOSE_BRACE: 125,
 } as const;
 
 export const isWhitespaceCode = (code: number) =>

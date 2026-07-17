@@ -1,4 +1,5 @@
 import { BINDING } from "../../parser/constants";
+import { composeSheet } from "../../parser/css";
 import { StaticBinding } from "../../parser/types";
 import { combinedPartsHash, composeParts } from "../compose";
 import {
@@ -23,6 +24,7 @@ import {
 import { commitComment } from "./comment";
 import { commitContent, seedContentByAdoption } from "./content";
 import { commitRawContent } from "./content-raw";
+import { seedCssGroupHashes } from "./css-apply";
 import {
 	commitNamedDynamic,
 	reapplyOnSwap as reapplyNamedDynamicOnSwap,
@@ -30,6 +32,7 @@ import {
 import { commitTag } from "./tag";
 import {
 	AttributeLiveBinding,
+	Carrier,
 	CommentLiveBinding,
 	ContentLiveBinding,
 	DynamicAttributeLiveBinding,
@@ -47,6 +50,7 @@ export const createLiveBinding = (
 	markerComment: Comment | null,
 	hostElement: Element | null,
 	endMarker: Comment | null = null,
+	carrier: Carrier | null = null,
 ): LiveBinding => {
 	switch (staticBinding.type) {
 		case BINDING.TAG:
@@ -93,14 +97,44 @@ export const createLiveBinding = (
 				staticBinding,
 				startMarker: markerComment!,
 				endMarker: endMarker!,
+				carrier: carrier!,
 				content: { kind: CONTENT_KIND.UNRESOLVED },
 			};
-		case BINDING.RAW_CONTENT:
+		case BINDING.RAW_CONTENT: {
+			//null previousGroupHashes marks the fallback path: no plan, or the carrier's
+			//root template binds the host style attribute and would wipe the host props
+			const cssPlan = carrier!.hostStyleIsBound ? null : staticBinding.cssPlan;
+			let groupNames: Array<string> | null = null;
+			let sheetOverride: string | null = null;
+			if (cssPlan !== null) {
+				const mountCounts = (carrier!.cssPlanMountCounts ??= new Map());
+				const instanceOrdinal = mountCounts.get(cssPlan) ?? 0;
+				mountCounts.set(cssPlan, instanceOrdinal + 1);
+				if (instanceOrdinal === 0) {
+					groupNames = cssPlan.groupNames;
+				} else {
+					//the baked base names are already taken on this host — this instance
+					//gets suffixed names and rewrites its own sheet once at first commit
+					const instancePrefix = `${cssPlan.namePrefix}${instanceOrdinal}-`;
+					groupNames = cssPlan.groups.map(
+						(group) => instancePrefix + group.ordinal,
+					);
+					sheetOverride = composeSheet(cssPlan, groupNames);
+				}
+			}
 			return {
 				staticBinding,
 				markerComment: markerComment!,
 				valueHash: UNSET_HASH,
+				carrier: carrier!,
+				previousGroupHashes:
+					cssPlan === null
+						? null
+						: new Array<number>(cssPlan.groups.length).fill(UNSET_HASH),
+				groupNames,
+				sheetOverride,
 			};
+		}
 		case BINDING.COMMENT:
 			return {
 				staticBinding,
@@ -162,6 +196,21 @@ export const seedLiveBinding = (
 			);
 			attribute.valueHash = computeGateHash(liveBinding, values);
 			return;
+		}
+		case BINDING.RAW_CONTENT: {
+			const rawContent = liveBinding as RawContentLiveBinding;
+			const groupHashes = rawContent.previousGroupHashes;
+			if (groupHashes === null) {
+				rawContent.valueHash = computeGateHash(liveBinding, values);
+				return;
+			}
+			//the server already wrote this instance's sheet — suffixed or not
+			rawContent.sheetOverride = null;
+			return seedCssGroupHashes(
+				rawContent.staticBinding.cssPlan!.groups,
+				groupHashes,
+				values,
+			);
 		}
 		default:
 			(liveBinding as { valueHash: number }).valueHash = computeGateHash(

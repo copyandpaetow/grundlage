@@ -1,11 +1,5 @@
-import { stringHash } from "../utils/hashing";
-import {
-	ATTRIBUTE_SHAPE,
-	BINDING,
-	BINDING_TYPES,
-	COMMENT_IDENTIFIER,
-	NO_KEY_BINDING,
-} from "./constants";
+import { hashValue } from "../utils/hashing";
+import { ATTRIBUTE_SHAPE, BINDING, BINDING_TYPES, COMMENT_IDENTIFIER, NO_KEY_BINDING } from "./constants";
 import {
 	AttributeBinding,
 	Binding,
@@ -16,9 +10,10 @@ import {
 	RawContentBinding,
 	StaticBinding,
 	TagBinding,
-	ValueOf,
+	ValueOf
 } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
+import { analyzeStyle, composeSheet } from "./css";
 
 type StateValue = ValueOf<typeof STATE>;
 
@@ -64,6 +59,7 @@ interface ParserState {
 	state: StateValue;
 	bindings: Array<Binding>;
 	templates: TemplateStringsArray;
+	templateHash: number;
 	index: number;
 	activeTemplate: string;
 	charIndex: number;
@@ -98,6 +94,7 @@ const createParser = (): ParserState => ({
 	state: STATE.TEXT,
 	bindings: [],
 	templates: EMPTY_TEMPLATES,
+	templateHash: 0,
 	index: 0,
 	activeTemplate: "",
 	charIndex: 0,
@@ -134,6 +131,8 @@ const resetParser = (
 	parser.state = STATE.TEXT;
 	parser.bindings = [];
 	parser.templates = strings;
+	//the strings are the template identity; hashed pre-parse so css sheets can bake
+	parser.templateHash = hashValue(strings);
 	parser.index = 0;
 	parser.activeTemplate = strings[0];
 	parser.charIndex = 0;
@@ -239,6 +238,8 @@ const createBinding = (parser: ParserState) => {
 			return {
 				type: BINDING_TYPES.RAW_CONTENT,
 				values: [],
+				tag: parser.currentTagName,
+				cssPlan: null,
 			} satisfies RawContentBinding;
 		case STATE.TAG:
 			return {
@@ -280,10 +281,16 @@ const completeComment = (parser: ParserState) => {
 const completeSpecialContent = (parser: ParserState) => {
 	if (parser.activeBinding) {
 		parser.resultBuffer.push(openComment(parser));
-		moveArrayContents(
-			parser.rawContentBuffer,
-			(parser.activeBinding as RawContentBinding).values,
-		);
+		const binding = parser.activeBinding as RawContentBinding;
+		moveArrayContents(parser.rawContentBuffer, binding.values);
+		if (binding.tag === STYLE_TAG) {
+			binding.cssPlan = analyzeStyle(binding.values, parser.templateHash);
+			//the prepared sheet rides in the markup — no first-commit sheet write
+			if (binding.cssPlan !== null)
+				parser.contentBuffer.push(
+					composeSheet(binding.cssPlan, binding.cssPlan.groupNames),
+				);
+		}
 	} else {
 		moveArrayContents(parser.rawContentBuffer, parser.contentBuffer);
 	}
@@ -796,15 +803,14 @@ const parse = (
 		return parse(parser, strings, PARSE_MODE.NO_ROOT_TEMPLATE);
 	}
 
-	const result = parser.resultBuffer.join("");
-
 	return {
-		htmlWithMarkers: result,
+		htmlWithMarkers: parser.resultBuffer.join(""),
 		bindings: parser.bindings.map(toStaticBinding),
-		templateHash: stringHash(result),
+		templateHash: parser.templateHash,
 		fragmentCloneSource: null,
 		hostBindingCount: parser.hostBindingOffset,
 		keyBindingIndex: parser.keyBindingIndex,
+		hostStyleIsBound: hasHostStyleBinding(parser),
 	};
 };
 
@@ -843,6 +849,18 @@ const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
 	};
 };
 
+const STYLE_ATTRIBUTE_NAME = "style";
+
+//a host binding writing the style attribute wholesale would wipe css host props; the
+//flag rides on ParsedTemplate and disables every css plan mounted under that host
+const hasHostStyleBinding = (parser: ParserState): boolean => {
+	for (let index = 0; index < parser.hostBindingOffset; index++) {
+		const { keys } = parser.bindings[index] as AttributeBinding;
+		if (keys.length === 1 && keys[0] === STYLE_ATTRIBUTE_NAME) return true;
+	}
+	return false;
+};
+
 const toStaticBinding = (binding: Binding): StaticBinding => {
 	switch (binding.type) {
 		case BINDING_TYPES.TAG:
@@ -857,7 +875,11 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 		case BINDING_TYPES.COMMENT:
 			return { type: BINDING.COMMENT, parts: binding.values.slice() };
 		case BINDING_TYPES.RAW_CONTENT:
-			return { type: BINDING.RAW_CONTENT, parts: binding.values.slice() };
+			return {
+				type: BINDING.RAW_CONTENT,
+				parts: binding.values.slice(),
+				cssPlan: binding.cssPlan,
+			};
 	}
 };
 

@@ -154,3 +154,100 @@ describe("html parser — raw content bindings", () => {
 		expect(script.textContent).toContain("<");
 	});
 });
+
+describe("html parser — css plan attachment", () => {
+	const rawContentBinding = (parsed: ReturnType<typeof parse>) =>
+		parsed.bindings[0] as RawContentStaticBinding;
+
+	test("a style value hole gets a css plan named from the template hash", () => {
+		const color = "red";
+		const parsed = parse`<style>div { color: ${color}; }</style>`;
+
+		const expectedName = `--${(parsed.templateHash >>> 0).toString(36)}-0`;
+		const cssPlan = rawContentBinding(parsed).cssPlan;
+		expect(cssPlan?.groupNames).toEqual([expectedName]);
+		expect(cssPlan?.groups).toEqual([{ ordinal: 0, valueParts: [" ", 0] }]);
+		//the prepared sheet is baked into the markup — no first-commit write
+		expect(parsed.htmlWithMarkers).toContain(
+			`<style>div { color:var(${expectedName}); }</style>`,
+		);
+	});
+
+	test("templates differing only in raw-content statics get distinct hashes", () => {
+		const color = "red";
+		const first = parse`<style>p { color: ${color}; }</style>`;
+		const second = parse`<style>div { background: ${color}; }</style>`;
+
+		expect(first.templateHash).not.toBe(second.templateHash);
+	});
+
+	test("a structural style hole gets no css plan", () => {
+		const selector = "div";
+		const parsed = parse`<style>${selector} { color: red; }</style>`;
+
+		expect(rawContentBinding(parsed).cssPlan).toBeNull();
+	});
+
+	test("script and textarea holes get no css plan", () => {
+		const code = "let a = 1;";
+		const value = "user input";
+		const scriptParsed = parse`<script>${code}</script>`;
+		const textareaParsed = parse`<textarea>${value}</textarea>`;
+
+		expect(rawContentBinding(scriptParsed).cssPlan).toBeNull();
+		expect(rawContentBinding(textareaParsed).cssPlan).toBeNull();
+	});
+
+	test("a nested template hole gets no css plan", () => {
+		const content = "div { color: red; }";
+		const parsed = parse`<div><template>${content}</template></div>`;
+
+		expect(rawContentBinding(parsed).cssPlan).toBeNull();
+	});
+
+	//the plan stays attached — the fallback decision happens at mount, where the flag
+	//also covers planned styles in NESTED templates under the same host
+	test("a dynamic host style binding sets hostStyleIsBound", () => {
+		const inline = "color: red";
+		const color = "blue";
+		const parsed = parse`<template style="${inline}"><style>div { color: ${color}; }</style></template>`;
+
+		const rawContent = parsed.bindings.find(
+			(binding) => binding.type === BINDING.RAW_CONTENT,
+		) as RawContentStaticBinding;
+		expect(parsed.hostStyleIsBound).toBe(true);
+		expect(rawContent.cssPlan).not.toBeNull();
+	});
+
+	test("a static host style attribute also sets hostStyleIsBound", () => {
+		const color = "blue";
+		const parsed = parse`<template style="position: absolute"><style>div { color: ${color}; }</style></template>`;
+
+		expect(parsed.hostStyleIsBound).toBe(true);
+	});
+
+	test("a non-style host binding leaves hostStyleIsBound unset", () => {
+		const className = "card";
+		const color = "blue";
+		const parsed = parse`<template class="${className}"><style>div { color: ${color}; }</style></template>`;
+
+		const rawContent = parsed.bindings.find(
+			(binding) => binding.type === BINDING.RAW_CONTENT,
+		) as RawContentStaticBinding;
+		expect(parsed.hostStyleIsBound).toBe(false);
+		expect(rawContent.cssPlan).not.toBeNull();
+	});
+
+	test("two style elements in one template get disjoint group names", () => {
+		const a = "red";
+		const b = "10px";
+		const parsed = parse`<style>.a { color: ${a}; }</style
+		><style>.b { width: ${b}; }</style>`;
+
+		const [firstBinding, secondBinding] =
+			parsed.bindings as Array<RawContentStaticBinding>;
+		const hashPrefix = `--${(parsed.templateHash >>> 0).toString(36)}-`;
+		expect(firstBinding.cssPlan?.groupNames[0]).toBe(`${hashPrefix}0`);
+		expect(secondBinding.cssPlan?.groupNames[0]).toBe(`${hashPrefix}1`);
+	});
+});

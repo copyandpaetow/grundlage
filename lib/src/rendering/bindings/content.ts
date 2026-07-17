@@ -73,7 +73,11 @@ const patchBranch = (
 ): void => {
 	assertNestable(value);
 	const branch = liveBinding.content as BranchContentState;
-	const mounted = reconcileInstance(branch.instance, value);
+	const mounted = reconcileInstance(
+		branch.instance,
+		value,
+		liveBinding.carrier,
+	);
 	if (mounted === null) return;
 	forEachInRange(
 		liveBinding.startMarker.nextSibling,
@@ -119,6 +123,7 @@ export const seedContentByAdoption = (
 			(liveBinding.content as BranchContentState).instance = hydrateInstance(
 				value as TemplateValue,
 				liveBinding.startMarker,
+				liveBinding.carrier,
 			);
 			return;
 		case CONTENT_KIND.LIST:

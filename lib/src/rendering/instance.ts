@@ -6,7 +6,7 @@ import {
 	createLiveBinding,
 	seedLiveBinding,
 } from "./bindings/dispatch";
-import { LiveBinding } from "./bindings/types";
+import { Carrier, LiveBinding } from "./bindings/types";
 import { buildFragment } from "./dom";
 import {
 	isOpenMarker,
@@ -35,13 +35,14 @@ export const patchInstance = (
 export const reconcileInstance = (
 	current: Instance | null,
 	value: TemplateValue,
+	carrier: Carrier,
 ): { instance: Instance; fragment: DocumentFragment } | null => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	if (current !== null && current.templateHash === parsed.templateHash) {
 		patchInstance(current, value.values);
 		return null;
 	}
-	return mountInstance(value);
+	return mountInstance(value, carrier);
 };
 
 const isRangeType = (type: number): boolean => type === BINDING.CONTENT;
@@ -56,6 +57,7 @@ export const assertNestable = (value: TemplateValue): void => {
 
 export const mountInstance = (
 	value: TemplateValue,
+	carrier: Carrier,
 ): { instance: Instance; fragment: DocumentFragment } => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	parsed.fragmentCloneSource ??= buildFragment(parsed.htmlWithMarkers);
@@ -74,14 +76,20 @@ export const mountInstance = (
 		const staticBinding = bindings[bindingIndex];
 
 		if (!isRangeType(staticBinding.type)) {
-			const live = createLiveBinding(staticBinding, node, null);
+			const live = createLiveBinding(staticBinding, node, null, null, carrier);
 			commitLiveBinding(live, value.values, liveBindings);
 			liveBindings[bindingIndex++] = live;
 			continue;
 		}
 
 		const closeMarker = node.nextSibling as Comment;
-		const live = createLiveBinding(staticBinding, node, null, closeMarker);
+		const live = createLiveBinding(
+			staticBinding,
+			node,
+			null,
+			closeMarker,
+			carrier,
+		);
 		commitLiveBinding(live, value.values, liveBindings);
 		liveBindings[bindingIndex++] = live;
 		walker.currentNode = closeMarker;
@@ -93,7 +101,11 @@ export const mountInstance = (
 	};
 };
 
-const seedInstance = (walker: TreeWalker, value: TemplateValue): Instance => {
+const seedInstance = (
+	walker: TreeWalker,
+	value: TemplateValue,
+	carrier: Carrier,
+): Instance => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	const { bindings, hostBindingCount } = parsed;
 	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
@@ -103,14 +115,20 @@ const seedInstance = (walker: TreeWalker, value: TemplateValue): Instance => {
 		const staticBinding = bindings[bindingIndex];
 
 		if (!isRangeType(staticBinding.type)) {
-			const live = createLiveBinding(staticBinding, open, null);
+			const live = createLiveBinding(staticBinding, open, null, null, carrier);
 			seedLiveBinding(live, value.values);
 			liveBindings[bindingIndex++] = live;
 			continue;
 		}
 
 		const closeMarker = scanToClose(walker, open);
-		const live = createLiveBinding(staticBinding, open, null, closeMarker);
+		const live = createLiveBinding(
+			staticBinding,
+			open,
+			null,
+			closeMarker,
+			carrier,
+		);
 		seedLiveBinding(live, value.values);
 		liveBindings[bindingIndex++] = live;
 		walker.currentNode = closeMarker;
@@ -131,13 +149,15 @@ const walkerFrom = (rangeStart: Node): TreeWalker => {
 export const hydrateInstance = (
 	value: TemplateValue,
 	rangeStart: Node,
-): Instance => seedInstance(walkerFrom(rangeStart), value);
+	carrier: Carrier,
+): Instance => seedInstance(walkerFrom(rangeStart), value, carrier);
 
 export const hydrateRow = (
 	value: TemplateValue,
 	rowStart: Node,
+	carrier: Carrier,
 ): { instance: Instance; tailMarker: Comment } => {
 	const walker = walkerFrom(rowStart);
-	const instance = seedInstance(walker, value);
+	const instance = seedInstance(walker, value, carrier);
 	return { instance, tailMarker: nextListTail(walker) };
 };

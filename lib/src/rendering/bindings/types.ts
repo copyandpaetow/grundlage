@@ -2,6 +2,7 @@ import {
 	AttributeStaticBinding,
 	CommentStaticBinding,
 	ContentStaticBinding,
+	CssPlan,
 	DynamicAttributeStaticBinding,
 	NamedDynamicStaticBinding,
 	RawContentStaticBinding,
@@ -10,6 +11,16 @@ import {
 } from "../../parser/types";
 import { CONTENT_KIND } from "../constants";
 import { Instance } from "../instance";
+
+//threaded from the painter through every mount, never derived from the DOM (bindings
+//commit while the fragment is detached). hostStyleIsBound disables the css fast path for
+//every <style> under this host — a host style attribute write wipes the custom
+//properties; the mount counts give duplicate mounts of one plan instance-suffixed names.
+export interface Carrier {
+	host: HTMLElement;
+	hostStyleIsBound: boolean;
+	cssPlanMountCounts: Map<CssPlan, number> | null;
+}
 
 export interface TagLiveBinding {
 	staticBinding: TagStaticBinding;
@@ -59,6 +70,7 @@ export interface ContentLiveBinding {
 	staticBinding: ContentStaticBinding;
 	startMarker: Comment;
 	endMarker: Comment;
+	carrier: Carrier;
 	content: ContentState;
 }
 
@@ -93,6 +105,10 @@ export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;
 	markerComment: Comment;
 	valueHash: number;
+	carrier: Carrier;
+	previousGroupHashes: Array<number> | null;
+	groupNames: Array<string> | null;
+	sheetOverride: string | null;
 }
 
 export interface CommentLiveBinding {

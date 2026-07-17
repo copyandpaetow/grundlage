@@ -18,7 +18,12 @@ import {
 	reconcileInstance,
 } from "../instance";
 import { forEachInRange } from "../range";
-import { ContentLiveBinding, ListContentState, ListItem } from "./types";
+import {
+	Carrier,
+	ContentLiveBinding,
+	ListContentState,
+	ListItem,
+} from "./types";
 
 const isKeyed = (parsed: ParsedTemplate): boolean =>
 	parsed.keyBindingIndex !== NO_KEY_BINDING;
@@ -151,7 +156,7 @@ const reconcileRows = (
 			matchHash,
 		);
 		if (reusableRow === undefined) continue;
-		patchRowInPlace(reusableRow, value, itemHashes[index]);
+		patchRowInPlace(reusableRow, value, itemHashes[index], content.carrier);
 		resolvedRows[index] = reusableRow;
 	}
 
@@ -171,7 +176,12 @@ const placeRows = (
 	for (let index = 0; index < resolvedRows.length; index++) {
 		let row = resolvedRows[index];
 		if (row === undefined)
-			row = mountRowAfter(cursor, values[index], itemHashes[index]);
+			row = mountRowAfter(
+				cursor,
+				values[index],
+				itemHashes[index],
+				content.carrier,
+			);
 		else if (cursor.nextSibling !== row.spanStart) moveRowAfter(cursor, row);
 		cursor = row.tailMarker;
 		finalRows[index] = row;
@@ -183,10 +193,11 @@ const mountRowAfter = (
 	after: ChildNode,
 	rawValue: unknown,
 	itemHash: number,
+	carrier: Carrier,
 ): ListItem => {
 	const value = coerceToTemplate(rawValue);
 	assertNestable(value);
-	const { instance, fragment } = mountInstance(value);
+	const { instance, fragment } = mountInstance(value, carrier);
 	const tailMarker = document.createComment(LIST_MARKER_DATA);
 	const spanStart = fragment.firstChild ?? tailMarker;
 	after.after(fragment, tailMarker);
@@ -204,9 +215,10 @@ const patchRowInPlace = (
 	row: ListItem,
 	value: TemplateValue,
 	itemHash: number,
+	carrier: Carrier,
 ): void => {
 	assertNestable(value);
-	const mounted = reconcileInstance(row.instance, value);
+	const mounted = reconcileInstance(row.instance, value, carrier);
 	if (mounted !== null)
 		replaceRowInstance(row, mounted.instance, mounted.fragment);
 	row.itemHash = itemHash;
@@ -256,7 +268,11 @@ export const hydrateListItems = (
 		const value = coerceToTemplate(values[index]);
 		assertNestable(value);
 		const spanStart = rowStart.nextSibling!;
-		const { instance, tailMarker } = hydrateRow(value, rowStart);
+		const { instance, tailMarker } = hydrateRow(
+			value,
+			rowStart,
+			liveBinding.carrier,
+		);
 		const parsed = getParsedTemplate(value.__templateStrings);
 		const itemHash = hashValue(values[index]);
 		itemHashes[index] = itemHash;
