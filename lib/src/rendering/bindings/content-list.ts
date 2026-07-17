@@ -16,6 +16,7 @@ import {
 	Instance,
 	mountInstance,
 	reconcileInstance,
+	releaseInstance,
 } from "../instance";
 import { forEachInRange } from "../range";
 import {
@@ -229,6 +230,7 @@ const replaceRowInstance = (
 	instance: Instance,
 	fragment: DocumentFragment,
 ): void => {
+	releaseInstance(row.instance);
 	clearRowNodes(row);
 	row.spanStart = fragment.firstChild ?? row.tailMarker;
 	row.tailMarker.before(fragment);
@@ -245,6 +247,7 @@ const moveRowAfter = (after: ChildNode, row: ListItem): void => {
 };
 
 const removeRowNodes = (row: ListItem): void => {
+	releaseInstance(row.instance);
 	forEachInRange(row.spanStart, row.tailMarker, (node) => node.remove());
 	row.tailMarker.remove();
 };

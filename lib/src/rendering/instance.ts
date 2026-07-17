@@ -1,12 +1,22 @@
 import { BINDING } from "../parser/constants";
 import { getParsedTemplate } from "../parser/html";
 import { TemplateValue } from "../template";
+import { releaseCssGroups } from "./bindings/css-apply";
 import {
 	commitLiveBinding,
 	createLiveBinding,
 	seedLiveBinding,
 } from "./bindings/dispatch";
-import { Carrier, LiveBinding } from "./bindings/types";
+import {
+	BranchContentState,
+	Carrier,
+	ContentLiveBinding,
+	ContentState,
+	ListContentState,
+	LiveBinding,
+	RawContentLiveBinding,
+} from "./bindings/types";
+import { CONTENT_KIND } from "./constants";
 import { buildFragment } from "./dom";
 import {
 	isOpenMarker,
@@ -30,6 +40,34 @@ export const patchInstance = (
 	const { liveBindings } = instance;
 	for (let index = 0; index < liveBindings.length; index++)
 		commitLiveBinding(liveBindings[index], values, liveBindings);
+};
+
+export const releaseInstance = (instance: Instance): void => {
+	const { liveBindings } = instance;
+	for (let index = 0; index < liveBindings.length; index++) {
+		const liveBinding = liveBindings[index];
+		const { type } = liveBinding.staticBinding;
+		if (type === BINDING.RAW_CONTENT) {
+			const rawContent = liveBinding as RawContentLiveBinding;
+			if (rawContent.previousGroupHashes !== null)
+				releaseCssGroups(rawContent);
+			continue;
+		}
+		if (type === BINDING.CONTENT)
+			releaseContent((liveBinding as ContentLiveBinding).content);
+	}
+};
+
+export const releaseContent = (content: ContentState): void => {
+	if (content.kind === CONTENT_KIND.BRANCH) {
+		const { instance } = content as BranchContentState;
+		if (instance !== null) releaseInstance(instance);
+		return;
+	}
+	if (content.kind !== CONTENT_KIND.LIST) return;
+	const { items } = content as ListContentState;
+	for (let index = 0; index < items.length; index++)
+		releaseInstance(items[index].instance);
 };
 
 export const reconcileInstance = (

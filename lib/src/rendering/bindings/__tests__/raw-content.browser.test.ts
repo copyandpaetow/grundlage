@@ -383,7 +383,7 @@ describe("raw content updates", () => {
 	});
 
 	test.skipIf(!resolvesComputedColors)(
-		"a css-wide keyword hole computes as unset, not the keyword",
+		"a css-wide keyword hole rides through var() and takes effect",
 		async () => {
 			const tag = uniqueTag();
 			const backgroundValue = "inherit";
@@ -403,12 +403,12 @@ describe("raw content updates", () => {
 			element.style.backgroundColor = "rgb(0, 128, 0)";
 			await sleep();
 
-			//documented narrowing: the keyword goes invalid-at-computed-value-time
-			//inside the custom property, so the declaration behaves as unset (initial
-			//here), not as a real `background-color: inherit` (which would be green)
+			//not narrowed: the keyword stays the custom property's value, so var()
+			//substitutes it and the paragraph gets `background-color: inherit` and
+			//inherits the host's green — same result the fallback text path gives
 			const paragraph = element.shadowRoot!.querySelector("p")!;
 			expect(getComputedStyle(paragraph).backgroundColor).toBe(
-				"rgba(0, 0, 0, 0)",
+				"rgb(0, 128, 0)",
 			);
 
 			cleanup(element);

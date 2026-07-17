@@ -7,6 +7,8 @@ import {
 	assertNestable,
 	hydrateInstance,
 	reconcileInstance,
+	releaseContent,
+	releaseInstance,
 } from "../instance";
 import { forEachInRange } from "../range";
 import { hydrateListItems, patchListContent } from "./content-list";
@@ -51,6 +53,7 @@ const switchContentKind = (
 		liveBinding.endMarker,
 		(node) => node.remove(),
 	);
+	releaseContent(liveBinding.content);
 	liveBinding.content = freshContentState(contentKind);
 };
 
@@ -79,6 +82,7 @@ const patchBranch = (
 		liveBinding.carrier,
 	);
 	if (mounted === null) return;
+	if (branch.instance !== null) releaseInstance(branch.instance);
 	forEachInRange(
 		liveBinding.startMarker.nextSibling,
 		liveBinding.endMarker,

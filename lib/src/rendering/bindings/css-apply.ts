@@ -32,3 +32,10 @@ export const seedCssGroupHashes = (
 			values,
 		);
 };
+
+export const releaseCssGroups = (liveBinding: RawContentLiveBinding): void => {
+	const groupNames = liveBinding.groupNames!;
+	const hostStyle = liveBinding.carrier.host.style;
+	for (let index = 0; index < groupNames.length; index++)
+		hostStyle.removeProperty(groupNames[index]);
+};

@@ -8,6 +8,7 @@ import {
 	mountInstance,
 	patchInstance,
 	reconcileInstance,
+	releaseInstance,
 } from "../instance";
 
 const detachedCarrier = () => ({
@@ -314,6 +315,52 @@ describe("raw content with a css plan", () => {
 		expect(serverCarrier.host.style.getPropertyValue(secondName).trim()).toBe(
 			"green",
 		);
+	});
+
+	test("releaseInstance recurses, clearing an outer and a nested style's props", () => {
+		const outer = (color: string) =>
+			html`<style>
+					div {
+						color: ${color};
+					}
+				</style>
+				<div>${sheet("red")}</div>`;
+		const carrier = detachedCarrier();
+		const { instance, fragment } = mountInstance(outer("blue"), carrier);
+		const styles = fragment.querySelectorAll("style");
+		const outerName = varNameOf(styles[0]);
+		const nestedName = varNameOf(styles[1]);
+		expect(carrier.host.style.getPropertyValue(outerName).trim()).toBe("blue");
+		expect(carrier.host.style.getPropertyValue(nestedName).trim()).toBe("red");
+
+		releaseInstance(instance);
+
+		expect(carrier.host.style.getPropertyValue(outerName)).toBe("");
+		expect(carrier.host.style.getPropertyValue(nestedName)).toBe("");
+	});
+
+	test("switching a branch away releases the nested style's host props", () => {
+		const wrap = (inner: unknown) => html`<div>${inner}</div>`;
+		const carrier = detachedCarrier();
+		const { instance, fragment } = mountInstance(wrap(sheet("red")), carrier);
+		const name = varNameOf(fragment.querySelector("style")!);
+		expect(carrier.host.style.getPropertyValue(name).trim()).toBe("red");
+
+		patchInstance(instance, wrap(null).values);
+
+		expect(carrier.host.style.getPropertyValue(name)).toBe("");
+	});
+
+	test("removing a list row releases its style's host props", () => {
+		const wrap = (items: Array<unknown>) => html`<div>${items}</div>`;
+		const carrier = detachedCarrier();
+		const { instance, fragment } = mountInstance(wrap([sheet("red")]), carrier);
+		const name = varNameOf(fragment.querySelector("style")!);
+		expect(carrier.host.style.getPropertyValue(name).trim()).toBe("red");
+
+		patchInstance(instance, wrap([]).values);
+
+		expect(carrier.host.style.getPropertyValue(name)).toBe("");
 	});
 });
 
