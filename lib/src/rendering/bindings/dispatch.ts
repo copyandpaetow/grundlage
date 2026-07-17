@@ -199,18 +199,13 @@ export const seedLiveBinding = (
 		}
 		case BINDING.RAW_CONTENT: {
 			const rawContent = liveBinding as RawContentLiveBinding;
-			const groupHashes = rawContent.previousGroupHashes;
-			if (groupHashes === null) {
+			if (rawContent.previousGroupHashes === null) {
 				rawContent.valueHash = computeGateHash(liveBinding, values);
 				return;
 			}
 			//the server already wrote this instance's sheet — suffixed or not
 			rawContent.sheetOverride = null;
-			return seedCssGroupHashes(
-				rawContent.staticBinding.cssPlan!.groups,
-				groupHashes,
-				values,
-			);
+			return seedCssGroupHashes(rawContent, values);
 		}
 		default:
 			(liveBinding as { valueHash: number }).valueHash = computeGateHash(

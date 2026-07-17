@@ -6,23 +6,16 @@ export const commitRawContent = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	const { parts, cssPlan } = liveBinding.staticBinding;
-	const groupHashes = liveBinding.previousGroupHashes;
+	const { parts } = liveBinding.staticBinding;
 
-	if (groupHashes !== null) {
+	if (liveBinding.previousGroupHashes !== null) {
 		//only a duplicate instance carries an override; the baked sheet came with the markup
 		if (liveBinding.sheetOverride !== null) {
 			liveBinding.markerComment.nextElementSibling!.textContent =
 				liveBinding.sheetOverride;
 			liveBinding.sheetOverride = null;
 		}
-		applyChangedCssGroups(
-			liveBinding.carrier.host.style,
-			cssPlan!.groups,
-			liveBinding.groupNames!,
-			groupHashes,
-			values,
-		);
+		applyChangedCssGroups(liveBinding, values);
 		return;
 	}
 
