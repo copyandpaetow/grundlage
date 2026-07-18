@@ -137,6 +137,24 @@ describe("props", () => {
 			const { enabled } = props(element, { enabled: [Boolean, false] });
 			expect(enabled).toBe(true);
 		});
+
+		it("reads true from the property channel when the attribute is absent", () => {
+			const element = createElement({}, { checked: true });
+			const { checked } = props(element, { checked: Boolean });
+			expect(checked).toBe(true);
+		});
+
+		it("reads false from the property channel over a truthy default", () => {
+			const element = createElement({}, { checked: false });
+			const { checked } = props(element, { checked: [Boolean, true] });
+			expect(checked).toBe(false);
+		});
+
+		it("lets a present attribute win over a false property", () => {
+			const element = createElement({ checked: "" }, { checked: false });
+			const { checked } = props(element, { checked: Boolean });
+			expect(checked).toBe(true);
+		});
 	});
 
 	describe("Function", () => {

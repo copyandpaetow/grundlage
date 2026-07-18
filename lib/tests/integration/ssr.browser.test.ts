@@ -743,5 +743,72 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 			cleanup(element);
 		});
+
+		test("a spread event handler fires after hydration", async () => {
+			//the server serializes only the stringable half of a spread; the function half is
+			//dropped, so hydration must re-attach it as a listener rather than only snapshot its hash
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+			let clicks = 0;
+
+			const makeComponent = () =>
+				component(function* () {
+					const attributes = {
+						onClick: () => {
+							clicks++;
+						},
+						"data-static": "kept",
+					};
+					yield () => html`<button ${attributes}>press</button>`;
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			expect(serialized).toContain('data-static="kept"');
+
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+			const element = hydrateFromHTML(clientHTML);
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+
+			element.shadowRoot!.querySelector("button")!.dispatchEvent(
+				new Event("click"),
+			);
+			expect(clicks).toBe(1);
+
+			cleanup(element);
+		});
+
+		test("a spread property-mode value is assigned after hydration", async () => {
+			//non-stringable spread values are set as element properties, which can't survive
+			//serialization; hydration must assign them, not just record their hash
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+			const payload = { a: 1 };
+
+			const makeComponent = () =>
+				component(function* () {
+					const attributes = { customData: payload };
+					yield () => html`<div ${attributes}>x</div>`;
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+			const element = hydrateFromHTML(clientHTML);
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+
+			const target = element.shadowRoot!.querySelector("div") as HTMLElement & {
+				customData?: unknown;
+			};
+			expect(target.customData).toEqual(payload);
+
+			cleanup(element);
+		});
 	});
 });

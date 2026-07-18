@@ -453,4 +453,41 @@ describe("raw content updates", () => {
 
 		cleanup(element);
 	});
+
+	test("swapping away from a styled template releases its host custom properties", async () => {
+		//a value-hole style writes its values as custom properties on the host's inline style;
+		//a structural swap remounts, so the old instance's properties must be released with it
+		//instead of stranding on the host style attribute forever
+		const tag = uniqueTag();
+		let showStyled = true;
+		const color = "red";
+
+		const MyElement = component(function* () {
+			yield () =>
+				showStyled
+					? html`<style>
+								p {
+									color: ${color};
+								}
+							</style>
+							<p>x</p>`
+					: html`<div>plain</div>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const style = element.shadowRoot!.querySelector("style") as HTMLStyleElement;
+		const name = varNameOf(style);
+		expect(element.style.getPropertyValue(name).trim()).toBe("red");
+
+		showStyled = false;
+		await element.update();
+		await sleep();
+
+		expect(element.style.getPropertyValue(name)).toBe("");
+
+		cleanup(element);
+	});
 });

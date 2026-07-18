@@ -234,4 +234,14 @@ describe("flushHostPayload writes server-collected values into the shadow root",
 		expect(host.shadowRoot!.children.length).toBe(1);
 		expect(host.shadowRoot!.children[0].tagName).toBe("ARTICLE");
 	});
+
+	test("a fetcher that resolves undefined does not crash the flush", async () => {
+		//JSON.stringify(undefined) returns the value undefined, not a string, so the
+		//following .replace() would throw and serialize the whole component as error text
+		const host = createHostWithShadow();
+		await withoutWindow(async () => {
+			await load(host, () => Promise.resolve(undefined));
+		});
+		expect(() => flushHostPayload(host)).not.toThrow();
+	});
 });

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { html, component } from "../../../index";
 
 const sleep = (duration = 0) =>
@@ -997,6 +997,43 @@ describe("root-template host attributes are rejected when nested inside content"
 			/top level of a component's render output/,
 		);
 
+		cleanup(element);
+	});
+
+	test("a host event listener is removed when the component fails", async () => {
+		//failing wipes the shadow root to error text; it must also revert host bindings, or
+		//the listener applied from the root <template> lingers as a dead closure on the host
+		const tag = uniqueTag();
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		let shouldThrow = false;
+		let clicks = 0;
+		const handler = () => {
+			clicks++;
+		};
+
+		const MyElement = component(function* () {
+			yield () => {
+				if (shouldThrow) throw new Error("boom");
+				return html`<template onClick=${handler}><p>ok</p></template>`;
+			};
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		element.dispatchEvent(new Event("click"));
+		expect(clicks).toBe(1);
+
+		shouldThrow = true;
+		await element.update();
+		await sleep();
+
+		clicks = 0;
+		element.dispatchEvent(new Event("click"));
+		expect(clicks).toBe(0);
+
+		warnSpy.mockRestore();
 		cleanup(element);
 	});
 });

@@ -22,6 +22,7 @@ export const OPERATION = {
 	THROW_TO_PARENT: 6,
 	FAIL: 7,
 	NOOP: 8,
+	THROW_INTO: 9,
 } as const;
 
 export const STEP_OUTCOME = {
@@ -60,7 +61,8 @@ export type Operation =
 	| { kind: typeof OPERATION.COMPLETED; payload: null }
 	| { kind: typeof OPERATION.THROW_TO_PARENT; payload: unknown }
 	| { kind: typeof OPERATION.FAIL; payload: unknown }
-	| { kind: typeof OPERATION.NOOP; payload: null };
+	| { kind: typeof OPERATION.NOOP; payload: null }
+	| { kind: typeof OPERATION.THROW_INTO; payload: unknown };
 
 export type StepOutcome =
 	| { kind: typeof STEP_OUTCOME.YIELDED; payload: unknown }
@@ -153,10 +155,10 @@ export const nextOperation = (
 				return createOperation(OPERATION.RESUME, incomingOutcome.payload);
 			}
 			if (incomingOutcome.kind === STEP_OUTCOME.THREW) {
-				task.state = TASK_STATE.FAILED;
-				return task.role === ROLE.INNER
-					? createOperation(OPERATION.THROW_TO_PARENT, incomingOutcome.payload)
-					: createOperation(OPERATION.FAIL, incomingOutcome.payload);
+				//throw the rejection back into the generator at its `yield promise` point so a
+				//try/catch there can recover; an uncaught throw re-surfaces as a DRIVING THREW
+				task.state = TASK_STATE.DRIVING;
+				return createOperation(OPERATION.THROW_INTO, incomingOutcome.payload);
 			}
 			break;
 	}

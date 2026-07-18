@@ -4,6 +4,7 @@ import {
 	createPainter,
 	paint,
 	Painter,
+	revertHostBindings,
 	serverPaint,
 	setupAttributeObserver,
 	teardownPainter,
@@ -44,14 +45,6 @@ export {
 } from "./types";
 export { load, type LoadOptions } from "./load";
 
-const CLIENT_OUTCOME = {
-	SUSPENDED: 0,
-	DONE: 1,
-	THREW_UP: 2,
-	FAILED: 3,
-} as const;
-type ClientOutcome = (typeof CLIENT_OUTCOME)[keyof typeof CLIENT_OUTCOME];
-
 const defaultOptions: ComponentOptions = {
 	clonable: true,
 	delegatesFocus: true,
@@ -68,6 +61,11 @@ export const component = (
 	componentGenerator: ComponentGenerator,
 	options: ComponentOptions = defaultOptions,
 ): ComponentConstructor => {
+	if (!isGeneratorFunction(componentGenerator))
+		throw new TypeError(
+			"component(fn) expects a generator function — write `component(function* (host) { … })` " +
+				"or `component(async function* (host) { … })`. A plain function or arrow function is not accepted.",
+		);
 	const mergedOptions = { ...defaultOptions, ...options };
 	const ParentClass: typeof HTMLElement = options.formAssociated
 		? FormBase
@@ -145,6 +143,9 @@ export const component = (
 
 		#fail(error: unknown): void {
 			this.#cancelBothTasks();
+			//host listeners/attributes live on the host, not in the shadow root the error text
+			//overwrites — revert them (reads instance + hostBindingCount) before zeroing below
+			revertHostBindings(this.#painter);
 			teardownPainter(this.#painter);
 			console.warn(error);
 			this.#painter.shadowRoot.textContent = `${error}`;
@@ -162,10 +163,12 @@ export const component = (
 			updatePromise.resolve();
 		}
 
+		//returns whether the task threw to its parent, so INSTALL can abandon its own frame
+		//(the reentrant THROW_TO_PARENT run has already driven the outer past this point)
 		#runTask(
 			task: Task,
 			start: SteppedTask = nextTaskStep(task, MODE.SEND, undefined),
-		): ClientOutcome {
+		): boolean {
 			let next = start;
 			while (true) {
 				if (next instanceof Promise) {
@@ -182,26 +185,24 @@ export const component = (
 								);
 						},
 					);
-					return CLIENT_OUTCOME.SUSPENDED;
+					return false;
 				}
 
 				const operation = nextOperation(task, next);
 				switch (operation.kind) {
 					case OPERATION.PAINT:
-						if (task.role === ROLE.OUTER) this.#renderer = null;
-						try {
-							paint(this.#painter, operation.payload);
-						} catch (error) {
-							next = createStepOutcome(STEP_OUTCOME.THREW, error);
-							break;
-						}
-						next = nextTaskStep(task, MODE.SEND, this);
-						break;
-
 					case OPERATION.PAINT_FROM:
-						if (task.role === ROLE.OUTER) this.#renderer = operation.payload;
+						if (task.role === ROLE.OUTER)
+							this.#renderer =
+								operation.kind === OPERATION.PAINT_FROM
+									? operation.payload
+									: null;
 						try {
-							paint(this.#painter, operation.payload(this));
+							const template =
+								operation.kind === OPERATION.PAINT
+									? operation.payload
+									: (operation.payload as RenderFunction)(this);
+							paint(this.#painter, template);
 						} catch (error) {
 							next = createStepOutcome(STEP_OUTCOME.THREW, error);
 							break;
@@ -213,13 +214,16 @@ export const component = (
 						next = nextTaskStep(task, MODE.SEND, operation.payload);
 						break;
 
+					case OPERATION.THROW_INTO:
+						next = nextTaskStep(task, MODE.THROW, operation.payload);
+						break;
+
 					case OPERATION.INSTALL: {
 						this.#renderer = operation.payload;
-						const innerOutcome = this.#runTask(
+						const innerThrewToParent = this.#runTask(
 							this.#resetInnerTask(operation.payload),
 						);
-						if (innerOutcome === CLIENT_OUTCOME.THREW_UP)
-							return CLIENT_OUTCOME.THREW_UP;
+						if (innerThrewToParent) return true;
 						next = nextTaskStep(task, MODE.SEND, this);
 						break;
 					}
@@ -242,7 +246,7 @@ export const component = (
 									);
 							},
 						);
-						return CLIENT_OUTCOME.SUSPENDED;
+						return false;
 					}
 
 					case OPERATION.THROW_TO_PARENT: {
@@ -253,7 +257,7 @@ export const component = (
 							parent !== null && parent.state === TASK_STATE.DRIVING;
 						if (!parentCanCatch) {
 							this.#fail(error);
-							return CLIENT_OUTCOME.THREW_UP;
+							return true;
 						}
 						const reaction = nextTaskStep(parent, MODE.THROW, error);
 						const dismissed =
@@ -264,19 +268,19 @@ export const component = (
 						this.#runTask(parent, reaction);
 						//a return left no live renderer — drop the dead child so update() can't re-run it
 						if (dismissed) this.#renderer = null;
-						return CLIENT_OUTCOME.THREW_UP;
+						return true;
 					}
 
 					case OPERATION.COMPLETED:
 						if (task.role === ROLE.INNER) this.#resolvePendingUpdatePromise();
-						return CLIENT_OUTCOME.DONE;
+						return false;
 
 					case OPERATION.FAIL:
 						this.#fail(operation.payload);
-						return CLIENT_OUTCOME.FAILED;
+						return false;
 
 					case OPERATION.NOOP:
-						return CLIENT_OUTCOME.SUSPENDED;
+						return false;
 				}
 			}
 		}
@@ -350,6 +354,10 @@ export const component = (
 						next = nextTaskStep(task, MODE.SEND, operation.payload);
 						break;
 
+					case OPERATION.THROW_INTO:
+						next = nextTaskStep(task, MODE.THROW, operation.payload);
+						break;
+
 					case OPERATION.AWAIT:
 						operation.payload.then(
 							(value) =>
@@ -357,7 +365,11 @@ export const component = (
 									task,
 									createStepOutcome(STEP_OUTCOME.RESUMED, value),
 								),
-							(error) => this.#fail(error),
+							(error) =>
+								this.#runServerTask(
+									task,
+									createStepOutcome(STEP_OUTCOME.THREW, error),
+								),
 						);
 						return;
 

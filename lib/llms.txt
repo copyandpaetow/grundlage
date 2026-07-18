@@ -37,7 +37,9 @@ customElements.define(
 ## API
 
 `component(generator, options?) => CustomElementConstructor`
-  Register the return value with `customElements.define`. `options` extends
+  Register the return value with `customElements.define`. The first argument MUST be a
+  generator function (`function*` or `async function*`) — a plain or arrow function
+  throws a `TypeError` at definition time, not at mount. `options` extends
   `ShadowRootInit` (default `{ mode: "open" }`); set `formAssociated: true` for form
   components. The generator may be sync or async. `{ mode: "closed" }` hydrates and
   replays `load` data like an open root — the closed shadow root is reached through
@@ -52,6 +54,8 @@ customElements.define(
   Reads typed values whether they arrived as attributes (strings) or properties.
   Schema entry forms: `String` | `Number` | `Boolean` | `Function` | `Array` | a class;
   `[Constructor]` allows `undefined`; `[Constructor, fallback]` supplies a default.
+  A present attribute always wins over the property channel: a `Boolean` is `true` when
+  the attribute is present, otherwise the own property is read (`el.checked = true`).
 
 `load(host, fetcher, options?) => Promise<Value>`
   Data needed before first render. On the server the fetcher runs and the result is
@@ -112,7 +116,22 @@ yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>�
   prefixes are reserved for internal markers and a collision silently misaligns hydration.
 - Events bind in markup as `onEventName=${handler}` (e.g. `onClick`, `onInput`) — not
   `addEventListener` strings and not lowercase `onclick=""`.
-- Change detection is HASH-BASED for arrays/objects: mutate-then-`update()` we will detect.
+- Change detection is HASH-BASED for plain arrays/objects (and Map/Set): mutate-then-
+  `update()` we will detect. Other values — class instances, `Date`, typed arrays — are
+  compared by REFERENCE identity, so mutating one in place reads as unchanged and is
+  skipped. Pass plain data, or replace the reference to signal a change.
+- A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the sheet is
+  served as static text with `var(--…)` indirection and each value lives as a custom
+  property on the HOST's inline `style` (SSR serializes them there too), so an update is a
+  `setProperty`, never a sheet reparse. Structural holes (selector, property name, at-rule
+  prelude) fall back to a full sheet rewrite — always correct, just slower. Consequences:
+  don't deliver a `style` attribute to the host through a `<template ${spread}>` object
+  (it wipes those custom properties; a `style` written as a root-`<template>` attribute —
+  static or `${…}`-bound — safely disables the fast path for every `<style>` in the
+  component, nested templates included), and a value that smuggles `;` or `!important` at
+  runtime behaves as invalid → `unset` rather than splitting into extra declarations. A
+  CSS-wide keyword (`inherit`/`initial`/`unset`/`revert`) is NOT narrowed — it rides
+  through `var()` and takes its normal effect, same as on the fallback path.
 - Read inputs with `props(host, schema)`. Don't read attributes directly — they're strings
   and skip the type coercion/defaults `props` gives you.
 - `load` replays SSR data on hydration; don't add your own fetch-once cache around it.

@@ -144,6 +144,9 @@ export const seedDynamic = (
 	liveBinding.appliedAttributes = snapshotAttributeMap(
 		normalizeToAttributeMap(value),
 	);
+	//server HTML carries only stringable entries; handlers and property-mode values must be
+	//attached to the hydrated element here, the same non-stringable set a tag swap reapplies
+	reapplyOnSwap(liveBinding, targetElement(liveBinding), values);
 };
 
 export const reapplyOnSwap = (

@@ -1,5 +1,6 @@
+import { moveArrayContents } from "../utils/arrays";
 import { hashValue } from "../utils/hashing";
-import { ATTRIBUTE_SHAPE, BINDING, BINDING_TYPES, COMMENT_IDENTIFIER, NO_KEY_BINDING } from "./constants";
+import { BINDING, PARSE_BINDING, COMMENT_IDENTIFIER, NO_KEY_BINDING } from "./constants";
 import {
 	AttributeBinding,
 	Binding,
@@ -16,13 +17,6 @@ import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
 import { analyzeStyle, composeSheet } from "./css";
 
 type StateValue = ValueOf<typeof STATE>;
-
-const moveArrayContents = (from: Array<unknown>, to: Array<unknown>) => {
-	for (let arrIndex = 0; arrIndex < from.length; arrIndex++) {
-		to.push(from[arrIndex]);
-	}
-	from.length = 0;
-};
 
 const PLACEHOLDER_TAG = "div";
 const TEMPLATE_TAG = "template";
@@ -219,31 +213,31 @@ const createBinding = (parser: ParserState) => {
 		case STATE.ATTRIBUTE_KEY:
 		case STATE.ATTRIBUTE_VALUE:
 			return {
-				type: BINDING_TYPES.ATTRIBUTE,
-				shape: ATTRIBUTE_SHAPE.STATIC,
+				type: PARSE_BINDING.ATTRIBUTE,
+				isExpandable: false,
 				values: [],
 				keys: [],
 			} satisfies AttributeBinding;
 		case STATE.COMMENT:
 			return {
-				type: BINDING_TYPES.COMMENT,
+				type: PARSE_BINDING.COMMENT,
 				values: [],
 			} satisfies CommentBinding;
 		case STATE.TEXT:
 			return {
-				type: BINDING_TYPES.CONTENT,
+				type: PARSE_BINDING.CONTENT,
 				values: [],
 			} satisfies ContentBinding;
 		case STATE.RAW_CONTENT:
 			return {
-				type: BINDING_TYPES.RAW_CONTENT,
+				type: PARSE_BINDING.RAW_CONTENT,
 				values: [],
 				tag: parser.currentTagName,
 				cssPlan: null,
 			} satisfies RawContentBinding;
 		case STATE.TAG:
 			return {
-				type: BINDING_TYPES.TAG,
+				type: PARSE_BINDING.TAG,
 				values: [],
 			} satisfies TagBinding;
 
@@ -396,34 +390,11 @@ const markTopLevelTextSibling = (
 	}
 };
 
-const classifyAttributeShape = (
-	binding: AttributeBinding,
-): ValueOf<typeof ATTRIBUTE_SHAPE> => {
-	const keys = binding.keys;
-	const values = binding.values;
-	const dynamicName = keys.length > 1 || typeof keys[0] === "number";
-
-	if (values.length === 0) {
-		if (!dynamicName) return ATTRIBUTE_SHAPE.STATIC;
-		return keys.length === 1
-			? ATTRIBUTE_SHAPE.EXPANDABLE
-			: ATTRIBUTE_SHAPE.DYNAMIC_NAME_BOOLEAN;
-	}
-
-	const singleDynamicValue = isSingleHole(values);
-
-	if (dynamicName) {
-		return singleDynamicValue
-			? ATTRIBUTE_SHAPE.DYNAMIC_NAME_SINGLE_VALUE
-			: ATTRIBUTE_SHAPE.DYNAMIC_NAME_MULTI_VALUE;
-	}
-
-	if (singleDynamicValue) return ATTRIBUTE_SHAPE.STATIC_NAME_SINGLE_VALUE;
-
-	return values.length === 1
-		? ATTRIBUTE_SHAPE.STATIC
-		: ATTRIBUTE_SHAPE.STATIC_NAME_MULTI_VALUE;
-};
+//a lone `${...}` in attribute-name position with no value is a spread: `<div ${attributes}>`
+const isExpandableSpread = (binding: AttributeBinding): boolean =>
+	binding.values.length === 0 &&
+	binding.keys.length === 1 &&
+	typeof binding.keys[0] === "number";
 
 const recordKeyBinding = (
 	parser: ParserState,
@@ -442,8 +413,8 @@ const finalizeAttributeBinding = (
 ) => {
 	moveArrayContents(parser.attributeKeyBuffer, binding.keys);
 	moveArrayContents(parser.attributeValueBuffer, binding.values);
-	binding.shape = classifyAttributeShape(binding);
-	if (binding.shape === ATTRIBUTE_SHAPE.EXPANDABLE) {
+	binding.isExpandable = isExpandableSpread(binding);
+	if (binding.isExpandable) {
 		binding.values.push(binding.keys[0]);
 		binding.keys.length = 0;
 	}
@@ -463,8 +434,8 @@ const completeAttribute = (parser: ParserState) => {
 	} else if (parser.attributeKeyBuffer.length) {
 		if (parser.isRootTemplate) {
 			const staticBinding: AttributeBinding = {
-				type: BINDING_TYPES.ATTRIBUTE,
-				shape: ATTRIBUTE_SHAPE.STATIC,
+				type: PARSE_BINDING.ATTRIBUTE,
+				isExpandable: false,
 				keys: [],
 				values: [],
 			};
@@ -827,7 +798,7 @@ const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
 			valueIndex: binding.values[0] as number,
 		};
 	}
-	if (binding.shape === ATTRIBUTE_SHAPE.EXPANDABLE) {
+	if (binding.isExpandable) {
 		return {
 			type: BINDING.DYNAMIC_ATTRIBUTE,
 			valueIndex: binding.values[0] as number,
@@ -863,18 +834,18 @@ const hasHostStyleBinding = (parser: ParserState): boolean => {
 
 const toStaticBinding = (binding: Binding): StaticBinding => {
 	switch (binding.type) {
-		case BINDING_TYPES.TAG:
+		case PARSE_BINDING.TAG:
 			return {
 				type: BINDING.TAG,
 				parts: binding.values.slice(),
 			};
-		case BINDING_TYPES.ATTRIBUTE:
+		case PARSE_BINDING.ATTRIBUTE:
 			return toAttributeStaticBinding(binding);
-		case BINDING_TYPES.CONTENT:
+		case PARSE_BINDING.CONTENT:
 			return { type: BINDING.CONTENT, valueIndex: binding.values[0] as number };
-		case BINDING_TYPES.COMMENT:
+		case PARSE_BINDING.COMMENT:
 			return { type: BINDING.COMMENT, parts: binding.values.slice() };
-		case BINDING_TYPES.RAW_CONTENT:
+		case PARSE_BINDING.RAW_CONTENT:
 			return {
 				type: BINDING.RAW_CONTENT,
 				parts: binding.values.slice(),

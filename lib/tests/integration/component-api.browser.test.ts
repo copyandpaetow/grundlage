@@ -111,3 +111,25 @@ describe("dynamic comment bindings", () => {
 		element.remove();
 	});
 });
+
+describe("component() input validation", () => {
+	test("a plain function throws a naming error at definition time", () => {
+		expect(() => component((() => html`<p>x</p>`) as never)).toThrow(
+			/generator function/,
+		);
+	});
+
+	test("an async non-generator function throws at definition time", () => {
+		expect(() => component((async () => {}) as never)).toThrow(
+			/generator function/,
+		);
+	});
+
+	test("a sync generator function is accepted", () => {
+		expect(() => component(function* () {})).not.toThrow();
+	});
+
+	test("an async generator function is accepted", () => {
+		expect(() => component(async function* () {})).not.toThrow();
+	});
+});

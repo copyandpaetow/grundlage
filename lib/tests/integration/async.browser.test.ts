@@ -388,6 +388,32 @@ describe("error handling", () => {
 		cleanup(element);
 	});
 
+	test("a rejected yielded promise is catchable with try/catch", async () => {
+		//the try/catch form documented next to `yield fetch(url)` must intercept the
+		//rejection so the generator can recover, not fail the whole component
+		const tag = uniqueTag();
+		let caught = false;
+
+		const MyElement = component(function* () {
+			try {
+				yield Promise.reject(new Error("boom"));
+			} catch {
+				caught = true;
+			}
+			yield () => html`<p>recovered</p>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag);
+		await sleep();
+
+		expect(caught).toBe(true);
+		expect(element.shadowRoot?.textContent).toContain("recovered");
+		expect(element.shadowRoot?.textContent).not.toContain("boom");
+
+		cleanup(element);
+	});
+
 	test("error stops further updates", async () => {
 		const tag = uniqueTag();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});

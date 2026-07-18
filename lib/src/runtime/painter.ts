@@ -12,6 +12,7 @@ import {
 	hydrateInstance,
 	Instance,
 	reconcileInstance,
+	releaseInstance,
 } from "../rendering/instance";
 import { Carrier } from "../rendering/bindings/types";
 
@@ -39,7 +40,7 @@ export const createPainter = (
 	hostBindingCount: 0,
 });
 
-const revertHostBindings = (painter: Painter): void => {
+export const revertHostBindings = (painter: Painter): void => {
 	const instance = painter.instance;
 	if (instance === null) return;
 	const liveBindings = instance.liveBindings;
@@ -56,6 +57,9 @@ const paintRoot = (
 	painter.carrier.hostStyleIsBound = parsed.hostStyleIsBound;
 	const mounted = reconcileInstance(painter.instance, value, painter.carrier);
 	if (mounted === null) return;
+	//a fresh mount replaces the old subtree; release its host-side effects (css custom
+	//properties) so the swapped-away template leaves nothing behind on the host
+	if (painter.instance !== null) releaseInstance(painter.instance);
 	revertHostBindings(painter);
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
 		const live = createLiveBinding(parsed.bindings[index], null, painter.host);

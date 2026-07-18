@@ -61,6 +61,7 @@ const readBooleanProp = (
 	defaultValue: unknown,
 ): unknown => {
 	if (element.hasAttribute(key)) return true;
+	if (Object.hasOwn(element, key)) return Boolean(element[key as keyof typeof element]);
 	if (hasDefault) return defaultValue;
 	return false;
 };

@@ -107,10 +107,12 @@ export const flushHostPayload = (host: Element): void => {
 		script.setAttribute("type", "application/json");
 		script.setAttribute(SSR_ATTRIBUTE, "");
 		if (entry.key !== undefined) script.setAttribute(KEY_ATTRIBUTE, entry.key);
-		script.textContent = JSON.stringify(entry.value).replace(
-			ANGLE_BRACKET,
-			"\\u003c",
-		);
+		//JSON.stringify(undefined) returns undefined, not a string; replay parses "null" back
+		const serialized = JSON.stringify(entry.value);
+		script.textContent =
+			serialized === undefined
+				? "null"
+				: serialized.replace(ANGLE_BRACKET, "\\u003c");
 		shadowRoot.appendChild(script);
 	}
 };

@@ -1,33 +1,33 @@
-import { ATTRIBUTE_SHAPE, BINDING, BINDING_TYPES } from "./constants";
+import { BINDING, PARSE_BINDING } from "./constants";
 
 export type ValueOf<T> = T[keyof T];
 
 export type AttributeBinding = {
-	type: typeof BINDING_TYPES.ATTRIBUTE;
-	shape: ValueOf<typeof ATTRIBUTE_SHAPE>;
+	type: typeof PARSE_BINDING.ATTRIBUTE;
+	isExpandable: boolean;
 	values: Array<number | string>;
 	keys: Array<number | string>;
 };
 
 export type ContentBinding = {
-	type: typeof BINDING_TYPES.CONTENT;
+	type: typeof PARSE_BINDING.CONTENT;
 	values: Array<number | string>;
 };
 
 export type CommentBinding = {
-	type: typeof BINDING_TYPES.COMMENT;
+	type: typeof PARSE_BINDING.COMMENT;
 	values: Array<number | string>;
 };
 
 export type RawContentBinding = {
-	type: typeof BINDING_TYPES.RAW_CONTENT;
+	type: typeof PARSE_BINDING.RAW_CONTENT;
 	values: Array<number | string>;
 	tag: string;
 	cssPlan: CssPlan | null;
 };
 
 export type TagBinding = {
-	type: typeof BINDING_TYPES.TAG;
+	type: typeof PARSE_BINDING.TAG;
 	values: Array<number | string>;
 };
 

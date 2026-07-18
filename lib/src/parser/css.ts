@@ -1,3 +1,4 @@
+import { moveArrayContents } from "../utils/arrays";
 import { CHAR_CODE, isQuoteCode } from "./chars";
 import { CssPlan, CssValueGroup, Part, ValueOf } from "./types";
 
@@ -45,13 +46,6 @@ interface CssAnalyzerState {
 	groups: Array<CssValueGroup>;
 	namePrefix: string;
 }
-
-const moveArrayContents = (from: Array<unknown>, to: Array<unknown>) => {
-	for (let arrIndex = 0; arrIndex < from.length; arrIndex++) {
-		to.push(from[arrIndex]);
-	}
-	from.length = 0;
-};
 
 const createCssAnalyzer = (): CssAnalyzerState => ({
 	state: CSS_STATE.SELECTOR,

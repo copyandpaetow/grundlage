@@ -2,22 +2,12 @@ export const COMMENT_IDENTIFIER = "^.^";
 
 export const NO_KEY_BINDING = -1;
 
-export const BINDING_TYPES = {
+export const PARSE_BINDING = {
 	TAG: 0,
 	ATTRIBUTE: 1,
 	CONTENT: 2,
 	RAW_CONTENT: 3,
 	COMMENT: 4,
-} as const;
-
-export const ATTRIBUTE_SHAPE = {
-	STATIC: 0,
-	STATIC_NAME_SINGLE_VALUE: 1,
-	STATIC_NAME_MULTI_VALUE: 2,
-	DYNAMIC_NAME_BOOLEAN: 3,
-	DYNAMIC_NAME_SINGLE_VALUE: 4,
-	DYNAMIC_NAME_MULTI_VALUE: 5,
-	EXPANDABLE: 6,
 } as const;
 
 export const BINDING = {

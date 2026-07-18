@@ -139,15 +139,17 @@ describe("step: suspended resume", () => {
 		expect(task.state).toBe(TASK_STATE.DRIVING);
 	});
 
-	test("a rejected await routes by role", () => {
+	test("a rejected await throws back into the coroutine so its try/catch can recover", () => {
 		const inner = makeTask({ state: TASK_STATE.SUSPENDED, role: ROLE.INNER });
-		expect(step(inner, { kind: STEP_OUTCOME.THREW, payload: 1 }).kind).toBe(
-			OPERATION.THROW_TO_PARENT,
-		);
+		const innerOperation = step(inner, { kind: STEP_OUTCOME.THREW, payload: 1 });
+		expect(innerOperation.kind).toBe(OPERATION.THROW_INTO);
+		expect(innerOperation.payload).toBe(1);
+		expect(inner.state).toBe(TASK_STATE.DRIVING);
+
 		const outer = makeTask({ state: TASK_STATE.SUSPENDED, role: ROLE.OUTER });
-		expect(step(outer, { kind: STEP_OUTCOME.THREW, payload: 1 }).kind).toBe(
-			OPERATION.FAIL,
-		);
+		const outerOperation = step(outer, { kind: STEP_OUTCOME.THREW, payload: 1 });
+		expect(outerOperation.kind).toBe(OPERATION.THROW_INTO);
+		expect(outer.state).toBe(TASK_STATE.DRIVING);
 	});
 });
 
