@@ -58,7 +58,7 @@ interface ParserState {
 	activeTemplate: string;
 	charIndex: number;
 	splitIndex: number;
-	hostBindingOffset: number;
+	hostBindingCount: number;
 	attributeQuoteCode: number;
 	currentTagName: string;
 	selfClosing: boolean;
@@ -93,7 +93,7 @@ const createParser = (): ParserState => ({
 	activeTemplate: "",
 	charIndex: 0,
 	splitIndex: 0,
-	hostBindingOffset: 0,
+	hostBindingCount: 0,
 	attributeQuoteCode: 0,
 	currentTagName: "",
 	selfClosing: false,
@@ -131,7 +131,7 @@ const resetParser = (
 	parser.activeTemplate = strings[0];
 	parser.charIndex = 0;
 	parser.splitIndex = 0;
-	parser.hostBindingOffset = 0;
+	parser.hostBindingCount = 0;
 	parser.attributeQuoteCode = 0;
 	parser.currentTagName = "";
 	parser.selfClosing = false;
@@ -426,7 +426,7 @@ const completeAttribute = (parser: ParserState) => {
 		finalizeAttributeBinding(parser, attributeBinding);
 
 		if (parser.isRootTemplate) {
-			parser.hostBindingOffset++;
+			parser.hostBindingCount++;
 		} else {
 			parser.resultBuffer.push(openComment(parser));
 			recordKeyBinding(parser, attributeBinding);
@@ -441,7 +441,7 @@ const completeAttribute = (parser: ParserState) => {
 			};
 			finalizeAttributeBinding(parser, staticBinding);
 			parser.bindings.push(staticBinding);
-			parser.hostBindingOffset++;
+			parser.hostBindingCount++;
 		} else {
 			parser.elementBuffer.push(MARKUP.ATTRIBUTE_SEPARATOR);
 			moveArrayContents(parser.attributeKeyBuffer, parser.elementBuffer);
@@ -779,7 +779,7 @@ const parse = (
 		bindings: parser.bindings.map(toStaticBinding),
 		templateHash: parser.templateHash,
 		fragmentCloneSource: null,
-		hostBindingCount: parser.hostBindingOffset,
+		hostBindingCount: parser.hostBindingCount,
 		keyBindingIndex: parser.keyBindingIndex,
 		hostStyleIsBound: hasHostStyleBinding(parser),
 	};
@@ -825,7 +825,7 @@ const STYLE_ATTRIBUTE_NAME = "style";
 //a host binding writing the style attribute wholesale would wipe css host props; the
 //flag rides on ParsedTemplate and disables every css plan mounted under that host
 const hasHostStyleBinding = (parser: ParserState): boolean => {
-	for (let index = 0; index < parser.hostBindingOffset; index++) {
+	for (let index = 0; index < parser.hostBindingCount; index++) {
 		const { keys } = parser.bindings[index] as AttributeBinding;
 		if (keys.length === 1 && keys[0] === STYLE_ATTRIBUTE_NAME) return true;
 	}

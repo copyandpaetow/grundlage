@@ -1,19 +1,25 @@
-import { combinedPartsHash, composeParts } from "../compose";
-import { combineOrderedHash } from "../constants";
+import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { combineOrderedHash } from "../../utils/hashing";
+import { AttributeStaticBinding } from "../../parser/types";
 import { targetElement } from "../dom";
 import { AttributeLiveBinding } from "./types";
+
+export const attributeGateHash = (
+	staticBinding: AttributeStaticBinding,
+	values: Array<unknown>,
+): number =>
+	combineOrderedHash(
+		combinedPartsHash(staticBinding.nameParts, values),
+		combinedPartsHash(staticBinding.valueParts, values),
+	);
 
 export const commitAttribute = (
 	liveBinding: AttributeLiveBinding,
 	values: Array<unknown>,
 ): void => {
 	const { nameParts, valueParts } = liveBinding.staticBinding;
-	const valueHash = combineOrderedHash(
-		combinedPartsHash(nameParts, values),
-		combinedPartsHash(valueParts, values),
-	);
-	if (valueHash === liveBinding.valueHash) return;
-	liveBinding.valueHash = valueHash;
+	if (!hasHashChanged(liveBinding, attributeGateHash(liveBinding.staticBinding, values)))
+		return;
 	const element = targetElement(liveBinding);
 	const composedName = composeParts(nameParts, values);
 	if (composedName !== liveBinding.lastComposedName) {

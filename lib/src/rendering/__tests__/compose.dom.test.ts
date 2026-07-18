@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { combinedPartsHash, composeParts, hasValueChanged } from "../compose";
+import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 
 describe("composeParts", () => {
 	test("interleaves static string parts with interpolated values", () => {
@@ -37,29 +37,23 @@ describe("combinedPartsHash", () => {
 	});
 });
 
-describe("hasValueChanged", () => {
+describe("hasHashChanged", () => {
 	test("first observation is a change and seeds the gate", () => {
 		const gate = { lastValueHash: -1 };
-		expect(hasValueChanged(gate, "a")).toBe(true);
+		expect(hasHashChanged(gate, 42)).toBe(true);
+		expect(gate.lastValueHash).toBe(42);
 	});
 
-	test("re-observing the same value is not a change", () => {
+	test("re-observing the same hash is not a change", () => {
 		const gate = { lastValueHash: -1 };
-		hasValueChanged(gate, "a");
-		expect(hasValueChanged(gate, "a")).toBe(false);
+		hasHashChanged(gate, 42);
+		expect(hasHashChanged(gate, 42)).toBe(false);
 	});
 
-	test("a different value is a change", () => {
+	test("a different hash is a change and updates the gate", () => {
 		const gate = { lastValueHash: -1 };
-		hasValueChanged(gate, "a");
-		expect(hasValueChanged(gate, "b")).toBe(true);
-	});
-
-	test("an in-place mutation is reported as a change", () => {
-		const gate = { lastValueHash: -1 };
-		const value = { n: 1 };
-		hasValueChanged(gate, value);
-		value.n = 2;
-		expect(hasValueChanged(gate, value)).toBe(true);
+		hasHashChanged(gate, 42);
+		expect(hasHashChanged(gate, 43)).toBe(true);
+		expect(gate.lastValueHash).toBe(43);
 	});
 });

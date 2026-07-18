@@ -1,14 +1,10 @@
 import { BINDING } from "../../parser/constants";
 import { composeSheet } from "../../parser/css";
 import { StaticBinding } from "../../parser/types";
-import { combinedPartsHash, composeParts } from "../compose";
-import {
-	ATTRIBUTE_MODE,
-	combineOrderedHash,
-	CONTENT_KIND,
-	UNSET_HASH,
-} from "../constants";
-import { commitAttribute } from "./attribute";
+import { Instance } from "../instance";
+import { composeParts } from "../compose";
+import { ATTRIBUTE_MODE, UNSET_HASH } from "../constants";
+import { attributeGateHash, commitAttribute } from "./attribute";
 import {
 	applyDynamicAttribute,
 	commitDynamic,
@@ -21,15 +17,19 @@ import {
 	revertAttributeMode,
 	seedOrCommitSingleValue,
 } from "./attribute-single-value";
-import { commitComment } from "./comment";
-import { commitContent, seedContentByAdoption } from "./content";
-import { commitRawContent } from "./content-raw";
+import { commentGateHash, commitComment } from "./comment";
+import {
+	commitContent,
+	seedContentByAdoption,
+	UNRESOLVED_CONTENT,
+} from "./content";
+import { commitRawContent, rawContentGateHash } from "./content-raw";
 import { seedCssGroupHashes } from "./css-apply";
 import {
 	commitNamedDynamic,
 	reapplyOnSwap as reapplyNamedDynamicOnSwap,
 } from "./named-dynamic";
-import { commitTag } from "./tag";
+import { commitTag, tagGateHash } from "./tag";
 import {
 	AttributeLiveBinding,
 	Carrier,
@@ -39,16 +39,14 @@ import {
 	NamedDynamicLiveBinding,
 	LiveBinding,
 	RawContentLiveBinding,
+	RawCssState,
 	SingleValueAttributeLiveBinding,
 	TagLiveBinding,
 } from "./types";
 
-const NO_SIBLINGS: Array<LiveBinding> = [];
-
 export const createLiveBinding = (
 	staticBinding: StaticBinding,
-	markerComment: Comment | null,
-	hostElement: Element | null,
+	anchor: Comment | Element | null,
 	endMarker: Comment | null = null,
 	carrier: Carrier | null = null,
 ): LiveBinding => {
@@ -56,60 +54,56 @@ export const createLiveBinding = (
 		case BINDING.TAG:
 			return {
 				staticBinding,
-				markerComment: markerComment!,
-				valueHash: UNSET_HASH,
+				markerComment: anchor as Comment,
+				lastValueHash: UNSET_HASH,
 			};
 		case BINDING.ATTRIBUTE:
 			return {
 				staticBinding,
-				markerComment,
-				hostElement,
-				valueHash: UNSET_HASH,
+				anchor: anchor!,
+				lastValueHash: UNSET_HASH,
 				lastComposedName: "",
 			};
 		case BINDING.SINGLE_VALUE_ATTRIBUTE:
 			return {
 				staticBinding,
-				markerComment,
-				hostElement,
-				valueHash: UNSET_HASH,
+				anchor: anchor!,
+				lastValueHash: UNSET_HASH,
 				lastComposedName: "",
 				appliedMode: ATTRIBUTE_MODE.ABSENT,
 			};
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return {
 				staticBinding,
-				markerComment,
-				hostElement,
+				anchor: anchor!,
 				appliedAttributes: new Map(),
 				lastValueHash: UNSET_HASH,
 			};
 		case BINDING.NAMED_DYNAMIC:
 			return {
 				staticBinding,
-				markerComment,
-				hostElement,
-				valueHash: UNSET_HASH,
+				anchor: anchor!,
+				lastValueHash: UNSET_HASH,
 				lastValue: undefined,
 			};
 		case BINDING.CONTENT:
 			return {
 				staticBinding,
-				startMarker: markerComment!,
+				startMarker: anchor as Comment,
 				endMarker: endMarker!,
-				carrier: carrier!,
-				content: { kind: CONTENT_KIND.UNRESOLVED },
+				content: UNRESOLVED_CONTENT,
 			};
 		case BINDING.RAW_CONTENT: {
-			//null previousGroupHashes marks the fallback path: no plan, or the carrier's
-			//root template binds the host style attribute and would wipe the host props
+			//null cssState marks the fallback path: no plan, or the carrier's root
+			//template binds the host style attribute and would wipe the host props
 			const cssPlan = carrier!.hostStyleIsBound ? null : staticBinding.cssPlan;
-			let groupNames: Array<string> | null = null;
-			let sheetOverride: string | null = null;
+			let cssState: RawCssState | null = null;
 			if (cssPlan !== null) {
 				const mountCounts = (carrier!.cssPlanMountCounts ??= new Map());
 				const instanceOrdinal = mountCounts.get(cssPlan) ?? 0;
 				mountCounts.set(cssPlan, instanceOrdinal + 1);
+				let groupNames: Array<string>;
+				let sheetOverride: string | null = null;
 				if (instanceOrdinal === 0) {
 					groupNames = cssPlan.groupNames;
 				} else {
@@ -121,37 +115,42 @@ export const createLiveBinding = (
 					);
 					sheetOverride = composeSheet(cssPlan, groupNames);
 				}
+				cssState = {
+					previousGroupHashes: new Array<number>(cssPlan.groups.length).fill(
+						UNSET_HASH,
+					),
+					groupNames,
+					sheetOverride,
+				};
 			}
 			return {
 				staticBinding,
-				markerComment: markerComment!,
-				valueHash: UNSET_HASH,
-				carrier: carrier!,
-				previousGroupHashes:
-					cssPlan === null
-						? null
-						: new Array<number>(cssPlan.groups.length).fill(UNSET_HASH),
-				groupNames,
-				sheetOverride,
+				markerComment: anchor as Comment,
+				lastValueHash: UNSET_HASH,
+				cssState,
 			};
 		}
 		case BINDING.COMMENT:
 			return {
 				staticBinding,
-				markerComment: markerComment!,
-				valueHash: UNSET_HASH,
+				markerComment: anchor as Comment,
+				lastValueHash: UNSET_HASH,
 			};
 	}
 };
 
 export const commitLiveBinding = (
+	instance: Instance,
 	liveBinding: LiveBinding,
 	values: Array<unknown>,
-	siblings: Array<LiveBinding> = NO_SIBLINGS,
 ): void => {
 	switch (liveBinding.staticBinding.type) {
 		case BINDING.TAG:
-			return commitTag(liveBinding as TagLiveBinding, values, siblings);
+			return commitTag(
+				liveBinding as TagLiveBinding,
+				values,
+				instance.liveBindings,
+			);
 		case BINDING.ATTRIBUTE:
 			return commitAttribute(liveBinding as AttributeLiveBinding, values);
 		case BINDING.SINGLE_VALUE_ATTRIBUTE:
@@ -164,21 +163,30 @@ export const commitLiveBinding = (
 		case BINDING.NAMED_DYNAMIC:
 			return commitNamedDynamic(liveBinding as NamedDynamicLiveBinding, values);
 		case BINDING.CONTENT:
-			return commitContent(liveBinding as ContentLiveBinding, values);
+			return commitContent(
+				liveBinding as ContentLiveBinding,
+				values,
+				instance.carrier,
+			);
 		case BINDING.RAW_CONTENT:
-			return commitRawContent(liveBinding as RawContentLiveBinding, values);
+			return commitRawContent(
+				liveBinding as RawContentLiveBinding,
+				values,
+				instance.carrier.host,
+			);
 		case BINDING.COMMENT:
 			return commitComment(liveBinding as CommentLiveBinding, values);
 	}
 };
 
 export const seedLiveBinding = (
+	instance: Instance,
 	liveBinding: LiveBinding,
 	values: Array<unknown>,
 ): void => {
 	switch (liveBinding.staticBinding.type) {
 		case BINDING.NAMED_DYNAMIC:
-			return commitLiveBinding(liveBinding, values);
+			return commitLiveBinding(instance, liveBinding, values);
 		case BINDING.SINGLE_VALUE_ATTRIBUTE:
 			return seedOrCommitSingleValue(
 				liveBinding as SingleValueAttributeLiveBinding,
@@ -187,51 +195,43 @@ export const seedLiveBinding = (
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return seedDynamic(liveBinding as DynamicAttributeLiveBinding, values);
 		case BINDING.CONTENT:
-			return seedContentByAdoption(liveBinding as ContentLiveBinding, values);
+			return seedContentByAdoption(
+				liveBinding as ContentLiveBinding,
+				values,
+				instance.carrier,
+			);
 		case BINDING.ATTRIBUTE: {
 			const attribute = liveBinding as AttributeLiveBinding;
 			attribute.lastComposedName = composeParts(
 				attribute.staticBinding.nameParts,
 				values,
 			);
-			attribute.valueHash = computeGateHash(liveBinding, values);
+			attribute.lastValueHash = attributeGateHash(attribute.staticBinding, values);
 			return;
 		}
 		case BINDING.RAW_CONTENT: {
 			const rawContent = liveBinding as RawContentLiveBinding;
-			if (rawContent.previousGroupHashes === null) {
-				rawContent.valueHash = computeGateHash(liveBinding, values);
+			if (rawContent.cssState === null) {
+				rawContent.lastValueHash = rawContentGateHash(
+					rawContent.staticBinding,
+					values,
+				);
 				return;
 			}
 			//the server already wrote this instance's sheet — suffixed or not
-			rawContent.sheetOverride = null;
+			rawContent.cssState.sheetOverride = null;
 			return seedCssGroupHashes(rawContent, values);
 		}
-		default:
-			(liveBinding as { valueHash: number }).valueHash = computeGateHash(
-				liveBinding,
-				values,
-			);
-	}
-};
-
-const computeGateHash = (
-	liveBinding: LiveBinding,
-	values: Array<unknown>,
-): number => {
-	const staticBinding = liveBinding.staticBinding;
-	switch (staticBinding.type) {
-		case BINDING.ATTRIBUTE:
-			return combineOrderedHash(
-				combinedPartsHash(staticBinding.nameParts, values),
-				combinedPartsHash(staticBinding.valueParts, values),
-			);
-		case BINDING.TAG:
-		case BINDING.RAW_CONTENT:
-		case BINDING.COMMENT:
-			return combinedPartsHash(staticBinding.parts, values);
-		default:
-			return UNSET_HASH;
+		case BINDING.TAG: {
+			const tag = liveBinding as TagLiveBinding;
+			tag.lastValueHash = tagGateHash(tag.staticBinding, values);
+			return;
+		}
+		case BINDING.COMMENT: {
+			const comment = liveBinding as CommentLiveBinding;
+			comment.lastValueHash = commentGateHash(comment.staticBinding, values);
+			return;
+		}
 	}
 };
 
@@ -268,28 +268,30 @@ export const revertHostBinding = (liveBinding: LiveBinding): void => {
 	switch (liveBinding.staticBinding.type) {
 		case BINDING.ATTRIBUTE: {
 			const attribute = liveBinding as AttributeLiveBinding;
-			if (attribute.hostElement !== null && attribute.lastComposedName !== "")
-				attribute.hostElement.removeAttribute(attribute.lastComposedName);
+			const { anchor } = attribute;
+			if (anchor instanceof Element && attribute.lastComposedName !== "")
+				anchor.removeAttribute(attribute.lastComposedName);
 			return;
 		}
 		case BINDING.SINGLE_VALUE_ATTRIBUTE: {
 			const single = liveBinding as SingleValueAttributeLiveBinding;
-			if (single.hostElement !== null)
-				revertAttributeMode(single.hostElement, single);
+			if (single.anchor instanceof Element)
+				revertAttributeMode(single.anchor, single);
 			return;
 		}
 		case BINDING.DYNAMIC_ATTRIBUTE: {
 			const dynamic = liveBinding as DynamicAttributeLiveBinding;
-			if (dynamic.hostElement === null) return;
+			const { anchor } = dynamic;
+			if (!(anchor instanceof Element)) return;
 			for (const [name, entry] of dynamic.appliedAttributes)
-				applyDynamicAttribute(dynamic.hostElement, name, null, entry.value);
+				applyDynamicAttribute(anchor, name, null, entry.value);
 			return;
 		}
 		case BINDING.NAMED_DYNAMIC: {
 			const named = liveBinding as NamedDynamicLiveBinding;
-			if (named.hostElement !== null)
+			if (named.anchor instanceof Element)
 				applyDynamicAttribute(
-					named.hostElement,
+					named.anchor,
 					named.staticBinding.name,
 					null,
 					named.lastValue,

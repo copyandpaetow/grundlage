@@ -17,13 +17,11 @@ import {
 import { Carrier } from "../rendering/bindings/types";
 
 export interface Painter {
-	host: BaseComponent;
 	shadowRoot: ShadowRoot;
 	carrier: Carrier;
 	instance: Instance | null;
 	attributeObserver: MutationObserver | null;
 	hydratePending: boolean;
-	hostBindingCount: number;
 }
 
 export const createPainter = (
@@ -31,20 +29,18 @@ export const createPainter = (
 	shadowRoot: ShadowRoot,
 	hydratePending: boolean,
 ): Painter => ({
-	host,
 	shadowRoot,
 	carrier: { host, hostStyleIsBound: false, cssPlanMountCounts: null },
 	instance: null,
 	attributeObserver: null,
 	hydratePending,
-	hostBindingCount: 0,
 });
 
 export const revertHostBindings = (painter: Painter): void => {
 	const instance = painter.instance;
 	if (instance === null) return;
 	const liveBindings = instance.liveBindings;
-	for (let index = 0; index < painter.hostBindingCount; index++)
+	for (let index = 0; index < instance.parsed.hostBindingCount; index++)
 		revertHostBinding(liveBindings[index]);
 };
 
@@ -62,13 +58,12 @@ const paintRoot = (
 	if (painter.instance !== null) releaseInstance(painter.instance);
 	revertHostBindings(painter);
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
-		const live = createLiveBinding(parsed.bindings[index], null, painter.host);
-		commitLiveBinding(live, value.values);
+		const live = createLiveBinding(parsed.bindings[index], painter.carrier.host);
+		commitLiveBinding(mounted.instance, live, value.values);
 		mounted.instance.liveBindings[index] = live;
 	}
 	painter.shadowRoot.replaceChildren(mounted.fragment);
 	painter.instance = mounted.instance;
-	painter.hostBindingCount = parsed.hostBindingCount;
 };
 
 const hydrateRoot = (
@@ -79,12 +74,11 @@ const hydrateRoot = (
 	painter.carrier.hostStyleIsBound = parsed.hostStyleIsBound;
 	const instance = hydrateInstance(value, painter.shadowRoot, painter.carrier);
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
-		const live = createLiveBinding(parsed.bindings[index], null, painter.host);
-		commitLiveBinding(live, value.values);
+		const live = createLiveBinding(parsed.bindings[index], painter.carrier.host);
+		commitLiveBinding(instance, live, value.values);
 		instance.liveBindings[index] = live;
 	}
 	painter.instance = instance;
-	painter.hostBindingCount = parsed.hostBindingCount;
 };
 
 export const paint = (painter: Painter, value: unknown): void => {
@@ -102,7 +96,7 @@ export const paint = (painter: Painter, value: unknown): void => {
 			paintRoot(painter, templateValue, parsed);
 		}
 	} finally {
-		painter.attributeObserver?.observe(painter.host, { attributes: true });
+		painter.attributeObserver?.observe(painter.carrier.host, { attributes: true });
 	}
 };
 
@@ -113,7 +107,7 @@ export const serverPaint = (painter: Painter, value: unknown): void => {
 		templateValue,
 		getParsedTemplate(templateValue.__templateStrings),
 	);
-	flushHostPayload(painter.host);
+	flushHostPayload(painter.carrier.host);
 };
 
 export const setupAttributeObserver = (
@@ -122,7 +116,7 @@ export const setupAttributeObserver = (
 ): void => {
 	painter.attributeObserver?.disconnect();
 	const observer = new MutationObserver(onChange);
-	observer.observe(painter.host, { attributes: true });
+	observer.observe(painter.carrier.host, { attributes: true });
 	painter.attributeObserver = observer;
 };
 

@@ -1,7 +1,7 @@
 import { isTemplate, TemplateValue } from "../../template";
 import { assertPrimitiveString } from "../../utils/guards";
 import { hashValue } from "../../utils/hashing";
-import { hasValueChanged } from "../compose";
+import { hasHashChanged } from "../compose";
 import { CONTENT_KIND, UNSET_HASH } from "../constants";
 import {
 	assertNestable,
@@ -14,10 +14,17 @@ import { forEachInRange } from "../range";
 import { hydrateListItems, patchListContent } from "./content-list";
 import {
 	BranchContentState,
+	Carrier,
 	ContentLiveBinding,
 	ContentState,
 	TextContentState,
+	UnresolvedContentState,
 } from "./types";
+
+//no mutable fields and only ever replaced, never written — one frozen instance is shared
+export const UNRESOLVED_CONTENT: UnresolvedContentState = Object.freeze({
+	kind: CONTENT_KIND.UNRESOLVED,
+});
 
 const contentKindOf = (value: unknown): number =>
 	isTemplate(value)
@@ -40,7 +47,7 @@ const freshContentState = (contentKind: number): ContentState => {
 				itemHashes: [],
 			};
 		default:
-			return { kind: CONTENT_KIND.UNRESOLVED };
+			return UNRESOLVED_CONTENT;
 	}
 };
 
@@ -62,7 +69,7 @@ const coerceToText = (value: unknown): string =>
 
 const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
 	const textState = liveBinding.content as TextContentState;
-	if (!hasValueChanged(textState, value)) return;
+	if (!hasHashChanged(textState, hashValue(value))) return;
 	const text = coerceToText(value);
 	const existing = liveBinding.startMarker.nextSibling;
 	if (existing === liveBinding.endMarker)
@@ -73,14 +80,11 @@ const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
 const patchBranch = (
 	liveBinding: ContentLiveBinding,
 	value: TemplateValue,
+	carrier: Carrier,
 ): void => {
 	assertNestable(value);
 	const branch = liveBinding.content as BranchContentState;
-	const mounted = reconcileInstance(
-		branch.instance,
-		value,
-		liveBinding.carrier,
-	);
+	const mounted = reconcileInstance(branch.instance, value, carrier);
 	if (mounted === null) return;
 	if (branch.instance !== null) releaseInstance(branch.instance);
 	forEachInRange(
@@ -95,6 +99,7 @@ const patchBranch = (
 export const commitContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
+	carrier: Carrier,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const contentKind = contentKindOf(value);
@@ -104,15 +109,16 @@ export const commitContent = (
 		case CONTENT_KIND.TEXT:
 			return patchText(liveBinding, value);
 		case CONTENT_KIND.BRANCH:
-			return patchBranch(liveBinding, value as TemplateValue);
+			return patchBranch(liveBinding, value as TemplateValue, carrier);
 		case CONTENT_KIND.LIST:
-			return patchListContent(liveBinding, value as Array<unknown>);
+			return patchListContent(liveBinding, value as Array<unknown>, carrier);
 	}
 };
 
 export const seedContentByAdoption = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
+	carrier: Carrier,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const kind = contentKindOf(value);
@@ -127,10 +133,10 @@ export const seedContentByAdoption = (
 			(liveBinding.content as BranchContentState).instance = hydrateInstance(
 				value as TemplateValue,
 				liveBinding.startMarker,
-				liveBinding.carrier,
+				carrier,
 			);
 			return;
 		case CONTENT_KIND.LIST:
-			return hydrateListItems(liveBinding, value as Array<unknown>);
+			return hydrateListItems(liveBinding, value as Array<unknown>, carrier);
 	}
 };

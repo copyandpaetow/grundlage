@@ -1,10 +1,18 @@
 import { getParsedTemplate } from "../parser/html";
 import { isTemplate, TemplateValue } from "../template";
 
+export const combineOrderedHash = (
+	accumulator: number,
+	valueHash: number,
+): number => (Math.imul(accumulator, 31) + valueHash) | 0;
+
+export const PARTS_HASH_SEED = 0x811c9dc5 | 0;
+export const LIST_HASH_SEED = 0x27d4eb2f | 0;
+
 export const stringHash = (str: string): number => {
 	let hash = 0;
 	for (let index = 0; index < str.length; index++) {
-		hash = (Math.imul(hash, 31) + str.charCodeAt(index)) | 0;
+		hash = combineOrderedHash(hash, str.charCodeAt(index));
 	}
 	return hash;
 };
@@ -24,17 +32,17 @@ const TAG = {
 
 const MAX_DEPTH = 64;
 
-const mix = (hash: number, value: number): number =>
-	((hash << 5) - hash + value) | 0;
-
 const floatView = new Float64Array(1);
 const floatIntView = new Int32Array(floatView.buffer);
 
 const hashNumber = (numberValue: number): number => {
 	if (numberValue === (numberValue | 0))
-		return mix(TAG.NUMBER, numberValue | 0);
+		return combineOrderedHash(TAG.NUMBER, numberValue | 0);
 	floatView[0] = numberValue;
-	return mix(TAG.NUMBER, mix(floatIntView[0], floatIntView[1]));
+	return combineOrderedHash(
+		TAG.NUMBER,
+		combineOrderedHash(floatIntView[0], floatIntView[1]),
+	);
 };
 
 const keyHashes = new Map<string, number>();
@@ -57,14 +65,14 @@ const referenceId = (value: Object): number => {
 		id = Math.imul(counter, 0x9e3779b1) | 0;
 		references.set(value, id);
 	}
-	return mix(TAG.REFERENCE, id);
+	return combineOrderedHash(TAG.REFERENCE, id);
 };
 
 const hashTemplateValue = (value: TemplateValue): number => {
 	const values = value.values;
 	let hash = values.length;
 	for (let index = 0; index < values.length; index++) {
-		hash = (Math.imul(hash, 31) + hashValue(values[index])) | 0;
+		hash = combineOrderedHash(hash, hashValue(values[index]));
 	}
 	return (
 		getParsedTemplate(value.__templateStrings).templateHash ^
@@ -74,7 +82,7 @@ const hashTemplateValue = (value: TemplateValue): number => {
 
 const hashChild = (child: unknown, depth: number): number => {
 	const type = typeof child;
-	if (type === "string") return mix(TAG.STRING, stringHash(child as string));
+	if (type === "string") return combineOrderedHash(TAG.STRING, stringHash(child as string));
 	if (type === "number") return hashNumber(child as number);
 	return hashValue(child, depth);
 };
@@ -83,9 +91,9 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 	if (value === null || value === undefined) return TAG.NULLISH;
 
 	const type = typeof value;
-	if (type === "string") return mix(TAG.STRING, stringHash(value as string));
+	if (type === "string") return combineOrderedHash(TAG.STRING, stringHash(value as string));
 	if (type === "number") return hashNumber(value as number);
-	if (type === "boolean") return mix(TAG.BOOLEAN, value ? 1 : 0);
+	if (type === "boolean") return combineOrderedHash(TAG.BOOLEAN, value ? 1 : 0);
 	if (type === "function") return referenceId(value as Object);
 	if (isTemplate(value)) return hashTemplateValue(value);
 
@@ -93,9 +101,9 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 	const childDepth = depth + 1;
 
 	if (Array.isArray(value)) {
-		let hash = mix(TAG.ARRAY, value.length);
+		let hash = combineOrderedHash(TAG.ARRAY, value.length);
 		for (let index = 0; index < value.length; index++) {
-			hash = mix(hash, hashChild(value[index], childDepth));
+			hash = combineOrderedHash(hash, hashChild(value[index], childDepth));
 		}
 		return hash;
 	}
@@ -105,8 +113,8 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 	if (constructor === Object) {
 		let hash: number = TAG.OBJECT;
 		for (const name in value) {
-			hash = mix(
-				mix(hash, hashKey(name)),
+			hash = combineOrderedHash(
+				combineOrderedHash(hash, hashKey(name)),
 				hashChild(value[name as keyof typeof value], childDepth),
 			);
 		}
@@ -115,10 +123,10 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 
 	if (constructor === Map) {
 		const map = value as Map<unknown, unknown>;
-		let hash = mix(TAG.MAP, map.size);
+		let hash = combineOrderedHash(TAG.MAP, map.size);
 		for (const key of map.keys()) {
-			hash = mix(
-				mix(hash, hashChild(key, childDepth)),
+			hash = combineOrderedHash(
+				combineOrderedHash(hash, hashChild(key, childDepth)),
 				hashChild(map.get(key), childDepth),
 			);
 		}
@@ -127,9 +135,9 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 
 	if (constructor === Set) {
 		const set = value as Set<unknown>;
-		let hash = mix(TAG.SET, set.size);
+		let hash = combineOrderedHash(TAG.SET, set.size);
 		for (const member of set) {
-			hash = mix(hash, hashChild(member, childDepth));
+			hash = combineOrderedHash(hash, hashChild(member, childDepth));
 		}
 		return hash;
 	}

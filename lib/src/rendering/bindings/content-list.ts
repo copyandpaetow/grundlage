@@ -2,14 +2,13 @@ import { BINDING, NO_KEY_BINDING } from "../../parser/constants";
 import { AttributeStaticBinding, ParsedTemplate } from "../../parser/types";
 import { getParsedTemplate } from "../../parser/html";
 import { coerceToTemplate, TemplateValue } from "../../template";
-import { hashValue } from "../../utils/hashing";
-import { composeParts } from "../compose";
 import {
 	combineOrderedHash,
+	hashValue,
 	LIST_HASH_SEED,
-	LIST_MARKER_DATA,
-	NO_KEY,
-} from "../constants";
+} from "../../utils/hashing";
+import { composeParts } from "../compose";
+import { LIST_MARKER_DATA, NO_KEY } from "../constants";
 import {
 	assertNestable,
 	hydrateRow,
@@ -54,6 +53,7 @@ const shapeOrKeyHash = (templateHash: number, keyHash: number): number =>
 export const patchListContent = (
 	content: ContentLiveBinding,
 	values: Array<unknown>,
+	carrier: Carrier,
 ): void => {
 	const list = content.content as ListContentState;
 	const count = values.length;
@@ -67,7 +67,7 @@ export const patchListContent = (
 	}
 	if (aggregateHash === list.aggregateHash) return;
 	list.aggregateHash = aggregateHash;
-	reconcileRows(content, list, values, itemHashes, count);
+	reconcileRows(content, list, values, itemHashes, count, carrier);
 };
 
 type RowsByHash = Map<number, Array<ListItem>>;
@@ -103,7 +103,7 @@ const groupUnclaimedByShapeOrKey = (previous: RowsByHash): RowsByHash => {
 			addRowToGroup(
 				groups,
 				shapeOrKeyHash(
-					group[index].instance.templateHash,
+					group[index].instance.parsed.templateHash,
 					group[index].keyHash,
 				),
 				group[index],
@@ -128,6 +128,7 @@ const reconcileRows = (
 	values: Array<unknown>,
 	itemHashes: Array<number>,
 	count: number,
+	carrier: Carrier,
 ): void => {
 	const previousByContentHash = groupRowsByContentHash(
 		list.items,
@@ -157,13 +158,13 @@ const reconcileRows = (
 			matchHash,
 		);
 		if (reusableRow === undefined) continue;
-		patchRowInPlace(reusableRow, value, itemHashes[index], content.carrier);
+		patchRowInPlace(reusableRow, value, itemHashes[index], carrier);
 		resolvedRows[index] = reusableRow;
 	}
 
 	removeUnclaimedRows(leftoverByShapeOrKey);
 
-	list.items = placeRows(content, resolvedRows, values, itemHashes);
+	list.items = placeRows(content, resolvedRows, values, itemHashes, carrier);
 };
 
 const placeRows = (
@@ -171,18 +172,14 @@ const placeRows = (
 	resolvedRows: Array<ListItem | undefined>,
 	values: Array<unknown>,
 	itemHashes: Array<number>,
+	carrier: Carrier,
 ): Array<ListItem> => {
 	const finalRows: Array<ListItem> = new Array(resolvedRows.length);
 	let cursor: ChildNode = content.startMarker;
 	for (let index = 0; index < resolvedRows.length; index++) {
 		let row = resolvedRows[index];
 		if (row === undefined)
-			row = mountRowAfter(
-				cursor,
-				values[index],
-				itemHashes[index],
-				content.carrier,
-			);
+			row = mountRowAfter(cursor, values[index], itemHashes[index], carrier);
 		else if (cursor.nextSibling !== row.spanStart) moveRowAfter(cursor, row);
 		cursor = row.tailMarker;
 		finalRows[index] = row;
@@ -259,6 +256,7 @@ const clearRowNodes = (row: ListItem): void => {
 export const hydrateListItems = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
+	carrier: Carrier,
 ): void => {
 	const list = liveBinding.content as ListContentState;
 	const count = values.length;
@@ -271,11 +269,7 @@ export const hydrateListItems = (
 		const value = coerceToTemplate(values[index]);
 		assertNestable(value);
 		const spanStart = rowStart.nextSibling!;
-		const { instance, tailMarker } = hydrateRow(
-			value,
-			rowStart,
-			liveBinding.carrier,
-		);
+		const { instance, tailMarker } = hydrateRow(value, rowStart, carrier);
 		const parsed = getParsedTemplate(value.__templateStrings);
 		const itemHash = hashValue(values[index]);
 		itemHashes[index] = itemHash;

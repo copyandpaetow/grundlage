@@ -1,6 +1,9 @@
 import { Part } from "../parser/types";
-import { hashValue } from "../utils/hashing";
-import { combineOrderedHash, PARTS_HASH_SEED } from "./constants";
+import {
+	combineOrderedHash,
+	hashValue,
+	PARTS_HASH_SEED,
+} from "../utils/hashing";
 
 export const composeParts = (
 	parts: Array<Part>,
@@ -27,12 +30,11 @@ export const combinedPartsHash = (
 	return hash;
 };
 
-export const hasValueChanged = (
-	liveBinding: { lastValueHash: number },
-	value: unknown,
+export const hasHashChanged = (
+	gate: { lastValueHash: number },
+	hash: number,
 ): boolean => {
-	const valueHash = hashValue(value);
-	if (valueHash === liveBinding.lastValueHash) return false;
-	liveBinding.lastValueHash = valueHash;
+	if (hash === gate.lastValueHash) return false;
+	gate.lastValueHash = hash;
 	return true;
 };

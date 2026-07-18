@@ -13,11 +13,10 @@ export const buildFragment = (result: string): DocumentFragment => {
 };
 
 // Re-read the sibling each commit: swapElement's replaceWith invalidates any cached element.
-export const targetElement = (liveBinding: {
-	hostElement: Element | null;
-	markerComment: Comment | null;
-}): Element =>
-	liveBinding.hostElement ?? liveBinding.markerComment!.nextElementSibling!;
+export const targetElement = (liveBinding: { anchor: Comment | Element }): Element =>
+	liveBinding.anchor instanceof Comment
+		? liveBinding.anchor.nextElementSibling!
+		: liveBinding.anchor;
 
 // Duck-typed user surface: any custom element exposing update() opts into a property-set re-render.
 export const nudgeComponent = (element: Element): void => {

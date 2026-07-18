@@ -1,9 +1,19 @@
-import { hashValue } from "../../utils/hashing";
+import { combineOrderedHash, hashValue } from "../../utils/hashing";
 import { isStringable } from "../../utils/guards";
-import { combinedPartsHash, composeParts } from "../compose";
-import { ATTRIBUTE_MODE, combineOrderedHash } from "../constants";
+import { SingleValueAttributeStaticBinding } from "../../parser/types";
+import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { ATTRIBUTE_MODE } from "../constants";
 import { nudgeComponent, targetElement } from "../dom";
 import { SingleValueAttributeLiveBinding } from "./types";
+
+export const singleValueGateHash = (
+	staticBinding: SingleValueAttributeStaticBinding,
+	values: Array<unknown>,
+): number =>
+	combineOrderedHash(
+		combinedPartsHash(staticBinding.nameParts, values),
+		hashValue(values[staticBinding.valueIndex]),
+	);
 
 export const attributeModeOf = (value: unknown): number => {
 	if (value === null || value === undefined || value === false)
@@ -36,12 +46,8 @@ export const commitSingleValue = (
 ): void => {
 	const { nameParts, valueIndex } = liveBinding.staticBinding;
 	const value = values[valueIndex];
-	const valueHash = combineOrderedHash(
-		combinedPartsHash(nameParts, values),
-		hashValue(value),
-	);
-	if (valueHash === liveBinding.valueHash) return;
-	liveBinding.valueHash = valueHash;
+	if (!hasHashChanged(liveBinding, singleValueGateHash(liveBinding.staticBinding, values)))
+		return;
 
 	const element = targetElement(liveBinding);
 	const name = composeParts(nameParts, values);
@@ -78,10 +84,7 @@ export const seedOrCommitSingleValue = (
 	const mode = attributeModeOf(value);
 	liveBinding.lastComposedName = name;
 	liveBinding.appliedMode = mode;
-	liveBinding.valueHash = combineOrderedHash(
-		combinedPartsHash(nameParts, values),
-		hashValue(value),
-	);
+	liveBinding.lastValueHash = singleValueGateHash(liveBinding.staticBinding, values);
 	if (mode === ATTRIBUTE_MODE.PROPERTY) {
 		const element = targetElement(liveBinding);
 		(element as unknown as Record<string, unknown>)[name] = value;

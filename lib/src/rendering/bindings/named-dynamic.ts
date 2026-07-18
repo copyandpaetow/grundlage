@@ -1,5 +1,6 @@
 import { hashValue } from "../../utils/hashing";
 import { isStringable } from "../../utils/guards";
+import { hasHashChanged } from "../compose";
 import { targetElement } from "../dom";
 import { applyDynamicAttribute } from "./attribute-dynamic";
 import { NamedDynamicLiveBinding } from "./types";
@@ -10,9 +11,7 @@ export const commitNamedDynamic = (
 ): void => {
 	const { name, valueIndex } = liveBinding.staticBinding;
 	const value = values[valueIndex];
-	const valueHash = hashValue(value);
-	if (valueHash === liveBinding.valueHash) return;
-	liveBinding.valueHash = valueHash;
+	if (!hasHashChanged(liveBinding, hashValue(value))) return;
 	applyDynamicAttribute(
 		targetElement(liveBinding),
 		name,

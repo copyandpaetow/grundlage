@@ -1,27 +1,34 @@
-import { combinedPartsHash, composeParts } from "../compose";
+import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { RawContentStaticBinding } from "../../parser/types";
 import { applyChangedCssGroups } from "./css-apply";
 import { RawContentLiveBinding } from "./types";
+
+export const rawContentGateHash = (
+	staticBinding: RawContentStaticBinding,
+	values: Array<unknown>,
+): number => combinedPartsHash(staticBinding.parts, values);
 
 export const commitRawContent = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
+	host: HTMLElement,
 ): void => {
 	const { parts } = liveBinding.staticBinding;
 
-	if (liveBinding.previousGroupHashes !== null) {
+	const cssState = liveBinding.cssState;
+	if (cssState !== null) {
 		//only a duplicate instance carries an override; the baked sheet came with the markup
-		if (liveBinding.sheetOverride !== null) {
+		if (cssState.sheetOverride !== null) {
 			liveBinding.markerComment.nextElementSibling!.textContent =
-				liveBinding.sheetOverride;
-			liveBinding.sheetOverride = null;
+				cssState.sheetOverride;
+			cssState.sheetOverride = null;
 		}
-		applyChangedCssGroups(liveBinding, values);
+		applyChangedCssGroups(liveBinding, values, host);
 		return;
 	}
 
-	const valueHash = combinedPartsHash(parts, values);
-	if (valueHash === liveBinding.valueHash) return;
-	liveBinding.valueHash = valueHash;
+	if (!hasHashChanged(liveBinding, rawContentGateHash(liveBinding.staticBinding, values)))
+		return;
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const composed = composeParts(parts, values);
 	if (element instanceof HTMLTemplateElement) {

@@ -4,7 +4,7 @@ import {
 	isPlainObject,
 	isStringable,
 } from "../../utils/guards";
-import { hasValueChanged } from "../compose";
+import { hasHashChanged } from "../compose";
 import { nudgeComponent, targetElement } from "../dom";
 import { AppliedAttribute, DynamicAttributeLiveBinding } from "./types";
 
@@ -126,7 +126,7 @@ export const commitDynamic = (
 	values: Array<unknown>,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
-	if (!hasValueChanged(liveBinding, value)) return;
+	if (!hasHashChanged(liveBinding, hashValue(value))) return;
 	const element = targetElement(liveBinding);
 	applyAttributeMap(
 		element,

@@ -12,17 +12,15 @@ import {
 import {
 	cancelTaskAndRunCleanup,
 	createCleanStepOutcome,
-	MODE,
-	nextTaskStep,
-	SteppedTask,
-} from "./runtime/engine";
-import {
 	createRenderTask,
 	createStepOutcome,
+	MODE,
 	nextOperation,
+	nextTaskStep,
 	OPERATION,
 	ROLE,
 	STEP_OUTCOME,
+	SteppedTask,
 	Task,
 	TASK_STATE,
 } from "./runtime/task";
@@ -144,7 +142,7 @@ export const component = (
 		#fail(error: unknown): void {
 			this.#cancelBothTasks();
 			//host listeners/attributes live on the host, not in the shadow root the error text
-			//overwrites — revert them (reads instance + hostBindingCount) before zeroing below
+			//overwrites — revert them (reads the instance) before it's dropped below
 			revertHostBindings(this.#painter);
 			teardownPainter(this.#painter);
 			console.warn(error);
@@ -152,7 +150,6 @@ export const component = (
 			// the error text replaces the DOM these referenced; a reconnect must remount,
 			// not patch the now-detached instance in place (same-hash reconcile would stick)
 			this.#painter.instance = null;
-			this.#painter.hostBindingCount = 0;
 			this.#resolvePendingUpdatePromise();
 		}
 
@@ -260,6 +257,7 @@ export const component = (
 							return true;
 						}
 						const reaction = nextTaskStep(parent, MODE.THROW, error);
+						//read reaction out before #runTask below reuses the shared step cell
 						const dismissed =
 							!(reaction instanceof Promise) &&
 							reaction.kind === STEP_OUTCOME.RETURNED;

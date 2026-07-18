@@ -15,11 +15,8 @@ interface CollectedEntry {
 	value: unknown;
 }
 
-const PENDING_SSR_LOADS = Symbol("grundlage.pendingSsrLoads");
-
-interface ServerHost extends Element {
-	[PENDING_SSR_LOADS]?: CollectedEntry[];
-}
+//written by collectOnServer during the render, drained once by flushHostPayload
+const pendingSsrLoads = new WeakMap<Element, CollectedEntry[]>();
 
 const SSR_ATTRIBUTE = "data-ssr";
 const KEY_ATTRIBUTE = "data-key";
@@ -38,13 +35,13 @@ const findReplayScript = (
 };
 
 const collectOnServer = async <Value>(
-	host: ServerHost,
+	host: Element,
 	fetcher: () => Promise<Value>,
 	key: string | undefined,
 ): Promise<Value> => {
 	const value = await fetcher();
-	const existing = host[PENDING_SSR_LOADS];
-	if (existing === undefined) host[PENDING_SSR_LOADS] = [{ key, value }];
+	const existing = pendingSsrLoads.get(host);
+	if (existing === undefined) pendingSsrLoads.set(host, [{ key, value }]);
 	else existing.push({ key, value });
 	return value;
 };
@@ -64,7 +61,7 @@ export const load = <Value>(
 
 	if (isServer()) {
 		if (skipSsr) return fetcher();
-		return collectOnServer(host as ServerHost, fetcher, key);
+		return collectOnServer(host, fetcher, key);
 	}
 
 	const shadowRoot = resolveShadowRoot(host);
@@ -91,10 +88,9 @@ export const warnOnUnclaimedReplay = (shadowRoot: ShadowRoot): void => {
 };
 
 export const flushHostPayload = (host: Element): void => {
-	const serverHost = host as ServerHost;
-	const collected = serverHost[PENDING_SSR_LOADS];
+	const collected = pendingSsrLoads.get(host);
 	if (collected === undefined) return;
-	serverHost[PENDING_SSR_LOADS] = undefined;
+	pendingSsrLoads.delete(host);
 	if (collected.length === 0) return;
 
 	const ownerDocument = host.ownerDocument;

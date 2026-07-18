@@ -1,5 +1,6 @@
 import { BINDING } from "../parser/constants";
 import { getParsedTemplate } from "../parser/html";
+import { ParsedTemplate } from "../parser/types";
 import { TemplateValue } from "../template";
 import { releaseCssGroups } from "./bindings/css-apply";
 import {
@@ -26,8 +27,9 @@ import {
 } from "./range";
 
 export interface Instance {
-	templateHash: number;
+	parsed: ParsedTemplate;
 	liveBindings: Array<LiveBinding>;
+	carrier: Carrier;
 }
 
 export const patchInstance = (
@@ -39,7 +41,7 @@ export const patchInstance = (
 	// Reordering this loop (or the marker emission) breaks tag swaps silently.
 	const { liveBindings } = instance;
 	for (let index = 0; index < liveBindings.length; index++)
-		commitLiveBinding(liveBindings[index], values, liveBindings);
+		commitLiveBinding(instance, liveBindings[index], values);
 };
 
 export const releaseInstance = (instance: Instance): void => {
@@ -49,8 +51,8 @@ export const releaseInstance = (instance: Instance): void => {
 		const { type } = liveBinding.staticBinding;
 		if (type === BINDING.RAW_CONTENT) {
 			const rawContent = liveBinding as RawContentLiveBinding;
-			if (rawContent.previousGroupHashes !== null)
-				releaseCssGroups(rawContent);
+			if (rawContent.cssState !== null)
+				releaseCssGroups(rawContent, instance.carrier.host);
 			continue;
 		}
 		if (type === BINDING.CONTENT)
@@ -76,7 +78,7 @@ export const reconcileInstance = (
 	carrier: Carrier,
 ): { instance: Instance; fragment: DocumentFragment } | null => {
 	const parsed = getParsedTemplate(value.__templateStrings);
-	if (current !== null && current.templateHash === parsed.templateHash) {
+	if (current !== null && current.parsed.templateHash === parsed.templateHash) {
 		patchInstance(current, value.values);
 		return null;
 	}
@@ -105,6 +107,7 @@ export const mountInstance = (
 
 	const { bindings, hostBindingCount } = parsed;
 	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
+	const instance: Instance = { parsed, liveBindings, carrier };
 	const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT);
 	let bindingIndex = hostBindingCount;
 
@@ -114,29 +117,20 @@ export const mountInstance = (
 		const staticBinding = bindings[bindingIndex];
 
 		if (!isRangeType(staticBinding.type)) {
-			const live = createLiveBinding(staticBinding, node, null, null, carrier);
-			commitLiveBinding(live, value.values, liveBindings);
+			const live = createLiveBinding(staticBinding, node, null, carrier);
+			commitLiveBinding(instance, live, value.values);
 			liveBindings[bindingIndex++] = live;
 			continue;
 		}
 
 		const closeMarker = node.nextSibling as Comment;
-		const live = createLiveBinding(
-			staticBinding,
-			node,
-			null,
-			closeMarker,
-			carrier,
-		);
-		commitLiveBinding(live, value.values, liveBindings);
+		const live = createLiveBinding(staticBinding, node, closeMarker, carrier);
+		commitLiveBinding(instance, live, value.values);
 		liveBindings[bindingIndex++] = live;
 		walker.currentNode = closeMarker;
 	}
 
-	return {
-		instance: { templateHash: parsed.templateHash, liveBindings },
-		fragment,
-	};
+	return { instance, fragment };
 };
 
 const seedInstance = (
@@ -147,32 +141,27 @@ const seedInstance = (
 	const parsed = getParsedTemplate(value.__templateStrings);
 	const { bindings, hostBindingCount } = parsed;
 	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
+	const instance: Instance = { parsed, liveBindings, carrier };
 
 	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length; ) {
 		const open = nextOpenMarker(walker);
 		const staticBinding = bindings[bindingIndex];
 
 		if (!isRangeType(staticBinding.type)) {
-			const live = createLiveBinding(staticBinding, open, null, null, carrier);
-			seedLiveBinding(live, value.values);
+			const live = createLiveBinding(staticBinding, open, null, carrier);
+			seedLiveBinding(instance, live, value.values);
 			liveBindings[bindingIndex++] = live;
 			continue;
 		}
 
 		const closeMarker = scanToClose(walker, open);
-		const live = createLiveBinding(
-			staticBinding,
-			open,
-			null,
-			closeMarker,
-			carrier,
-		);
-		seedLiveBinding(live, value.values);
+		const live = createLiveBinding(staticBinding, open, closeMarker, carrier);
+		seedLiveBinding(instance, live, value.values);
 		liveBindings[bindingIndex++] = live;
 		walker.currentNode = closeMarker;
 	}
 
-	return { templateHash: parsed.templateHash, liveBindings };
+	return instance;
 };
 
 const walkerFrom = (rangeStart: Node): TreeWalker => {

@@ -1,5 +1,6 @@
 import { BINDING } from "../../parser/constants";
-import { combinedPartsHash, composeParts } from "../compose";
+import { TagStaticBinding } from "../../parser/types";
+import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 import { targetElement } from "../dom";
 import { reapplyOnSwap } from "./dispatch";
 import {
@@ -59,15 +60,19 @@ const swapElement = (
 		reapplyOnSwap(carried[index], newElement, values);
 };
 
+export const tagGateHash = (
+	staticBinding: TagStaticBinding,
+	values: Array<unknown>,
+): number => combinedPartsHash(staticBinding.parts, values);
+
 export const commitTag = (
 	liveBinding: TagLiveBinding,
 	values: Array<unknown>,
 	siblings: Array<LiveBinding>,
 ): void => {
 	const { parts } = liveBinding.staticBinding;
-	const valueHash = combinedPartsHash(parts, values);
-	if (valueHash === liveBinding.valueHash) return;
-	liveBinding.valueHash = valueHash;
+	if (!hasHashChanged(liveBinding, tagGateHash(liveBinding.staticBinding, values)))
+		return;
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const newTag = composeParts(parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;

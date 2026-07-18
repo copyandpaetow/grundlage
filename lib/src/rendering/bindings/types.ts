@@ -25,22 +25,22 @@ export interface Carrier {
 export interface TagLiveBinding {
 	staticBinding: TagStaticBinding;
 	markerComment: Comment;
-	valueHash: number;
+	lastValueHash: number;
 }
 
+//anchor is the host element for a host binding, else the marker comment before the target
+//element; targetElement discriminates by node type. One field makes "exactly one" unbreakable.
 export interface AttributeLiveBinding {
 	staticBinding: AttributeStaticBinding;
-	markerComment: Comment | null;
-	hostElement: Element | null;
-	valueHash: number;
+	anchor: Comment | Element;
+	lastValueHash: number;
 	lastComposedName: string;
 }
 
 export interface SingleValueAttributeLiveBinding {
 	staticBinding: SingleValueAttributeStaticBinding;
-	markerComment: Comment | null;
-	hostElement: Element | null;
-	valueHash: number;
+	anchor: Comment | Element;
+	lastValueHash: number;
 	lastComposedName: string;
 	appliedMode: number;
 }
@@ -52,17 +52,15 @@ export interface AppliedAttribute {
 
 export interface DynamicAttributeLiveBinding {
 	staticBinding: DynamicAttributeStaticBinding;
-	markerComment: Comment | null;
-	hostElement: Element | null;
+	anchor: Comment | Element;
 	appliedAttributes: Map<string, AppliedAttribute>;
 	lastValueHash: number;
 }
 
 export interface NamedDynamicLiveBinding {
 	staticBinding: NamedDynamicStaticBinding;
-	markerComment: Comment | null;
-	hostElement: Element | null;
-	valueHash: number;
+	anchor: Comment | Element;
+	lastValueHash: number;
 	lastValue: unknown;
 }
 
@@ -70,7 +68,6 @@ export interface ContentLiveBinding {
 	staticBinding: ContentStaticBinding;
 	startMarker: Comment;
 	endMarker: Comment;
-	carrier: Carrier;
 	content: ContentState;
 }
 
@@ -101,20 +98,24 @@ export interface ListContentState {
 	itemHashes: Array<number>;
 }
 
+//present iff this instance is on the css fast path; null is the fallback-path discriminator
+export interface RawCssState {
+	previousGroupHashes: Array<number>;
+	groupNames: Array<string>;
+	sheetOverride: string | null;
+}
+
 export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;
 	markerComment: Comment;
-	valueHash: number;
-	carrier: Carrier;
-	previousGroupHashes: Array<number> | null;
-	groupNames: Array<string> | null;
-	sheetOverride: string | null;
+	lastValueHash: number;
+	cssState: RawCssState | null;
 }
 
 export interface CommentLiveBinding {
 	staticBinding: CommentStaticBinding;
 	markerComment: Comment;
-	valueHash: number;
+	lastValueHash: number;
 }
 
 export type LiveBinding =
