@@ -20,7 +20,7 @@ export const applyChangedCssGroups = (
 	}
 };
 
-export const seedCssGroupHashes = (
+export const hydrateCssGroupHashes = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
 ): void => {

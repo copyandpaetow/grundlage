@@ -15,25 +15,29 @@ import {
 	releaseInstance,
 } from "../rendering/instance";
 import { Carrier } from "../rendering/bindings/types";
+import { ValueOf } from "../utils/types";
 
 export interface Painter {
 	shadowRoot: ShadowRoot;
 	carrier: Carrier;
 	instance: Instance | null;
 	attributeObserver: MutationObserver | null;
-	hydratePending: boolean;
+	isHydrationPending: boolean;
 }
+
+export const PAINT_MODE = { HYDRATE: 0, FRESH: 1 } as const;
+type PaintMode = ValueOf<typeof PAINT_MODE>;
 
 export const createPainter = (
 	host: BaseComponent,
 	shadowRoot: ShadowRoot,
-	hydratePending: boolean,
+	mode: PaintMode,
 ): Painter => ({
 	shadowRoot,
 	carrier: { host, hostStyleIsBound: false, cssPlanMountCounts: null },
 	instance: null,
 	attributeObserver: null,
-	hydratePending,
+	isHydrationPending: mode === PAINT_MODE.HYDRATE,
 });
 
 export const revertHostBindings = (painter: Painter): void => {
@@ -88,9 +92,9 @@ export const paint = (painter: Painter, value: unknown): void => {
 	//the root can't know statically); disconnect() also drops queued self-write records
 	painter.attributeObserver?.disconnect();
 	try {
-		if (painter.hydratePending) {
+		if (painter.isHydrationPending) {
 			hydrateRoot(painter, templateValue, parsed);
-			painter.hydratePending = false;
+			painter.isHydrationPending = false;
 			warnOnUnclaimedReplay(painter.shadowRoot);
 		} else {
 			paintRoot(painter, templateValue, parsed);
@@ -120,6 +124,10 @@ export const setupAttributeObserver = (
 	painter.attributeObserver = observer;
 };
 
-export const teardownPainter = (painter: Painter): void => {
+export const teardownAttributeObserver = (painter: Painter): void => {
 	painter.attributeObserver?.disconnect();
+};
+
+export const teardownPainter = (painter: Painter): void => {
+	teardownAttributeObserver(painter);
 };

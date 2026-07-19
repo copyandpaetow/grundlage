@@ -85,7 +85,7 @@ describe("form-associated component in a live form", () => {
 			await sleep();
 
 			let resets = 0;
-			field.addEventListener(FORM_EVENTS.reset, () => resets++);
+			field.addEventListener(FORM_EVENTS.RESET, () => resets++);
 			form.reset();
 
 			expect(resets).toBe(1);
@@ -114,7 +114,7 @@ describe("form-associated component in a live form", () => {
 			await sleep();
 
 			let disabled: boolean | null = null;
-			field.addEventListener(FORM_EVENTS.disabled, (event) => {
+			field.addEventListener(FORM_EVENTS.DISABLED, (event) => {
 				disabled = (event as CustomEvent<{ disabled: boolean }>).detail
 					.disabled;
 			});

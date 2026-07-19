@@ -1,5 +1,7 @@
 export const COMMENT_IDENTIFIER = "^.^";
 
+export const EVENT_PREFIX = "on";
+
 export const NO_KEY_BINDING = -1;
 
 export const PARSE_BINDING = {

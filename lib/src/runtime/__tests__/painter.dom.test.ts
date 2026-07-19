@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { html } from "../../template";
 import { BaseComponent } from "../../types";
-import { createPainter, paint, teardownPainter } from "../painter";
+import { createPainter, PAINT_MODE, paint, teardownPainter } from "../painter";
 
 /*
 the Painter's DOM-commit jobs (B1 setup, B2 patch-on-shape-match vs replace). the patch/replace and
@@ -20,7 +20,7 @@ const makeHost = (): BaseComponent => {
 describe("painter — DOM commit (B1/B2)", () => {
 	test("B1: first paint sets up the template into the shadow root", () => {
 		const host = makeHost();
-		const painter = createPainter(host, host.shadowRoot!, false);
+		const painter = createPainter(host, host.shadowRoot!, PAINT_MODE.FRESH);
 
 		paint(painter, html`<p>${"a"}</p>`);
 		expect(host.shadowRoot?.querySelector("p")?.textContent).toBe("a");
@@ -29,7 +29,7 @@ describe("painter — DOM commit (B1/B2)", () => {
 
 	test("B2: a same-shape re-paint patches in place (node identity preserved)", () => {
 		const host = makeHost();
-		const painter = createPainter(host, host.shadowRoot!, false);
+		const painter = createPainter(host, host.shadowRoot!, PAINT_MODE.FRESH);
 		//same tagged-template site → same parsed shape → templateHash match → updateTemplate path
 		const render = (value: string) => html`<p>${value}</p>`;
 
@@ -44,7 +44,7 @@ describe("painter — DOM commit (B1/B2)", () => {
 
 	test("B2: a different-shape re-paint replaces the children", () => {
 		const host = makeHost();
-		const painter = createPainter(host, host.shadowRoot!, false);
+		const painter = createPainter(host, host.shadowRoot!, PAINT_MODE.FRESH);
 
 		paint(painter, html`<p>${"a"}</p>`);
 		const paragraph = host.shadowRoot?.querySelector("p");
@@ -62,7 +62,7 @@ describe("painter — DOM commit (B1/B2)", () => {
 		host.setAttribute("class", "server-class");
 		host.shadowRoot!.innerHTML = "<p>hi</p>";
 
-		const painter = createPainter(host, host.shadowRoot!, true);
+		const painter = createPainter(host, host.shadowRoot!, PAINT_MODE.HYDRATE);
 		paint(
 			painter,
 			html`<template class="${"client-class"}"><p>hi</p></template>`,
@@ -78,7 +78,7 @@ describe("painter — DOM commit (B1/B2)", () => {
 		host.shadowRoot!.innerHTML = "<p>hi</p>";
 		const setSpy = vi.spyOn(host, "setAttribute");
 
-		const painter = createPainter(host, host.shadowRoot!, true);
+		const painter = createPainter(host, host.shadowRoot!, PAINT_MODE.HYDRATE);
 		paint(painter, html`<template class="${"same"}"><p>hi</p></template>`);
 
 		expect(setSpy).not.toHaveBeenCalled();
@@ -95,7 +95,7 @@ describe("painter — DOM commit (B1/B2)", () => {
 		host.shadowRoot!.append(script);
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const painter = createPainter(host, host.shadowRoot!, true);
+		const painter = createPainter(host, host.shadowRoot!, PAINT_MODE.HYDRATE);
 		paint(painter, html`<p>hi</p>`);
 
 		expect(warnSpy).toHaveBeenCalledTimes(1);
@@ -104,7 +104,7 @@ describe("painter — DOM commit (B1/B2)", () => {
 
 	test("teardownPainter disconnects the observer", () => {
 		const host = makeHost();
-		const painter = createPainter(host, host.shadowRoot!, false);
+		const painter = createPainter(host, host.shadowRoot!, PAINT_MODE.FRESH);
 		let disconnected = false;
 		painter.attributeObserver = {
 			disconnect: () => {

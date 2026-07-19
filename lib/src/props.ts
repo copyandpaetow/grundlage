@@ -57,13 +57,12 @@ const resolveSchemaEntry = (entry: SchemaDefinition): ResolvedSchemaEntry => {
 const readBooleanProp = (
 	element: HTMLElement,
 	key: string,
-	hasDefault: boolean,
-	defaultValue: unknown,
+	valueWhenAbsent: unknown,
 ): unknown => {
 	if (element.hasAttribute(key)) return true;
-	if (Object.hasOwn(element, key)) return Boolean(element[key as keyof typeof element]);
-	if (hasDefault) return defaultValue;
-	return false;
+	if (Object.hasOwn(element, key))
+		return Boolean(element[key as keyof typeof element]);
+	return valueWhenAbsent;
 };
 
 const readStringableProp = (
@@ -79,7 +78,9 @@ const readStringableProp = (
 	}
 	const coerced = constructorValue(raw);
 	if (constructorValue === Number && Number.isNaN(coerced)) {
-		throw new Error(`Invalid number value for attribute "${key}": "${raw}"`);
+		throw new Error(
+			`grundlage: Invalid number value for attribute "${key}": "${raw}"`,
+		);
 	}
 	return coerced;
 };
@@ -95,7 +96,11 @@ export const props = <Type extends Schema>(
 			resolveSchemaEntry(schema[key] as SchemaDefinition);
 
 		if (constructorValue === Boolean) {
-			result[key] = readBooleanProp(element, key, hasDefault, defaultValue);
+			result[key] = readBooleanProp(
+				element,
+				key,
+				hasDefault ? defaultValue : false,
+			);
 			continue;
 		}
 
@@ -111,7 +116,7 @@ export const props = <Type extends Schema>(
 		} else if (isOptional) {
 			result[key] = undefined;
 		} else {
-			throw new Error(`Missing required prop: "${key}"`);
+			throw new Error(`grundlage: Missing required prop: "${key}"`);
 		}
 	}
 

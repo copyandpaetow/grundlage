@@ -2,6 +2,7 @@ import { combineOrderedHash, hashValue } from "../../utils/hashing";
 import { isStringable } from "../../utils/guards";
 import { SingleValueAttributeStaticBinding } from "../../parser/types";
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { ValueOf } from "../../utils/types";
 import { ATTRIBUTE_MODE } from "../constants";
 import { nudgeComponent, targetElement } from "../dom";
 import { SingleValueAttributeLiveBinding } from "./types";
@@ -15,7 +16,9 @@ export const singleValueGateHash = (
 		hashValue(values[staticBinding.valueIndex]),
 	);
 
-export const attributeModeOf = (value: unknown): number => {
+export const attributeModeOf = (
+	value: unknown,
+): ValueOf<typeof ATTRIBUTE_MODE> => {
 	if (value === null || value === undefined || value === false)
 		return ATTRIBUTE_MODE.ABSENT;
 	if (isStringable(value)) return ATTRIBUTE_MODE.ATTRIBUTE;
@@ -74,7 +77,7 @@ export const commitSingleValue = (
 	liveBinding.appliedMode = nextMode;
 };
 
-export const seedOrCommitSingleValue = (
+export const hydrateOrCommitSingleValue = (
 	liveBinding: SingleValueAttributeLiveBinding,
 	values: Array<unknown>,
 ): void => {

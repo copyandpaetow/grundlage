@@ -57,7 +57,7 @@ describe("FormBase - lifecycle callbacks re-broadcast as events", () => {
 		const field = makeField();
 		const form = document.createElement("form");
 		let received: CustomEvent<{ form: HTMLFormElement | null }> | null = null;
-		field.addEventListener(FORM_EVENTS.associated, (event) => {
+		field.addEventListener(FORM_EVENTS.ASSOCIATED, (event) => {
 			received = event as CustomEvent<{ form: HTMLFormElement | null }>;
 		});
 
@@ -69,7 +69,7 @@ describe("FormBase - lifecycle callbacks re-broadcast as events", () => {
 	test("formDisabledCallback carries the disabled flag in detail", () => {
 		const field = makeField();
 		let received: CustomEvent<{ disabled: boolean }> | null = null;
-		field.addEventListener(FORM_EVENTS.disabled, (event) => {
+		field.addEventListener(FORM_EVENTS.DISABLED, (event) => {
 			received = event as CustomEvent<{ disabled: boolean }>;
 		});
 
@@ -81,7 +81,7 @@ describe("FormBase - lifecycle callbacks re-broadcast as events", () => {
 	test("formResetCallback fires a plain payloadless Event", () => {
 		const field = makeField();
 		let received: Event | null = null;
-		field.addEventListener(FORM_EVENTS.reset, (event) => {
+		field.addEventListener(FORM_EVENTS.RESET, (event) => {
 			received = event;
 		});
 
@@ -95,7 +95,7 @@ describe("FormBase - lifecycle callbacks re-broadcast as events", () => {
 	test("formStateRestoreCallback carries state and mode in detail", () => {
 		const field = makeField();
 		let received: CustomEvent<{ state: unknown; mode: string }> | null = null;
-		field.addEventListener(FORM_EVENTS.restore, (event) => {
+		field.addEventListener(FORM_EVENTS.RESTORE, (event) => {
 			received = event as CustomEvent<{ state: unknown; mode: string }>;
 		});
 
@@ -110,7 +110,7 @@ describe("FormBase - lifecycle callbacks re-broadcast as events", () => {
 		// into ancestors that never opted in.
 		const field = makeField();
 		let bubbles = true;
-		field.addEventListener(FORM_EVENTS.reset, (event) => {
+		field.addEventListener(FORM_EVENTS.RESET, (event) => {
 			bubbles = event.bubbles;
 		});
 

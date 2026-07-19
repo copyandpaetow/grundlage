@@ -1,5 +1,6 @@
 import { BaseComponent } from "../types";
 
+//lazy platform singleton: one detached <template> reused to parse every fragment
 let parserHost: HTMLTemplateElement | null = null;
 
 export const buildFragment = (result: string): DocumentFragment => {
@@ -7,13 +8,15 @@ export const buildFragment = (result: string): DocumentFragment => {
 	parserHost.innerHTML = result;
 	const fragment = document.createDocumentFragment();
 	while (parserHost.content.firstChild) {
-		fragment.append(parserHost.content.firstChild);
+		fragment.appendChild(parserHost.content.firstChild);
 	}
 	return fragment;
 };
 
 // Re-read the sibling each commit: swapElement's replaceWith invalidates any cached element.
-export const targetElement = (liveBinding: { anchor: Comment | Element }): Element =>
+export const targetElement = (liveBinding: {
+	anchor: Comment | Element;
+}): Element =>
 	liveBinding.anchor instanceof Comment
 		? liveBinding.anchor.nextElementSibling!
 		: liveBinding.anchor;

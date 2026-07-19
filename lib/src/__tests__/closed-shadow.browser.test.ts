@@ -156,7 +156,7 @@ describe("closed shadow root — hydration + load replay", () => {
 			form.appendChild(host);
 			document.body.appendChild(form);
 			let resets = 0;
-			host.addEventListener(FORM_EVENTS.reset, () => resets++);
+			host.addEventListener(FORM_EVENTS.RESET, () => resets++);
 			form.reset();
 			expect(resets).toBe(1);
 

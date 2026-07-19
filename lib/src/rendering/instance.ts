@@ -1,12 +1,13 @@
 import { BINDING } from "../parser/constants";
+import { ValueOf } from "../utils/types";
 import { getParsedTemplate } from "../parser/html";
 import { ParsedTemplate } from "../parser/types";
 import { TemplateValue } from "../template";
-import { releaseCssGroups } from "./bindings/css-apply";
 import {
 	commitLiveBinding,
 	createLiveBinding,
-	seedLiveBinding,
+	hydrateLiveBinding,
+	releaseLiveBinding,
 } from "./bindings/dispatch";
 import {
 	BranchContentState,
@@ -15,7 +16,6 @@ import {
 	ContentState,
 	ListContentState,
 	LiveBinding,
-	RawContentLiveBinding,
 } from "./bindings/types";
 import { CONTENT_KIND } from "./constants";
 import { buildFragment } from "./dom";
@@ -48,14 +48,8 @@ export const releaseInstance = (instance: Instance): void => {
 	const { liveBindings } = instance;
 	for (let index = 0; index < liveBindings.length; index++) {
 		const liveBinding = liveBindings[index];
-		const { type } = liveBinding.staticBinding;
-		if (type === BINDING.RAW_CONTENT) {
-			const rawContent = liveBinding as RawContentLiveBinding;
-			if (rawContent.cssState !== null)
-				releaseCssGroups(rawContent, instance.carrier.host);
-			continue;
-		}
-		if (type === BINDING.CONTENT)
+		releaseLiveBinding(liveBinding, instance.carrier.host);
+		if (liveBinding.staticBinding.type === BINDING.CONTENT)
 			releaseContent((liveBinding as ContentLiveBinding).content);
 	}
 };
@@ -85,12 +79,13 @@ export const reconcileInstance = (
 	return mountInstance(value, carrier);
 };
 
-const isRangeType = (type: number): boolean => type === BINDING.CONTENT;
+const isRangeType = (type: ValueOf<typeof BINDING>): boolean =>
+	type === BINDING.CONTENT;
 
 export const assertNestable = (value: TemplateValue): void => {
 	if (getParsedTemplate(value.__templateStrings).hostBindingCount > 0)
 		throw new Error(
-			"`<template>` with attributes is only valid at the top level of a component's render " +
+			"grundlage: `<template>` with attributes is only valid at the top level of a component's render " +
 				"output — not inside ${...} content, a list item, or any nested template position.",
 		);
 };
@@ -133,7 +128,7 @@ export const mountInstance = (
 	return { instance, fragment };
 };
 
-const seedInstance = (
+const hydrateInstanceFrom = (
 	walker: TreeWalker,
 	value: TemplateValue,
 	carrier: Carrier,
@@ -149,14 +144,14 @@ const seedInstance = (
 
 		if (!isRangeType(staticBinding.type)) {
 			const live = createLiveBinding(staticBinding, open, null, carrier);
-			seedLiveBinding(instance, live, value.values);
+			hydrateLiveBinding(instance, live, value.values);
 			liveBindings[bindingIndex++] = live;
 			continue;
 		}
 
 		const closeMarker = scanToClose(walker, open);
 		const live = createLiveBinding(staticBinding, open, closeMarker, carrier);
-		seedLiveBinding(instance, live, value.values);
+		hydrateLiveBinding(instance, live, value.values);
 		liveBindings[bindingIndex++] = live;
 		walker.currentNode = closeMarker;
 	}
@@ -177,7 +172,7 @@ export const hydrateInstance = (
 	value: TemplateValue,
 	rangeStart: Node,
 	carrier: Carrier,
-): Instance => seedInstance(walkerFrom(rangeStart), value, carrier);
+): Instance => hydrateInstanceFrom(walkerFrom(rangeStart), value, carrier);
 
 export const hydrateRow = (
 	value: TemplateValue,
@@ -185,6 +180,6 @@ export const hydrateRow = (
 	carrier: Carrier,
 ): { instance: Instance; tailMarker: Comment } => {
 	const walker = walkerFrom(rowStart);
-	const instance = seedInstance(walker, value, carrier);
+	const instance = hydrateInstanceFrom(walker, value, carrier);
 	return { instance, tailMarker: nextListTail(walker) };
 };

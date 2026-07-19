@@ -55,6 +55,8 @@ const hashKey = (name: string): number => {
 	return cached;
 };
 
+//program-wide identity registry: reference ids must stay stable across every render,
+//so the map and its counter outlive any single frame
 const references = new WeakMap<Object, number>();
 let counter = 0;
 
@@ -74,15 +76,16 @@ const hashTemplateValue = (value: TemplateValue): number => {
 	for (let index = 0; index < values.length; index++) {
 		hash = combineOrderedHash(hash, hashValue(values[index]));
 	}
-	return (
-		getParsedTemplate(value.__templateStrings).templateHash ^
-		Math.imul(hash, 31)
+	return combineOrderedHash(
+		getParsedTemplate(value.__templateStrings).templateHash,
+		hash,
 	);
 };
 
 const hashChild = (child: unknown, depth: number): number => {
 	const type = typeof child;
-	if (type === "string") return combineOrderedHash(TAG.STRING, stringHash(child as string));
+	if (type === "string")
+		return combineOrderedHash(TAG.STRING, stringHash(child as string));
 	if (type === "number") return hashNumber(child as number);
 	return hashValue(child, depth);
 };
@@ -91,7 +94,8 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 	if (value === null || value === undefined) return TAG.NULLISH;
 
 	const type = typeof value;
-	if (type === "string") return combineOrderedHash(TAG.STRING, stringHash(value as string));
+	if (type === "string")
+		return combineOrderedHash(TAG.STRING, stringHash(value as string));
 	if (type === "number") return hashNumber(value as number);
 	if (type === "boolean") return combineOrderedHash(TAG.BOOLEAN, value ? 1 : 0);
 	if (type === "function") return referenceId(value as Object);

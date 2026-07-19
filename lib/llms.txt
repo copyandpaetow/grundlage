@@ -40,8 +40,10 @@ customElements.define(
   Register the return value with `customElements.define`. The first argument MUST be a
   generator function (`function*` or `async function*`) — a plain or arrow function
   throws a `TypeError` at definition time, not at mount. `options` extends
-  `ShadowRootInit` (default `{ mode: "open" }`); set `formAssociated: true` for form
-  components. The generator may be sync or async. `{ mode: "closed" }` hydrates and
+  `ShadowRootInit`; the defaults are `{ mode: "open", clonable: true,
+  delegatesFocus: true, serializable: true }` (any option you pass overrides its
+  default). Set `formAssociated: true` for form components. The generator may be sync
+  or async. `{ mode: "closed" }` hydrates and
   replays `load` data like an open root — the closed shadow root is reached through
   `attachInternals().shadowRoot` instead of `host.shadowRoot`, so server output is reused
   rather than re-rendered.

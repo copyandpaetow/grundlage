@@ -78,3 +78,10 @@ export const commitTag = (
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
 	swapElement(element, newTag, siblings, values);
 };
+
+export const hydrateTag = (
+	liveBinding: TagLiveBinding,
+	values: Array<unknown>,
+): void => {
+	liveBinding.lastValueHash = tagGateHash(liveBinding.staticBinding, values);
+};

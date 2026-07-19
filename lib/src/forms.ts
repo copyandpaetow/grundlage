@@ -1,8 +1,8 @@
 export const FORM_EVENTS = {
-	associated: "form-associated",
-	disabled: "form-disabled",
-	reset: "form-reset",
-	restore: "form-state-restore",
+	ASSOCIATED: "form-associated",
+	DISABLED: "form-disabled",
+	RESET: "form-reset",
+	RESTORE: "form-state-restore",
 } as const;
 
 export class FormBase extends HTMLElement {
@@ -10,23 +10,23 @@ export class FormBase extends HTMLElement {
 
 	formAssociatedCallback(form: HTMLFormElement | null) {
 		this.dispatchEvent(
-			new CustomEvent(FORM_EVENTS.associated, { detail: { form } }),
+			new CustomEvent(FORM_EVENTS.ASSOCIATED, { detail: { form } }),
 		);
 	}
 
 	formDisabledCallback(disabled: boolean) {
 		this.dispatchEvent(
-			new CustomEvent(FORM_EVENTS.disabled, { detail: { disabled } }),
+			new CustomEvent(FORM_EVENTS.DISABLED, { detail: { disabled } }),
 		);
 	}
 
 	formResetCallback() {
-		this.dispatchEvent(new Event(FORM_EVENTS.reset));
+		this.dispatchEvent(new Event(FORM_EVENTS.RESET));
 	}
 
 	formStateRestoreCallback(state: unknown, mode: "restore" | "autocomplete") {
 		this.dispatchEvent(
-			new CustomEvent(FORM_EVENTS.restore, { detail: { state, mode } }),
+			new CustomEvent(FORM_EVENTS.RESTORE, { detail: { state, mode } }),
 		);
 	}
 }

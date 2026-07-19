@@ -1,6 +1,12 @@
 import { moveArrayContents } from "../utils/arrays";
 import { hashValue } from "../utils/hashing";
-import { BINDING, PARSE_BINDING, COMMENT_IDENTIFIER, NO_KEY_BINDING } from "./constants";
+import {
+	BINDING,
+	PARSE_BINDING,
+	COMMENT_IDENTIFIER,
+	EVENT_PREFIX,
+	NO_KEY_BINDING,
+} from "./constants";
 import {
 	AttributeBinding,
 	Binding,
@@ -11,10 +17,10 @@ import {
 	RawContentBinding,
 	StaticBinding,
 	TagBinding,
-	ValueOf
 } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
 import { analyzeStyle, composeSheet } from "./css";
+import { ValueOf } from "../utils/types";
 
 type StateValue = ValueOf<typeof STATE>;
 
@@ -47,7 +53,7 @@ const STATE = {
 } as const;
 
 const PARSE_MODE = { OPTIMISTIC_ROOT: 0, NO_ROOT_TEMPLATE: 1 } as const;
-type ParseMode = (typeof PARSE_MODE)[keyof typeof PARSE_MODE];
+type ParseMode = ValueOf<typeof PARSE_MODE>;
 
 interface ParserState {
 	state: StateValue;
@@ -61,12 +67,12 @@ interface ParserState {
 	hostBindingCount: number;
 	attributeQuoteCode: number;
 	currentTagName: string;
-	selfClosing: boolean;
+	isSelfClosing: boolean;
 	activeBinding: Binding | null;
 	isRootTemplate: boolean;
 	hasRootTemplate: boolean;
 	rootTemplateClosed: boolean;
-	sawTopLevelSibling: boolean;
+	hasSeenTopLevelSibling: boolean;
 	hasOpenedAnyTag: boolean;
 	forceNoRootTemplate: boolean;
 	keyBindingIndex: number;
@@ -96,12 +102,12 @@ const createParser = (): ParserState => ({
 	hostBindingCount: 0,
 	attributeQuoteCode: 0,
 	currentTagName: "",
-	selfClosing: false,
+	isSelfClosing: false,
 	activeBinding: null,
 	isRootTemplate: false,
 	hasRootTemplate: false,
 	rootTemplateClosed: false,
-	sawTopLevelSibling: false,
+	hasSeenTopLevelSibling: false,
 	hasOpenedAnyTag: false,
 	forceNoRootTemplate: false,
 	keyBindingIndex: NO_KEY_BINDING,
@@ -134,12 +140,12 @@ const resetParser = (
 	parser.hostBindingCount = 0;
 	parser.attributeQuoteCode = 0;
 	parser.currentTagName = "";
-	parser.selfClosing = false;
+	parser.isSelfClosing = false;
 	parser.activeBinding = null;
 	parser.isRootTemplate = false;
 	parser.hasRootTemplate = false;
 	parser.rootTemplateClosed = false;
-	parser.sawTopLevelSibling = false;
+	parser.hasSeenTopLevelSibling = false;
 	parser.hasOpenedAnyTag = false;
 	parser.forceNoRootTemplate = mode === PARSE_MODE.NO_ROOT_TEMPLATE;
 	parser.keyBindingIndex = NO_KEY_BINDING;
@@ -172,7 +178,7 @@ const updateBinding = (parser: ParserState) => {
 			(parser.activeBinding as ContentBinding).values.push(parser.index);
 			parser.activeBinding = null;
 			if (parser.openTagBindings.length === 0) {
-				parser.sawTopLevelSibling = true;
+				parser.hasSeenTopLevelSibling = true;
 			}
 			break;
 		}
@@ -272,7 +278,7 @@ const completeComment = (parser: ParserState) => {
 	parser.activeBinding = null;
 };
 
-const completeSpecialContent = (parser: ParserState) => {
+const completeRawContent = (parser: ParserState) => {
 	if (parser.activeBinding) {
 		parser.resultBuffer.push(openComment(parser));
 		const binding = parser.activeBinding as RawContentBinding;
@@ -296,7 +302,7 @@ const completeTag = (parser: ParserState) => {
 	parser.hasOpenedAnyTag = true;
 
 	if (!isFirstTag && parser.openTagBindings.length === 0) {
-		parser.sawTopLevelSibling = true;
+		parser.hasSeenTopLevelSibling = true;
 	}
 
 	if (parser.activeBinding) {
@@ -318,7 +324,7 @@ const completeTag = (parser: ParserState) => {
 	const isRoot =
 		isFirstTag &&
 		!parser.forceNoRootTemplate &&
-		!parser.sawTopLevelSibling &&
+		!parser.hasSeenTopLevelSibling &&
 		parser.currentTagName === TEMPLATE_TAG;
 	parser.isRootTemplate = isRoot;
 
@@ -347,14 +353,14 @@ const completeEndTag = (parser: ParserState) => {
 	if (parser.activeBinding) {
 		if (!opener) {
 			throw new Error(
-				"Asymmetric tag: dynamic </${...}> close cannot pair with a static open tag — make the open dynamic too.",
+				"grundlage: Asymmetric tag: dynamic </${...}> close cannot pair with a static open tag — make the open dynamic too.",
 			);
 		}
 		parser.endTagBuffer.length = 0;
 		parser.endTagBuffer.push(PLACEHOLDER_TAG);
 	} else if (opener) {
 		throw new Error(
-			"Asymmetric tag: static end tag cannot pair with a dynamic <${...}> open tag — make the close dynamic too.",
+			"grundlage: Asymmetric tag: static end tag cannot pair with a dynamic <${...}> open tag — make the close dynamic too.",
 		);
 	}
 	parser.resultBuffer.push(MARKUP.END_TAG_OPEN);
@@ -386,7 +392,7 @@ const markTopLevelTextSibling = (
 		parser.openTagBindings.length === 0 &&
 		rangeHasNonWhitespace(parser, start, end)
 	) {
-		parser.sawTopLevelSibling = true;
+		parser.hasSeenTopLevelSibling = true;
 	}
 };
 
@@ -433,12 +439,12 @@ const completeAttribute = (parser: ParserState) => {
 		}
 	} else if (parser.attributeKeyBuffer.length) {
 		if (parser.isRootTemplate) {
-			const staticBinding: AttributeBinding = {
+			const staticBinding = {
 				type: PARSE_BINDING.ATTRIBUTE,
 				isExpandable: false,
-				keys: [],
 				values: [],
-			};
+				keys: [],
+			} satisfies AttributeBinding;
 			finalizeAttributeBinding(parser, staticBinding);
 			parser.bindings.push(staticBinding);
 			parser.hostBindingCount++;
@@ -460,7 +466,7 @@ const completeAttribute = (parser: ParserState) => {
 };
 
 const resetElementScope = (parser: ParserState) => {
-	parser.selfClosing = false;
+	parser.isSelfClosing = false;
 	parser.currentTagName = "";
 	parser.tagBuffer.length = 0;
 };
@@ -477,7 +483,7 @@ const flushElement = (parser: ParserState) => {
 	parser.resultBuffer.push(MARKUP.TAG_OPEN);
 	moveArrayContents(parser.elementBuffer, parser.resultBuffer);
 	parser.resultBuffer.push(MARKUP.TAG_CLOSE);
-	if (parser.selfClosing) {
+	if (parser.isSelfClosing) {
 		parser.resultBuffer.push(
 			MARKUP.END_TAG_OPEN,
 			parser.currentTagName,
@@ -494,7 +500,7 @@ const closeOpenTag = (parser: ParserState) => {
 		parser.activeTemplate.charCodeAt(parser.charIndex - 1) === CHAR_CODE.SLASH
 	) {
 		parser.openTagBindings.pop();
-		parser.selfClosing = true;
+		parser.isSelfClosing = true;
 		flushElement(parser);
 		parser.state = STATE.TEXT;
 	} else if (parsesContentAsRaw(parser, parser.currentTagName)) {
@@ -616,7 +622,7 @@ const parse = (
 							END_TAG_OPEN_LENGTH +
 							parser.currentTagName.length;
 						parser.charIndex += 1;
-						completeSpecialContent(parser);
+						completeRawContent(parser);
 						parser.state = STATE.END_TAG;
 						parser.endTagBuffer.push(parser.currentTagName);
 					}
@@ -746,7 +752,7 @@ const parse = (
 					parser.openTagBindings[parser.openTagBindings.length - 1];
 				if (!opener) {
 					throw new Error(
-						"Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
+						"grundlage: Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
 					);
 				}
 				parser.activeBinding = opener;
@@ -770,7 +776,7 @@ const parse = (
 	}
 	flushElement(parser);
 
-	if (parser.hasRootTemplate && parser.sawTopLevelSibling) {
+	if (parser.hasRootTemplate && parser.hasSeenTopLevelSibling) {
 		return parse(parser, strings, PARSE_MODE.NO_ROOT_TEMPLATE);
 	}
 
@@ -787,7 +793,7 @@ const parse = (
 
 const isHandlerName = (binding: AttributeBinding): boolean =>
 	typeof binding.keys[0] === "string" &&
-	binding.keys[0].startsWith("on") &&
+	binding.keys[0].startsWith(EVENT_PREFIX) &&
 	isSingleHole(binding.values);
 
 const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
@@ -854,6 +860,7 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 	}
 };
 
+//parsing never nests — one pooled struct reused across every parse (ADR-0009)
 const parser = createParser();
 
 const parseCache = new WeakMap<TemplateStringsArray, ParsedTemplate>();

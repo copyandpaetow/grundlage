@@ -18,3 +18,13 @@ export const commitComment = (
 	const payload = liveBinding.markerComment.nextSibling as Comment;
 	if (payload.data !== composed) payload.data = composed;
 };
+
+export const hydrateComment = (
+	liveBinding: CommentLiveBinding,
+	values: Array<unknown>,
+): void => {
+	liveBinding.lastValueHash = commentGateHash(
+		liveBinding.staticBinding,
+		values,
+	);
+};

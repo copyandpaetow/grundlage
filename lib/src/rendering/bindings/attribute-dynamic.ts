@@ -1,3 +1,4 @@
+import { EVENT_PREFIX } from "../../parser/constants";
 import { hashValue } from "../../utils/hashing";
 import {
 	assertPrimitiveString,
@@ -5,28 +6,27 @@ import {
 	isStringable,
 } from "../../utils/guards";
 import { hasHashChanged } from "../compose";
+import { ATTRIBUTE_MODE } from "../constants";
 import { nudgeComponent, targetElement } from "../dom";
+import { attributeModeOf } from "./attribute-single-value";
 import { AppliedAttribute, DynamicAttributeLiveBinding } from "./types";
 
-const CHAR_LOWER_O = 111;
-const CHAR_LOWER_N = 110;
-const CHAR_DASH = 45;
+const CUSTOM_EVENT_PREFIX = `${EVENT_PREFIX}-`;
 
 const resolveEventNameFromKey = (
 	key: string,
 	element: Element,
 ): string | null => {
-	if (key.charCodeAt(0) !== CHAR_LOWER_O || key.charCodeAt(1) !== CHAR_LOWER_N)
-		return null;
-	if (key.charCodeAt(2) === CHAR_DASH) return key.slice(3).toLowerCase();
+	if (!key.startsWith(EVENT_PREFIX)) return null;
+	if (key.startsWith(CUSTOM_EVENT_PREFIX))
+		return key.slice(CUSTOM_EVENT_PREFIX.length).toLowerCase();
 	const lowerKey = key.toLowerCase();
-	return lowerKey in element ? lowerKey.slice(2) : null;
+	return lowerKey in element ? lowerKey.slice(EVENT_PREFIX.length) : null;
 };
 
 const warnIfDeadNativeHandler = (key: string, element: Element): void => {
-	if (key.charCodeAt(0) !== CHAR_LOWER_O || key.charCodeAt(1) !== CHAR_LOWER_N)
+	if (!key.startsWith(EVENT_PREFIX) || key.startsWith(CUSTOM_EVENT_PREFIX))
 		return;
-	if (key.charCodeAt(2) === CHAR_DASH) return;
 	const lowerKey = key.toLowerCase();
 	if (lowerKey in element) return;
 	console.warn(
@@ -53,24 +53,24 @@ export const applyDynamicAttribute = (
 
 	const clearsProperty = oldValue !== undefined && !isStringable(oldValue);
 
-	if (value === null || value === undefined || value === false) {
-		if (clearsProperty) {
-			delete (element as unknown as Record<string, unknown>)[key];
+	switch (attributeModeOf(value)) {
+		case ATTRIBUTE_MODE.ABSENT:
+			if (clearsProperty) {
+				delete (element as unknown as Record<string, unknown>)[key];
+				nudgeComponent(element);
+			}
+			element.removeAttribute(key);
+			return;
+		case ATTRIBUTE_MODE.ATTRIBUTE:
+			if (clearsProperty)
+				delete (element as unknown as Record<string, unknown>)[key];
+			element.setAttribute(key, String(value));
+			return;
+		case ATTRIBUTE_MODE.PROPERTY:
+			(element as unknown as Record<string, unknown>)[key] = value;
 			nudgeComponent(element);
-		}
-		element.removeAttribute(key);
-		return;
+			return;
 	}
-
-	if (isStringable(value)) {
-		if (clearsProperty)
-			delete (element as unknown as Record<string, unknown>)[key];
-		element.setAttribute(key, String(value));
-		return;
-	}
-
-	(element as unknown as Record<string, unknown>)[key] = value;
-	nudgeComponent(element);
 };
 
 export const normalizeToAttributeMap = (
@@ -135,7 +135,7 @@ export const commitDynamic = (
 	);
 };
 
-export const seedDynamic = (
+export const hydrateDynamic = (
 	liveBinding: DynamicAttributeLiveBinding,
 	values: Array<unknown>,
 ): void => {

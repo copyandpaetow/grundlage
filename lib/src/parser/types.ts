@@ -1,35 +1,33 @@
 import { BINDING, PARSE_BINDING } from "./constants";
 
-export type ValueOf<T> = T[keyof T];
-
-export type AttributeBinding = {
+export interface AttributeBinding {
 	type: typeof PARSE_BINDING.ATTRIBUTE;
 	isExpandable: boolean;
-	values: Array<number | string>;
-	keys: Array<number | string>;
-};
+	values: Array<Part>;
+	keys: Array<Part>;
+}
 
-export type ContentBinding = {
+export interface ContentBinding {
 	type: typeof PARSE_BINDING.CONTENT;
-	values: Array<number | string>;
-};
+	values: Array<Part>;
+}
 
-export type CommentBinding = {
+export interface CommentBinding {
 	type: typeof PARSE_BINDING.COMMENT;
-	values: Array<number | string>;
-};
+	values: Array<Part>;
+}
 
-export type RawContentBinding = {
+export interface RawContentBinding {
 	type: typeof PARSE_BINDING.RAW_CONTENT;
-	values: Array<number | string>;
+	values: Array<Part>;
 	tag: string;
 	cssPlan: CssPlan | null;
-};
+}
 
-export type TagBinding = {
+export interface TagBinding {
 	type: typeof PARSE_BINDING.TAG;
-	values: Array<number | string>;
-};
+	values: Array<Part>;
+}
 
 export type Binding =
 	| TagBinding

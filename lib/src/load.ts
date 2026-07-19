@@ -16,7 +16,7 @@ interface CollectedEntry {
 }
 
 //written by collectOnServer during the render, drained once by flushHostPayload
-const pendingSsrLoads = new WeakMap<Element, CollectedEntry[]>();
+const pendingSsrLoads = new WeakMap<Element, Array<CollectedEntry>>();
 
 const SSR_ATTRIBUTE = "data-ssr";
 const KEY_ATTRIBUTE = "data-key";
@@ -95,7 +95,7 @@ export const flushHostPayload = (host: Element): void => {
 
 	const ownerDocument = host.ownerDocument;
 	const shadowRoot = resolveShadowRoot(host);
-	if (ownerDocument == null || shadowRoot == null) return;
+	if (ownerDocument === null || shadowRoot === null) return;
 
 	for (let index = 0; index < collected.length; index++) {
 		const entry = collected[index];

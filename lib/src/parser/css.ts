@@ -1,6 +1,7 @@
 import { moveArrayContents } from "../utils/arrays";
 import { CHAR_CODE, isQuoteCode } from "./chars";
-import { CssPlan, CssValueGroup, Part, ValueOf } from "./types";
+import { ValueOf } from "../utils/types";
+import { CssPlan, CssValueGroup, Part } from "./types";
 
 type CssStateValue = ValueOf<typeof CSS_STATE>;
 
@@ -89,6 +90,7 @@ const resetCssAnalyzer = (css: CssAnalyzerState, templateHash: number) => {
 	css.namePrefix = `--${(templateHash >>> 0).toString(36)}-`;
 };
 
+//sheet analysis never nests — one pooled analyzer reused per call (mirrors ADR-0009)
 const analyzer = createCssAnalyzer();
 
 const isAtRuleNameCode = (code: number) =>

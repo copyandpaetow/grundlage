@@ -1,6 +1,6 @@
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 import { RawContentStaticBinding } from "../../parser/types";
-import { applyChangedCssGroups } from "./css-apply";
+import { applyChangedCssGroups, hydrateCssGroupHashes } from "./css-apply";
 import { RawContentLiveBinding } from "./types";
 
 export const rawContentGateHash = (
@@ -36,4 +36,20 @@ export const commitRawContent = (
 		return;
 	}
 	if (element.textContent !== composed) element.textContent = composed;
+};
+
+export const hydrateRawContent = (
+	liveBinding: RawContentLiveBinding,
+	values: Array<unknown>,
+): void => {
+	if (liveBinding.cssState === null) {
+		liveBinding.lastValueHash = rawContentGateHash(
+			liveBinding.staticBinding,
+			values,
+		);
+		return;
+	}
+	//the server already wrote this instance's sheet — suffixed or not
+	liveBinding.cssState.sheetOverride = null;
+	hydrateCssGroupHashes(liveBinding, values);
 };

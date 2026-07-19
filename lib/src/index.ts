@@ -2,6 +2,7 @@ import { FormBase } from "./forms";
 import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
 import {
 	createPainter,
+	PAINT_MODE,
 	paint,
 	Painter,
 	revertHostBindings,
@@ -61,11 +62,11 @@ export const component = (
 ): ComponentConstructor => {
 	if (!isGeneratorFunction(componentGenerator))
 		throw new TypeError(
-			"component(fn) expects a generator function — write `component(function* (host) { … })` " +
+			"grundlage: component(fn) expects a generator function — write `component(function* (host) { … })` " +
 				"or `component(async function* (host) { … })`. A plain function or arrow function is not accepted.",
 		);
 	const mergedOptions = { ...defaultOptions, ...options };
-	const ParentClass: typeof HTMLElement = options.formAssociated
+	const ParentClass: typeof HTMLElement = mergedOptions.formAssociated
 		? FormBase
 		: HTMLElement;
 
@@ -74,7 +75,7 @@ export const component = (
 		#outer: Task | null = null;
 		#inner: Task | null = null;
 		#renderer: ComponentGenerator | RenderFunction | null = null;
-		#scheduled = false;
+		#isScheduled = false;
 		#pendingUpdate: PromiseWithResolvers<void> | null = null;
 		#internals: ElementInternals | null = null;
 
@@ -88,9 +89,13 @@ export const component = (
 				this.shadowRoot ??
 				(mergedOptions.mode === "closed" ? this.internals?.shadowRoot : null) ??
 				null;
-			const prerendered = existingRoot !== null;
+			const isPrerendered = existingRoot !== null;
 			const shadowRoot = existingRoot ?? this.attachShadow(mergedOptions);
-			this.#painter = createPainter(this, shadowRoot, prerendered);
+			this.#painter = createPainter(
+				this,
+				shadowRoot,
+				isPrerendered ? PAINT_MODE.HYDRATE : PAINT_MODE.FRESH,
+			);
 		}
 
 		connectedCallback() {
@@ -258,14 +263,14 @@ export const component = (
 						}
 						const reaction = nextTaskStep(parent, MODE.THROW, error);
 						//read reaction out before #runTask below reuses the shared step cell
-						const dismissed =
+						const isDismissed =
 							!(reaction instanceof Promise) &&
 							reaction.kind === STEP_OUTCOME.RETURNED;
 						//run the outer to whatever it did next: a re-yield paints a fallback, a
 						//return completes it (cleanup captured, deferred to disconnect like COMPLETED)
 						this.#runTask(parent, reaction);
 						//a return left no live renderer — drop the dead child so update() can't re-run it
-						if (dismissed) this.#renderer = null;
+						if (isDismissed) this.#renderer = null;
 						return true;
 					}
 
@@ -300,10 +305,10 @@ export const component = (
 
 		#scheduleNextUpdate(): Promise<void> {
 			this.#pendingUpdate ??= Promise.withResolvers<void>();
-			if (!this.#scheduled) {
-				this.#scheduled = true;
+			if (!this.#isScheduled) {
+				this.#isScheduled = true;
 				queueMicrotask(() => {
-					this.#scheduled = false;
+					this.#isScheduled = false;
 					this.#rerunCurrentRenderer();
 				});
 			}

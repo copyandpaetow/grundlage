@@ -9,15 +9,17 @@ import {
 	SingleValueAttributeStaticBinding,
 	TagStaticBinding,
 } from "../../parser/types";
-import { CONTENT_KIND } from "../constants";
+import { ATTRIBUTE_MODE, CONTENT_KIND } from "../constants";
 import { Instance } from "../instance";
+import { BaseComponent } from "../../types";
+import { ValueOf } from "../../utils/types";
 
 //threaded from the painter through every mount, never derived from the DOM (bindings
 //commit while the fragment is detached). hostStyleIsBound disables the css fast path for
 //every <style> under this host — a host style attribute write wipes the custom
 //properties; the mount counts give duplicate mounts of one plan instance-suffixed names.
 export interface Carrier {
-	host: HTMLElement;
+	host: BaseComponent;
 	hostStyleIsBound: boolean;
 	cssPlanMountCounts: Map<CssPlan, number> | null;
 }
@@ -42,7 +44,7 @@ export interface SingleValueAttributeLiveBinding {
 	anchor: Comment | Element;
 	lastValueHash: number;
 	lastComposedName: string;
-	appliedMode: number;
+	appliedMode: ValueOf<typeof ATTRIBUTE_MODE>;
 }
 
 export interface AppliedAttribute {

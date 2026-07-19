@@ -1,4 +1,4 @@
-import { ValueOf } from "../parser/types";
+import { ValueOf } from "../utils/types";
 import { ComponentGenerator, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/guards";
 import { isTemplate, TemplateValue } from "../template";
@@ -158,15 +158,15 @@ export const nextOperation = (
 			break;
 
 		case TASK_STATE.SUSPENDED:
-			if (incomingOutcome.kind === STEP_OUTCOME.RESUMED) {
-				task.state = TASK_STATE.DRIVING;
-				return createOperation(OPERATION.RESUME, incomingOutcome.payload);
-			}
-			if (incomingOutcome.kind === STEP_OUTCOME.THREW) {
-				//throw the rejection back into the generator at its `yield promise` point so a
-				//try/catch there can recover; an uncaught throw re-surfaces as a DRIVING THREW
-				task.state = TASK_STATE.DRIVING;
-				return createOperation(OPERATION.THROW_INTO, incomingOutcome.payload);
+			switch (incomingOutcome.kind) {
+				case STEP_OUTCOME.RESUMED:
+					task.state = TASK_STATE.DRIVING;
+					return createOperation(OPERATION.RESUME, incomingOutcome.payload);
+				case STEP_OUTCOME.THREW:
+					//throw the rejection back into the generator at its `yield promise` point so a
+					//try/catch there can recover; an uncaught throw re-surfaces as a DRIVING THREW
+					task.state = TASK_STATE.DRIVING;
+					return createOperation(OPERATION.THROW_INTO, incomingOutcome.payload);
 			}
 			break;
 	}

@@ -2,6 +2,7 @@ import { isTemplate, TemplateValue } from "../../template";
 import { assertPrimitiveString } from "../../utils/guards";
 import { hashValue } from "../../utils/hashing";
 import { hasHashChanged } from "../compose";
+import { ValueOf } from "../../utils/types";
 import { CONTENT_KIND, UNSET_HASH } from "../constants";
 import {
 	assertNestable,
@@ -26,14 +27,15 @@ export const UNRESOLVED_CONTENT: UnresolvedContentState = Object.freeze({
 	kind: CONTENT_KIND.UNRESOLVED,
 });
 
-const contentKindOf = (value: unknown): number =>
-	isTemplate(value)
-		? CONTENT_KIND.BRANCH
-		: Array.isArray(value)
-			? CONTENT_KIND.LIST
-			: CONTENT_KIND.TEXT;
+const contentKindOf = (value: unknown): ValueOf<typeof CONTENT_KIND> => {
+	if (isTemplate(value)) return CONTENT_KIND.BRANCH;
+	if (Array.isArray(value)) return CONTENT_KIND.LIST;
+	return CONTENT_KIND.TEXT;
+};
 
-const freshContentState = (contentKind: number): ContentState => {
+const freshContentState = (
+	contentKind: ValueOf<typeof CONTENT_KIND>,
+): ContentState => {
 	switch (contentKind) {
 		case CONTENT_KIND.TEXT:
 			return { kind: CONTENT_KIND.TEXT, lastValueHash: UNSET_HASH };
@@ -53,7 +55,7 @@ const freshContentState = (contentKind: number): ContentState => {
 
 const switchContentKind = (
 	liveBinding: ContentLiveBinding,
-	contentKind: number,
+	contentKind: ValueOf<typeof CONTENT_KIND>,
 ): void => {
 	forEachInRange(
 		liveBinding.startMarker.nextSibling,
@@ -115,7 +117,7 @@ export const commitContent = (
 	}
 };
 
-export const seedContentByAdoption = (
+export const hydrateContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
 	carrier: Carrier,

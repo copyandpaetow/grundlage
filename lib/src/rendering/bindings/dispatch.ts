@@ -2,34 +2,29 @@ import { BINDING } from "../../parser/constants";
 import { composeSheet } from "../../parser/css";
 import { StaticBinding } from "../../parser/types";
 import { Instance } from "../instance";
-import { composeParts } from "../compose";
 import { ATTRIBUTE_MODE, UNSET_HASH } from "../constants";
-import { attributeGateHash, commitAttribute } from "./attribute";
+import { commitAttribute, hydrateAttribute } from "./attribute";
 import {
 	applyDynamicAttribute,
 	commitDynamic,
 	reapplyOnSwap as reapplyDynamicOnSwap,
-	seedDynamic,
+	hydrateDynamic,
 } from "./attribute-dynamic";
 import {
 	commitSingleValue,
 	reapplyOnSwap as reapplySingleValueOnSwap,
 	revertAttributeMode,
-	seedOrCommitSingleValue,
+	hydrateOrCommitSingleValue,
 } from "./attribute-single-value";
-import { commentGateHash, commitComment } from "./comment";
-import {
-	commitContent,
-	seedContentByAdoption,
-	UNRESOLVED_CONTENT,
-} from "./content";
-import { commitRawContent, rawContentGateHash } from "./content-raw";
-import { seedCssGroupHashes } from "./css-apply";
+import { commitComment, hydrateComment } from "./comment";
+import { commitContent, hydrateContent, UNRESOLVED_CONTENT } from "./content";
+import { releaseCssGroups } from "./css-apply";
+import { commitRawContent, hydrateRawContent } from "./content-raw";
 import {
 	commitNamedDynamic,
 	reapplyOnSwap as reapplyNamedDynamicOnSwap,
-} from "./named-dynamic";
-import { commitTag, tagGateHash } from "./tag";
+} from "./attribute-named-dynamic";
+import { commitTag, hydrateTag } from "./tag";
 import {
 	AttributeLiveBinding,
 	Carrier,
@@ -179,59 +174,35 @@ export const commitLiveBinding = (
 	}
 };
 
-export const seedLiveBinding = (
+export const hydrateLiveBinding = (
 	instance: Instance,
 	liveBinding: LiveBinding,
 	values: Array<unknown>,
 ): void => {
 	switch (liveBinding.staticBinding.type) {
-		case BINDING.NAMED_DYNAMIC:
-			return commitLiveBinding(instance, liveBinding, values);
+		case BINDING.TAG:
+			return hydrateTag(liveBinding as TagLiveBinding, values);
+		case BINDING.ATTRIBUTE:
+			return hydrateAttribute(liveBinding as AttributeLiveBinding, values);
 		case BINDING.SINGLE_VALUE_ATTRIBUTE:
-			return seedOrCommitSingleValue(
+			return hydrateOrCommitSingleValue(
 				liveBinding as SingleValueAttributeLiveBinding,
 				values,
 			);
 		case BINDING.DYNAMIC_ATTRIBUTE:
-			return seedDynamic(liveBinding as DynamicAttributeLiveBinding, values);
+			return hydrateDynamic(liveBinding as DynamicAttributeLiveBinding, values);
+		case BINDING.NAMED_DYNAMIC:
+			return commitLiveBinding(instance, liveBinding, values);
 		case BINDING.CONTENT:
-			return seedContentByAdoption(
+			return hydrateContent(
 				liveBinding as ContentLiveBinding,
 				values,
 				instance.carrier,
 			);
-		case BINDING.ATTRIBUTE: {
-			const attribute = liveBinding as AttributeLiveBinding;
-			attribute.lastComposedName = composeParts(
-				attribute.staticBinding.nameParts,
-				values,
-			);
-			attribute.lastValueHash = attributeGateHash(attribute.staticBinding, values);
-			return;
-		}
-		case BINDING.RAW_CONTENT: {
-			const rawContent = liveBinding as RawContentLiveBinding;
-			if (rawContent.cssState === null) {
-				rawContent.lastValueHash = rawContentGateHash(
-					rawContent.staticBinding,
-					values,
-				);
-				return;
-			}
-			//the server already wrote this instance's sheet — suffixed or not
-			rawContent.cssState.sheetOverride = null;
-			return seedCssGroupHashes(rawContent, values);
-		}
-		case BINDING.TAG: {
-			const tag = liveBinding as TagLiveBinding;
-			tag.lastValueHash = tagGateHash(tag.staticBinding, values);
-			return;
-		}
-		case BINDING.COMMENT: {
-			const comment = liveBinding as CommentLiveBinding;
-			comment.lastValueHash = commentGateHash(comment.staticBinding, values);
-			return;
-		}
+		case BINDING.RAW_CONTENT:
+			return hydrateRawContent(liveBinding as RawContentLiveBinding, values);
+		case BINDING.COMMENT:
+			return hydrateComment(liveBinding as CommentLiveBinding, values);
 	}
 };
 
@@ -299,4 +270,14 @@ export const revertHostBinding = (liveBinding: LiveBinding): void => {
 			return;
 		}
 	}
+};
+
+//paired release for createLiveBinding's host-side acquire (css custom properties on the host)
+export const releaseLiveBinding = (
+	liveBinding: LiveBinding,
+	host: HTMLElement,
+): void => {
+	if (liveBinding.staticBinding.type !== BINDING.RAW_CONTENT) return;
+	const rawContent = liveBinding as RawContentLiveBinding;
+	if (rawContent.cssState !== null) releaseCssGroups(rawContent, host);
 };

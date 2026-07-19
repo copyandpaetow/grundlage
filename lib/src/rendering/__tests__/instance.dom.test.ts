@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { BaseComponent } from "../../types";
 import { html, TemplateValue } from "../../template";
 import { hashValue } from "../../utils/hashing";
 import { getParsedTemplate } from "../../parser/html";
@@ -11,8 +12,11 @@ import {
 	releaseInstance,
 } from "../instance";
 
+//the css probes only touch host.style; a div stands in for the component element
+const createHost = () => document.createElement("div") as unknown as BaseComponent;
+
 const detachedCarrier = () => ({
-	host: document.createElement("div"),
+	host: createHost(),
 	hostStyleIsBound: false,
 	cssPlanMountCounts: null,
 });
@@ -225,7 +229,7 @@ describe("raw content with a css plan", () => {
 		//the carrier's root template binds the host style attribute, which would wipe
 		//the plan's custom properties — every planned style under it falls back
 		const carrier = {
-			host: document.createElement("div"),
+			host: createHost(),
 			hostStyleIsBound: true,
 			cssPlanMountCounts: null,
 		};
@@ -243,7 +247,7 @@ describe("raw content with a css plan", () => {
 
 	test("hydrating under a style-binding carrier seeds the fallback gate", () => {
 		const serverCarrier = {
-			host: document.createElement("div"),
+			host: createHost(),
 			hostStyleIsBound: true,
 			cssPlanMountCounts: null,
 		};
