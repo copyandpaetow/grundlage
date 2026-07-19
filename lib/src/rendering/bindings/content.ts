@@ -4,14 +4,8 @@ import { hashValue } from "../../utils/hashing";
 import { hasHashChanged } from "../compose";
 import { ValueOf } from "../../utils/types";
 import { CONTENT_KIND, UNSET_HASH } from "../constants";
-import {
-	assertNestable,
-	hydrateInstance,
-	reconcileInstance,
-	releaseContent,
-	releaseInstance,
-} from "../instance";
-import { forEachInRange } from "../range";
+import { assertNestable, hydrateInstance, reconcileInstance, releaseContent, releaseInstance } from "../instance";
+import { forEachNode } from "../markers";
 import { hydrateListItems, patchListContent } from "./content-list";
 import {
 	BranchContentState,
@@ -19,10 +13,9 @@ import {
 	ContentLiveBinding,
 	ContentState,
 	TextContentState,
-	UnresolvedContentState,
+	UnresolvedContentState
 } from "./types";
 
-//no mutable fields and only ever replaced, never written — one frozen instance is shared
 export const UNRESOLVED_CONTENT: UnresolvedContentState = Object.freeze({
 	kind: CONTENT_KIND.UNRESOLVED,
 });
@@ -33,7 +26,7 @@ const contentKindOf = (value: unknown): ValueOf<typeof CONTENT_KIND> => {
 	return CONTENT_KIND.TEXT;
 };
 
-const freshContentState = (
+const createContentState = (
 	contentKind: ValueOf<typeof CONTENT_KIND>,
 ): ContentState => {
 	switch (contentKind) {
@@ -57,13 +50,13 @@ const switchContentKind = (
 	liveBinding: ContentLiveBinding,
 	contentKind: ValueOf<typeof CONTENT_KIND>,
 ): void => {
-	forEachInRange(
+	forEachNode(
 		liveBinding.startMarker.nextSibling,
 		liveBinding.endMarker,
 		(node) => node.remove(),
 	);
 	releaseContent(liveBinding.content);
-	liveBinding.content = freshContentState(contentKind);
+	liveBinding.content = createContentState(contentKind);
 };
 
 const coerceToText = (value: unknown): string =>
@@ -89,7 +82,7 @@ const patchBranch = (
 	const mounted = reconcileInstance(branch.instance, value, carrier);
 	if (mounted === null) return;
 	if (branch.instance !== null) releaseInstance(branch.instance);
-	forEachInRange(
+	forEachNode(
 		liveBinding.startMarker.nextSibling,
 		liveBinding.endMarker,
 		(node) => node.remove(),
@@ -124,7 +117,7 @@ export const hydrateContent = (
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const kind = contentKindOf(value);
-	liveBinding.content = freshContentState(kind);
+	liveBinding.content = createContentState(kind);
 	switch (kind) {
 		case CONTENT_KIND.TEXT:
 			(liveBinding.content as TextContentState).lastValueHash =

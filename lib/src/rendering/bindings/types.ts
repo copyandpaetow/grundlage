@@ -1,8 +1,8 @@
 import {
 	AttributeStaticBinding,
 	CommentStaticBinding,
+	CompiledStyleSheet,
 	ContentStaticBinding,
-	CssPlan,
 	DynamicAttributeStaticBinding,
 	NamedDynamicStaticBinding,
 	RawContentStaticBinding,
@@ -17,11 +17,11 @@ import { ValueOf } from "../../utils/types";
 //threaded from the painter through every mount, never derived from the DOM (bindings
 //commit while the fragment is detached). hostStyleIsBound disables the css fast path for
 //every <style> under this host — a host style attribute write wipes the custom
-//properties; the mount counts give duplicate mounts of one plan instance-suffixed names.
+//properties; the mount counts give duplicate mounts of one sheet instance-suffixed names.
 export interface Carrier {
 	host: BaseComponent;
 	hostStyleIsBound: boolean;
-	cssPlanMountCounts: Map<CssPlan, number> | null;
+	styleSheetMountCounts: Map<CompiledStyleSheet, number> | null;
 }
 
 export interface TagLiveBinding {
@@ -31,7 +31,7 @@ export interface TagLiveBinding {
 }
 
 //anchor is the host element for a host binding, else the marker comment before the target
-//element; targetElement discriminates by node type. One field makes "exactly one" unbreakable.
+//element; resolveTargetElement discriminates by node type. One field makes "exactly one" unbreakable.
 export interface AttributeLiveBinding {
 	staticBinding: AttributeStaticBinding;
 	anchor: Comment | Element;
@@ -44,7 +44,7 @@ export interface SingleValueAttributeLiveBinding {
 	anchor: Comment | Element;
 	lastValueHash: number;
 	lastComposedName: string;
-	appliedMode: ValueOf<typeof ATTRIBUTE_MODE>;
+	appliedAttributeMode: ValueOf<typeof ATTRIBUTE_MODE>;
 }
 
 export interface AppliedAttribute {
@@ -100,10 +100,9 @@ export interface ListContentState {
 	itemHashes: Array<number>;
 }
 
-//present iff this instance is on the css fast path; null is the fallback-path discriminator
-export interface RawCssState {
-	previousGroupHashes: Array<number>;
-	groupNames: Array<string>;
+export interface StyleSheetState {
+	previousValueHashes: Array<number>;
+	customPropertyNames: Array<string>;
 	sheetOverride: string | null;
 }
 
@@ -111,7 +110,7 @@ export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;
 	markerComment: Comment;
 	lastValueHash: number;
-	cssState: RawCssState | null;
+	styleSheetState: StyleSheetState | null;
 }
 
 export interface CommentLiveBinding {
@@ -135,5 +134,5 @@ export interface ListItem {
 	instance: Instance;
 	itemHash: number;
 	keyHash: number;
-	spanStart: ChildNode;
+	startNode: ChildNode;
 }

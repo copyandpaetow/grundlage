@@ -1,4 +1,3 @@
-// NaN so every `hash === lastValueHash` gate is false on the first commit — never a real number.
 export const UNSET_HASH = Number.NaN;
 
 export const CONTENT_KIND = {
@@ -11,5 +10,3 @@ export const CONTENT_KIND = {
 export const ATTRIBUTE_MODE = { ABSENT: 0, ATTRIBUTE: 1, PROPERTY: 2 } as const;
 
 export const NO_KEY = 0;
-
-export const LIST_MARKER_DATA = "*.*";

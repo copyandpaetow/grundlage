@@ -2,10 +2,10 @@ import { FormBase } from "./forms";
 import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
 import {
 	createPainter,
-	PAINT_MODE,
 	paint,
+	PAINT_MODE,
 	Painter,
-	revertHostBindings,
+	revertAllHostBindings,
 	serverPaint,
 	setupAttributeObserver,
 	teardownPainter,
@@ -146,14 +146,10 @@ export const component = (
 
 		#fail(error: unknown): void {
 			this.#cancelBothTasks();
-			//host listeners/attributes live on the host, not in the shadow root the error text
-			//overwrites — revert them (reads the instance) before it's dropped below
-			revertHostBindings(this.#painter);
+			revertAllHostBindings(this.#painter);
 			teardownPainter(this.#painter);
 			console.warn(error);
 			this.#painter.shadowRoot.textContent = `${error}`;
-			// the error text replaces the DOM these referenced; a reconnect must remount,
-			// not patch the now-detached instance in place (same-hash reconcile would stick)
 			this.#painter.instance = null;
 			this.#resolvePendingUpdatePromise();
 		}
@@ -165,8 +161,6 @@ export const component = (
 			updatePromise.resolve();
 		}
 
-		//returns whether the task threw to its parent, so INSTALL can abandon its own frame
-		//(the reentrant THROW_TO_PARENT run has already driven the outer past this point)
 		#runTask(
 			task: Task,
 			start: SteppedTask = nextTaskStep(task, MODE.SEND, undefined),
@@ -262,14 +256,10 @@ export const component = (
 							return true;
 						}
 						const reaction = nextTaskStep(parent, MODE.THROW, error);
-						//read reaction out before #runTask below reuses the shared step cell
 						const isDismissed =
 							!(reaction instanceof Promise) &&
 							reaction.kind === STEP_OUTCOME.RETURNED;
-						//run the outer to whatever it did next: a re-yield paints a fallback, a
-						//return completes it (cleanup captured, deferred to disconnect like COMPLETED)
 						this.#runTask(parent, reaction);
-						//a return left no live renderer — drop the dead child so update() can't re-run it
 						if (isDismissed) this.#renderer = null;
 						return true;
 					}

@@ -1,7 +1,7 @@
 import { isServer } from "./utils/guards";
 import { BaseComponent } from "./types";
 
-// A closed shadow root is absent from host.shadowRoot; internals is its only handle.
+//a closed shadow root is absent from host.shadowRoot; internals is its only handle
 const resolveShadowRoot = (host: Element): ShadowRoot | null =>
 	host.shadowRoot ?? (host as BaseComponent).internals?.shadowRoot ?? null;
 
@@ -77,7 +77,7 @@ export const load = <Value>(
 	return fetcher();
 };
 
-export const warnOnUnclaimedReplay = (shadowRoot: ShadowRoot): void => {
+export const warnOnUnclaimedSsrPayloads = (shadowRoot: ShadowRoot): void => {
 	const leftover = shadowRoot.querySelectorAll(ANY_SSR_SELECTOR);
 	if (leftover.length === 0) return;
 	console.warn(

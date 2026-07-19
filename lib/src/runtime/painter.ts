@@ -1,6 +1,6 @@
 import { getParsedTemplate } from "../parser/html";
 import { ParsedTemplate } from "../parser/types";
-import { flushHostPayload, warnOnUnclaimedReplay } from "../load";
+import { flushHostPayload, warnOnUnclaimedSsrPayloads } from "../load";
 import { coerceToTemplate, TemplateValue } from "../template";
 import { BaseComponent } from "../types";
 import {
@@ -34,13 +34,13 @@ export const createPainter = (
 	mode: PaintMode,
 ): Painter => ({
 	shadowRoot,
-	carrier: { host, hostStyleIsBound: false, cssPlanMountCounts: null },
+	carrier: { host, hostStyleIsBound: false, styleSheetMountCounts: null },
 	instance: null,
 	attributeObserver: null,
 	isHydrationPending: mode === PAINT_MODE.HYDRATE,
 });
 
-export const revertHostBindings = (painter: Painter): void => {
+export const revertAllHostBindings = (painter: Painter): void => {
 	const instance = painter.instance;
 	if (instance === null) return;
 	const liveBindings = instance.liveBindings;
@@ -53,16 +53,16 @@ const paintRoot = (
 	value: TemplateValue,
 	parsed: ParsedTemplate,
 ): void => {
-	//a root-template change remounts every live binding, so updating in place is safe
 	painter.carrier.hostStyleIsBound = parsed.hostStyleIsBound;
 	const mounted = reconcileInstance(painter.instance, value, painter.carrier);
 	if (mounted === null) return;
-	//a fresh mount replaces the old subtree; release its host-side effects (css custom
-	//properties) so the swapped-away template leaves nothing behind on the host
 	if (painter.instance !== null) releaseInstance(painter.instance);
-	revertHostBindings(painter);
+	revertAllHostBindings(painter);
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
-		const live = createLiveBinding(parsed.bindings[index], painter.carrier.host);
+		const live = createLiveBinding(
+			parsed.bindings[index],
+			painter.carrier.host,
+		);
 		commitLiveBinding(mounted.instance, live, value.values);
 		mounted.instance.liveBindings[index] = live;
 	}
@@ -77,8 +77,12 @@ const hydrateRoot = (
 ): void => {
 	painter.carrier.hostStyleIsBound = parsed.hostStyleIsBound;
 	const instance = hydrateInstance(value, painter.shadowRoot, painter.carrier);
+
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
-		const live = createLiveBinding(parsed.bindings[index], painter.carrier.host);
+		const live = createLiveBinding(
+			parsed.bindings[index],
+			painter.carrier.host,
+		);
 		commitLiveBinding(instance, live, value.values);
 		instance.liveBindings[index] = live;
 	}
@@ -88,19 +92,20 @@ const hydrateRoot = (
 export const paint = (painter: Painter, value: unknown): void => {
 	const templateValue = coerceToTemplate(value);
 	const parsed = getParsedTemplate(templateValue.__templateStrings);
-	//any paint may write the host (host bindings, css host props from nested templates
-	//the root can't know statically); disconnect() also drops queued self-write records
+
 	painter.attributeObserver?.disconnect();
 	try {
 		if (painter.isHydrationPending) {
 			hydrateRoot(painter, templateValue, parsed);
 			painter.isHydrationPending = false;
-			warnOnUnclaimedReplay(painter.shadowRoot);
+			warnOnUnclaimedSsrPayloads(painter.shadowRoot);
 		} else {
 			paintRoot(painter, templateValue, parsed);
 		}
 	} finally {
-		painter.attributeObserver?.observe(painter.carrier.host, { attributes: true });
+		painter.attributeObserver?.observe(painter.carrier.host, {
+			attributes: true,
+		});
 	}
 };
 

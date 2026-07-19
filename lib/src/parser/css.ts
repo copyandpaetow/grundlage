@@ -1,7 +1,7 @@
-import { moveArrayContents } from "../utils/arrays";
+import { moveArrayContents } from "../utils/move-array-contents";
 import { CHAR_CODE, isQuoteCode } from "./chars";
 import { ValueOf } from "../utils/types";
-import { CssPlan, CssValueGroup, Part } from "./types";
+import { CompiledStyleSheet, CustomProperty, Part } from "./types";
 
 type CssStateValue = ValueOf<typeof CSS_STATE>;
 
@@ -18,6 +18,15 @@ const NO_VAR_UNSAFE_BLOCK = 0;
 
 //var() never substitutes in descriptor at-rules (@font-face, @property, …), so a value
 //hole is only fast under at-rules known to hold regular style declarations
+//todo: VAR_SAFE_AT_RULE_NAMES is fragile. CSS is moving so fast there will be more here soon
+/*
+the detection would need to be different here
+- we need to differentiate where we are =>between rules, inside a selector, inside a key, or inside a value
+=> this we should be able to do with only listening for brackets (() and {}), quotes(""/''), and punctuations (:;). Maybe the @ could also be used but maybe isnt even needed
+- if we see a hole and are not inside a value, we can abort early and use the fallback for this style tag
+- inside the value we just make sure we capture all that can be inside a css variable, extract and replace it with the css variable
+
+ */
 const VAR_SAFE_AT_RULE_NAMES = new Set([
 	"media",
 	"supports",
@@ -44,8 +53,8 @@ interface CssAnalyzerState {
 	valueTopLevelBangCount: number;
 	sheetBuffer: Array<string | number>;
 	valueBuffer: Array<Part>;
-	groups: Array<CssValueGroup>;
-	namePrefix: string;
+	customProperties: Array<CustomProperty>;
+	customPropertyPrefix: string;
 }
 
 const createCssAnalyzer = (): CssAnalyzerState => ({
@@ -64,8 +73,8 @@ const createCssAnalyzer = (): CssAnalyzerState => ({
 	valueTopLevelBangCount: 0,
 	sheetBuffer: [],
 	valueBuffer: [],
-	groups: [],
-	namePrefix: "",
+	customProperties: [],
+	customPropertyPrefix: "",
 });
 
 const resetCssAnalyzer = (css: CssAnalyzerState, templateHash: number) => {
@@ -83,11 +92,11 @@ const resetCssAnalyzer = (css: CssAnalyzerState, templateHash: number) => {
 	css.valueFirstExpressionIndex = NO_EXPRESSION_INDEX;
 	css.valueTopLevelBangCount = 0;
 	css.valueBuffer.length = 0;
-	//sheetParts and groups escape into the returned plan, so reset allocates fresh arrays
+	//sheetParts and custom properties escape into the returned sheet, so reset allocates fresh arrays
 	css.sheetBuffer = [];
-	css.groups = [];
+	css.customProperties = [];
 	//stringHash is signed; a negative hash would put a stray "-" inside the name
-	css.namePrefix = `--${(templateHash >>> 0).toString(36)}-`;
+	css.customPropertyPrefix = `--${(templateHash >>> 0).toString(36)}-`;
 };
 
 //sheet analysis never nests — one pooled analyzer reused per call (mirrors ADR-0009)
@@ -123,6 +132,7 @@ const finishDeclarationValue = (css: CssAnalyzerState): boolean => {
 		moveArrayContents(valueBuffer, css.sheetBuffer);
 	} else {
 		let importantSuffix = "";
+		//todo: this part is barely readable
 		if (css.valueTopLevelBangCount === 1) {
 			const lastValuePart = valueBuffer[valueBuffer.length - 1];
 			if (typeof lastValuePart !== "string") return false;
@@ -137,11 +147,11 @@ const finishDeclarationValue = (css: CssAnalyzerState): boolean => {
 		} else if (css.valueTopLevelBangCount > 1) {
 			return false;
 		}
-		css.groups.push({
-			ordinal: css.valueFirstExpressionIndex,
+		css.customProperties.push({
+			nameSuffix: css.valueFirstExpressionIndex,
 			valueParts: valueBuffer.slice(),
 		});
-		css.sheetBuffer.push(css.groups.length - 1);
+		css.sheetBuffer.push(css.customProperties.length - 1);
 		if (importantSuffix !== "") css.sheetBuffer.push(importantSuffix);
 	}
 	valueBuffer.length = 0;
@@ -152,10 +162,10 @@ const finishDeclarationValue = (css: CssAnalyzerState): boolean => {
 	return true;
 };
 
-export const analyzeStyle = (
+export const compileStyleSheet = (
 	parts: Array<Part>,
 	templateHash: number,
-): CssPlan | null => {
+): CompiledStyleSheet | null => {
 	const css = analyzer;
 	resetCssAnalyzer(css, templateHash);
 
@@ -282,21 +292,24 @@ export const analyzeStyle = (
 		css.parenDepth === 0;
 	if (!endedCleanly) return null;
 	return {
-		namePrefix: css.namePrefix,
-		groupNames: css.groups.map((group) => css.namePrefix + group.ordinal),
+		customPropertyPrefix: css.customPropertyPrefix,
+		customPropertyNames: css.customProperties.map(
+			(property) => css.customPropertyPrefix + property.nameSuffix,
+		),
 		sheetParts: css.sheetBuffer,
-		groups: css.groups,
+		customProperties: css.customProperties,
 	};
 };
 
 export const composeSheet = (
-	plan: CssPlan,
-	groupNames: Array<string>,
+	sheet: CompiledStyleSheet,
+	customPropertyNames: Array<string>,
 ): string => {
 	let result = "";
-	for (let index = 0; index < plan.sheetParts.length; index++) {
-		const part = plan.sheetParts[index];
-		result += typeof part === "number" ? `var(${groupNames[part]})` : part;
+	for (let index = 0; index < sheet.sheetParts.length; index++) {
+		const part = sheet.sheetParts[index];
+		result +=
+			typeof part === "number" ? `var(${customPropertyNames[part]})` : part;
 	}
 	return result;
 };

@@ -1,4 +1,4 @@
-import { EVENT_PREFIX } from "../../parser/constants";
+import { MARKUP } from "../../parser/chars";
 import { hashValue } from "../../utils/hashing";
 import {
 	assertPrimitiveString,
@@ -7,25 +7,28 @@ import {
 } from "../../utils/guards";
 import { hasHashChanged } from "../compose";
 import { ATTRIBUTE_MODE } from "../constants";
-import { nudgeComponent, targetElement } from "../dom";
-import { attributeModeOf } from "./attribute-single-value";
+import { triggerComponentUpdate, resolveTargetElement } from "../dom";
+import { resolveAttributeMode } from "./attribute-single-value";
 import { AppliedAttribute, DynamicAttributeLiveBinding } from "./types";
-
-const CUSTOM_EVENT_PREFIX = `${EVENT_PREFIX}-`;
 
 const resolveEventNameFromKey = (
 	key: string,
 	element: Element,
 ): string | null => {
-	if (!key.startsWith(EVENT_PREFIX)) return null;
-	if (key.startsWith(CUSTOM_EVENT_PREFIX))
-		return key.slice(CUSTOM_EVENT_PREFIX.length).toLowerCase();
+	if (!key.startsWith(MARKUP.EVENT_PREFIX)) return null;
+	if (key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX))
+		return key.slice(MARKUP.CUSTOM_EVENT_PREFIX.length).toLowerCase();
 	const lowerKey = key.toLowerCase();
-	return lowerKey in element ? lowerKey.slice(EVENT_PREFIX.length) : null;
+	return lowerKey in element
+		? lowerKey.slice(MARKUP.EVENT_PREFIX.length)
+		: null;
 };
 
 const warnIfDeadNativeHandler = (key: string, element: Element): void => {
-	if (!key.startsWith(EVENT_PREFIX) || key.startsWith(CUSTOM_EVENT_PREFIX))
+	if (
+		!key.startsWith(MARKUP.EVENT_PREFIX) ||
+		key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX)
+	)
 		return;
 	const lowerKey = key.toLowerCase();
 	if (lowerKey in element) return;
@@ -53,11 +56,11 @@ export const applyDynamicAttribute = (
 
 	const clearsProperty = oldValue !== undefined && !isStringable(oldValue);
 
-	switch (attributeModeOf(value)) {
+	switch (resolveAttributeMode(value)) {
 		case ATTRIBUTE_MODE.ABSENT:
 			if (clearsProperty) {
 				delete (element as unknown as Record<string, unknown>)[key];
-				nudgeComponent(element);
+				triggerComponentUpdate(element);
 			}
 			element.removeAttribute(key);
 			return;
@@ -68,7 +71,7 @@ export const applyDynamicAttribute = (
 			return;
 		case ATTRIBUTE_MODE.PROPERTY:
 			(element as unknown as Record<string, unknown>)[key] = value;
-			nudgeComponent(element);
+			triggerComponentUpdate(element);
 			return;
 	}
 };
@@ -127,7 +130,7 @@ export const commitDynamic = (
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	if (!hasHashChanged(liveBinding, hashValue(value))) return;
-	const element = targetElement(liveBinding);
+	const element = resolveTargetElement(liveBinding);
 	applyAttributeMap(
 		element,
 		liveBinding.appliedAttributes,
@@ -146,7 +149,7 @@ export const hydrateDynamic = (
 	);
 	//server HTML carries only stringable entries; handlers and property-mode values must be
 	//attached to the hydrated element here, the same non-stringable set a tag swap reapplies
-	reapplyOnSwap(liveBinding, targetElement(liveBinding), values);
+	reapplyOnSwap(liveBinding, resolveTargetElement(liveBinding), values);
 };
 
 export const reapplyOnSwap = (

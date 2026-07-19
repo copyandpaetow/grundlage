@@ -5,9 +5,7 @@ import {
 	PARTS_HASH_SEED,
 } from "../utils/hashing";
 
-//a nullish hole contributes empty text, matching the content channel; false and objects
-//still stringify (`String(false)`, `[object Object]`) — only null/undefined are dropped
-const partToString = (value: unknown): string =>
+const stringifyPart = (value: unknown): string =>
 	value == null ? "" : String(value);
 
 export const composeParts = (
@@ -17,7 +15,7 @@ export const composeParts = (
 	let result = "";
 	for (let index = 0; index < parts.length; index++) {
 		const part = parts[index];
-		result += typeof part === "number" ? partToString(values[part]) : part;
+		result += typeof part === "number" ? stringifyPart(values[part]) : part;
 	}
 	return result;
 };

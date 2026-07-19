@@ -13,12 +13,13 @@ import {
 } from "../instance";
 
 //the css probes only touch host.style; a div stands in for the component element
-const createHost = () => document.createElement("div") as unknown as BaseComponent;
+const createHost = () =>
+	document.createElement("div") as unknown as BaseComponent;
 
 const detachedCarrier = () => ({
 	host: createHost(),
 	hostStyleIsBound: false,
-	cssPlanMountCounts: null,
+	styleSheetMountCounts: null,
 });
 
 const mountIntoShadow = (value: TemplateValue) => {
@@ -231,7 +232,7 @@ describe("raw content with a css plan", () => {
 		const carrier = {
 			host: createHost(),
 			hostStyleIsBound: true,
-			cssPlanMountCounts: null,
+			styleSheetMountCounts: null,
 		};
 		const { instance, fragment } = mountInstance(sheet("red"), carrier);
 		const style = fragment.querySelector("style")!;
@@ -249,7 +250,7 @@ describe("raw content with a css plan", () => {
 		const serverCarrier = {
 			host: createHost(),
 			hostStyleIsBound: true,
-			cssPlanMountCounts: null,
+			styleSheetMountCounts: null,
 		};
 		const shadowRoot = serverCarrier.host.attachShadow({ mode: "open" });
 		const mounted = mountInstance(sheet("red"), serverCarrier);

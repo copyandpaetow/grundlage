@@ -1,14 +1,13 @@
 import { describe, test, expect } from "vitest";
-import { isWhitespaceCode, isQuoteCode } from "../chars";
-import { COMMENT_IDENTIFIER } from "../constants";
+import { isWhitespaceCode, isQuoteCode, MARKUP } from "../chars";
 
 //the parser hot loop reads char codes, so we test against `.charCodeAt(0)` of the
 //literal character to keep the intent readable while exercising the numeric predicate
 const code = (char: string) => char.charCodeAt(0);
 
-describe("COMMENT_IDENTIFIER", () => {
+describe("MARKUP.COMMENT_IDENTIFIER", () => {
 	test("is a stable string", () => {
-		expect(COMMENT_IDENTIFIER).toBe("^.^");
+		expect(MARKUP.COMMENT_IDENTIFIER).toBe("^.^");
 	});
 });
 

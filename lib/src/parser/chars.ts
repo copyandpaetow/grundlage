@@ -8,6 +8,10 @@ export const MARKUP = {
 	ATTRIBUTE_SEPARATOR: " ",
 	ATTRIBUTE_ASSIGN: "=",
 	ATTRIBUTE_QUOTE: "'",
+	COMMENT_IDENTIFIER: "^.^",
+	LIST_MARKER_DATA: "*.*",
+	EVENT_PREFIX: "on",
+	CUSTOM_EVENT_PREFIX: "on-",
 } as const;
 
 export const CHAR_CODE = {

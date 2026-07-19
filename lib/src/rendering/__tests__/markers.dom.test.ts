@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { forEachInRange } from "../range";
+import { forEachNode } from "../markers";
 
 const comment = (data: string): Comment => document.createComment(data);
 
-describe("forEachInRange", () => {
+describe("forEachNode", () => {
 	test("visits every node from first up to but not including end", () => {
 		const parent = document.createElement("div");
 		const start = comment("start");
@@ -13,7 +13,7 @@ describe("forEachInRange", () => {
 		parent.append(start, p, text, end);
 
 		const visited: Array<Node> = [];
-		forEachInRange(start.nextSibling, end, (node) => visited.push(node));
+		forEachNode(start.nextSibling, end, (node) => visited.push(node));
 
 		expect(visited).toEqual([p, text]);
 	});
@@ -26,7 +26,7 @@ describe("forEachInRange", () => {
 		const after = document.createElement("footer");
 		parent.append(before, start, document.createElement("p"), end, after);
 
-		forEachInRange(start.nextSibling, end, (node) => node.remove());
+		forEachNode(start.nextSibling, end, (node) => node.remove());
 
 		expect(start.nextSibling).toBe(end);
 		expect(parent.firstChild).toBe(before);
@@ -40,7 +40,7 @@ describe("forEachInRange", () => {
 		parent.append(start, end);
 
 		const visited: Array<Node> = [];
-		forEachInRange(start.nextSibling, end, (node) => visited.push(node));
+		forEachNode(start.nextSibling, end, (node) => visited.push(node));
 
 		expect(visited).toEqual([]);
 		expect(start.nextSibling).toBe(end);
@@ -48,7 +48,7 @@ describe("forEachInRange", () => {
 
 	test("a null first is a no-op", () => {
 		const visited: Array<Node> = [];
-		forEachInRange(null, comment("end"), (node) => visited.push(node));
+		forEachNode(null, comment("end"), (node) => visited.push(node));
 
 		expect(visited).toEqual([]);
 	});
@@ -60,9 +60,7 @@ describe("forEachInRange", () => {
 		parent.append(first, second);
 
 		const visited: Array<Node> = [];
-		forEachInRange(first, comment("detached-end"), (node) =>
-			visited.push(node),
-		);
+		forEachNode(first, comment("detached-end"), (node) => visited.push(node));
 
 		expect(visited).toEqual([first, second]);
 	});

@@ -1,5 +1,4 @@
 import { BINDING } from "../parser/constants";
-import { ValueOf } from "../utils/types";
 import { getParsedTemplate } from "../parser/html";
 import { ParsedTemplate } from "../parser/types";
 import { TemplateValue } from "../template";
@@ -24,7 +23,7 @@ import {
 	nextListTail,
 	nextOpenMarker,
 	scanToClose,
-} from "./range";
+} from "./markers";
 
 export interface Instance {
 	parsed: ParsedTemplate;
@@ -36,9 +35,6 @@ export const patchInstance = (
 	instance: Instance,
 	values: Array<unknown>,
 ): void => {
-	// Commit in parser marker order: an element's TAG binding precedes its attribute/event
-	// bindings, so a tag swap runs before siblings re-read the new element via targetElement.
-	// Reordering this loop (or the marker emission) breaks tag swaps silently.
 	const { liveBindings } = instance;
 	for (let index = 0; index < liveBindings.length; index++)
 		commitLiveBinding(instance, liveBindings[index], values);
@@ -79,9 +75,6 @@ export const reconcileInstance = (
 	return mountInstance(value, carrier);
 };
 
-const isRangeType = (type: ValueOf<typeof BINDING>): boolean =>
-	type === BINDING.CONTENT;
-
 export const assertNestable = (value: TemplateValue): void => {
 	if (getParsedTemplate(value.__templateStrings).hostBindingCount > 0)
 		throw new Error(
@@ -111,7 +104,7 @@ export const mountInstance = (
 		if (!isOpenMarker(node.data)) continue;
 		const staticBinding = bindings[bindingIndex];
 
-		if (!isRangeType(staticBinding.type)) {
+		if (staticBinding.type !== BINDING.CONTENT) {
 			const live = createLiveBinding(staticBinding, node, null, carrier);
 			commitLiveBinding(instance, live, value.values);
 			liveBindings[bindingIndex++] = live;
@@ -128,7 +121,7 @@ export const mountInstance = (
 	return { instance, fragment };
 };
 
-const hydrateInstanceFrom = (
+const hydrateInstanceWithWalker = (
 	walker: TreeWalker,
 	value: TemplateValue,
 	carrier: Carrier,
@@ -142,7 +135,7 @@ const hydrateInstanceFrom = (
 		const open = nextOpenMarker(walker);
 		const staticBinding = bindings[bindingIndex];
 
-		if (!isRangeType(staticBinding.type)) {
+		if (staticBinding.type !== BINDING.CONTENT) {
 			const live = createLiveBinding(staticBinding, open, null, carrier);
 			hydrateLiveBinding(instance, live, value.values);
 			liveBindings[bindingIndex++] = live;
@@ -159,27 +152,28 @@ const hydrateInstanceFrom = (
 	return instance;
 };
 
-const walkerFrom = (rangeStart: Node): TreeWalker => {
+const createCommentWalkerAt = (startNode: Node): TreeWalker => {
 	const walker = document.createTreeWalker(
-		rangeStart.getRootNode(),
+		startNode.getRootNode(),
 		NodeFilter.SHOW_COMMENT,
 	);
-	walker.currentNode = rangeStart;
+	walker.currentNode = startNode;
 	return walker;
 };
 
 export const hydrateInstance = (
 	value: TemplateValue,
-	rangeStart: Node,
+	startNode: Node,
 	carrier: Carrier,
-): Instance => hydrateInstanceFrom(walkerFrom(rangeStart), value, carrier);
+): Instance =>
+	hydrateInstanceWithWalker(createCommentWalkerAt(startNode), value, carrier);
 
 export const hydrateRow = (
 	value: TemplateValue,
 	rowStart: Node,
 	carrier: Carrier,
 ): { instance: Instance; tailMarker: Comment } => {
-	const walker = walkerFrom(rowStart);
-	const instance = hydrateInstanceFrom(walker, value, carrier);
+	const walker = createCommentWalkerAt(rowStart);
+	const instance = hydrateInstanceWithWalker(walker, value, carrier);
 	return { instance, tailMarker: nextListTail(walker) };
 };

@@ -1,46 +1,50 @@
 import { combinedPartsHash, composeParts } from "../compose";
 import { RawContentLiveBinding } from "./types";
 
-export const applyChangedCssGroups = (
+export const applyChangedCustomProperties = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
 	host: HTMLElement,
 ): void => {
-	const groups = liveBinding.staticBinding.cssPlan!.groups;
-	const { groupNames, previousGroupHashes } = liveBinding.cssState!;
+	const customProperties =
+		liveBinding.staticBinding.compiledStyleSheet!.customProperties;
+	const { customPropertyNames, previousValueHashes } =
+		liveBinding.styleSheetState!;
 	const hostStyle = host.style;
-	for (let index = 0; index < groups.length; index++) {
-		const groupHash = combinedPartsHash(groups[index].valueParts, values);
-		if (groupHash === previousGroupHashes[index]) continue;
-		previousGroupHashes[index] = groupHash;
+	for (let index = 0; index < customProperties.length; index++) {
+		const valueHash = combinedPartsHash(
+			customProperties[index].valueParts,
+			values,
+		);
+		if (valueHash === previousValueHashes[index]) continue;
+		previousValueHashes[index] = valueHash;
 		hostStyle.setProperty(
-			groupNames[index],
-			composeParts(groups[index].valueParts, values),
+			customPropertyNames[index],
+			composeParts(customProperties[index].valueParts, values),
 		);
 	}
 };
 
-export const hydrateCssGroupHashes = (
+export const hydrateCustomPropertyHashes = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	const groups = liveBinding.staticBinding.cssPlan!.groups;
-	const { previousGroupHashes } = liveBinding.cssState!;
-	for (let index = 0; index < groups.length; index++)
-		previousGroupHashes[index] = combinedPartsHash(
-			groups[index].valueParts,
+	const customProperties =
+		liveBinding.staticBinding.compiledStyleSheet!.customProperties;
+	const { previousValueHashes } = liveBinding.styleSheetState!;
+	for (let index = 0; index < customProperties.length; index++)
+		previousValueHashes[index] = combinedPartsHash(
+			customProperties[index].valueParts,
 			values,
 		);
 };
 
-//the carrier's mount count stays monotonic: a live sibling mount still references the
-//base names, so recycling this instance's ordinal would collide with it
-export const releaseCssGroups = (
+export const releaseCustomProperties = (
 	liveBinding: RawContentLiveBinding,
 	host: HTMLElement,
 ): void => {
-	const { groupNames } = liveBinding.cssState!;
+	const { customPropertyNames } = liveBinding.styleSheetState!;
 	const hostStyle = host.style;
-	for (let index = 0; index < groupNames.length; index++)
-		hostStyle.removeProperty(groupNames[index]);
+	for (let index = 0; index < customPropertyNames.length; index++)
+		hostStyle.removeProperty(customPropertyNames[index]);
 };

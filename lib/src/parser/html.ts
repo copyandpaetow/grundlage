@@ -1,12 +1,6 @@
-import { moveArrayContents } from "../utils/arrays";
+import { moveArrayContents } from "../utils/move-array-contents";
 import { hashValue } from "../utils/hashing";
-import {
-	BINDING,
-	PARSE_BINDING,
-	COMMENT_IDENTIFIER,
-	EVENT_PREFIX,
-	NO_KEY_BINDING,
-} from "./constants";
+import { BINDING, NO_KEY_BINDING, PARSE_BINDING } from "./constants";
 import {
 	AttributeBinding,
 	Binding,
@@ -19,7 +13,7 @@ import {
 	TagBinding,
 } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
-import { analyzeStyle, composeSheet } from "./css";
+import { compileStyleSheet, composeSheet } from "./css";
 import { ValueOf } from "../utils/types";
 
 type StateValue = ValueOf<typeof STATE>;
@@ -33,9 +27,7 @@ const COMMENT_OPEN_LENGTH = MARKUP.COMMENT_OPEN.length;
 const END_TAG_OPEN_LENGTH = MARKUP.END_TAG_OPEN.length;
 const parsesContentAsRaw = (parser: ParserState, tag: string) => {
 	if (tag === TEMPLATE_TAG) {
-		const isNestedTemplate =
-			parser.forceNoRootTemplate || !parser.isRootTemplate;
-		return isNestedTemplate;
+		return parser.forceNoRootTemplate || !parser.isRootTemplate;
 	}
 
 	return tag === STYLE_TAG || tag === TEXTAREA_TAG || tag === SCRIPT_TAG;
@@ -162,10 +154,10 @@ const resetParser = (
 };
 
 const openComment = (parser: ParserState) =>
-	`${MARKUP.COMMENT_OPEN}${COMMENT_IDENTIFIER} ${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}${MARKUP.COMMENT_CLOSE}`;
+	`${MARKUP.COMMENT_OPEN}${MARKUP.COMMENT_IDENTIFIER} ${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}${MARKUP.COMMENT_CLOSE}`;
 
 const closeComment = (parser: ParserState) =>
-	`${MARKUP.COMMENT_OPEN}${COMMENT_IDENTIFIER} /${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}${MARKUP.COMMENT_CLOSE}`;
+	`${MARKUP.COMMENT_OPEN}${MARKUP.COMMENT_IDENTIFIER} /${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}${MARKUP.COMMENT_CLOSE}`;
 
 const isSingleHole = (parts: Array<string | number>) =>
 	parts.length === 1 && typeof parts[0] === "number";
@@ -239,7 +231,7 @@ const createBinding = (parser: ParserState) => {
 				type: PARSE_BINDING.RAW_CONTENT,
 				values: [],
 				tag: parser.currentTagName,
-				cssPlan: null,
+				compiledStyleSheet: null,
 			} satisfies RawContentBinding;
 		case STATE.TAG:
 			return {
@@ -249,7 +241,7 @@ const createBinding = (parser: ParserState) => {
 
 		default:
 			throw new Error(
-				`createBinding called in non-binding state: ${parser.state}`,
+				`grundlage: createBinding called in non-binding state: ${parser.state}`,
 			);
 	}
 };
@@ -284,11 +276,17 @@ const completeRawContent = (parser: ParserState) => {
 		const binding = parser.activeBinding as RawContentBinding;
 		moveArrayContents(parser.rawContentBuffer, binding.values);
 		if (binding.tag === STYLE_TAG) {
-			binding.cssPlan = analyzeStyle(binding.values, parser.templateHash);
+			binding.compiledStyleSheet = compileStyleSheet(
+				binding.values,
+				parser.templateHash,
+			);
 			//the prepared sheet rides in the markup — no first-commit sheet write
-			if (binding.cssPlan !== null)
+			if (binding.compiledStyleSheet !== null)
 				parser.contentBuffer.push(
-					composeSheet(binding.cssPlan, binding.cssPlan.groupNames),
+					composeSheet(
+						binding.compiledStyleSheet,
+						binding.compiledStyleSheet.customPropertyNames,
+					),
 				);
 		}
 	} else {
@@ -791,9 +789,10 @@ const parse = (
 	};
 };
 
+//deliberately wide: without knowing the type of the expression slot we can detect if it is an event listener or something that just starts with "on" => "once", "online" etc/
 const isHandlerName = (binding: AttributeBinding): boolean =>
 	typeof binding.keys[0] === "string" &&
-	binding.keys[0].startsWith(EVENT_PREFIX) &&
+	binding.keys[0].startsWith(MARKUP.EVENT_PREFIX) &&
 	isSingleHole(binding.values);
 
 const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
@@ -855,12 +854,11 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 			return {
 				type: BINDING.RAW_CONTENT,
 				parts: binding.values.slice(),
-				cssPlan: binding.cssPlan,
+				compiledStyleSheet: binding.compiledStyleSheet,
 			};
 	}
 };
 
-//parsing never nests — one pooled struct reused across every parse (ADR-0009)
 const parser = createParser();
 
 const parseCache = new WeakMap<TemplateStringsArray, ParsedTemplate>();

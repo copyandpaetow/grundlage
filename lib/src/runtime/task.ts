@@ -163,8 +163,6 @@ export const nextOperation = (
 					task.state = TASK_STATE.DRIVING;
 					return createOperation(OPERATION.RESUME, incomingOutcome.payload);
 				case STEP_OUTCOME.THREW:
-					//throw the rejection back into the generator at its `yield promise` point so a
-					//try/catch there can recover; an uncaught throw re-surfaces as a DRIVING THREW
 					task.state = TASK_STATE.DRIVING;
 					return createOperation(OPERATION.THROW_INTO, incomingOutcome.payload);
 			}
@@ -181,7 +179,6 @@ export const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	} catch {
 		/* a generator that throws on return() is already dead; nothing left to salvage */
 	}
-	// the engine is being torn down, so there is no live onError channel to route to
 	if (ending instanceof Promise) ending.catch(console.warn);
 	const cleanup = task.cleanup;
 	if (cleanup !== null) {

@@ -21,7 +21,7 @@ export interface RawContentBinding {
 	type: typeof PARSE_BINDING.RAW_CONTENT;
 	values: Array<Part>;
 	tag: string;
-	cssPlan: CssPlan | null;
+	compiledStyleSheet: CompiledStyleSheet | null;
 }
 
 export interface TagBinding {
@@ -38,16 +38,16 @@ export type Binding =
 
 export type Part = string | number;
 
-export interface CssValueGroup {
-	ordinal: number; //the group's first expression index — the name's tail
+export interface CustomProperty {
+	nameSuffix: number;
 	valueParts: Array<Part>;
 }
 
-export interface CssPlan {
-	namePrefix: string; //"--<templateHash unsigned base36>-"
-	groupNames: Array<string>; //base names (namePrefix + ordinal), shared by the first mount per host
-	sheetParts: Array<string | number>; //number = group index, resolved to var(--name)
-	groups: Array<CssValueGroup>;
+export interface CompiledStyleSheet {
+	customPropertyPrefix: string;
+	customPropertyNames: Array<string>;
+	sheetParts: Array<string | number>;
+	customProperties: Array<CustomProperty>;
 }
 
 export interface TagStaticBinding {
@@ -86,7 +86,7 @@ export interface ContentStaticBinding {
 export interface RawContentStaticBinding {
 	type: typeof BINDING.RAW_CONTENT;
 	parts: Array<Part>;
-	cssPlan: CssPlan | null;
+	compiledStyleSheet: CompiledStyleSheet | null;
 }
 
 export interface CommentStaticBinding {

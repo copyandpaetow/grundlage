@@ -7,18 +7,18 @@ import { commitAttribute, hydrateAttribute } from "./attribute";
 import {
 	applyDynamicAttribute,
 	commitDynamic,
-	reapplyOnSwap as reapplyDynamicOnSwap,
 	hydrateDynamic,
+	reapplyOnSwap as reapplyDynamicOnSwap,
 } from "./attribute-dynamic";
 import {
 	commitSingleValue,
+	hydrateSingleValue,
 	reapplyOnSwap as reapplySingleValueOnSwap,
-	revertAttributeMode,
-	hydrateOrCommitSingleValue,
+	clearAppliedAttribute,
 } from "./attribute-single-value";
 import { commitComment, hydrateComment } from "./comment";
 import { commitContent, hydrateContent, UNRESOLVED_CONTENT } from "./content";
-import { releaseCssGroups } from "./css-apply";
+import { releaseCustomProperties } from "./css-apply";
 import { commitRawContent, hydrateRawContent } from "./content-raw";
 import {
 	commitNamedDynamic,
@@ -31,11 +31,11 @@ import {
 	CommentLiveBinding,
 	ContentLiveBinding,
 	DynamicAttributeLiveBinding,
-	NamedDynamicLiveBinding,
 	LiveBinding,
+	NamedDynamicLiveBinding,
 	RawContentLiveBinding,
-	RawCssState,
 	SingleValueAttributeLiveBinding,
+	StyleSheetState,
 	TagLiveBinding,
 } from "./types";
 
@@ -65,7 +65,7 @@ export const createLiveBinding = (
 				anchor: anchor!,
 				lastValueHash: UNSET_HASH,
 				lastComposedName: "",
-				appliedMode: ATTRIBUTE_MODE.ABSENT,
+				appliedAttributeMode: ATTRIBUTE_MODE.ABSENT,
 			};
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return {
@@ -89,32 +89,31 @@ export const createLiveBinding = (
 				content: UNRESOLVED_CONTENT,
 			};
 		case BINDING.RAW_CONTENT: {
-			//null cssState marks the fallback path: no plan, or the carrier's root
-			//template binds the host style attribute and would wipe the host props
-			const cssPlan = carrier!.hostStyleIsBound ? null : staticBinding.cssPlan;
-			let cssState: RawCssState | null = null;
-			if (cssPlan !== null) {
-				const mountCounts = (carrier!.cssPlanMountCounts ??= new Map());
-				const instanceOrdinal = mountCounts.get(cssPlan) ?? 0;
-				mountCounts.set(cssPlan, instanceOrdinal + 1);
-				let groupNames: Array<string>;
+			const activeStyleSheet = carrier!.hostStyleIsBound
+				? null
+				: staticBinding.compiledStyleSheet;
+			let styleSheetState: StyleSheetState | null = null;
+			if (activeStyleSheet !== null) {
+				const mountCounts = (carrier!.styleSheetMountCounts ??= new Map());
+				const instanceIndexOnHost = mountCounts.get(activeStyleSheet) ?? 0;
+				mountCounts.set(activeStyleSheet, instanceIndexOnHost + 1);
+				let customPropertyNames: Array<string>;
 				let sheetOverride: string | null = null;
-				if (instanceOrdinal === 0) {
-					groupNames = cssPlan.groupNames;
+				if (instanceIndexOnHost === 0) {
+					customPropertyNames = activeStyleSheet.customPropertyNames;
 				} else {
-					//the baked base names are already taken on this host — this instance
-					//gets suffixed names and rewrites its own sheet once at first commit
-					const instancePrefix = `${cssPlan.namePrefix}${instanceOrdinal}-`;
-					groupNames = cssPlan.groups.map(
-						(group) => instancePrefix + group.ordinal,
+					//the base names are already taken on this host
+					const instancePrefix = `${activeStyleSheet.customPropertyPrefix}${instanceIndexOnHost}-`;
+					customPropertyNames = activeStyleSheet.customProperties.map(
+						(property) => instancePrefix + property.nameSuffix,
 					);
-					sheetOverride = composeSheet(cssPlan, groupNames);
+					sheetOverride = composeSheet(activeStyleSheet, customPropertyNames);
 				}
-				cssState = {
-					previousGroupHashes: new Array<number>(cssPlan.groups.length).fill(
-						UNSET_HASH,
-					),
-					groupNames,
+				styleSheetState = {
+					previousValueHashes: new Array<number>(
+						activeStyleSheet.customProperties.length,
+					).fill(UNSET_HASH),
+					customPropertyNames,
 					sheetOverride,
 				};
 			}
@@ -122,7 +121,7 @@ export const createLiveBinding = (
 				staticBinding,
 				markerComment: anchor as Comment,
 				lastValueHash: UNSET_HASH,
-				cssState,
+				styleSheetState,
 			};
 		}
 		case BINDING.COMMENT:
@@ -185,7 +184,7 @@ export const hydrateLiveBinding = (
 		case BINDING.ATTRIBUTE:
 			return hydrateAttribute(liveBinding as AttributeLiveBinding, values);
 		case BINDING.SINGLE_VALUE_ATTRIBUTE:
-			return hydrateOrCommitSingleValue(
+			return hydrateSingleValue(
 				liveBinding as SingleValueAttributeLiveBinding,
 				values,
 			);
@@ -247,7 +246,7 @@ export const revertHostBinding = (liveBinding: LiveBinding): void => {
 		case BINDING.SINGLE_VALUE_ATTRIBUTE: {
 			const single = liveBinding as SingleValueAttributeLiveBinding;
 			if (single.anchor instanceof Element)
-				revertAttributeMode(single.anchor, single);
+				clearAppliedAttribute(single.anchor, single);
 			return;
 		}
 		case BINDING.DYNAMIC_ATTRIBUTE: {
@@ -272,12 +271,12 @@ export const revertHostBinding = (liveBinding: LiveBinding): void => {
 	}
 };
 
-//paired release for createLiveBinding's host-side acquire (css custom properties on the host)
 export const releaseLiveBinding = (
 	liveBinding: LiveBinding,
 	host: HTMLElement,
 ): void => {
 	if (liveBinding.staticBinding.type !== BINDING.RAW_CONTENT) return;
 	const rawContent = liveBinding as RawContentLiveBinding;
-	if (rawContent.cssState !== null) releaseCssGroups(rawContent, host);
+	if (rawContent.styleSheetState !== null)
+		releaseCustomProperties(rawContent, host);
 };

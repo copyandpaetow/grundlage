@@ -8,7 +8,8 @@ import {
 	LIST_HASH_SEED,
 } from "../../utils/hashing";
 import { composeParts } from "../compose";
-import { LIST_MARKER_DATA, NO_KEY } from "../constants";
+import { NO_KEY } from "../constants";
+import { MARKUP } from "../../parser/chars";
 import {
 	assertNestable,
 	hydrateRow,
@@ -17,7 +18,7 @@ import {
 	reconcileInstance,
 	releaseInstance,
 } from "../instance";
-import { forEachInRange } from "../range";
+import { forEachNode } from "../markers";
 import {
 	Carrier,
 	ContentLiveBinding,
@@ -90,7 +91,7 @@ const groupRowsByContentHash = (
 	let boundary: ChildNode = startMarker;
 	for (let index = 0; index < rows.length; index++) {
 		addRowToGroup(groups, rows[index].itemHash, rows[index]);
-		rows[index].spanStart = boundary.nextSibling!;
+		rows[index].startNode = boundary.nextSibling!;
 		boundary = rows[index].tailMarker;
 	}
 	return groups;
@@ -191,7 +192,7 @@ const placeRows = (
 				itemHashes[index],
 				carrier,
 			);
-		else if (cursor.nextSibling !== row.spanStart) moveRowAfter(cursor, row);
+		else if (cursor.nextSibling !== row.startNode) moveRowAfter(cursor, row);
 		cursor = row.tailMarker;
 		finalRows[index] = row;
 	}
@@ -207,8 +208,8 @@ const mountRowAfter = (
 	const value = coerceToTemplate(rawValue);
 	assertNestable(value);
 	const { instance, fragment } = mountInstance(value, carrier);
-	const tailMarker = document.createComment(LIST_MARKER_DATA);
-	const spanStart = fragment.firstChild ?? tailMarker;
+	const tailMarker = document.createComment(MARKUP.LIST_MARKER_DATA);
+	const startNode = fragment.firstChild ?? tailMarker;
 	after.after(fragment, tailMarker);
 	const parsed = getParsedTemplate(value.__templateStrings);
 	return {
@@ -216,7 +217,7 @@ const mountRowAfter = (
 		instance,
 		itemHash,
 		keyHash: keyHashOf(value, parsed),
-		spanStart,
+		startNode,
 	};
 };
 
@@ -239,15 +240,15 @@ const replaceRowInstance = (
 	fragment: DocumentFragment,
 ): void => {
 	releaseInstance(row.instance);
-	clearRowNodes(row);
-	row.spanStart = fragment.firstChild ?? row.tailMarker;
+	forEachNode(row.startNode, row.tailMarker, (node) => node.remove());
+	row.startNode = fragment.firstChild ?? row.tailMarker;
 	row.tailMarker.before(fragment);
 	row.instance = instance;
 };
 
 const moveRowAfter = (after: ChildNode, row: ListItem): void => {
 	let anchor = after;
-	forEachInRange(row.spanStart, row.tailMarker, (node) => {
+	forEachNode(row.startNode, row.tailMarker, (node) => {
 		anchor.after(node);
 		anchor = node;
 	});
@@ -256,12 +257,8 @@ const moveRowAfter = (after: ChildNode, row: ListItem): void => {
 
 const removeRowNodes = (row: ListItem): void => {
 	releaseInstance(row.instance);
-	forEachInRange(row.spanStart, row.tailMarker, (node) => node.remove());
+	forEachNode(row.startNode, row.tailMarker, (node) => node.remove());
 	row.tailMarker.remove();
-};
-
-const clearRowNodes = (row: ListItem): void => {
-	forEachInRange(row.spanStart, row.tailMarker, (node) => node.remove());
 };
 
 export const hydrateListItems = (
@@ -279,7 +276,7 @@ export const hydrateListItems = (
 	for (let index = 0; index < count; index++) {
 		const value = coerceToTemplate(itemValues[index]);
 		assertNestable(value);
-		const spanStart = rowStart.nextSibling!;
+		const startNode = rowStart.nextSibling!;
 		const { instance, tailMarker } = hydrateRow(value, rowStart, carrier);
 		const parsed = getParsedTemplate(value.__templateStrings);
 		const itemHash = hashValue(itemValues[index]);
@@ -290,7 +287,7 @@ export const hydrateListItems = (
 			instance,
 			itemHash,
 			keyHash: keyHashOf(value, parsed),
-			spanStart,
+			startNode,
 		};
 		rowStart = tailMarker;
 	}

@@ -1,9 +1,12 @@
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 import { RawContentStaticBinding } from "../../parser/types";
-import { applyChangedCssGroups, hydrateCssGroupHashes } from "./css-apply";
+import {
+	applyChangedCustomProperties,
+	hydrateCustomPropertyHashes,
+} from "./css-apply";
 import { RawContentLiveBinding } from "./types";
 
-export const rawContentGateHash = (
+const rawContentGateHash = (
 	staticBinding: RawContentStaticBinding,
 	values: Array<unknown>,
 ): number => combinedPartsHash(staticBinding.parts, values);
@@ -15,19 +18,26 @@ export const commitRawContent = (
 ): void => {
 	const { parts } = liveBinding.staticBinding;
 
-	const cssState = liveBinding.cssState;
-	if (cssState !== null) {
+	const styleSheetState = liveBinding.styleSheetState;
+	//todo: why is this here? either we are in the fast path and the css stylesheet is static and applied in the parser
+	//or we are not in the fast path and than it doesnt need extra handling => when can this happen with the duplicate instance?
+	if (styleSheetState) {
 		//only a duplicate instance carries an override; the baked sheet came with the markup
-		if (cssState.sheetOverride !== null) {
+		if (styleSheetState.sheetOverride !== null) {
 			liveBinding.markerComment.nextElementSibling!.textContent =
-				cssState.sheetOverride;
-			cssState.sheetOverride = null;
+				styleSheetState.sheetOverride;
+			styleSheetState.sheetOverride = null;
 		}
-		applyChangedCssGroups(liveBinding, values, host);
+		applyChangedCustomProperties(liveBinding, values, host);
 		return;
 	}
 
-	if (!hasHashChanged(liveBinding, rawContentGateHash(liveBinding.staticBinding, values)))
+	if (
+		!hasHashChanged(
+			liveBinding,
+			rawContentGateHash(liveBinding.staticBinding, values),
+		)
+	)
 		return;
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const composed = composeParts(parts, values);
@@ -42,14 +52,13 @@ export const hydrateRawContent = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	if (liveBinding.cssState === null) {
+	if (liveBinding.styleSheetState === null) {
 		liveBinding.lastValueHash = rawContentGateHash(
 			liveBinding.staticBinding,
 			values,
 		);
 		return;
 	}
-	//the server already wrote this instance's sheet — suffixed or not
-	liveBinding.cssState.sheetOverride = null;
-	hydrateCssGroupHashes(liveBinding, values);
+	liveBinding.styleSheetState.sheetOverride = null;
+	hydrateCustomPropertyHashes(liveBinding, values);
 };

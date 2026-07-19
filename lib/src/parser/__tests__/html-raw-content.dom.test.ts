@@ -164,9 +164,11 @@ describe("html parser — css plan attachment", () => {
 		const parsed = parse`<style>div { color: ${color}; }</style>`;
 
 		const expectedName = `--${(parsed.templateHash >>> 0).toString(36)}-0`;
-		const cssPlan = rawContentBinding(parsed).cssPlan;
-		expect(cssPlan?.groupNames).toEqual([expectedName]);
-		expect(cssPlan?.groups).toEqual([{ ordinal: 0, valueParts: [" ", 0] }]);
+		const compiledStyleSheet = rawContentBinding(parsed).compiledStyleSheet;
+		expect(compiledStyleSheet?.customPropertyNames).toEqual([expectedName]);
+		expect(compiledStyleSheet?.customProperties).toEqual([
+			{ nameSuffix: 0, valueParts: [" ", 0] },
+		]);
 		//the prepared sheet is baked into the markup — no first-commit write
 		expect(parsed.htmlWithMarkers).toContain(
 			`<style>div { color:var(${expectedName}); }</style>`,
@@ -185,7 +187,7 @@ describe("html parser — css plan attachment", () => {
 		const selector = "div";
 		const parsed = parse`<style>${selector} { color: red; }</style>`;
 
-		expect(rawContentBinding(parsed).cssPlan).toBeNull();
+		expect(rawContentBinding(parsed).compiledStyleSheet).toBeNull();
 	});
 
 	test("script and textarea holes get no css plan", () => {
@@ -194,15 +196,15 @@ describe("html parser — css plan attachment", () => {
 		const scriptParsed = parse`<script>${code}</script>`;
 		const textareaParsed = parse`<textarea>${value}</textarea>`;
 
-		expect(rawContentBinding(scriptParsed).cssPlan).toBeNull();
-		expect(rawContentBinding(textareaParsed).cssPlan).toBeNull();
+		expect(rawContentBinding(scriptParsed).compiledStyleSheet).toBeNull();
+		expect(rawContentBinding(textareaParsed).compiledStyleSheet).toBeNull();
 	});
 
 	test("a nested template hole gets no css plan", () => {
 		const content = "div { color: red; }";
 		const parsed = parse`<div><template>${content}</template></div>`;
 
-		expect(rawContentBinding(parsed).cssPlan).toBeNull();
+		expect(rawContentBinding(parsed).compiledStyleSheet).toBeNull();
 	});
 
 	//the plan stays attached — the fallback decision happens at mount, where the flag
@@ -216,7 +218,7 @@ describe("html parser — css plan attachment", () => {
 			(binding) => binding.type === BINDING.RAW_CONTENT,
 		) as RawContentStaticBinding;
 		expect(parsed.hostStyleIsBound).toBe(true);
-		expect(rawContent.cssPlan).not.toBeNull();
+		expect(rawContent.compiledStyleSheet).not.toBeNull();
 	});
 
 	test("a static host style attribute also sets hostStyleIsBound", () => {
@@ -235,7 +237,7 @@ describe("html parser — css plan attachment", () => {
 			(binding) => binding.type === BINDING.RAW_CONTENT,
 		) as RawContentStaticBinding;
 		expect(parsed.hostStyleIsBound).toBe(false);
-		expect(rawContent.cssPlan).not.toBeNull();
+		expect(rawContent.compiledStyleSheet).not.toBeNull();
 	});
 
 	test("two style elements in one template get disjoint group names", () => {
@@ -247,7 +249,11 @@ describe("html parser — css plan attachment", () => {
 		const [firstBinding, secondBinding] =
 			parsed.bindings as Array<RawContentStaticBinding>;
 		const hashPrefix = `--${(parsed.templateHash >>> 0).toString(36)}-`;
-		expect(firstBinding.cssPlan?.groupNames[0]).toBe(`${hashPrefix}0`);
-		expect(secondBinding.cssPlan?.groupNames[0]).toBe(`${hashPrefix}1`);
+		expect(firstBinding.compiledStyleSheet?.customPropertyNames[0]).toBe(
+			`${hashPrefix}0`,
+		);
+		expect(secondBinding.compiledStyleSheet?.customPropertyNames[0]).toBe(
+			`${hashPrefix}1`,
+		);
 	});
 });

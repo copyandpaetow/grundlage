@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { flushHostPayload, load, warnOnUnclaimedReplay } from "../load";
+import { flushHostPayload, load, warnOnUnclaimedSsrPayloads } from "../load";
 
 //happy-dom env — `window` is defined here, so load takes the client path
 //these tests cover the DOM-as-queue behavior plus the round-trip via flushHostPayload
@@ -106,7 +106,7 @@ describe("client replay reads scripts from the host's shadow root", () => {
 	});
 });
 
-describe("warnOnUnclaimedReplay flags drift between server and client load() calls", () => {
+describe("warnOnUnclaimedSsrPayloads flags drift between server and client load() calls", () => {
 	test("warns with a count when unclaimed data-ssr scripts remain after hydration", async () => {
 		const host = createHostWithShadow();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -124,7 +124,7 @@ describe("warnOnUnclaimedReplay flags drift between server and client load() cal
 		//simulates a conditional load() call that never ran on the client this time
 		await load(host, () => Promise.resolve("fallback"));
 
-		warnOnUnclaimedReplay(host.shadowRoot!);
+		warnOnUnclaimedSsrPayloads(host.shadowRoot!);
 
 		expect(warnSpy).toHaveBeenCalledTimes(1);
 		expect(warnSpy.mock.calls[0][0]).toContain("1 SSR load()");
@@ -142,7 +142,7 @@ describe("warnOnUnclaimedReplay flags drift between server and client load() cal
 
 		await load(host, () => Promise.resolve("fallback"));
 
-		warnOnUnclaimedReplay(host.shadowRoot!);
+		warnOnUnclaimedSsrPayloads(host.shadowRoot!);
 
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();

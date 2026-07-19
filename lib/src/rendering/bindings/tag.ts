@@ -1,17 +1,17 @@
 import { BINDING } from "../../parser/constants";
 import { TagStaticBinding } from "../../parser/types";
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
-import { targetElement } from "../dom";
+import { resolveTargetElement } from "../dom";
 import { reapplyOnSwap } from "./dispatch";
 import {
 	DynamicAttributeLiveBinding,
-	NamedDynamicLiveBinding,
 	LiveBinding,
+	NamedDynamicLiveBinding,
 	SingleValueAttributeLiveBinding,
 	TagLiveBinding,
 } from "./types";
 
-const reappliesOnSwap = (
+const shouldReapplyOnSwap = (
 	liveBinding: LiveBinding,
 ): liveBinding is
 	| SingleValueAttributeLiveBinding
@@ -36,8 +36,8 @@ const swapElement = (
 		const sibling = siblings[index];
 		if (
 			sibling !== undefined &&
-			reappliesOnSwap(sibling) &&
-			targetElement(sibling) === element
+			shouldReapplyOnSwap(sibling) &&
+			resolveTargetElement(sibling) === element
 		)
 			carried.push(sibling);
 	}
@@ -60,7 +60,7 @@ const swapElement = (
 		reapplyOnSwap(carried[index], newElement, values);
 };
 
-export const tagGateHash = (
+const tagGateHash = (
 	staticBinding: TagStaticBinding,
 	values: Array<unknown>,
 ): number => combinedPartsHash(staticBinding.parts, values);
@@ -71,7 +71,9 @@ export const commitTag = (
 	siblings: Array<LiveBinding>,
 ): void => {
 	const { parts } = liveBinding.staticBinding;
-	if (!hasHashChanged(liveBinding, tagGateHash(liveBinding.staticBinding, values)))
+	if (
+		!hasHashChanged(liveBinding, tagGateHash(liveBinding.staticBinding, values))
+	)
 		return;
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const newTag = composeParts(parts, values);

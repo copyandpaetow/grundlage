@@ -4,10 +4,10 @@ import { SingleValueAttributeStaticBinding } from "../../parser/types";
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 import { ValueOf } from "../../utils/types";
 import { ATTRIBUTE_MODE } from "../constants";
-import { nudgeComponent, targetElement } from "../dom";
+import { triggerComponentUpdate, resolveTargetElement } from "../dom";
 import { SingleValueAttributeLiveBinding } from "./types";
 
-export const singleValueGateHash = (
+const singleValueGateHash = (
 	staticBinding: SingleValueAttributeStaticBinding,
 	values: Array<unknown>,
 ): number =>
@@ -16,7 +16,7 @@ export const singleValueGateHash = (
 		hashValue(values[staticBinding.valueIndex]),
 	);
 
-export const attributeModeOf = (
+export const resolveAttributeMode = (
 	value: unknown,
 ): ValueOf<typeof ATTRIBUTE_MODE> => {
 	if (value === null || value === undefined || value === false)
@@ -25,11 +25,11 @@ export const attributeModeOf = (
 	return ATTRIBUTE_MODE.PROPERTY;
 };
 
-export const revertAttributeMode = (
+export const clearAppliedAttribute = (
 	element: Element,
 	liveBinding: SingleValueAttributeLiveBinding,
 ): void => {
-	switch (liveBinding.appliedMode) {
+	switch (liveBinding.appliedAttributeMode) {
 		case ATTRIBUTE_MODE.ATTRIBUTE:
 			element.removeAttribute(liveBinding.lastComposedName);
 			break;
@@ -37,10 +37,10 @@ export const revertAttributeMode = (
 			delete (element as unknown as Record<string, unknown>)[
 				liveBinding.lastComposedName
 			];
-			nudgeComponent(element);
+			triggerComponentUpdate(element);
 			break;
 	}
-	liveBinding.appliedMode = ATTRIBUTE_MODE.ABSENT;
+	liveBinding.appliedAttributeMode = ATTRIBUTE_MODE.ABSENT;
 };
 
 export const commitSingleValue = (
@@ -49,20 +49,25 @@ export const commitSingleValue = (
 ): void => {
 	const { nameParts, valueIndex } = liveBinding.staticBinding;
 	const value = values[valueIndex];
-	if (!hasHashChanged(liveBinding, singleValueGateHash(liveBinding.staticBinding, values)))
+	if (
+		!hasHashChanged(
+			liveBinding,
+			singleValueGateHash(liveBinding.staticBinding, values),
+		)
+	)
 		return;
 
-	const element = targetElement(liveBinding);
+	const element = resolveTargetElement(liveBinding);
 	const name = composeParts(nameParts, values);
 	if (name !== liveBinding.lastComposedName) {
-		revertAttributeMode(element, liveBinding);
+		clearAppliedAttribute(element, liveBinding);
 		liveBinding.lastComposedName = name;
 	}
 
-	const nextMode = attributeModeOf(value);
-	if (nextMode !== liveBinding.appliedMode)
-		revertAttributeMode(element, liveBinding);
-	switch (nextMode) {
+	const nextAttributeMode = resolveAttributeMode(value);
+	if (nextAttributeMode !== liveBinding.appliedAttributeMode)
+		clearAppliedAttribute(element, liveBinding);
+	switch (nextAttributeMode) {
 		case ATTRIBUTE_MODE.ATTRIBUTE: {
 			const stringValue = String(value);
 			if (element.getAttribute(name) !== stringValue)
@@ -71,27 +76,30 @@ export const commitSingleValue = (
 		}
 		case ATTRIBUTE_MODE.PROPERTY:
 			(element as unknown as Record<string, unknown>)[name] = value;
-			nudgeComponent(element);
+			triggerComponentUpdate(element);
 			break;
 	}
-	liveBinding.appliedMode = nextMode;
+	liveBinding.appliedAttributeMode = nextAttributeMode;
 };
 
-export const hydrateOrCommitSingleValue = (
+export const hydrateSingleValue = (
 	liveBinding: SingleValueAttributeLiveBinding,
 	values: Array<unknown>,
 ): void => {
 	const { nameParts, valueIndex } = liveBinding.staticBinding;
 	const value = values[valueIndex];
 	const name = composeParts(nameParts, values);
-	const mode = attributeModeOf(value);
+	const mode = resolveAttributeMode(value);
 	liveBinding.lastComposedName = name;
-	liveBinding.appliedMode = mode;
-	liveBinding.lastValueHash = singleValueGateHash(liveBinding.staticBinding, values);
+	liveBinding.appliedAttributeMode = mode;
+	liveBinding.lastValueHash = singleValueGateHash(
+		liveBinding.staticBinding,
+		values,
+	);
 	if (mode === ATTRIBUTE_MODE.PROPERTY) {
-		const element = targetElement(liveBinding);
+		const element = resolveTargetElement(liveBinding);
 		(element as unknown as Record<string, unknown>)[name] = value;
-		nudgeComponent(element);
+		triggerComponentUpdate(element);
 	}
 };
 
@@ -100,10 +108,10 @@ export const reapplyOnSwap = (
 	element: Element,
 	values: Array<unknown>,
 ): void => {
-	if (liveBinding.appliedMode !== ATTRIBUTE_MODE.PROPERTY) return;
+	if (liveBinding.appliedAttributeMode !== ATTRIBUTE_MODE.PROPERTY) return;
 	const value = values[liveBinding.staticBinding.valueIndex];
 	(element as unknown as Record<string, unknown>)[
 		liveBinding.lastComposedName
 	] = value;
-	nudgeComponent(element);
+	triggerComponentUpdate(element);
 };

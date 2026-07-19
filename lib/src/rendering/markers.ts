@@ -1,12 +1,14 @@
-import { COMMENT_IDENTIFIER } from "../parser/constants";
-import { LIST_MARKER_DATA } from "./constants";
+import { MARKUP } from "../parser/chars";
 
 export const isOpenMarker = (data: string): boolean =>
-	data.startsWith(COMMENT_IDENTIFIER + " ") &&
-	data[COMMENT_IDENTIFIER.length + 1] !== "/";
+	data.startsWith(MARKUP.COMMENT_IDENTIFIER + " ") &&
+	data[MARKUP.COMMENT_IDENTIFIER.length + 1] !== "/";
 
 export const closeOf = (openData: string): string =>
-	openData.replace(COMMENT_IDENTIFIER + " ", COMMENT_IDENTIFIER + " /");
+	openData.replace(
+		MARKUP.COMMENT_IDENTIFIER + " ",
+		MARKUP.COMMENT_IDENTIFIER + " /",
+	);
 
 export const scanToClose = (walker: TreeWalker, open: Comment): Comment => {
 	const openData = open.data;
@@ -17,24 +19,26 @@ export const scanToClose = (walker: TreeWalker, open: Comment): Comment => {
 		if (node.data === openData) depth++;
 		else if (node.data === closeData && --depth === 0) return node;
 	}
-	throw new Error("unterminated content marker");
+	throw new Error("grundlage: unterminated content marker");
 };
 
 export const nextOpenMarker = (walker: TreeWalker): Comment => {
 	let node: Comment | null;
 	while ((node = walker.nextNode() as Comment | null))
 		if (isOpenMarker(node.data)) return node;
-	throw new Error("hydration marker mismatch: fewer markers than bindings");
+	throw new Error(
+		"grundlage: hydration marker mismatch: fewer markers than bindings",
+	);
 };
 
 export const nextListTail = (walker: TreeWalker): Comment => {
 	let node: Comment | null;
 	while ((node = walker.nextNode() as Comment | null))
-		if (node.data === LIST_MARKER_DATA) return node;
-	throw new Error("unterminated list row");
+		if (node.data === MARKUP.LIST_MARKER_DATA) return node;
+	throw new Error("grundlage: unterminated list row");
 };
 
-export const forEachInRange = (
+export const forEachNode = (
 	first: ChildNode | null,
 	end: ChildNode | null,
 	visit: (node: ChildNode) => void,
