@@ -1,15 +1,15 @@
 import { FormBase } from "./forms";
 import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
 import {
-	createPainter,
-	paint,
-	PAINT_MODE,
-	Painter,
-	revertAllHostBindings,
-	serverPaint,
-	setupAttributeObserver,
-	teardownPainter,
-} from "./runtime/painter";
+	commitLiveBinding,
+	createLiveBinding,
+	revertHostBinding,
+} from "./rendering/bindings/dispatch";
+import { StyleSheetMoveState } from "./rendering/bindings/types";
+import { flushHostPayload, warnOnUnclaimedSsrPayloads } from "./load";
+import { getParsedTemplate } from "./parser/html";
+import { ParsedTemplate } from "./parser/types";
+import { coerceToTemplate, TemplateValue } from "./template";
 import {
 	cancelTaskAndRunCleanup,
 	createCleanStepOutcome,
@@ -26,6 +26,13 @@ import {
 	TASK_STATE,
 } from "./runtime/task";
 import { html as htmlValue } from "./template";
+import {
+	hydrateInstance,
+	Instance,
+	reconcileInstance,
+	refreshStyleSheetsAfterMove,
+	releaseInstance,
+} from "./rendering/instance";
 import {
 	BaseComponent,
 	ComponentConstructor,
@@ -71,7 +78,14 @@ export const component = (
 		: HTMLElement;
 
 	class BaseElement extends ParentClass implements BaseComponent {
-		#painter: Painter;
+		#shadowRoot: ShadowRoot;
+		#instance: Instance | null = null;
+		#attributeObserver: MutationObserver | null = null;
+		#isHydrationPending: boolean;
+		#styleSheetMoveState: StyleSheetMoveState = {
+			needsStyleSheetRefreshOnMove: false,
+			needsRerenderAfterMove: false,
+		};
 		#outer: Task | null = null;
 		#inner: Task | null = null;
 		#renderer: ComponentGenerator | RenderFunction | null = null;
@@ -89,20 +103,22 @@ export const component = (
 				this.shadowRoot ??
 				(mergedOptions.mode === "closed" ? this.internals?.shadowRoot : null) ??
 				null;
-			const isPrerendered = existingRoot !== null;
-			const shadowRoot = existingRoot ?? this.attachShadow(mergedOptions);
-			this.#painter = createPainter(
-				this,
-				shadowRoot,
-				isPrerendered ? PAINT_MODE.HYDRATE : PAINT_MODE.FRESH,
-			);
+			this.#isHydrationPending = existingRoot !== null;
+			this.#shadowRoot = existingRoot ?? this.attachShadow(mergedOptions);
 		}
 
 		connectedCallback() {
-			if (this.#outer !== null) return;
+			if (this.#outer) {
+				const instance = this.#instance;
+				if (instance) {
+					refreshStyleSheetsAfterMove(instance);
+					this.#rerenderIfStyleSheetsDemoted();
+				}
+				return;
+			}
 			this.#outer = createRenderTask(ROLE.OUTER, componentGenerator(this));
 			if (isServer()) return this.#runServerTask(this.#outer);
-			setupAttributeObserver(this.#painter, () => this.update());
+			this.#setupAttributeObserver();
 			this.#runTask(this.#outer);
 		}
 
@@ -111,7 +127,7 @@ export const component = (
 			if (this.isConnected) return;
 			if (this.#outer === null) return;
 			this.#cancelBothTasks();
-			teardownPainter(this.#painter);
+			this.#teardownAttributeObserver();
 			this.#resolvePendingUpdatePromise();
 		}
 
@@ -146,11 +162,11 @@ export const component = (
 
 		#fail(error: unknown): void {
 			this.#cancelBothTasks();
-			revertAllHostBindings(this.#painter);
-			teardownPainter(this.#painter);
+			this.#revertAllHostBindings();
+			this.#teardownAttributeObserver();
 			console.warn(error);
-			this.#painter.shadowRoot.textContent = `${error}`;
-			this.#painter.instance = null;
+			this.#shadowRoot.textContent = `${error}`;
+			this.#instance = null;
 			this.#resolvePendingUpdatePromise();
 		}
 
@@ -198,7 +214,7 @@ export const component = (
 								operation.kind === OPERATION.PAINT
 									? operation.payload
 									: (operation.payload as RenderFunction)(this);
-							paint(this.#painter, template);
+							this.#paint(template);
 						} catch (error) {
 							next = createStepOutcome(STEP_OUTCOME.THREW, error);
 							break;
@@ -250,7 +266,7 @@ export const component = (
 						cancelTaskAndRunCleanup(this.#inner);
 						const parent = this.#outer;
 						const parentCanCatch =
-							parent !== null && parent.state === TASK_STATE.DRIVING;
+							parent && parent.state === TASK_STATE.DRIVING;
 						if (!parentCanCatch) {
 							this.#fail(error);
 							return true;
@@ -283,7 +299,7 @@ export const component = (
 			if (renderer === null) return this.#resolvePendingUpdatePromise();
 			if (!isGeneratorFunction(renderer)) {
 				try {
-					paint(this.#painter, (renderer as RenderFunction)(this));
+					this.#paint((renderer as RenderFunction)(this));
 					this.#resolvePendingUpdatePromise();
 				} catch (error) {
 					this.#fail(error);
@@ -303,6 +319,93 @@ export const component = (
 				});
 			}
 			return this.#pendingUpdate.promise;
+		}
+
+		#paint(value: unknown): void {
+			const templateValue = coerceToTemplate(value);
+			const parsed = getParsedTemplate(templateValue.__templateStrings);
+
+			this.#attributeObserver?.disconnect();
+			try {
+				if (this.#isHydrationPending) {
+					this.#hydrateRoot(templateValue, parsed);
+					this.#isHydrationPending = false;
+					warnOnUnclaimedSsrPayloads(this.#shadowRoot);
+				} else {
+					this.#paintRoot(templateValue, parsed);
+				}
+			} finally {
+				this.#attributeObserver?.observe(this, { attributes: true });
+			}
+			this.#rerenderIfStyleSheetsDemoted();
+		}
+
+		#paintRoot(value: TemplateValue, parsed: ParsedTemplate): void {
+			const mounted = reconcileInstance(
+				this.#instance,
+				value,
+				this.#styleSheetMoveState,
+			);
+			if (!mounted) return;
+			if (this.#instance) releaseInstance(this.#instance);
+			this.#revertAllHostBindings();
+			for (let index = 0; index < parsed.hostBindingCount; index++) {
+				const live = createLiveBinding(parsed.bindings[index], this);
+				commitLiveBinding(mounted.instance, live, value.values);
+				mounted.instance.liveBindings[index] = live;
+			}
+			this.#shadowRoot.replaceChildren(mounted.fragment);
+			this.#instance = mounted.instance;
+		}
+
+		#hydrateRoot(value: TemplateValue, parsed: ParsedTemplate): void {
+			const instance = hydrateInstance(
+				value,
+				this.#shadowRoot,
+				this.#styleSheetMoveState,
+			);
+			for (let index = 0; index < parsed.hostBindingCount; index++) {
+				const live = createLiveBinding(parsed.bindings[index], this);
+				commitLiveBinding(instance, live, value.values);
+				instance.liveBindings[index] = live;
+			}
+			this.#instance = instance;
+		}
+
+		#serverPaint(value: unknown): void {
+			const templateValue = coerceToTemplate(value);
+			this.#paintRoot(
+				templateValue,
+				getParsedTemplate(templateValue.__templateStrings),
+			);
+			flushHostPayload(this);
+		}
+
+		#revertAllHostBindings(): void {
+			const instance = this.#instance;
+			if (!instance) return;
+			const liveBindings = instance.liveBindings;
+			for (let index = 0; index < instance.parsed.hostBindingCount; index++)
+				revertHostBinding(liveBindings[index]);
+		}
+
+		//a deep stylesheet demote during the move walk has no host in scope, so it flags the
+		//move state instead of re-rendering; the two element-level walk sites drain it here
+		#rerenderIfStyleSheetsDemoted(): void {
+			if (!this.#styleSheetMoveState.needsRerenderAfterMove) return;
+			this.#styleSheetMoveState.needsRerenderAfterMove = false;
+			this.update();
+		}
+
+		#setupAttributeObserver(): void {
+			this.#attributeObserver?.disconnect();
+			const observer = new MutationObserver(() => this.update());
+			observer.observe(this, { attributes: true });
+			this.#attributeObserver = observer;
+		}
+
+		#teardownAttributeObserver(): void {
+			this.#attributeObserver?.disconnect();
 		}
 
 		//unlike the client, server continuations need no isTaskLive supersession guard: a
@@ -332,7 +435,7 @@ export const component = (
 								operation.kind === OPERATION.PAINT
 									? operation.payload
 									: (operation.payload as RenderFunction)(this);
-							serverPaint(this.#painter, template);
+							this.#serverPaint(template);
 						} catch (error) {
 							next = createStepOutcome(STEP_OUTCOME.THREW, error);
 							break;
@@ -370,7 +473,7 @@ export const component = (
 						const error = operation.payload;
 						cancelTaskAndRunCleanup(this.#inner);
 						const parent = this.#outer;
-						if (parent !== null && parent.state === TASK_STATE.DRIVING)
+						if (parent && parent.state === TASK_STATE.DRIVING)
 							return this.#runServerTask(
 								parent,
 								nextTaskStep(parent, MODE.THROW, error),

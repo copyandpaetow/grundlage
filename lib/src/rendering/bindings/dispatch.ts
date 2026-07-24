@@ -1,5 +1,4 @@
 import { BINDING } from "../../parser/constants";
-import { composeSheet } from "../../parser/css";
 import { StaticBinding } from "../../parser/types";
 import { Instance } from "../instance";
 import { ATTRIBUTE_MODE, UNSET_HASH } from "../constants";
@@ -18,7 +17,7 @@ import {
 } from "./attribute-single-value";
 import { commitComment, hydrateComment } from "./comment";
 import { commitContent, hydrateContent, UNRESOLVED_CONTENT } from "./content";
-import { releaseCustomProperties } from "./css-apply";
+import { createStyleSheetState } from "./css-apply";
 import { commitRawContent, hydrateRawContent } from "./content-raw";
 import {
 	commitNamedDynamic,
@@ -27,7 +26,6 @@ import {
 import { commitTag, hydrateTag } from "./tag";
 import {
 	AttributeLiveBinding,
-	Carrier,
 	CommentLiveBinding,
 	ContentLiveBinding,
 	DynamicAttributeLiveBinding,
@@ -35,7 +33,6 @@ import {
 	NamedDynamicLiveBinding,
 	RawContentLiveBinding,
 	SingleValueAttributeLiveBinding,
-	StyleSheetState,
 	TagLiveBinding,
 } from "./types";
 
@@ -43,7 +40,6 @@ export const createLiveBinding = (
 	staticBinding: StaticBinding,
 	anchor: Comment | Element | null,
 	endMarker: Comment | null = null,
-	carrier: Carrier | null = null,
 ): LiveBinding => {
 	switch (staticBinding.type) {
 		case BINDING.TAG:
@@ -89,37 +85,17 @@ export const createLiveBinding = (
 				content: UNRESOLVED_CONTENT,
 			};
 		case BINDING.RAW_CONTENT: {
-			const activeStyleSheet = carrier!.hostStyleIsBound
-				? null
-				: staticBinding.compiledStyleSheet;
-			let styleSheetState: StyleSheetState | null = null;
-			if (activeStyleSheet !== null) {
-				const mountCounts = (carrier!.styleSheetMountCounts ??= new Map());
-				const instanceIndexOnHost = mountCounts.get(activeStyleSheet) ?? 0;
-				mountCounts.set(activeStyleSheet, instanceIndexOnHost + 1);
-				let customPropertyNames: Array<string>;
-				let sheetOverride: string | null = null;
-				if (instanceIndexOnHost === 0) {
-					customPropertyNames = activeStyleSheet.customPropertyNames;
-				} else {
-					//the base names are already taken on this host
-					const instancePrefix = `${activeStyleSheet.customPropertyPrefix}${instanceIndexOnHost}-`;
-					customPropertyNames = activeStyleSheet.customProperties.map(
-						(property) => instancePrefix + property.nameSuffix,
-					);
-					sheetOverride = composeSheet(activeStyleSheet, customPropertyNames);
-				}
-				styleSheetState = {
-					previousValueHashes: new Array<number>(
-						activeStyleSheet.customProperties.length,
-					).fill(UNSET_HASH),
-					customPropertyNames,
-					sheetOverride,
-				};
-			}
+			const markerComment = anchor as Comment;
+			const styleSheetState =
+				staticBinding.compiledStyleSheet === null
+					? null
+					: createStyleSheetState(
+							staticBinding.compiledStyleSheet,
+							markerComment.nextElementSibling as HTMLStyleElement,
+						);
 			return {
 				staticBinding,
-				markerComment: anchor as Comment,
+				markerComment,
 				lastValueHash: UNSET_HASH,
 				styleSheetState,
 			};
@@ -160,14 +136,10 @@ export const commitLiveBinding = (
 			return commitContent(
 				liveBinding as ContentLiveBinding,
 				values,
-				instance.carrier,
+				instance.moveState,
 			);
 		case BINDING.RAW_CONTENT:
-			return commitRawContent(
-				liveBinding as RawContentLiveBinding,
-				values,
-				instance.carrier.host,
-			);
+			return commitRawContent(liveBinding as RawContentLiveBinding, values);
 		case BINDING.COMMENT:
 			return commitComment(liveBinding as CommentLiveBinding, values);
 	}
@@ -196,7 +168,7 @@ export const hydrateLiveBinding = (
 			return hydrateContent(
 				liveBinding as ContentLiveBinding,
 				values,
-				instance.carrier,
+				instance.moveState,
 			);
 		case BINDING.RAW_CONTENT:
 			return hydrateRawContent(liveBinding as RawContentLiveBinding, values);
@@ -269,14 +241,4 @@ export const revertHostBinding = (liveBinding: LiveBinding): void => {
 			return;
 		}
 	}
-};
-
-export const releaseLiveBinding = (
-	liveBinding: LiveBinding,
-	host: HTMLElement,
-): void => {
-	if (liveBinding.staticBinding.type !== BINDING.RAW_CONTENT) return;
-	const rawContent = liveBinding as RawContentLiveBinding;
-	if (rawContent.styleSheetState !== null)
-		releaseCustomProperties(rawContent, host);
 };

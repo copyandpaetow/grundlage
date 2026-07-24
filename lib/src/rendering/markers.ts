@@ -44,7 +44,7 @@ export const forEachNode = (
 	visit: (node: ChildNode) => void,
 ): void => {
 	let current = first;
-	while (current !== null && current !== end) {
+	while (current && current !== end) {
 		const next = current.nextSibling;
 		visit(current);
 		current = next;

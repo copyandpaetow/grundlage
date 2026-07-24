@@ -65,9 +65,9 @@ export const load = <Value>(
 	}
 
 	const shadowRoot = resolveShadowRoot(host);
-	if (!skipSsr && shadowRoot !== null) {
+	if (!skipSsr && shadowRoot) {
 		const script = findReplayScript(shadowRoot, key);
-		if (script !== null) {
+		if (script) {
 			const value = JSON.parse(script.textContent || "null") as Value;
 			script.remove();
 			return Promise.resolve(value);

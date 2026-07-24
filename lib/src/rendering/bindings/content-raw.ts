@@ -1,8 +1,8 @@
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 import { RawContentStaticBinding } from "../../parser/types";
 import {
-	applyChangedCustomProperties,
-	hydrateCustomPropertyHashes,
+	commitStyleSheetDirect,
+	seedDeclarationValueHashes,
 } from "./css-apply";
 import { RawContentLiveBinding } from "./types";
 
@@ -14,23 +14,10 @@ const rawContentGateHash = (
 export const commitRawContent = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
-	host: HTMLElement,
 ): void => {
-	const { parts } = liveBinding.staticBinding;
-
-	const styleSheetState = liveBinding.styleSheetState;
-	//todo: why is this here? either we are in the fast path and the css stylesheet is static and applied in the parser
-	//or we are not in the fast path and than it doesnt need extra handling => when can this happen with the duplicate instance?
-	if (styleSheetState) {
-		//only a duplicate instance carries an override; the baked sheet came with the markup
-		if (styleSheetState.sheetOverride !== null) {
-			liveBinding.markerComment.nextElementSibling!.textContent =
-				styleSheetState.sheetOverride;
-			styleSheetState.sheetOverride = null;
-		}
-		applyChangedCustomProperties(liveBinding, values, host);
-		return;
-	}
+	const committedToLiveSheet =
+		liveBinding.styleSheetState && commitStyleSheetDirect(liveBinding, values);
+	if (committedToLiveSheet) return;
 
 	if (
 		!hasHashChanged(
@@ -40,25 +27,25 @@ export const commitRawContent = (
 	)
 		return;
 	const element = liveBinding.markerComment.nextElementSibling!;
-	const composed = composeParts(parts, values);
+	const composed = composeParts(liveBinding.staticBinding.parts, values);
 	if (element instanceof HTMLTemplateElement) {
 		if (element.innerHTML !== composed) element.innerHTML = composed;
 		return;
 	}
 	if (element.textContent !== composed) element.textContent = composed;
+	//commitStyleSheetDirect above may have demoted this binding to null — re-read, don't cache
+	if (liveBinding.styleSheetState)
+		seedDeclarationValueHashes(liveBinding, values);
 };
 
 export const hydrateRawContent = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	if (liveBinding.styleSheetState === null) {
-		liveBinding.lastValueHash = rawContentGateHash(
-			liveBinding.staticBinding,
-			values,
-		);
-		return;
-	}
-	liveBinding.styleSheetState.sheetOverride = null;
-	hydrateCustomPropertyHashes(liveBinding, values);
+	liveBinding.lastValueHash = rawContentGateHash(
+		liveBinding.staticBinding,
+		values,
+	);
+	if (liveBinding.styleSheetState)
+		seedDeclarationValueHashes(liveBinding, values);
 };

@@ -38,16 +38,21 @@ export type Binding =
 
 export type Part = string | number;
 
-export interface CustomProperty {
-	nameSuffix: number;
+export interface DynamicDeclaration {
+	rulePath: Array<number>;
+	propertyName: string;
+	priority: string;
 	valueParts: Array<Part>;
 }
 
+export interface RuleCountCheck {
+	rulePath: Array<number>;
+	expectedRuleCount: number;
+}
+
 export interface CompiledStyleSheet {
-	customPropertyPrefix: string;
-	customPropertyNames: Array<string>;
-	sheetParts: Array<string | number>;
-	customProperties: Array<CustomProperty>;
+	dynamicDeclarations: Array<DynamicDeclaration>;
+	ruleCountChecks: Array<RuleCountCheck>;
 }
 
 export interface TagStaticBinding {
@@ -111,5 +116,8 @@ export interface ParsedTemplate {
 	fragmentCloneSource: DocumentFragment | null;
 	hostBindingCount: number;
 	keyBindingIndex: number;
-	hostStyleIsBound: boolean;
+	//true when any raw-content binding compiled to a css sheet; OR-folded into the move
+	//state's needsStyleSheetRefreshOnMove so the after-move walk needn't thread through
+	//every binding constructor
+	hasStyleSheetBinding: boolean;
 }

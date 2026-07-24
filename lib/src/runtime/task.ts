@@ -181,7 +181,7 @@ export const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	}
 	if (ending instanceof Promise) ending.catch(console.warn);
 	const cleanup = task.cleanup;
-	if (cleanup !== null) {
+	if (cleanup) {
 		task.cleanup = null;
 		cleanup();
 	}

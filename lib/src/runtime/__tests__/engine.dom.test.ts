@@ -68,7 +68,7 @@ describe("engine terminal", () => {
 		await sleep();
 
 		expect(element.shadowRoot).toBeNull(); //closed: the host exposes no root
-		//...yet the engine still displayed the error, via painter.shadowRoot not host.shadowRoot!
+		//...yet the engine still displayed the error into the closed root it holds privately
 		expect(closedRoot?.textContent).toContain("closed-boom");
 		element.remove();
 	});
@@ -113,7 +113,7 @@ describe("engine terminal", () => {
 
 		boom = false;
 		element.remove();
-		document.body.appendChild(element); //reconnect restarts the engine on the same painter
+		document.body.appendChild(element); //reconnect restarts the engine on the same element
 		await sleep();
 		//same-hash re-render must NOT patch the detached error text; it must remount live DOM
 		expect(element.shadowRoot?.textContent).toContain("alive");

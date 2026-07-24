@@ -6,15 +6,16 @@ import {
 	commitLiveBinding,
 	createLiveBinding,
 	hydrateLiveBinding,
-	releaseLiveBinding,
 } from "./bindings/dispatch";
+import { rebindStyleSheet } from "./bindings/css-apply";
 import {
 	BranchContentState,
-	Carrier,
+	StyleSheetMoveState,
 	ContentLiveBinding,
 	ContentState,
 	ListContentState,
 	LiveBinding,
+	RawContentLiveBinding,
 } from "./bindings/types";
 import { CONTENT_KIND } from "./constants";
 import { buildFragment } from "./dom";
@@ -28,7 +29,7 @@ import {
 export interface Instance {
 	parsed: ParsedTemplate;
 	liveBindings: Array<LiveBinding>;
-	carrier: Carrier;
+	moveState: StyleSheetMoveState;
 }
 
 export const patchInstance = (
@@ -44,16 +45,44 @@ export const releaseInstance = (instance: Instance): void => {
 	const { liveBindings } = instance;
 	for (let index = 0; index < liveBindings.length; index++) {
 		const liveBinding = liveBindings[index];
-		releaseLiveBinding(liveBinding, instance.carrier.host);
 		if (liveBinding.staticBinding.type === BINDING.CONTENT)
 			releaseContent((liveBinding as ContentLiveBinding).content);
+	}
+};
+
+//a DOM move reparses every <style> in the moved subtree from its stale text; each nested
+//component refreshes its own shadow tree from its connectedCallback, so this walk stays
+//within one instance tree
+export const refreshStyleSheetsAfterMove = (instance: Instance): void => {
+	if (!instance.moveState.needsStyleSheetRefreshOnMove) return;
+	const { liveBindings } = instance;
+	for (let index = 0; index < liveBindings.length; index++) {
+		const liveBinding = liveBindings[index];
+		if (liveBinding.staticBinding.type === BINDING.RAW_CONTENT) {
+			rebindStyleSheet(
+				liveBinding as RawContentLiveBinding,
+				instance.moveState,
+			);
+			continue;
+		}
+		if (liveBinding.staticBinding.type !== BINDING.CONTENT) continue;
+		const content = (liveBinding as ContentLiveBinding).content;
+		if (content.kind === CONTENT_KIND.BRANCH) {
+			const branch = (content as BranchContentState).instance;
+			if (branch) refreshStyleSheetsAfterMove(branch);
+			continue;
+		}
+		if (content.kind !== CONTENT_KIND.LIST) continue;
+		const { items } = content as ListContentState;
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex++)
+			refreshStyleSheetsAfterMove(items[itemIndex].instance);
 	}
 };
 
 export const releaseContent = (content: ContentState): void => {
 	if (content.kind === CONTENT_KIND.BRANCH) {
 		const { instance } = content as BranchContentState;
-		if (instance !== null) releaseInstance(instance);
+		if (instance) releaseInstance(instance);
 		return;
 	}
 	if (content.kind !== CONTENT_KIND.LIST) return;
@@ -65,14 +94,14 @@ export const releaseContent = (content: ContentState): void => {
 export const reconcileInstance = (
 	current: Instance | null,
 	value: TemplateValue,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): { instance: Instance; fragment: DocumentFragment } | null => {
 	const parsed = getParsedTemplate(value.__templateStrings);
-	if (current !== null && current.parsed.templateHash === parsed.templateHash) {
+	if (current && current.parsed.templateHash === parsed.templateHash) {
 		patchInstance(current, value.values);
 		return null;
 	}
-	return mountInstance(value, carrier);
+	return mountInstance(value, moveState);
 };
 
 export const assertNestable = (value: TemplateValue): void => {
@@ -85,7 +114,7 @@ export const assertNestable = (value: TemplateValue): void => {
 
 export const mountInstance = (
 	value: TemplateValue,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): { instance: Instance; fragment: DocumentFragment } => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	parsed.fragmentCloneSource ??= buildFragment(parsed.htmlWithMarkers);
@@ -94,8 +123,9 @@ export const mountInstance = (
 	) as DocumentFragment;
 
 	const { bindings, hostBindingCount } = parsed;
+	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
 	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
-	const instance: Instance = { parsed, liveBindings, carrier };
+	const instance: Instance = { parsed, liveBindings, moveState };
 	const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT);
 	let bindingIndex = hostBindingCount;
 
@@ -105,14 +135,14 @@ export const mountInstance = (
 		const staticBinding = bindings[bindingIndex];
 
 		if (staticBinding.type !== BINDING.CONTENT) {
-			const live = createLiveBinding(staticBinding, node, null, carrier);
+			const live = createLiveBinding(staticBinding, node);
 			commitLiveBinding(instance, live, value.values);
 			liveBindings[bindingIndex++] = live;
 			continue;
 		}
 
 		const closeMarker = node.nextSibling as Comment;
-		const live = createLiveBinding(staticBinding, node, closeMarker, carrier);
+		const live = createLiveBinding(staticBinding, node, closeMarker);
 		commitLiveBinding(instance, live, value.values);
 		liveBindings[bindingIndex++] = live;
 		walker.currentNode = closeMarker;
@@ -124,26 +154,27 @@ export const mountInstance = (
 const hydrateInstanceWithWalker = (
 	walker: TreeWalker,
 	value: TemplateValue,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): Instance => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	const { bindings, hostBindingCount } = parsed;
+	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
 	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
-	const instance: Instance = { parsed, liveBindings, carrier };
+	const instance: Instance = { parsed, liveBindings, moveState };
 
 	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length; ) {
 		const open = nextOpenMarker(walker);
 		const staticBinding = bindings[bindingIndex];
 
 		if (staticBinding.type !== BINDING.CONTENT) {
-			const live = createLiveBinding(staticBinding, open, null, carrier);
+			const live = createLiveBinding(staticBinding, open);
 			hydrateLiveBinding(instance, live, value.values);
 			liveBindings[bindingIndex++] = live;
 			continue;
 		}
 
 		const closeMarker = scanToClose(walker, open);
-		const live = createLiveBinding(staticBinding, open, closeMarker, carrier);
+		const live = createLiveBinding(staticBinding, open, closeMarker);
 		hydrateLiveBinding(instance, live, value.values);
 		liveBindings[bindingIndex++] = live;
 		walker.currentNode = closeMarker;
@@ -164,16 +195,16 @@ const createCommentWalkerAt = (startNode: Node): TreeWalker => {
 export const hydrateInstance = (
 	value: TemplateValue,
 	startNode: Node,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): Instance =>
-	hydrateInstanceWithWalker(createCommentWalkerAt(startNode), value, carrier);
+	hydrateInstanceWithWalker(createCommentWalkerAt(startNode), value, moveState);
 
 export const hydrateRow = (
 	value: TemplateValue,
 	rowStart: Node,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): { instance: Instance; tailMarker: Comment } => {
 	const walker = createCommentWalkerAt(rowStart);
-	const instance = hydrateInstanceWithWalker(walker, value, carrier);
+	const instance = hydrateInstanceWithWalker(walker, value, moveState);
 	return { instance, tailMarker: nextListTail(walker) };
 };

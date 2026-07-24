@@ -9,7 +9,7 @@ import { forEachNode } from "../markers";
 import { hydrateListItems, patchListContent } from "./content-list";
 import {
 	BranchContentState,
-	Carrier,
+	StyleSheetMoveState,
 	ContentLiveBinding,
 	ContentState,
 	TextContentState,
@@ -75,13 +75,13 @@ const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
 const patchBranch = (
 	liveBinding: ContentLiveBinding,
 	value: TemplateValue,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): void => {
 	assertNestable(value);
 	const branch = liveBinding.content as BranchContentState;
-	const mounted = reconcileInstance(branch.instance, value, carrier);
+	const mounted = reconcileInstance(branch.instance, value, moveState);
 	if (mounted === null) return;
-	if (branch.instance !== null) releaseInstance(branch.instance);
+	if (branch.instance) releaseInstance(branch.instance);
 	forEachNode(
 		liveBinding.startMarker.nextSibling,
 		liveBinding.endMarker,
@@ -94,7 +94,7 @@ const patchBranch = (
 export const commitContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const contentKind = contentKindOf(value);
@@ -104,16 +104,16 @@ export const commitContent = (
 		case CONTENT_KIND.TEXT:
 			return patchText(liveBinding, value);
 		case CONTENT_KIND.BRANCH:
-			return patchBranch(liveBinding, value as TemplateValue, carrier);
+			return patchBranch(liveBinding, value as TemplateValue, moveState);
 		case CONTENT_KIND.LIST:
-			return patchListContent(liveBinding, value as Array<unknown>, carrier);
+			return patchListContent(liveBinding, value as Array<unknown>, moveState);
 	}
 };
 
 export const hydrateContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const kind = contentKindOf(value);
@@ -128,10 +128,10 @@ export const hydrateContent = (
 			(liveBinding.content as BranchContentState).instance = hydrateInstance(
 				value as TemplateValue,
 				liveBinding.startMarker,
-				carrier,
+				moveState,
 			);
 			return;
 		case CONTENT_KIND.LIST:
-			return hydrateListItems(liveBinding, value as Array<unknown>, carrier);
+			return hydrateListItems(liveBinding, value as Array<unknown>, moveState);
 	}
 };

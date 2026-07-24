@@ -159,20 +159,17 @@ describe("html parser — css plan attachment", () => {
 	const rawContentBinding = (parsed: ReturnType<typeof parse>) =>
 		parsed.bindings[0] as RawContentStaticBinding;
 
-	test("a style value hole gets a css plan named from the template hash", () => {
+	test("a style value hole gets a css plan addressing the declaration", () => {
 		const color = "red";
 		const parsed = parse`<style>div { color: ${color}; }</style>`;
 
-		const expectedName = `--${(parsed.templateHash >>> 0).toString(36)}-0`;
 		const compiledStyleSheet = rawContentBinding(parsed).compiledStyleSheet;
-		expect(compiledStyleSheet?.customPropertyNames).toEqual([expectedName]);
-		expect(compiledStyleSheet?.customProperties).toEqual([
-			{ nameSuffix: 0, valueParts: [" ", 0] },
+		expect(compiledStyleSheet?.dynamicDeclarations).toEqual([
+			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [" ", 0] },
 		]);
-		//the prepared sheet is baked into the markup — no first-commit write
-		expect(parsed.htmlWithMarkers).toContain(
-			`<style>div { color:var(${expectedName}); }</style>`,
-		);
+		//the sheet text is composed with literal values at first commit — the cached
+		//markup carries an empty <style>
+		expect(parsed.htmlWithMarkers).toContain("<style></style>");
 	});
 
 	test("templates differing only in raw-content statics get distinct hashes", () => {
@@ -207,9 +204,9 @@ describe("html parser — css plan attachment", () => {
 		expect(rawContentBinding(parsed).compiledStyleSheet).toBeNull();
 	});
 
-	//the plan stays attached — the fallback decision happens at mount, where the flag
-	//also covers planned styles in NESTED templates under the same host
-	test("a dynamic host style binding sets hostStyleIsBound", () => {
+	//values live on each instance's own CSSStyleSheet, so a host style binding no longer
+	//conflicts with the fast path
+	test("a dynamic host style binding leaves the css plan attached", () => {
 		const inline = "color: red";
 		const color = "blue";
 		const parsed = parse`<template style="${inline}"><style>div { color: ${color}; }</style></template>`;
@@ -217,30 +214,10 @@ describe("html parser — css plan attachment", () => {
 		const rawContent = parsed.bindings.find(
 			(binding) => binding.type === BINDING.RAW_CONTENT,
 		) as RawContentStaticBinding;
-		expect(parsed.hostStyleIsBound).toBe(true);
 		expect(rawContent.compiledStyleSheet).not.toBeNull();
 	});
 
-	test("a static host style attribute also sets hostStyleIsBound", () => {
-		const color = "blue";
-		const parsed = parse`<template style="position: absolute"><style>div { color: ${color}; }</style></template>`;
-
-		expect(parsed.hostStyleIsBound).toBe(true);
-	});
-
-	test("a non-style host binding leaves hostStyleIsBound unset", () => {
-		const className = "card";
-		const color = "blue";
-		const parsed = parse`<template class="${className}"><style>div { color: ${color}; }</style></template>`;
-
-		const rawContent = parsed.bindings.find(
-			(binding) => binding.type === BINDING.RAW_CONTENT,
-		) as RawContentStaticBinding;
-		expect(parsed.hostStyleIsBound).toBe(false);
-		expect(rawContent.compiledStyleSheet).not.toBeNull();
-	});
-
-	test("two style elements in one template get disjoint group names", () => {
+	test("two style elements in one template get separate plans", () => {
 		const a = "red";
 		const b = "10px";
 		const parsed = parse`<style>.a { color: ${a}; }</style
@@ -248,12 +225,11 @@ describe("html parser — css plan attachment", () => {
 
 		const [firstBinding, secondBinding] =
 			parsed.bindings as Array<RawContentStaticBinding>;
-		const hashPrefix = `--${(parsed.templateHash >>> 0).toString(36)}-`;
-		expect(firstBinding.compiledStyleSheet?.customPropertyNames[0]).toBe(
-			`${hashPrefix}0`,
-		);
-		expect(secondBinding.compiledStyleSheet?.customPropertyNames[0]).toBe(
-			`${hashPrefix}1`,
-		);
+		expect(firstBinding.compiledStyleSheet?.dynamicDeclarations).toEqual([
+			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [" ", 0] },
+		]);
+		expect(secondBinding.compiledStyleSheet?.dynamicDeclarations).toEqual([
+			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [" ", 1] },
+		]);
 	});
 });

@@ -13,7 +13,7 @@ import {
 	TagBinding,
 } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
-import { compileStyleSheet, composeSheet } from "./css";
+import { compileStyleSheet } from "./css";
 import { ValueOf } from "../utils/types";
 
 type StateValue = ValueOf<typeof STATE>;
@@ -275,20 +275,10 @@ const completeRawContent = (parser: ParserState) => {
 		parser.resultBuffer.push(openComment(parser));
 		const binding = parser.activeBinding as RawContentBinding;
 		moveArrayContents(parser.rawContentBuffer, binding.values);
-		if (binding.tag === STYLE_TAG) {
-			binding.compiledStyleSheet = compileStyleSheet(
-				binding.values,
-				parser.templateHash,
-			);
-			//the prepared sheet rides in the markup — no first-commit sheet write
-			if (binding.compiledStyleSheet !== null)
-				parser.contentBuffer.push(
-					composeSheet(
-						binding.compiledStyleSheet,
-						binding.compiledStyleSheet.customPropertyNames,
-					),
-				);
-		}
+		//the sheet text is composed with literal values at first commit, while the clone is
+		//still detached — the cached markup deliberately carries an empty <style>
+		if (binding.tag === STYLE_TAG)
+			binding.compiledStyleSheet = compileStyleSheet(binding.values);
 	} else {
 		moveArrayContents(parser.rawContentBuffer, parser.contentBuffer);
 	}
@@ -785,7 +775,11 @@ const parse = (
 		fragmentCloneSource: null,
 		hostBindingCount: parser.hostBindingCount,
 		keyBindingIndex: parser.keyBindingIndex,
-		hostStyleIsBound: hasHostStyleBinding(parser),
+		hasStyleSheetBinding: parser.bindings.some(
+			(binding) =>
+				binding.type === PARSE_BINDING.RAW_CONTENT &&
+				binding.compiledStyleSheet,
+		),
 	};
 };
 
@@ -823,18 +817,6 @@ const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
 		nameParts: binding.keys.slice(),
 		valueParts,
 	};
-};
-
-const STYLE_ATTRIBUTE_NAME = "style";
-
-//a host binding writing the style attribute wholesale would wipe css host props; the
-//flag rides on ParsedTemplate and disables every css plan mounted under that host
-const hasHostStyleBinding = (parser: ParserState): boolean => {
-	for (let index = 0; index < parser.hostBindingCount; index++) {
-		const { keys } = parser.bindings[index] as AttributeBinding;
-		if (keys.length === 1 && keys[0] === STYLE_ATTRIBUTE_NAME) return true;
-	}
-	return false;
 };
 
 const toStaticBinding = (binding: Binding): StaticBinding => {

@@ -1,7 +1,11 @@
-import { moveArrayContents } from "../utils/move-array-contents";
 import { CHAR_CODE, isQuoteCode } from "./chars";
 import { ValueOf } from "../utils/types";
-import { CompiledStyleSheet, CustomProperty, Part } from "./types";
+import {
+	CompiledStyleSheet,
+	DynamicDeclaration,
+	Part,
+	RuleCountCheck,
+} from "./types";
 
 type CssStateValue = ValueOf<typeof CSS_STATE>;
 
@@ -13,29 +17,61 @@ const CSS_STATE = {
 	COMMENT: 4,
 } as const;
 
-const NO_EXPRESSION_INDEX = -1;
-const NO_VAR_UNSAFE_BLOCK = 0;
+type AtRuleKindValue = ValueOf<typeof AT_RULE_KIND>;
 
-//var() never substitutes in descriptor at-rules (@font-face, @property, …), so a value
-//hole is only fast under at-rules known to hold regular style declarations
-//todo: VAR_SAFE_AT_RULE_NAMES is fragile. CSS is moving so fast there will be more here soon
-/*
-the detection would need to be different here
-- we need to differentiate where we are =>between rules, inside a selector, inside a key, or inside a value
-=> this we should be able to do with only listening for brackets (() and {}), quotes(""/''), and punctuations (:;). Maybe the @ could also be used but maybe isnt even needed
-- if we see a hole and are not inside a value, we can abort early and use the fallback for this style tag
-- inside the value we just make sure we capture all that can be inside a css variable, extract and replace it with the css variable
+const AT_RULE_KIND = {
+	NONE: 0,
+	GROUPING: 1,
+	KEYFRAMES: 2,
+	DESCRIPTOR: 3,
+} as const;
 
- */
-const VAR_SAFE_AT_RULE_NAMES = new Set([
+type RuleKindValue = ValueOf<typeof RULE_KIND>;
+
+const RULE_KIND = {
+	STYLE: 0,
+	GROUPING: 1,
+	KEYFRAMES: 2,
+	DESCRIPTOR: 3,
+} as const;
+
+const NO_OPEN_RUN = -1;
+
+//these at-rules nest style rules whose declarations land on an addressable CSSOM
+//declaration block; every other at-rule (@font-face, @property, …) holds descriptors,
+//which the fast path leaves to the fallback
+const GROUPING_AT_RULE_NAMES = new Set([
 	"media",
 	"supports",
 	"container",
 	"layer",
 	"scope",
-	"keyframes",
 	"starting-style",
 ]);
+const KEYFRAMES_AT_RULE_NAME = "keyframes";
+
+const COMMENT_PATTERN = /\/\*[^]*?\*\//g;
+const PROPERTY_NAME_PATTERN = /^(?:--[\w-]+|-?[a-zA-Z][a-zA-Z0-9-]*)$/;
+
+//setProperty silently ignores a malformed name, which would read as a stale render — only
+//names this shape provably reach the declaration block
+const normalizePropertyName = (raw: string): string | null => {
+	const cleaned = raw.replace(COMMENT_PATTERN, " ").trim();
+	const name = cleaned.startsWith("--") ? cleaned : cleaned.toLowerCase();
+	return PROPERTY_NAME_PATTERN.test(name) ? name : null;
+};
+
+interface RuleFrame {
+	kind: RuleKindValue;
+	rulePath: Array<number>;
+	childRuleCount: number;
+	declarationsCreateRuns: boolean;
+	openRunIndex: number;
+	isInsideStyleRule: boolean;
+	isInsideDescriptor: boolean;
+	isOnDynamicPath: boolean;
+	declaredProperties: Map<string, boolean> | null;
+}
 
 interface CssAnalyzerState {
 	state: CssStateValue;
@@ -44,17 +80,16 @@ interface CssAnalyzerState {
 	activeStatic: string;
 	charIndex: number;
 	splitIndex: number;
-	braceDepth: number;
 	parenDepth: number;
-	pendingAtRuleIsVarUnsafe: boolean;
-	varUnsafeBlockDepth: number;
+	pendingAtRuleKind: AtRuleKindValue;
+	propertyStartIndex: number;
+	activePropertyName: string;
 	valueHasHole: boolean;
-	valueFirstExpressionIndex: number;
 	valueTopLevelBangCount: number;
-	sheetBuffer: Array<string | number>;
 	valueBuffer: Array<Part>;
-	customProperties: Array<CustomProperty>;
-	customPropertyPrefix: string;
+	ruleStack: Array<RuleFrame>;
+	dynamicDeclarations: Array<DynamicDeclaration>;
+	ruleCountChecks: Array<RuleCountCheck>;
 }
 
 const createCssAnalyzer = (): CssAnalyzerState => ({
@@ -64,42 +99,50 @@ const createCssAnalyzer = (): CssAnalyzerState => ({
 	activeStatic: "",
 	charIndex: 0,
 	splitIndex: 0,
-	braceDepth: 0,
 	parenDepth: 0,
-	pendingAtRuleIsVarUnsafe: false,
-	varUnsafeBlockDepth: NO_VAR_UNSAFE_BLOCK,
+	pendingAtRuleKind: AT_RULE_KIND.NONE,
+	propertyStartIndex: 0,
+	activePropertyName: "",
 	valueHasHole: false,
-	valueFirstExpressionIndex: NO_EXPRESSION_INDEX,
 	valueTopLevelBangCount: 0,
-	sheetBuffer: [],
 	valueBuffer: [],
-	customProperties: [],
-	customPropertyPrefix: "",
+	ruleStack: [],
+	dynamicDeclarations: [],
+	ruleCountChecks: [],
 });
 
-const resetCssAnalyzer = (css: CssAnalyzerState, templateHash: number) => {
+const createSheetRootFrame = (): RuleFrame => ({
+	kind: RULE_KIND.GROUPING,
+	rulePath: [],
+	childRuleCount: 0,
+	declarationsCreateRuns: false,
+	openRunIndex: NO_OPEN_RUN,
+	isInsideStyleRule: false,
+	isInsideDescriptor: false,
+	isOnDynamicPath: false,
+	declaredProperties: null,
+});
+
+const resetCssAnalyzer = (css: CssAnalyzerState) => {
 	css.state = CSS_STATE.SELECTOR;
 	css.returnState = CSS_STATE.SELECTOR;
 	css.quoteCode = 0;
 	css.activeStatic = "";
 	css.charIndex = 0;
 	css.splitIndex = 0;
-	css.braceDepth = 0;
 	css.parenDepth = 0;
-	css.pendingAtRuleIsVarUnsafe = false;
-	css.varUnsafeBlockDepth = NO_VAR_UNSAFE_BLOCK;
+	css.pendingAtRuleKind = AT_RULE_KIND.NONE;
+	css.propertyStartIndex = 0;
+	css.activePropertyName = "";
 	css.valueHasHole = false;
-	css.valueFirstExpressionIndex = NO_EXPRESSION_INDEX;
 	css.valueTopLevelBangCount = 0;
 	css.valueBuffer.length = 0;
-	//sheetParts and custom properties escape into the returned sheet, so reset allocates fresh arrays
-	css.sheetBuffer = [];
-	css.customProperties = [];
-	//stringHash is signed; a negative hash would put a stray "-" inside the name
-	css.customPropertyPrefix = `--${(templateHash >>> 0).toString(36)}-`;
+	css.ruleStack.length = 0;
+	css.ruleStack.push(createSheetRootFrame());
+	css.dynamicDeclarations = [];
+	css.ruleCountChecks = [];
 };
 
-//sheet analysis never nests — one pooled analyzer reused per call (mirrors ADR-0009)
 const analyzer = createCssAnalyzer();
 
 const isAtRuleNameCode = (code: number) =>
@@ -118,65 +161,164 @@ const readAtRuleName = (css: CssAnalyzerState): string => {
 	return staticText.slice(css.charIndex + 1, endIndex).toLowerCase();
 };
 
-//a span lands in the value while composing a declaration value, in the sheet otherwise
-const captureSpan = (css: CssAnalyzerState, end: number) => {
+const readAtRuleKind = (css: CssAnalyzerState): AtRuleKindValue => {
+	const name = readAtRuleName(css);
+	if (GROUPING_AT_RULE_NAMES.has(name)) return AT_RULE_KIND.GROUPING;
+	if (name === KEYFRAMES_AT_RULE_NAME) return AT_RULE_KIND.KEYFRAMES;
+	return AT_RULE_KIND.DESCRIPTOR;
+};
+
+const captureValueSpan = (css: CssAnalyzerState, end: number) => {
 	if (end <= css.splitIndex) return;
-	const slice = css.activeStatic.slice(css.splitIndex, end);
-	if (css.state === CSS_STATE.VALUE) css.valueBuffer.push(slice);
-	else css.sheetBuffer.push(slice);
+	css.valueBuffer.push(css.activeStatic.slice(css.splitIndex, end));
+};
+
+const activeFrame = (css: CssAnalyzerState): RuleFrame =>
+	css.ruleStack[css.ruleStack.length - 1];
+
+const createRuleFrame = (
+	css: CssAnalyzerState,
+	parent: RuleFrame,
+	ruleIndex: number,
+): RuleFrame => {
+	const atRuleKind = css.pendingAtRuleKind;
+	const isInsideStyleRule =
+		parent.kind === RULE_KIND.STYLE || parent.isInsideStyleRule;
+	let kind: RuleKindValue;
+	if (atRuleKind === AT_RULE_KIND.GROUPING) kind = RULE_KIND.GROUPING;
+	else if (atRuleKind === AT_RULE_KIND.KEYFRAMES) kind = RULE_KIND.KEYFRAMES;
+	else if (atRuleKind === AT_RULE_KIND.DESCRIPTOR) kind = RULE_KIND.DESCRIPTOR;
+	else kind = RULE_KIND.STYLE;
+	return {
+		kind,
+		rulePath: parent.rulePath.concat(ruleIndex),
+		childRuleCount: 0,
+		//a grouping rule nested under a style rule holds its bare declarations in implicit
+		//CSSNestedDeclarations child rules, never on the grouping rule itself
+		declarationsCreateRuns: kind === RULE_KIND.GROUPING && isInsideStyleRule,
+		openRunIndex: NO_OPEN_RUN,
+		isInsideStyleRule,
+		isInsideDescriptor: kind === RULE_KIND.DESCRIPTOR || parent.isInsideDescriptor,
+		isOnDynamicPath: false,
+		declaredProperties: null,
+	};
+};
+
+//setProperty replaces a rule's whole entry for a property, so a duplicate of a holed
+//property inside one rule would let an update defeat the cascade order the author wrote
+const registerDeclaredProperty = (
+	frame: RuleFrame,
+	propertyName: string,
+	hasHole: boolean,
+): boolean => {
+	const declaredProperties = (frame.declaredProperties ??= new Map());
+	const existingHasHole = declaredProperties.get(propertyName);
+	if (existingHasHole === undefined) {
+		declaredProperties.set(propertyName, hasHole);
+		return true;
+	}
+	return !hasHole && existingHasHole === false;
+};
+
+//a nested rule (or statement at-rule) between declarations ends the current implicit
+//CSSNestedDeclarations run and flips the style rule into run mode for later declarations
+const registerChildRule = (frame: RuleFrame): number => {
+	const ruleIndex = frame.childRuleCount++;
+	frame.openRunIndex = NO_OPEN_RUN;
+	if (frame.kind === RULE_KIND.STYLE) frame.declarationsCreateRuns = true;
+	return ruleIndex;
+};
+
+const markDynamicPath = (css: CssAnalyzerState, holderFrame: RuleFrame) => {
+	const ruleStack = css.ruleStack;
+	for (let index = 0; index < ruleStack.length - 1; index++)
+		ruleStack[index].isOnDynamicPath = true;
+	if (holderFrame.declarationsCreateRuns) holderFrame.isOnDynamicPath = true;
+};
+
+const resetDeclaration = (css: CssAnalyzerState) => {
+	css.valueBuffer.length = 0;
+	css.valueHasHole = false;
+	css.valueTopLevelBangCount = 0;
+	css.state = CSS_STATE.PROPERTY;
+};
+
+//CSSOM takes priority as a separate setProperty argument, so a trailing !important is
+//split off the value parts here
+const extractImportantPriority = (css: CssAnalyzerState): string | null => {
+	if (css.valueTopLevelBangCount === 0) return "";
+	if (css.valueTopLevelBangCount > 1) return null;
+	const valueBuffer = css.valueBuffer;
+	const lastValuePart = valueBuffer[valueBuffer.length - 1];
+	if (typeof lastValuePart !== "string") return null;
+	const bangIndex = lastValuePart.lastIndexOf("!");
+	if (bangIndex === -1) return null;
+	const afterBang = lastValuePart.slice(bangIndex + 1);
+	if (afterBang.trim().toLowerCase() !== "important") return null;
+	const beforeImportant = lastValuePart.slice(0, bangIndex);
+	if (beforeImportant === "") valueBuffer.pop();
+	else valueBuffer[valueBuffer.length - 1] = beforeImportant;
+	return "important";
 };
 
 const finishDeclarationValue = (css: CssAnalyzerState): boolean => {
-	const valueBuffer = css.valueBuffer;
-	if (!css.valueHasHole) {
-		moveArrayContents(valueBuffer, css.sheetBuffer);
-	} else {
-		let importantSuffix = "";
-		//todo: this part is barely readable
-		if (css.valueTopLevelBangCount === 1) {
-			const lastValuePart = valueBuffer[valueBuffer.length - 1];
-			if (typeof lastValuePart !== "string") return false;
-			const bangIndex = lastValuePart.lastIndexOf("!");
-			if (bangIndex === -1) return false;
-			const afterBang = lastValuePart.slice(bangIndex + 1);
-			if (afterBang.trim().toLowerCase() !== "important") return false;
-			const beforeImportant = lastValuePart.slice(0, bangIndex);
-			if (beforeImportant === "") valueBuffer.pop();
-			else valueBuffer[valueBuffer.length - 1] = beforeImportant;
-			importantSuffix = " !important";
-		} else if (css.valueTopLevelBangCount > 1) {
-			return false;
-		}
-		css.customProperties.push({
-			nameSuffix: css.valueFirstExpressionIndex,
-			valueParts: valueBuffer.slice(),
-		});
-		css.sheetBuffer.push(css.customProperties.length - 1);
-		if (importantSuffix !== "") css.sheetBuffer.push(importantSuffix);
+	const frame = activeFrame(css);
+	if (frame.isInsideDescriptor) {
+		resetDeclaration(css);
+		return true;
 	}
-	valueBuffer.length = 0;
-	css.valueHasHole = false;
-	css.valueFirstExpressionIndex = NO_EXPRESSION_INDEX;
-	css.valueTopLevelBangCount = 0;
-	css.state = CSS_STATE.PROPERTY;
+	const isDeclarationHolder =
+		frame.kind === RULE_KIND.STYLE || frame.declarationsCreateRuns;
+	if (!isDeclarationHolder) {
+		//a bare declaration directly inside @keyframes or a top-level grouping rule is
+		//dropped by the browser — unaddressable, so a hole there bails
+		if (css.valueHasHole) return false;
+		resetDeclaration(css);
+		return true;
+	}
+	if (frame.declarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN)
+		frame.openRunIndex = frame.childRuleCount++;
+	const propertyName = normalizePropertyName(css.activePropertyName);
+	if (propertyName === null) {
+		//an unreachable name only matters when an update must reach it
+		if (css.valueHasHole) return false;
+		resetDeclaration(css);
+		return true;
+	}
+	if (!registerDeclaredProperty(frame, propertyName, css.valueHasHole))
+		return false;
+	if (!css.valueHasHole) {
+		resetDeclaration(css);
+		return true;
+	}
+	const priority = extractImportantPriority(css);
+	if (priority === null) return false;
+	css.dynamicDeclarations.push({
+		rulePath:
+			frame.openRunIndex === NO_OPEN_RUN
+				? frame.rulePath
+				: frame.rulePath.concat(frame.openRunIndex),
+		propertyName,
+		priority,
+		valueParts: css.valueBuffer.slice(),
+	});
+	markDynamicPath(css, frame);
+	resetDeclaration(css);
 	return true;
 };
 
 export const compileStyleSheet = (
 	parts: Array<Part>,
-	templateHash: number,
 ): CompiledStyleSheet | null => {
 	const css = analyzer;
-	resetCssAnalyzer(css, templateHash);
+	resetCssAnalyzer(css);
 
 	for (let partIndex = 0; partIndex < parts.length; partIndex++) {
 		const part = parts[partIndex];
 		if (typeof part === "number") {
 			const isDeclarationValueHole =
-				css.state === CSS_STATE.VALUE &&
-				css.varUnsafeBlockDepth === NO_VAR_UNSAFE_BLOCK;
+				css.state === CSS_STATE.VALUE && !activeFrame(css).isInsideDescriptor;
 			if (!isDeclarationValueHole) return null;
-			if (!css.valueHasHole) css.valueFirstExpressionIndex = part;
 			css.valueBuffer.push(part);
 			css.valueHasHole = true;
 			continue;
@@ -184,6 +326,7 @@ export const compileStyleSheet = (
 
 		css.activeStatic = part;
 		css.splitIndex = 0;
+		css.propertyStartIndex = 0;
 		for (css.charIndex = 0; css.charIndex < part.length; css.charIndex++) {
 			const code = part.charCodeAt(css.charIndex);
 
@@ -231,85 +374,82 @@ export const compileStyleSheet = (
 			}
 
 			switch (code) {
-				case CHAR_CODE.OPEN_BRACE:
+				case CHAR_CODE.OPEN_BRACE: {
 					//"{" never occurs in a real value: the ":" that entered VALUE belonged
 					//to a nested selector's pseudo, which has no fast path
 					if (css.state === CSS_STATE.VALUE) return null;
-					css.braceDepth++;
-					if (css.pendingAtRuleIsVarUnsafe) {
-						if (css.varUnsafeBlockDepth === NO_VAR_UNSAFE_BLOCK)
-							css.varUnsafeBlockDepth = css.braceDepth;
-						css.pendingAtRuleIsVarUnsafe = false;
-					}
+					const parent = activeFrame(css);
+					const ruleIndex = registerChildRule(parent);
+					css.ruleStack.push(createRuleFrame(css, parent, ruleIndex));
+					css.pendingAtRuleKind = AT_RULE_KIND.NONE;
 					css.state = CSS_STATE.PROPERTY;
+					css.propertyStartIndex = css.charIndex + 1;
 					break;
-				case CHAR_CODE.CLOSE_BRACE:
+				}
+				case CHAR_CODE.CLOSE_BRACE: {
 					if (css.state === CSS_STATE.VALUE) {
-						captureSpan(css, css.charIndex);
+						captureValueSpan(css, css.charIndex);
 						if (!finishDeclarationValue(css)) return null;
-						css.splitIndex = css.charIndex; //"}" rides into the next sheet span
 					}
-					if (css.braceDepth === 0) return null;
-					css.braceDepth--;
-					if (css.braceDepth < css.varUnsafeBlockDepth)
-						css.varUnsafeBlockDepth = NO_VAR_UNSAFE_BLOCK;
+					if (css.ruleStack.length === 1) return null;
+					const closedFrame = css.ruleStack.pop()!;
+					if (closedFrame.isOnDynamicPath)
+						css.ruleCountChecks.push({
+							rulePath: closedFrame.rulePath,
+							expectedRuleCount: closedFrame.childRuleCount,
+						});
 					css.state =
-						css.braceDepth === 0 ? CSS_STATE.SELECTOR : CSS_STATE.PROPERTY;
+						css.ruleStack.length === 1 ? CSS_STATE.SELECTOR : CSS_STATE.PROPERTY;
+					css.propertyStartIndex = css.charIndex + 1;
 					break;
+				}
 				case CHAR_CODE.SEMICOLON:
 					if (css.state === CSS_STATE.VALUE) {
-						captureSpan(css, css.charIndex);
+						captureValueSpan(css, css.charIndex);
 						if (!finishDeclarationValue(css)) return null;
-						css.splitIndex = css.charIndex; //";" rides into the next sheet span
 					}
-					//a ";" also terminates statement at-rules (@import, @charset)
-					css.pendingAtRuleIsVarUnsafe = false;
+					//a statement at-rule (@import, @layer a;) still occupies a cssRules slot
+					if (css.pendingAtRuleKind !== AT_RULE_KIND.NONE) {
+						registerChildRule(activeFrame(css));
+						css.pendingAtRuleKind = AT_RULE_KIND.NONE;
+					}
+					css.propertyStartIndex = css.charIndex + 1;
 					break;
 				case CHAR_CODE.COLON:
 					if (css.state === CSS_STATE.PROPERTY) {
-						captureSpan(css, css.charIndex + 1);
+						css.activePropertyName = css.activeStatic.slice(
+							css.propertyStartIndex,
+							css.charIndex,
+						);
 						css.state = CSS_STATE.VALUE;
 						css.splitIndex = css.charIndex + 1;
 					}
 					break;
 				case CHAR_CODE.AT:
 					if (css.state !== CSS_STATE.VALUE)
-						css.pendingAtRuleIsVarUnsafe = !VAR_SAFE_AT_RULE_NAMES.has(
-							readAtRuleName(css),
-						);
+						css.pendingAtRuleKind = readAtRuleKind(css);
 					break;
 				case CHAR_CODE.BANG:
 					if (css.state === CSS_STATE.VALUE) css.valueTopLevelBangCount++;
 					break;
 			}
 		}
-		captureSpan(css, part.length);
+		if (css.state === CSS_STATE.VALUE) captureValueSpan(css, part.length);
 	}
 
 	const endedCleanly =
 		css.state === CSS_STATE.SELECTOR &&
-		css.braceDepth === 0 &&
+		css.ruleStack.length === 1 &&
 		css.parenDepth === 0;
 	if (!endedCleanly) return null;
+	if (css.dynamicDeclarations.length === 0) return null;
+	const sheetRoot = css.ruleStack[0];
+	css.ruleCountChecks.push({
+		rulePath: sheetRoot.rulePath,
+		expectedRuleCount: sheetRoot.childRuleCount,
+	});
 	return {
-		customPropertyPrefix: css.customPropertyPrefix,
-		customPropertyNames: css.customProperties.map(
-			(property) => css.customPropertyPrefix + property.nameSuffix,
-		),
-		sheetParts: css.sheetBuffer,
-		customProperties: css.customProperties,
+		dynamicDeclarations: css.dynamicDeclarations,
+		ruleCountChecks: css.ruleCountChecks,
 	};
-};
-
-export const composeSheet = (
-	sheet: CompiledStyleSheet,
-	customPropertyNames: Array<string>,
-): string => {
-	let result = "";
-	for (let index = 0; index < sheet.sheetParts.length; index++) {
-		const part = sheet.sheetParts[index];
-		result +=
-			typeof part === "number" ? `var(${customPropertyNames[part]})` : part;
-	}
-	return result;
 };

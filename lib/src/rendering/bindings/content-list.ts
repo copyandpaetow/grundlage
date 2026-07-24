@@ -16,11 +16,12 @@ import {
 	Instance,
 	mountInstance,
 	reconcileInstance,
+	refreshStyleSheetsAfterMove,
 	releaseInstance,
 } from "../instance";
 import { forEachNode } from "../markers";
 import {
-	Carrier,
+	StyleSheetMoveState,
 	ContentLiveBinding,
 	ListContentState,
 	ListItem,
@@ -54,7 +55,7 @@ const shapeOrKeyHash = (templateHash: number, keyHash: number): number =>
 export const patchListContent = (
 	liveBinding: ContentLiveBinding,
 	itemValues: Array<unknown>,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): void => {
 	const list = liveBinding.content as ListContentState;
 	const count = itemValues.length;
@@ -68,7 +69,7 @@ export const patchListContent = (
 	}
 	if (aggregateHash === list.aggregateHash) return;
 	list.aggregateHash = aggregateHash;
-	reconcileRows(liveBinding, list, itemValues, itemHashes, count, carrier);
+	reconcileRows(liveBinding, list, itemValues, itemHashes, count, moveState);
 };
 
 type RowsByHash = Map<number, Array<ListItem>>;
@@ -129,7 +130,7 @@ const reconcileRows = (
 	itemValues: Array<unknown>,
 	itemHashes: Array<number>,
 	count: number,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): void => {
 	const previousByContentHash = groupRowsByContentHash(
 		list.items,
@@ -159,7 +160,7 @@ const reconcileRows = (
 			matchHash,
 		);
 		if (reusableRow === undefined) continue;
-		patchRowInPlace(reusableRow, value, itemHashes[index], carrier);
+		patchRowInPlace(reusableRow, value, itemHashes[index], moveState);
 		resolvedRows[index] = reusableRow;
 	}
 
@@ -170,7 +171,7 @@ const reconcileRows = (
 		resolvedRows,
 		itemValues,
 		itemHashes,
-		carrier,
+		moveState,
 	);
 };
 
@@ -179,7 +180,7 @@ const placeRows = (
 	resolvedRows: Array<ListItem | undefined>,
 	itemValues: Array<unknown>,
 	itemHashes: Array<number>,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): Array<ListItem> => {
 	const finalRows: Array<ListItem> = new Array(resolvedRows.length);
 	let cursor: ChildNode = liveBinding.startMarker;
@@ -190,9 +191,12 @@ const placeRows = (
 				cursor,
 				itemValues[index],
 				itemHashes[index],
-				carrier,
+				moveState,
 			);
-		else if (cursor.nextSibling !== row.startNode) moveRowAfter(cursor, row);
+		else if (cursor.nextSibling !== row.startNode) {
+			moveRowAfter(cursor, row);
+			refreshStyleSheetsAfterMove(row.instance);
+		}
 		cursor = row.tailMarker;
 		finalRows[index] = row;
 	}
@@ -203,11 +207,11 @@ const mountRowAfter = (
 	after: ChildNode,
 	rawValue: unknown,
 	itemHash: number,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): ListItem => {
 	const value = coerceToTemplate(rawValue);
 	assertNestable(value);
-	const { instance, fragment } = mountInstance(value, carrier);
+	const { instance, fragment } = mountInstance(value, moveState);
 	const tailMarker = document.createComment(MARKUP.LIST_MARKER_DATA);
 	const startNode = fragment.firstChild ?? tailMarker;
 	after.after(fragment, tailMarker);
@@ -225,12 +229,11 @@ const patchRowInPlace = (
 	row: ListItem,
 	value: TemplateValue,
 	itemHash: number,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): void => {
 	assertNestable(value);
-	const mounted = reconcileInstance(row.instance, value, carrier);
-	if (mounted !== null)
-		replaceRowInstance(row, mounted.instance, mounted.fragment);
+	const mounted = reconcileInstance(row.instance, value, moveState);
+	if (mounted) replaceRowInstance(row, mounted.instance, mounted.fragment);
 	row.itemHash = itemHash;
 };
 
@@ -264,7 +267,7 @@ const removeRowNodes = (row: ListItem): void => {
 export const hydrateListItems = (
 	liveBinding: ContentLiveBinding,
 	itemValues: Array<unknown>,
-	carrier: Carrier,
+	moveState: StyleSheetMoveState,
 ): void => {
 	const list = liveBinding.content as ListContentState;
 	const count = itemValues.length;
@@ -277,7 +280,7 @@ export const hydrateListItems = (
 		const value = coerceToTemplate(itemValues[index]);
 		assertNestable(value);
 		const startNode = rowStart.nextSibling!;
-		const { instance, tailMarker } = hydrateRow(value, rowStart, carrier);
+		const { instance, tailMarker } = hydrateRow(value, rowStart, moveState);
 		const parsed = getParsedTemplate(value.__templateStrings);
 		const itemHash = hashValue(itemValues[index]);
 		itemHashes[index] = itemHash;

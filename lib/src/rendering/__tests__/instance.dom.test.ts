@@ -9,25 +9,27 @@ import {
 	mountInstance,
 	patchInstance,
 	reconcileInstance,
-	releaseInstance,
+	refreshStyleSheetsAfterMove,
 } from "../instance";
+import { StyleSheetMoveState } from "../bindings/types";
 
-//the css probes only touch host.style; a div stands in for the component element
+//a div stands in for the component element; the css fast path never touches the host
 const createHost = () =>
 	document.createElement("div") as unknown as BaseComponent;
 
-const detachedCarrier = () => ({
-	host: createHost(),
-	hostStyleIsBound: false,
-	styleSheetMountCounts: null,
+const moveState = (): StyleSheetMoveState => ({
+	needsStyleSheetRefreshOnMove: false,
+	needsRerenderAfterMove: false,
 });
 
+//the host must be connected: a detached <style> has no sheet, so the CSSOM lane never engages
 const mountIntoShadow = (value: TemplateValue) => {
-	const carrier = detachedCarrier();
-	const shadowRoot = carrier.host.attachShadow({ mode: "open" });
-	const { instance, fragment } = mountInstance(value, carrier);
+	const host = createHost();
+	document.body.appendChild(host as unknown as Element);
+	const shadowRoot = host.attachShadow({ mode: "open" });
+	const { instance, fragment } = mountInstance(value, moveState());
 	shadowRoot.appendChild(fragment);
-	return { carrier, shadowRoot, instance };
+	return { host, shadowRoot, instance };
 };
 
 const textNodeOf = (element: Element): Text =>
@@ -71,7 +73,7 @@ describe("assertNestable: host binding requirement", () => {
 	test("mounting a parent whose content is a nested root template throws", () => {
 		const inner = html`<template class="leak"><p>x</p></template>`;
 		expect(() =>
-			mountInstance(html`<div>${inner}</div>`, detachedCarrier()),
+			mountInstance(html`<div>${inner}</div>`, moveState()),
 		).toThrow(/top level of a component's render output/);
 	});
 
@@ -82,7 +84,7 @@ describe("assertNestable: host binding requirement", () => {
 				html`<ul>
 					${items}
 				</ul>`,
-				detachedCarrier(),
+				moveState(),
 			),
 		).toThrow(/top level of a component's render output/);
 	});
@@ -92,7 +94,7 @@ describe("mountInstance: fragment + live-binding wiring", () => {
 	test("produces a DocumentFragment with the parsed shape", () => {
 		const { fragment } = mountInstance(
 			html`<section><p>${"hi"}</p></section>`,
-			detachedCarrier(),
+			moveState(),
 		);
 		expect(fragment.querySelector("section")).not.toBeNull();
 		expect(fragment.querySelector("p")?.textContent).toContain("hi");
@@ -100,7 +102,7 @@ describe("mountInstance: fragment + live-binding wiring", () => {
 
 	test("builds one live binding per static binding", () => {
 		const value = html`<p class="${"c"}">${"text"}</p>`;
-		const { instance } = mountInstance(value, detachedCarrier());
+		const { instance } = mountInstance(value, moveState());
 		expect(instance.liveBindings.length).toBe(
 			getParsedTemplate(value.__templateStrings).bindings.length,
 		);
@@ -110,16 +112,16 @@ describe("mountInstance: fragment + live-binding wiring", () => {
 describe("reconcileInstance: patch vs rebuild", () => {
 	test("patches in place when the template hash matches", () => {
 		const paragraph = (value: string) => html`<p class="${value}">x</p>`;
-		const { instance } = mountInstance(paragraph("a"), detachedCarrier());
+		const { instance } = mountInstance(paragraph("a"), moveState());
 		expect(
-			reconcileInstance(instance, paragraph("b"), detachedCarrier()),
+			reconcileInstance(instance, paragraph("b"), moveState()),
 		).toBeNull();
 	});
 
 	test("rebuilds when the structure differs", () => {
-		const { instance } = mountInstance(html`<p>${"a"}</p>`, detachedCarrier());
+		const { instance } = mountInstance(html`<p>${"a"}</p>`, moveState());
 		expect(
-			reconcileInstance(instance, html`<span>${"a"}</span>`, detachedCarrier()),
+			reconcileInstance(instance, html`<span>${"a"}</span>`, moveState()),
 		).not.toBeNull();
 	});
 });
@@ -129,7 +131,7 @@ describe("patchInstance: change detection", () => {
 		const paragraph = (value: string) => html`<p class="${value}">${"hi"}</p>`;
 		const { instance, fragment } = mountInstance(
 			paragraph("before"),
-			detachedCarrier(),
+			moveState(),
 		);
 		const element = fragment.querySelector("p")!;
 		expect(element.getAttribute("class")).toBe("before");
@@ -142,7 +144,7 @@ describe("patchInstance: change detection", () => {
 		const paragraph = (value: string) => html`<p>${value}</p>`;
 		const { instance, fragment } = mountInstance(
 			paragraph("first"),
-			detachedCarrier(),
+			moveState(),
 		);
 		const element = fragment.querySelector("p")!;
 		const original = textNodeOf(element);
@@ -161,231 +163,169 @@ describe("raw content with a css plan", () => {
 				color: ${color};
 			}
 		</style>`;
-	const varNameOf = (style: Element): string =>
-		style.textContent!.match(/var\((--[^)]+)\)/)![1];
 	const normalizeWhitespace = (string: string) =>
 		string.replace(/\s+/g, " ").trim();
+	const declarationOf = (style: HTMLStyleElement): CSSStyleDeclaration =>
+		(style.sheet!.cssRules[0] as CSSStyleRule).style;
 
-	test("mount carries the baked sheet in the fragment and stamps the host props", () => {
-		const carrier = detachedCarrier();
-		const { fragment } = mountInstance(sheet("red"), carrier);
+	test("mount composes the literal sheet into the detached fragment", () => {
+		const { fragment } = mountInstance(sheet("red"), moveState());
 		const styles = fragment.querySelectorAll("style");
 
 		expect(styles).toHaveLength(1);
-		expect(normalizeWhitespace(styles[0].textContent!)).toMatch(
-			/^p \{ color:var\(--[a-z0-9]+-0\); \}$/,
+		expect(normalizeWhitespace(styles[0].textContent!)).toBe(
+			"p { color: red; }",
 		);
-		expect(
-			carrier.host.style.getPropertyValue(varNameOf(styles[0])).trim(),
-		).toBe("red");
 	});
 
-	test("a patch rewrites the host prop, never the sheet", () => {
-		const carrier = detachedCarrier();
-		const { instance, fragment } = mountInstance(sheet("red"), carrier);
-		const style = fragment.querySelector("style")!;
+	test("a connected patch updates the declaration through the sheet, never the text", () => {
+		const { host, shadowRoot, instance } = mountIntoShadow(sheet("red"));
+		const style = shadowRoot.querySelector("style")!;
 		const sheetTextNode = style.firstChild as Text;
 		const sheetText = sheetTextNode.data;
-		const name = varNameOf(style);
 
 		patchInstance(instance, sheet("blue").values);
 
 		expect(style.firstChild).toBe(sheetTextNode);
 		expect(sheetTextNode.data).toBe(sheetText);
-		expect(carrier.host.style.getPropertyValue(name).trim()).toBe("blue");
+		expect(declarationOf(style).getPropertyValue("color")).toBe("blue");
+		expect(host.getAttribute("style")).toBeNull();
 	});
 
 	test("an unchanged patch writes nothing", () => {
-		const carrier = detachedCarrier();
-		const { instance, fragment } = mountInstance(sheet("red"), carrier);
-		const name = varNameOf(fragment.querySelector("style")!);
-		carrier.host.style.setProperty(name, "canary");
+		const { shadowRoot, instance } = mountIntoShadow(sheet("red"));
+		const style = shadowRoot.querySelector("style")!;
+		//first patch resolves the sheet; same values, so the hash gate must skip.
+		//The marker must be a valid value — setProperty drops invalid ones
+		patchInstance(instance, sheet("red").values);
+		declarationOf(style).setProperty("color", "teal");
 
 		patchInstance(instance, sheet("red").values);
 
-		expect(carrier.host.style.getPropertyValue(name)).toBe("canary");
+		expect(declarationOf(style).getPropertyValue("color")).toBe("teal");
 	});
 
-	test("hydrate seeds without touching the sheet or host props; a later patch updates props only", () => {
-		const { carrier, shadowRoot } = mountIntoShadow(sheet("red"));
-		const style = shadowRoot.querySelector("style")!;
-		const sheetTextNode = style.firstChild as Text;
-		const name = varNameOf(style);
-		carrier.host.style.setProperty(name, "canary");
-
-		//hydration always starts with a fresh carrier (the painter creates one per
-		//element), so its css mount counts replay from zero and re-derive the
-		//server's name sequence — reusing the server carrier would double-count
-		const clientCarrier = { ...detachedCarrier(), host: carrier.host };
-		const instance = hydrateInstance(sheet("red"), shadowRoot, clientCarrier);
-		expect(style.firstChild).toBe(sheetTextNode);
-		expect(carrier.host.style.getPropertyValue(name)).toBe("canary");
-
-		patchInstance(instance, sheet("blue").values);
-		expect(style.firstChild).toBe(sheetTextNode);
-		expect(carrier.host.style.getPropertyValue(name).trim()).toBe("blue");
-	});
-
-	test("a style-binding carrier forces the fallback: composed sheet, untouched host", () => {
-		//the carrier's root template binds the host style attribute, which would wipe
-		//the plan's custom properties — every planned style under it falls back
-		const carrier = {
-			host: createHost(),
-			hostStyleIsBound: true,
-			styleSheetMountCounts: null,
-		};
-		const { instance, fragment } = mountInstance(sheet("red"), carrier);
+	test("a patch while detached rewrites the composed text", () => {
+		const { instance, fragment } = mountInstance(sheet("red"), moveState());
 		const style = fragment.querySelector("style")!;
 
-		expect(style.textContent).not.toContain("var(");
-		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: red; }");
-		expect(carrier.host.getAttribute("style")).toBeNull();
-
 		patchInstance(instance, sheet("blue").values);
+
 		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: blue; }");
-		expect(carrier.host.getAttribute("style")).toBeNull();
 	});
 
-	test("hydrating under a style-binding carrier seeds the fallback gate", () => {
-		const serverCarrier = {
-			host: createHost(),
-			hostStyleIsBound: true,
-			styleSheetMountCounts: null,
-		};
-		const shadowRoot = serverCarrier.host.attachShadow({ mode: "open" });
-		const mounted = mountInstance(sheet("red"), serverCarrier);
-		shadowRoot.appendChild(mounted.fragment);
+	test("hydrate seeds without touching the sheet; a later patch goes through CSSOM", () => {
+		const { shadowRoot } = mountIntoShadow(sheet("red"));
 		const style = shadowRoot.querySelector("style")!;
-		const serverTextNode = style.firstChild as Text;
+		const sheetTextNode = style.firstChild as Text;
 
-		const instance = hydrateInstance(sheet("red"), shadowRoot, serverCarrier);
-		expect(style.firstChild).toBe(serverTextNode);
+		const instance = hydrateInstance(sheet("red"), shadowRoot, moveState());
+		expect(style.firstChild).toBe(sheetTextNode);
 
 		patchInstance(instance, sheet("blue").values);
-		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: blue; }");
+		expect(style.firstChild).toBe(sheetTextNode);
+		expect(declarationOf(style).getPropertyValue("color")).toBe("blue");
 	});
 
-	test("the same template mounted twice under one host gets disjoint names", () => {
-		const carrier = detachedCarrier();
-		const first = mountInstance(sheet("red"), carrier);
-		const second = mountInstance(sheet("blue"), carrier);
-		const firstStyle = first.fragment.querySelector("style")!;
-		const secondStyle = second.fragment.querySelector("style")!;
-		const firstName = varNameOf(firstStyle);
-		const secondName = varNameOf(secondStyle);
-
-		expect(firstName).not.toBe(secondName);
-		expect(carrier.host.style.getPropertyValue(firstName).trim()).toBe("red");
-		expect(carrier.host.style.getPropertyValue(secondName).trim()).toBe("blue");
-	});
-
-	test("patching one duplicate leaves the other instance's prop untouched", () => {
-		const carrier = detachedCarrier();
-		const first = mountInstance(sheet("red"), carrier);
-		const second = mountInstance(sheet("blue"), carrier);
-		const firstName = varNameOf(first.fragment.querySelector("style")!);
-		const secondStyle = second.fragment.querySelector("style")!;
-		const secondName = varNameOf(secondStyle);
-		const secondSheetTextNode = secondStyle.firstChild as Text;
+	test("duplicate instances own private sheets and never interfere", () => {
+		const host = createHost();
+		document.body.appendChild(host as unknown as Element);
+		const shadowRoot = host.attachShadow({ mode: "open" });
+		const state = moveState();
+		const first = mountInstance(sheet("red"), state);
+		shadowRoot.appendChild(first.fragment);
+		const second = mountInstance(sheet("blue"), state);
+		shadowRoot.appendChild(second.fragment);
+		const styles = shadowRoot.querySelectorAll("style");
 
 		patchInstance(second.instance, sheet("green").values);
 
-		expect(carrier.host.style.getPropertyValue(firstName).trim()).toBe("red");
-		expect(carrier.host.style.getPropertyValue(secondName).trim()).toBe(
-			"green",
+		expect(normalizeWhitespace(styles[0].textContent!)).toBe(
+			"p { color: red; }",
 		);
-		//the duplicate's suffixed sheet was written once at mount, then never again
-		expect(secondStyle.firstChild).toBe(secondSheetTextNode);
+		expect(declarationOf(styles[0]).getPropertyValue("color")).toBe("red");
+		expect(declarationOf(styles[1]).getPropertyValue("color")).toBe("green");
 	});
 
-	test("hydration re-derives the duplicate's suffixed names from mount order", () => {
-		const serverCarrier = detachedCarrier();
-		const shadowRoot = serverCarrier.host.attachShadow({ mode: "open" });
-		const first = mountInstance(sheet("red"), serverCarrier);
-		shadowRoot.appendChild(first.fragment);
-		const second = mountInstance(sheet("blue"), serverCarrier);
-		shadowRoot.appendChild(second.fragment);
-		const styles = shadowRoot.querySelectorAll("style");
-		const secondName = varNameOf(styles[1]);
+	test("a moved style is refreshed from its orphaned sheet", () => {
+		const { shadowRoot, instance } = mountIntoShadow(sheet("red"));
+		patchInstance(instance, sheet("blue").values);
+		const style = shadowRoot.querySelector("style")!;
 
-		const clientCarrier = { ...detachedCarrier(), host: serverCarrier.host };
-		hydrateInstance(sheet("red"), shadowRoot, clientCarrier);
-		const secondInstance = hydrateInstance(
-			sheet("blue"),
-			styles[0],
-			clientCarrier,
+		//a plain re-append reparses the sheet from the stale mount-time text
+		const wrapper = document.createElement("div");
+		shadowRoot.appendChild(wrapper);
+		wrapper.append(
+			...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper),
 		);
+		expect(declarationOf(style).getPropertyValue("color")).toBe("red");
 
-		patchInstance(secondInstance, sheet("green").values);
-		expect(serverCarrier.host.style.getPropertyValue(secondName).trim()).toBe(
-			"green",
-		);
+		refreshStyleSheetsAfterMove(instance);
+		expect(declarationOf(style).getPropertyValue("color")).toBe("blue");
+
+		patchInstance(instance, sheet("green").values);
+		expect(declarationOf(style).getPropertyValue("color")).toBe("green");
 	});
 
-	test("releaseInstance recurses, clearing an outer and a nested style's props", () => {
-		const outer = (color: string) =>
-			html`<style>
-					div {
-						color: ${color};
-					}
-				</style>
-				<div>${sheet("red")}</div>`;
-		const carrier = detachedCarrier();
-		const { instance, fragment } = mountInstance(outer("blue"), carrier);
-		const styles = fragment.querySelectorAll("style");
-		const outerName = varNameOf(styles[0]);
-		const nestedName = varNameOf(styles[1]);
-		expect(carrier.host.style.getPropertyValue(outerName).trim()).toBe("blue");
-		expect(carrier.host.style.getPropertyValue(nestedName).trim()).toBe("red");
+	test("a moved style whose reparse breaks the plan structure demotes and flags a re-render", () => {
+		const { shadowRoot, instance } = mountIntoShadow(sheet("red"));
+		patchInstance(instance, sheet("blue").values); //resolve the CSSOM sheet
+		const style = shadowRoot.querySelector("style")!;
 
-		releaseInstance(instance);
+		//a reparse yielding a different rule count than the compiled plan recorded makes the
+		//after-move rebind bail; the leaf has no host, so it flags the shared move state instead
+		style.textContent = "p { color: red; } a { color: blue; }";
+		const wrapper = document.createElement("div");
+		shadowRoot.appendChild(wrapper);
+		wrapper.append(
+			...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper),
+		);
 
-		expect(carrier.host.style.getPropertyValue(outerName)).toBe("");
-		expect(carrier.host.style.getPropertyValue(nestedName)).toBe("");
+		expect(instance.moveState.needsRerenderAfterMove).toBe(false);
+		refreshStyleSheetsAfterMove(instance);
+		expect(instance.moveState.needsRerenderAfterMove).toBe(true);
+
+		//the demote is real: the next patch recomposes the whole sheet on the text lane
+		patchInstance(instance, sheet("green").values);
+		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: green; }");
 	});
 
-	test("switching a branch away releases the nested style's host props", () => {
+	test("switching a branch away removes the style element with the branch", () => {
 		const wrap = (inner: unknown) => html`<div>${inner}</div>`;
-		const carrier = detachedCarrier();
-		const { instance, fragment } = mountInstance(wrap(sheet("red")), carrier);
-		const name = varNameOf(fragment.querySelector("style")!);
-		expect(carrier.host.style.getPropertyValue(name).trim()).toBe("red");
+		const { instance, fragment } = mountInstance(wrap(sheet("red")), moveState());
+		expect(fragment.querySelector("style")).not.toBeNull();
 
 		patchInstance(instance, wrap(null).values);
 
-		expect(carrier.host.style.getPropertyValue(name)).toBe("");
+		expect(fragment.querySelector("style")).toBeNull();
 	});
 
-	test("removing a list row releases its style's host props", () => {
+	test("removing a list row removes its style element", () => {
 		const wrap = (items: Array<unknown>) => html`<div>${items}</div>`;
-		const carrier = detachedCarrier();
-		const { instance, fragment } = mountInstance(wrap([sheet("red")]), carrier);
-		const name = varNameOf(fragment.querySelector("style")!);
-		expect(carrier.host.style.getPropertyValue(name).trim()).toBe("red");
+		const { instance, fragment } = mountInstance(wrap([sheet("red")]), moveState());
+		expect(fragment.querySelector("style")).not.toBeNull();
 
 		patchInstance(instance, wrap([]).values);
 
-		expect(carrier.host.style.getPropertyValue(name)).toBe("");
+		expect(fragment.querySelector("style")).toBeNull();
 	});
 });
 
 describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 	test("does not re-write server-rendered content, and the text node survives", () => {
-		const { carrier, shadowRoot } = mountIntoShadow(
-			html`<p>${"server-text"}</p>`,
-		);
+		const { shadowRoot } = mountIntoShadow(html`<p>${"server-text"}</p>`);
 		const paragraph = shadowRoot.querySelector("p")!;
 		const serverTextNode = textNodeOf(paragraph);
 		expect(serverTextNode.data).toBe("server-text");
 
-		hydrateInstance(html`<p>${"client-text"}</p>`, shadowRoot, carrier);
+		hydrateInstance(html`<p>${"client-text"}</p>`, shadowRoot, moveState());
 
 		expect(textNodeOf(paragraph)).toBe(serverTextNode);
 		expect(serverTextNode.data).toBe("server-text");
 	});
 
 	test("does not overwrite a server-rendered attribute on hydrate", () => {
-		const { carrier, shadowRoot } = mountIntoShadow(
+		const { shadowRoot } = mountIntoShadow(
 			html`<span class="${"server-class"}"></span>`,
 		);
 		const span = shadowRoot.querySelector("span")!;
@@ -395,20 +335,18 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		hydrateInstance(
 			html`<span class="${"client-class"}"></span>`,
 			shadowRoot,
-			carrier,
+			moveState(),
 		);
 
 		expect(span.getAttribute("class")).toBe("stale-from-dom");
 	});
 
 	test("a patch after hydrate refreshes content to the current values", () => {
-		const { carrier, shadowRoot } = mountIntoShadow(
-			html`<p>${"server-text"}</p>`,
-		);
+		const { shadowRoot } = mountIntoShadow(html`<p>${"server-text"}</p>`);
 		const instance = hydrateInstance(
 			html`<p>${"client-text"}</p>`,
 			shadowRoot,
-			carrier,
+			moveState(),
 		);
 		expect(shadowRoot.querySelector("p")?.textContent).toBe("server-text");
 
@@ -417,14 +355,14 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 	});
 
 	test("a patch after hydrate writes a changed attribute value", () => {
-		const { carrier, shadowRoot } = mountIntoShadow(
+		const { shadowRoot } = mountIntoShadow(
 			html`<span class="${"server-class"}"></span>`,
 		);
 		const span = shadowRoot.querySelector("span")!;
 		const instance = hydrateInstance(
 			html`<span class="${"client-class"}"></span>`,
 			shadowRoot,
-			carrier,
+			moveState(),
 		);
 
 		patchInstance(instance, ["updated-class"]);
@@ -438,10 +376,10 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 			html`<ul>
 				${labels.map((label) => html`<li class=${label}>${label}</li>`)}
 			</ul>`;
-		const { carrier, shadowRoot } = mountIntoShadow(rows(["a", "b"]));
+		const { shadowRoot } = mountIntoShadow(rows(["a", "b"]));
 
 		expect(() =>
-			hydrateInstance(rows(["a", "b"]), shadowRoot, carrier),
+			hydrateInstance(rows(["a", "b"]), shadowRoot, moveState()),
 		).not.toThrow();
 
 		const items = shadowRoot.querySelectorAll("li");
@@ -464,10 +402,10 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 			["a", "b"],
 			["c", "d"],
 		];
-		const { carrier, shadowRoot } = mountIntoShadow(rows(tree));
+		const { shadowRoot } = mountIntoShadow(rows(tree));
 
 		expect(() =>
-			hydrateInstance(rows(tree), shadowRoot, carrier),
+			hydrateInstance(rows(tree), shadowRoot, moveState()),
 		).not.toThrow();
 
 		expect(shadowRoot.querySelectorAll("li").length).toBe(2);
