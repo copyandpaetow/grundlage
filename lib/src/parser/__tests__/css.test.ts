@@ -5,7 +5,12 @@ describe("dynamic declarations", () => {
 	test("single value hole addresses its rule and property", () => {
 		const plan = compileStyleSheet([".box { color: ", 0, "; }"]);
 		expect(plan?.dynamicDeclarations).toEqual([
-			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [" ", 0] },
+			{
+				rulePath: [0],
+				propertyName: "color",
+				priority: "",
+				valueParts: [" ", 0],
+			},
 		]);
 		expect(plan?.ruleCountChecks).toEqual([
 			{ rulePath: [], expectedRuleCount: 1 },
@@ -86,7 +91,9 @@ describe("property names", () => {
 
 	test("a vendor-prefixed property is addressable", () => {
 		const plan = compileStyleSheet(["div{-webkit-line-clamp:", 0, "}"]);
-		expect(plan?.dynamicDeclarations[0].propertyName).toBe("-webkit-line-clamp");
+		expect(plan?.dynamicDeclarations[0].propertyName).toBe(
+			"-webkit-line-clamp",
+		);
 	});
 
 	test("a comment before the property name is stripped", () => {
@@ -127,7 +134,12 @@ describe("nesting", () => {
 	test("a nested style rule gets a two-step path", () => {
 		const plan = compileStyleSheet(["div{.b{color:", 0, "}}"]);
 		expect(plan?.dynamicDeclarations).toEqual([
-			{ rulePath: [0, 0], propertyName: "color", priority: "", valueParts: [0] },
+			{
+				rulePath: [0, 0],
+				propertyName: "color",
+				priority: "",
+				valueParts: [0],
+			},
 		]);
 		expect(plan?.ruleCountChecks).toEqual([
 			{ rulePath: [0], expectedRuleCount: 1 },
@@ -148,7 +160,12 @@ describe("nesting", () => {
 	test("declarations after a nested rule land in an implicit nested-declarations rule", () => {
 		const plan = compileStyleSheet(["div{.b{color:red}width:", 0, "}"]);
 		expect(plan?.dynamicDeclarations).toEqual([
-			{ rulePath: [0, 1], propertyName: "width", priority: "", valueParts: [0] },
+			{
+				rulePath: [0, 1],
+				propertyName: "width",
+				priority: "",
+				valueParts: [0],
+			},
 		]);
 		expect(plan?.ruleCountChecks).toEqual([
 			{ rulePath: [0], expectedRuleCount: 2 },
@@ -165,9 +182,18 @@ describe("nesting", () => {
 
 describe("at-rules", () => {
 	test("a hole in a rule nested in @media is addressed through the media rule", () => {
-		const plan = compileStyleSheet(["@media (min-width: 600px){.a{color:", 0, "}}"]);
+		const plan = compileStyleSheet([
+			"@media (min-width: 600px){.a{color:",
+			0,
+			"}}",
+		]);
 		expect(plan?.dynamicDeclarations).toEqual([
-			{ rulePath: [0, 0], propertyName: "color", priority: "", valueParts: [0] },
+			{
+				rulePath: [0, 0],
+				propertyName: "color",
+				priority: "",
+				valueParts: [0],
+			},
 		]);
 		expect(plan?.ruleCountChecks).toEqual([
 			{ rulePath: [0], expectedRuleCount: 1 },
@@ -176,7 +202,11 @@ describe("at-rules", () => {
 	});
 
 	test("an at-rule nested inside a style rule holds an implicit nested-declarations rule", () => {
-		const plan = compileStyleSheet(["div{@media (hover:hover){color:", 0, "}}"]);
+		const plan = compileStyleSheet([
+			"div{@media (hover:hover){color:",
+			0,
+			"}}",
+		]);
 		expect(plan?.dynamicDeclarations).toEqual([
 			{
 				rulePath: [0, 0, 0],
@@ -193,7 +223,11 @@ describe("at-rules", () => {
 	});
 
 	test("a hole in a keyframe declaration addresses the keyframe block", () => {
-		const plan = compileStyleSheet(["@keyframes spin{to{transform:rotate(", 0, "deg)}}"]);
+		const plan = compileStyleSheet([
+			"@keyframes spin{to{transform:rotate(",
+			0,
+			"deg)}}",
+		]);
 		expect(plan?.dynamicDeclarations).toEqual([
 			{
 				rulePath: [0, 0],
@@ -244,7 +278,9 @@ describe("at-rules", () => {
 	});
 
 	test("a hole inside @property bails", () => {
-		expect(compileStyleSheet(["@property --x{initial-value:", 0, "}"])).toBeNull();
+		expect(
+			compileStyleSheet(["@property --x{initial-value:", 0, "}"]),
+		).toBeNull();
 	});
 
 	test("descriptor at-rule names are case-insensitive", () => {
@@ -252,7 +288,11 @@ describe("at-rules", () => {
 	});
 
 	test("a hole after a closed descriptor block is fast again", () => {
-		const plan = compileStyleSheet(["@font-face{src:url(x.woff2)}.a{color:", 0, "}"]);
+		const plan = compileStyleSheet([
+			"@font-face{src:url(x.woff2)}.a{color:",
+			0,
+			"}",
+		]);
 		expect(plan?.dynamicDeclarations).toEqual([
 			{ rulePath: [1], propertyName: "color", priority: "", valueParts: [0] },
 		]);
@@ -298,6 +338,12 @@ describe("!important", () => {
 		expect(plan?.dynamicDeclarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
+	});
+
+	test("a trailing comment after !important in a holed declaration bails", () => {
+		expect(
+			compileStyleSheet(["div{color:", 0, " !important /* note */}"]),
+		).toBeNull();
 	});
 });
 
@@ -366,11 +412,34 @@ describe("strings and comments", () => {
 	test("an unterminated string bails", () => {
 		expect(compileStyleSheet(['div{content:"a}', 0, ""])).toBeNull();
 	});
+
+	test("an escaped backslash does not swallow the closing quote", () => {
+		const plan = compileStyleSheet(['div{content:"a\\\\";width:', 0, "}"]);
+		expect(plan?.dynamicDeclarations).toEqual([
+			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
+		]);
+	});
+
+	test("a comment inside a holed value is kept in the value parts", () => {
+		const plan = compileStyleSheet(["div{color:/* c */", 0, "}"]);
+		expect(plan?.dynamicDeclarations).toEqual([
+			{
+				rulePath: [0],
+				propertyName: "color",
+				priority: "",
+				valueParts: ["/* c */", 0],
+			},
+		]);
+	});
 });
 
 describe("parentheses", () => {
 	test("a semicolon inside url() is not a terminator", () => {
-		const plan = compileStyleSheet([".a{background:url(img;x.png);width:", 0, "}"]);
+		const plan = compileStyleSheet([
+			".a{background:url(img;x.png);width:",
+			0,
+			"}",
+		]);
 		expect(plan?.dynamicDeclarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
@@ -381,7 +450,7 @@ describe("parentheses", () => {
 	});
 });
 
-describe("analyzer reuse", () => {
+describe("parser reuse", () => {
 	test("two compilations do not share state", () => {
 		const firstPlan = compileStyleSheet(["div{.b{color:red}width:", 0, "}"]);
 		const secondPlan = compileStyleSheet(["p{color:", 0, "}"]);

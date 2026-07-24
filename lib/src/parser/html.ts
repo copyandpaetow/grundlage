@@ -123,7 +123,6 @@ const resetParser = (
 	parser.state = STATE.TEXT;
 	parser.bindings = [];
 	parser.templates = strings;
-	//the strings are the template identity; hashed pre-parse so css sheets can bake
 	parser.templateHash = hashValue(strings);
 	parser.index = 0;
 	parser.activeTemplate = strings[0];
@@ -384,7 +383,6 @@ const markTopLevelTextSibling = (
 	}
 };
 
-//a lone `${...}` in attribute-name position with no value is a spread: `<div ${attributes}>`
 const isExpandableSpread = (binding: AttributeBinding): boolean =>
 	binding.values.length === 0 &&
 	binding.keys.length === 1 &&

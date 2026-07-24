@@ -4,7 +4,13 @@ import { hashValue } from "../../utils/hashing";
 import { hasHashChanged } from "../compose";
 import { ValueOf } from "../../utils/types";
 import { CONTENT_KIND, UNSET_HASH } from "../constants";
-import { assertNestable, hydrateInstance, reconcileInstance, releaseContent, releaseInstance } from "../instance";
+import {
+	assertNestable,
+	hydrateInstance,
+	reconcileInstance,
+	releaseContent,
+	releaseInstance,
+} from "../instance";
 import { forEachNode } from "../markers";
 import { hydrateListItems, patchListContent } from "./content-list";
 import {
@@ -13,7 +19,7 @@ import {
 	ContentLiveBinding,
 	ContentState,
 	TextContentState,
-	UnresolvedContentState
+	UnresolvedContentState,
 } from "./types";
 
 export const UNRESOLVED_CONTENT: UnresolvedContentState = Object.freeze({

@@ -336,10 +336,14 @@ describe("raw content updates", () => {
 		const styles = element.shadowRoot!.querySelectorAll("style");
 		expect(styles).toHaveLength(2);
 		expect(
-			ruleDeclarationOf(styles[0] as HTMLStyleElement).getPropertyValue("color"),
+			ruleDeclarationOf(styles[0] as HTMLStyleElement).getPropertyValue(
+				"color",
+			),
 		).toBe("red");
 		expect(
-			ruleDeclarationOf(styles[1] as HTMLStyleElement).getPropertyValue("color"),
+			ruleDeclarationOf(styles[1] as HTMLStyleElement).getPropertyValue(
+				"color",
+			),
 		).toBe("blue");
 		expect(element.getAttribute("style")).toBeNull();
 
@@ -481,7 +485,9 @@ describe("raw content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const style = element.shadowRoot!.querySelector("style") as HTMLStyleElement;
+		const style = element.shadowRoot!.querySelector(
+			"style",
+		) as HTMLStyleElement;
 		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: red; }");
 
 		showStyled = false;
@@ -516,7 +522,9 @@ describe("raw content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const style = element.shadowRoot!.querySelector("style") as HTMLStyleElement;
+		const style = element.shadowRoot!.querySelector(
+			"style",
+		) as HTMLStyleElement;
 
 		color = "blue";
 		await element.update();

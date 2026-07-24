@@ -122,18 +122,19 @@ yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>�
   `update()` we will detect. Other values — class instances, `Date`, typed arrays — are
   compared by REFERENCE identity, so mutating one in place reads as unchanged and is
   skipped. Pass plain data, or replace the reference to signal a change.
-- A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the sheet is
-  served as static text with `var(--…)` indirection and each value lives as a custom
-  property on the HOST's inline `style` (SSR serializes them there too), so an update is a
-  `setProperty`, never a sheet reparse. Structural holes (selector, property name, at-rule
-  prelude) fall back to a full sheet rewrite — always correct, just slower. Consequences:
-  don't deliver a `style` attribute to the host through a `<template ${spread}>` object
-  (it wipes those custom properties; a `style` written as a root-`<template>` attribute —
-  static or `${…}`-bound — safely disables the fast path for every `<style>` in the
-  component, nested templates included), and a value that smuggles `;` or `!important` at
-  runtime behaves as invalid → `unset` rather than splitting into extra declarations. A
-  CSS-wide keyword (`inherit`/`initial`/`unset`/`revert`) is NOT narrowed — it rides
-  through `var()` and takes its normal effect, same as on the fallback path.
+- A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the mounted
+  (and server-rendered) sheet text carries the real literal values, and every later
+  update is a `setProperty` on the element's OWN stylesheet object (CSSOM) — never a
+  sheet reparse, never a write to the host. Duplicate instances each own a private sheet,
+  so they never collide, and a host `style` attribute (root-`<template>` bound or spread)
+  no longer affects the fast path. Structural holes (selector, property name, at-rule
+  prelude) and a holed property duplicated in one declaration block fall back to a full
+  text rewrite — always correct, just slower; a sheet the browser parses differently than
+  the library expects (e.g. it drops a rule it can't parse) demotes to the same fallback.
+  Consequences: a runtime value that fails to parse (including one that smuggles `;` or
+  `!important`) is dropped by the browser and the PREVIOUS value stays, a CSS-wide
+  keyword (`inherit`/`initial`/`unset`/`revert`) takes its normal effect, and serialized
+  output (`getHTML`) reflects the last full-text write, not later CSSOM updates.
 - Read inputs with `props(host, schema)`. Don't read attributes directly — they're strings
   and skip the type coercion/defaults `props` gives you.
 - `load` replays SSR data on hydration; don't add your own fetch-once cache around it.

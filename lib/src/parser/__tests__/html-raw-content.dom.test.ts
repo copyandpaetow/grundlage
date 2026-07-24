@@ -165,7 +165,12 @@ describe("html parser — css plan attachment", () => {
 
 		const compiledStyleSheet = rawContentBinding(parsed).compiledStyleSheet;
 		expect(compiledStyleSheet?.dynamicDeclarations).toEqual([
-			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [" ", 0] },
+			{
+				rulePath: [0],
+				propertyName: "color",
+				priority: "",
+				valueParts: [" ", 0],
+			},
 		]);
 		//the sheet text is composed with literal values at first commit — the cached
 		//markup carries an empty <style>
@@ -226,10 +231,20 @@ describe("html parser — css plan attachment", () => {
 		const [firstBinding, secondBinding] =
 			parsed.bindings as Array<RawContentStaticBinding>;
 		expect(firstBinding.compiledStyleSheet?.dynamicDeclarations).toEqual([
-			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [" ", 0] },
+			{
+				rulePath: [0],
+				propertyName: "color",
+				priority: "",
+				valueParts: [" ", 0],
+			},
 		]);
 		expect(secondBinding.compiledStyleSheet?.dynamicDeclarations).toEqual([
-			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [" ", 1] },
+			{
+				rulePath: [0],
+				propertyName: "width",
+				priority: "",
+				valueParts: [" ", 1],
+			},
 		]);
 	});
 });

@@ -773,9 +773,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			customElements.define(clientTag, makeComponent());
 			await sleep();
 
-			element.shadowRoot!.querySelector("button")!.dispatchEvent(
-				new Event("click"),
-			);
+			element
+				.shadowRoot!.querySelector("button")!
+				.dispatchEvent(new Event("click"));
 			expect(clicks).toBe(1);
 
 			cleanup(element);

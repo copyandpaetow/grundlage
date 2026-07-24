@@ -72,9 +72,9 @@ describe("assertNestable: host binding requirement", () => {
 
 	test("mounting a parent whose content is a nested root template throws", () => {
 		const inner = html`<template class="leak"><p>x</p></template>`;
-		expect(() =>
-			mountInstance(html`<div>${inner}</div>`, moveState()),
-		).toThrow(/top level of a component's render output/);
+		expect(() => mountInstance(html`<div>${inner}</div>`, moveState())).toThrow(
+			/top level of a component's render output/,
+		);
 	});
 
 	test("mounting a list whose item is a root template throws", () => {
@@ -113,9 +113,7 @@ describe("reconcileInstance: patch vs rebuild", () => {
 	test("patches in place when the template hash matches", () => {
 		const paragraph = (value: string) => html`<p class="${value}">x</p>`;
 		const { instance } = mountInstance(paragraph("a"), moveState());
-		expect(
-			reconcileInstance(instance, paragraph("b"), moveState()),
-		).toBeNull();
+		expect(reconcileInstance(instance, paragraph("b"), moveState())).toBeNull();
 	});
 
 	test("rebuilds when the structure differs", () => {
@@ -292,7 +290,10 @@ describe("raw content with a css plan", () => {
 
 	test("switching a branch away removes the style element with the branch", () => {
 		const wrap = (inner: unknown) => html`<div>${inner}</div>`;
-		const { instance, fragment } = mountInstance(wrap(sheet("red")), moveState());
+		const { instance, fragment } = mountInstance(
+			wrap(sheet("red")),
+			moveState(),
+		);
 		expect(fragment.querySelector("style")).not.toBeNull();
 
 		patchInstance(instance, wrap(null).values);
@@ -302,7 +303,10 @@ describe("raw content with a css plan", () => {
 
 	test("removing a list row removes its style element", () => {
 		const wrap = (items: Array<unknown>) => html`<div>${items}</div>`;
-		const { instance, fragment } = mountInstance(wrap([sheet("red")]), moveState());
+		const { instance, fragment } = mountInstance(
+			wrap([sheet("red")]),
+			moveState(),
+		);
 		expect(fragment.querySelector("style")).not.toBeNull();
 
 		patchInstance(instance, wrap([]).values);
