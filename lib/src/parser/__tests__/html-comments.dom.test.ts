@@ -11,10 +11,37 @@ const literalParts = (binding: CommentStaticBinding) =>
 	binding.parts.filter((part): part is string => typeof part === "string");
 
 describe("html parser — comment bindings", () => {
-	test("expression inside HTML comment is a comment binding", () => {
-		const msg = "debug info";
-		const parsed = parse`<!-- ${msg} -->`;
+	test("the first dynamic comment is the list key, not a binding", () => {
+		const identifier = "row-1";
+		const parsed = parse`<!-- ${identifier} -->`;
 
+		expect(parsed.bindings).toHaveLength(0);
+		expect(parsed.keyValueParts).toEqual([" ", 0, " "]);
+	});
+
+	test("a key comment is stripped — it leaves no node in the markup", () => {
+		const identifier = "row-1";
+		const parsed = parse`<!-- ${identifier} --><li>row</li>`;
+
+		expect(parsed.htmlWithMarkers).toBe("<li>row</li>");
+	});
+
+	test("the literal text around a key expression does not change the key", () => {
+		const identifier = "row-1";
+		const bare = parse`<!--${identifier}-->`;
+		const prose = parse`<!-- id: ${identifier} -->`;
+
+		expect(bare.keyValueParts).toEqual([0]);
+		expect(prose.keyValueParts).toEqual([" id: ", 0, " "]);
+		expect(bare.htmlWithMarkers).toBe(prose.htmlWithMarkers);
+	});
+
+	test("a dynamic comment after the key stays a comment binding", () => {
+		const identifier = "row-1";
+		const msg = "debug info";
+		const parsed = parse`<!--${identifier}--><!-- ${msg} -->`;
+
+		expect(parsed.keyValueParts).toEqual([0]);
 		expect(parsed.bindings).toHaveLength(1);
 		expect(parsed.bindings[0].type).toBe(BINDING.COMMENT);
 	});
@@ -38,22 +65,21 @@ describe("html parser — comment bindings", () => {
 		]);
 	});
 
-	test("multiple expressions in one comment share one binding", () => {
+	test("multiple expressions in one comment share one key", () => {
 		const a = "x";
 		const b = "y";
 		const parsed = parse`<!-- ${a} and ${b} -->`;
 
-		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as CommentStaticBinding;
-		expect(binding.type).toBe(BINDING.COMMENT);
-		expect(binding.parts.filter((part) => typeof part === "number")).toEqual([
-			0, 1,
-		]);
+		expect(parsed.bindings).toHaveLength(0);
+		expect(
+			parsed.keyValueParts!.filter((part) => typeof part === "number"),
+		).toEqual([0, 1]);
 	});
 
 	test("comment binding parts do not include delimiters", () => {
+		const identifier = "row-1";
 		const msg = "debug";
-		const parsed = parse`<!-- ${msg} -->`;
+		const parsed = parse`<!--${identifier}--><!-- ${msg} -->`;
 
 		const binding = parsed.bindings[0] as CommentStaticBinding;
 		for (const part of literalParts(binding)) {
@@ -63,9 +89,10 @@ describe("html parser — comment bindings", () => {
 	});
 
 	test("multi-expression comment binding parts do not include delimiters", () => {
+		const identifier = "row-1";
 		const a = "x";
 		const b = "y";
-		const parsed = parse`<!-- ${a} and ${b} -->`;
+		const parsed = parse`<!--${identifier}--><!-- ${a} and ${b} -->`;
 
 		const binding = parsed.bindings[0] as CommentStaticBinding;
 		for (const part of literalParts(binding)) {
@@ -107,13 +134,14 @@ describe("html parser — comment bindings", () => {
 		).toBeNull();
 	});
 
-	test("a single-hole comment stays a comment — whitespace does not flip its semantics", () => {
+	test("a single-hole comment after the key stays a comment — whitespace does not flip its semantics", () => {
+		const identifier = "row-1";
 		const msg = "x";
-		const tight = parse`<!--${msg}-->`;
+		const tight = parse`<!--${identifier}--><!--${msg}-->`;
 		expect(tight.bindings).toHaveLength(1);
 		expect(tight.bindings[0].type).toBe(BINDING.COMMENT);
 
-		const spaced = parse`<!-- ${msg} -->`;
+		const spaced = parse`<!--${identifier}--><!-- ${msg} -->`;
 		expect(spaced.bindings[0].type).toBe(BINDING.COMMENT);
 	});
 });

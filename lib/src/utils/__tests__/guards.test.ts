@@ -11,6 +11,8 @@ describe("isStringable", () => {
 		["number", 42],
 		["zero", 0],
 		["NaN", NaN],
+		["bigint", 42n],
+		["bigint zero", 0n],
 		["boolean true", true],
 		["boolean false", false],
 	])("accepts %s", (_label, value) => {
@@ -33,13 +35,15 @@ describe("assertPrimitiveString", () => {
 	test("stringifies primitives", () => {
 		expect(assertPrimitiveString("a")).toBe("a");
 		expect(assertPrimitiveString(42)).toBe("42");
+		expect(assertPrimitiveString(42n)).toBe("42");
+		expect(assertPrimitiveString(0n)).toBe("0");
 		expect(assertPrimitiveString(true)).toBe("true");
 		expect(assertPrimitiveString(false)).toBe("false");
 	});
 
 	test("throws on non-stringable values", () => {
 		expect(() => assertPrimitiveString({})).toThrow(
-			/Expected string, number, or boolean/,
+			/Expected string, number, bigint, or boolean/,
 		);
 		expect(() => assertPrimitiveString(null)).toThrow();
 		expect(() => assertPrimitiveString(undefined)).toThrow();

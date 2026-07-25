@@ -15,9 +15,9 @@ import { forEachNode } from "../markers";
 import { hydrateListItems, patchListContent } from "./content-list";
 import {
 	BranchContentState,
-	StyleSheetMoveState,
 	ContentLiveBinding,
 	ContentState,
+	StyleSheetMoveState,
 	TextContentState,
 	UnresolvedContentState,
 } from "./types";
@@ -65,8 +65,11 @@ const switchContentKind = (
 	liveBinding.content = createContentState(contentKind);
 };
 
-const coerceToText = (value: unknown): string =>
-	value === null || value === undefined ? "" : assertPrimitiveString(value);
+const coerceToText = (value: unknown): string => {
+	const isAbsentContent =
+		value === null || value === undefined || typeof value === "boolean";
+	return isAbsentContent ? "" : assertPrimitiveString(value);
+};
 
 const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
 	const textState = liveBinding.content as TextContentState;

@@ -1,4 +1,5 @@
-type SchemaEntry = abstract new (...args: any[]) => any;
+//BigInt has no construct signature, so it can't ride the constructor shape the others share
+type SchemaEntry = (abstract new (...args: any[]) => any) | BigIntConstructor;
 type SchemaDefinition = SchemaEntry | [SchemaEntry] | [SchemaEntry, any];
 
 export type Schema = Record<string, SchemaDefinition>;
@@ -18,17 +19,22 @@ type Primitive<Type> = Type extends StringConstructor
 	? string
 	: Type extends NumberConstructor
 		? number
-		: Type extends BooleanConstructor
-			? boolean
-			: Type extends abstract new (...args: any[]) => infer Result
-				? Result
-				: unknown;
+		: Type extends BigIntConstructor
+			? bigint
+			: Type extends BooleanConstructor
+				? boolean
+				: Type extends abstract new (...args: any[]) => infer Result
+					? Result
+					: unknown;
 
 type InferSchema<Type extends Schema> = {
 	[Key in keyof Type]: InferEntry<Type[Key]>;
 };
 
-type StringableValue = StringConstructor | NumberConstructor;
+type StringableValue =
+	| StringConstructor
+	| NumberConstructor
+	| BigIntConstructor;
 
 type ResolvedSchemaEntry = {
 	constructorValue: SchemaEntry;
@@ -65,24 +71,46 @@ const readBooleanProp = (
 	return valueWhenAbsent;
 };
 
+const coerceAttributeValue = (
+	key: string,
+	raw: string,
+	constructorValue: StringableValue,
+): unknown => {
+	if (constructorValue === Number) {
+		const coerced = Number(raw);
+		if (Number.isNaN(coerced))
+			throw new Error(
+				`grundlage: Invalid number value for attribute "${key}": "${raw}"`,
+			);
+		return coerced;
+	}
+	if (constructorValue === BigInt) {
+		//BigInt rejects a malformed string by throwing, where Number returns NaN
+		try {
+			return BigInt(raw);
+		} catch {
+			throw new Error(
+				`grundlage: Invalid bigint value for attribute "${key}": "${raw}"`,
+			);
+		}
+	}
+	return String(raw);
+};
+
 const readStringableProp = (
 	element: HTMLElement,
 	key: string,
 	constructorValue: StringableValue,
 ): unknown => {
 	const raw = element.getAttribute(key);
-	const isAbsent = raw === null || (constructorValue === Number && raw === "");
+	const treatsEmptyStringAsAbsent =
+		constructorValue === Number || constructorValue === BigInt;
+	const isAbsent = raw === null || (treatsEmptyStringAsAbsent && raw === "");
 	if (isAbsent) {
 		if (!Object.hasOwn(element, key)) return undefined;
 		return element[key as keyof typeof element] ?? undefined;
 	}
-	const coerced = constructorValue(raw);
-	if (constructorValue === Number && Number.isNaN(coerced)) {
-		throw new Error(
-			`grundlage: Invalid number value for attribute "${key}": "${raw}"`,
-		);
-	}
-	return coerced;
+	return coerceAttributeValue(key, raw, constructorValue);
 };
 
 export const props = <Type extends Schema>(
@@ -104,10 +132,14 @@ export const props = <Type extends Schema>(
 			continue;
 		}
 
-		const value =
-			constructorValue === String || constructorValue === Number
-				? readStringableProp(element, key, constructorValue as StringableValue)
-				: (element[key as keyof typeof element] ?? undefined);
+		const readsAttributeChannel =
+			constructorValue === String ||
+			constructorValue === Number ||
+			constructorValue === BigInt;
+
+		const value = readsAttributeChannel
+			? readStringableProp(element, key, constructorValue as StringableValue)
+			: (element[key as keyof typeof element] ?? undefined);
 
 		if (value !== undefined) {
 			result[key] = value;

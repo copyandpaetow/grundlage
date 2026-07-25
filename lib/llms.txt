@@ -46,24 +46,37 @@ customElements.define(
   or async. `{ mode: "closed" }` hydrates and
   replays `load` data like an open root — the closed shadow root is reached through
   `attachInternals().shadowRoot` instead of `host.shadowRoot`, so server output is reused
-  rather than re-rendered.
+  rather than re-rendered. The return value is a class: `class extends component(fn) {}`
+  adds real methods, getters, or static fields — that is the extension point, not assigning
+  to `host` at runtime.
 
 `` html`...` `` => `Template` (opaque)
   Tagged template literal. Parsed once and cached; later renders only touch dynamic
   parts. Yield it, or embed it inside another `html` template.
 
 `props(host, schema) => typed object`
-  Reads typed values whether they arrived as attributes (strings) or properties.
-  Schema entry forms: `String` | `Number` | `Boolean` | `Function` | `Array` | a class;
-  `[Constructor]` allows `undefined`; `[Constructor, fallback]` supplies a default.
-  A present attribute always wins over the property channel: a `Boolean` is `true` when
-  the attribute is present, otherwise the own property is read (`el.checked = true`).
+  Reads typed values from attributes or properties. Only `String`, `Number`, `BigInt`, and
+  `Boolean` consult the attribute channel and coerce the string; `Function`, `Array`, and
+  a class are read from the own property ONLY — no attribute is inspected and no coercion
+  happens, the schema entry just types the result. `[Constructor]` allows `undefined`;
+  `[Constructor, fallback]` supplies a default. For the four coercing forms a present
+  attribute wins over the property channel: a `Boolean` is `true` when the attribute is
+  present, otherwise the own property is read (`el.checked = true`). `Number` and `BigInt`
+  treat an empty attribute as absent and THROW on a value they can't parse
+  (`count="hello"`, `total="3.14"`).
 
 `load(host, fetcher, options?) => Promise<Value>`
   Data needed before first render. On the server the fetcher runs and the result is
   serialized into the markup; on the client it's replayed once during hydration, then
   the fetcher runs normally. `options` is `{ key?, skipSsr? }`, or a string shorthand
   for `{ key }`.
+
+`host.setProp(name, value, oldValue?) => void`
+  Imperative counterpart to a markup binding, for a framework/interop driver feeding props
+  from outside. Sets one host binding with the same resolution as a dynamic attribute —
+  stringable value → attribute, non-stringable → own property, `on*` + function → event
+  listener — then triggers `update()`. Pass `oldValue` so a previous function listener is
+  removed and a stale property slot is cleared.
 
 Types: `BaseComponent`, `ComponentOptions`, `LoadOptions`, `Template`.
 
@@ -75,7 +88,7 @@ attribute      <div class=${className}>
 mixed attr     <div class="static ${dynamic}">
 event          <button onClick=${handler}>        // on + EventName, camelCase
 list           <ul>${items.map((i) => html`<li>${i}</li>`)}</ul>
-nested         <div>${show ? html`<details>…</details>` : null}</div>
+nested         <div>${show && html`<details>…</details>`}</div>    // false renders nothing
 dynamic tag    <${tagName}>content</${tagName}>
 raw            <style>${css}</style>               // style/script/textarea
 ```
@@ -101,6 +114,10 @@ yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>�
 - The component generator runs ONCE per mount and runs to completion — no `while (true)`.
   State declared before your `yield` persists across re-renders (the yielded render
   function closes over it), so keep mutable state there rather than re-deriving it.
+- Don't hang state or methods off `host` (`host.query = …`, `host.close = () => …`) — the
+  host is not your instance bag. Keep state in generator-local variables and communicate
+  outward by dispatching events, inward by reading attributes/props. To add real methods,
+  extend the returned class (`class extends component(fn) {}`), never assign at runtime.
 - `host.update()` is the ONLY re-render trigger (no reactive primitive). It re-fires what
   you last yielded: a render function is re-called, a yielded INNER generator restarts
   from scratch, a yielded static `html` template does not re-run. The root never re-runs.
@@ -113,6 +130,11 @@ yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>�
   generator): `const host = yield () => html`…``. A yielded promise returns its resolved
   value (`const data = yield fetch(...)`); any other plain value is echoed back. Yielded
   inner generators and render functions also receive the host as their first argument.
+- In a CONTENT hole, `null`, `undefined`, `false`, and `true` render nothing — a boolean is a
+  condition result, not a value. Numbers, bigints, and strings always render — `0`, `0n`,
+  `NaN`, and `""` included. So `${isOpen && html`…`}` is safe, but `${items.length && html`…`}` writes the
+  text `"0"` on an empty list — use a ternary for any non-boolean guard. ATTRIBUTE holes are
+  separate: there `false`/`null`/`undefined` REMOVE the attribute.
 - Components render into SHADOW DOM by default. Light-DOM selectors won't reach inside.
 - Don't write literal `<!--^.^ …-->` or `<!--*.*-->` comments in template HTML — those
   prefixes are reserved for internal markers and a collision silently misaligns hydration.

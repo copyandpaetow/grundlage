@@ -1,14 +1,19 @@
 export const isStringable = (value: unknown) =>
 	typeof value === "string" ||
 	typeof value === "number" ||
+	typeof value === "bigint" ||
 	typeof value === "boolean";
 
 export const assertPrimitiveString = (value: unknown): string => {
 	if (typeof value === "string") return value;
-	if (typeof value === "number" || typeof value === "boolean")
+	if (
+		typeof value === "number" ||
+		typeof value === "bigint" ||
+		typeof value === "boolean"
+	)
 		return String(value);
 	throw new Error(
-		`grundlage: Expected string, number, or boolean => got ${typeof value}`,
+		`grundlage: Expected string, number, bigint, or boolean => got ${typeof value}`,
 	);
 };
 

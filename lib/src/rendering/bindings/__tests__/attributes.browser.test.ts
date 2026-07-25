@@ -247,6 +247,30 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
+	test("writes a bigint to the attribute channel, like a number", async () => {
+		const tag = uniqueTag();
+		let value: unknown = 9007199254740993n;
+
+		const MyElement = component(function* () {
+			yield () => html`<div data-total=${value}>text</div>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("data-total")).toBe("9007199254740993");
+
+		value = 0n;
+		await element.update();
+		await sleep();
+
+		expect(div.getAttribute("data-total")).toBe("0");
+
+		cleanup(element);
+	});
+
 	test("removes attribute when value is null", async () => {
 		const tag = uniqueTag();
 		let value: string | null = "visible";

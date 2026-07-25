@@ -1,5 +1,4 @@
-import { BINDING, NO_KEY_BINDING } from "../../parser/constants";
-import { AttributeStaticBinding, ParsedTemplate } from "../../parser/types";
+import { ParsedTemplate } from "../../parser/types";
 import { getParsedTemplate } from "../../parser/html";
 import { coerceToTemplate, TemplateValue } from "../../template";
 import {
@@ -7,7 +6,7 @@ import {
 	hashValue,
 	LIST_HASH_SEED,
 } from "../../utils/hashing";
-import { composeParts } from "../compose";
+import { combinedPartsHash } from "../compose";
 import { NO_KEY } from "../constants";
 import { MARKUP } from "../../parser/chars";
 import {
@@ -27,27 +26,10 @@ import {
 	ListItem,
 } from "./types";
 
-const isKeyed = (parsed: ParsedTemplate): boolean =>
-	parsed.keyBindingIndex !== NO_KEY_BINDING;
-
-const evaluateKeyHash = (
-	value: TemplateValue,
-	parsed: ParsedTemplate,
-): number => {
-	const binding = parsed.bindings[parsed.keyBindingIndex];
-	const keyValue =
-		binding.type === BINDING.SINGLE_VALUE_ATTRIBUTE
-			? value.values[binding.valueIndex]
-			: composeParts(
-					(binding as AttributeStaticBinding).valueParts,
-					value.values,
-				);
-
-	return hashValue(keyValue);
-};
-
 const keyHashOf = (value: TemplateValue, parsed: ParsedTemplate): number =>
-	isKeyed(parsed) ? evaluateKeyHash(value, parsed) : NO_KEY;
+	parsed.keyValueParts === null
+		? NO_KEY
+		: combinedPartsHash(parsed.keyValueParts, value.values);
 
 const shapeOrKeyHash = (templateHash: number, keyHash: number): number =>
 	keyHash === NO_KEY ? templateHash : keyHash;

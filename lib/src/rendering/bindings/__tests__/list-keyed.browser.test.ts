@@ -5,8 +5,8 @@ const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
 //content values are chosen distinct so the exact-content-hash pass never claims a row;
-//this isolates the key= match path (reorder/insert/remove tracked by key, not content)
-describe("keyed lists (key= escape hatch)", () => {
+//this isolates the key match path (reorder/insert/remove tracked by key, not content)
+describe("keyed lists (dynamic-comment escape hatch)", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-keyed-${tagId++}-${Date.now()}`;
 
@@ -25,7 +25,9 @@ describe("keyed lists (key= escape hatch)", () => {
 		const Element = component(function* () {
 			yield () =>
 				html`<ul>
-					${read().map((row) => html`<li key="${row.id}">${row.text}</li>`)}
+					${read().map(
+						(row) => html`<!--${row.id}--><li>${row.text}</li>`,
+					)}
 				</ul>`;
 		});
 		customElements.define(tag, Element);

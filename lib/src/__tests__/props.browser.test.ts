@@ -107,6 +107,58 @@ describe("props", () => {
 		});
 	});
 
+	describe("BigInt", () => {
+		it("reads and coerces from attribute", () => {
+			const element = createElement({ total: "9007199254740993" });
+			const { total } = props(element, { total: BigInt });
+			expect(total).toBe(9007199254740993n);
+		});
+
+		it("handles zero correctly", () => {
+			const element = createElement({ total: "0" });
+			const { total } = props(element, { total: BigInt });
+			expect(total).toBe(0n);
+		});
+
+		it("handles negative values", () => {
+			const element = createElement({ total: "-5" });
+			const { total } = props(element, { total: BigInt });
+			expect(total).toBe(-5n);
+		});
+
+		it("throws on a malformed attribute", () => {
+			const element = createElement({ total: "3.14" });
+			expect(() => props(element, { total: BigInt })).toThrow(
+				'Invalid bigint value for attribute "total": "3.14"',
+			);
+		});
+
+		it("treats an empty attribute as absent, like Number", () => {
+			const element = createElement({ total: "" });
+			const { total } = props(element, { total: [BigInt, 7n] });
+			expect(total).toBe(7n);
+		});
+
+		it("falls back to property when attribute is missing", () => {
+			const element = createElement({}, { total: 99n });
+			const { total } = props(element, { total: BigInt });
+			expect(total).toBe(99n);
+		});
+
+		it("uses default when missing", () => {
+			const element = createElement();
+			const { total } = props(element, { total: [BigInt, 0n] });
+			expect(total).toBe(0n);
+		});
+
+		it("throws when required and missing", () => {
+			const element = createElement();
+			expect(() => props(element, { total: BigInt })).toThrow(
+				'Missing required prop: "total"',
+			);
+		});
+	});
+
 	describe("Boolean", () => {
 		it("returns true when attribute is present", () => {
 			const element = createElement({ disabled: "" });

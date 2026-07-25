@@ -115,9 +115,6 @@ export interface ParsedTemplate {
 	templateHash: number;
 	fragmentCloneSource: DocumentFragment | null;
 	hostBindingCount: number;
-	keyBindingIndex: number;
-	//true when any raw-content binding compiled to a css sheet; OR-folded into the move
-	//state's needsStyleSheetRefreshOnMove so the after-move walk needn't thread through
-	//every binding constructor
 	hasStyleSheetBinding: boolean;
+	keyValueParts: Array<Part> | null;
 }

@@ -22,12 +22,13 @@ const TAG = {
 	STRING: 2,
 	NUMBER: 3,
 	BOOLEAN: 4,
-	ARRAY: 5,
-	OBJECT: 6,
-	MAP: 7,
-	SET: 8,
-	REFERENCE: 9,
-	TRUNCATED: 10,
+	BIGINT: 5,
+	ARRAY: 6,
+	OBJECT: 7,
+	MAP: 8,
+	SET: 9,
+	REFERENCE: 10,
+	TRUNCATED: 11,
 } as const;
 
 const MAX_DEPTH = 64;
@@ -97,6 +98,8 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 	if (type === "string")
 		return combineOrderedHash(TAG.STRING, stringHash(value as string));
 	if (type === "number") return hashNumber(value as number);
+	if (type === "bigint")
+		return combineOrderedHash(TAG.BIGINT, stringHash(String(value)));
 	if (type === "boolean") return combineOrderedHash(TAG.BOOLEAN, value ? 1 : 0);
 	if (type === "function") return referenceId(value as Object);
 	if (isTemplate(value)) return hashTemplateValue(value);

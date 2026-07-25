@@ -70,11 +70,15 @@ describe("dynamic comment bindings", () => {
 
 	test("updates the DOM comment text when expressions change", async () => {
 		const tag = uniqueTag();
+		const key = "pair";
 		let left = "foo";
 		let right = "bar";
 
+		//the first dynamic comment is the list key and is stripped, so the comment
+		//under test has to sit after it
 		const MyElement = component(function* () {
-			yield () => html`<div><!-- ${left} and ${right} --></div>`;
+			yield () =>
+				html`<!--${key}--><div><!-- ${left} and ${right} --></div>`;
 		});
 
 		customElements.define(tag, MyElement);

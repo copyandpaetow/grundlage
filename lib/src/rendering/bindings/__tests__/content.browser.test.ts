@@ -140,8 +140,7 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test('renders false as the literal string "false"', async () => {
-		//false is stringable, so the renderer uses assertPrimitiveString, so the text node holds "false"
+	test("renders false as empty text", async () => {
 		const tag = uniqueTag();
 		let value: unknown = false;
 
@@ -154,12 +153,12 @@ describe("content updates", () => {
 		await sleep();
 
 		const p = element.shadowRoot?.querySelector("p")!;
-		expect(p.textContent).toBe("false");
+		expect(p.textContent).toBe("");
 
 		cleanup(element);
 	});
 
-	test("renders boolean true as text", async () => {
+	test("renders true as empty text", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
@@ -171,7 +170,39 @@ describe("content updates", () => {
 		await sleep();
 
 		const p = element.shadowRoot?.querySelector("p")!;
-		expect(p.textContent).toBe("true");
+		expect(p.textContent).toBe("");
+
+		cleanup(element);
+	});
+
+	test("a false-guarded template appears and disappears", async () => {
+		const tag = uniqueTag();
+		let isVisible = false;
+
+		const MyElement = component(function* () {
+			yield () => html`<p>${isVisible && html`<span>shown</span>`}</p>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("");
+
+		isVisible = true;
+		await element.update();
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
+			"shown",
+		);
+
+		isVisible = false;
+		await element.update();
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("span")).toBeNull();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("");
 
 		cleanup(element);
 	});
@@ -206,6 +237,30 @@ describe("content updates", () => {
 
 		const p = element.shadowRoot?.querySelector("p")!;
 		expect(p.textContent).toBe("0");
+
+		cleanup(element);
+	});
+
+	test("renders a bigint as text", async () => {
+		const tag = uniqueTag();
+		let value: unknown = 0n;
+
+		const MyElement = component(function* () {
+			yield () => html`<p>${value}</p>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const p = element.shadowRoot?.querySelector("p")!;
+		expect(p.textContent).toBe("0");
+
+		value = 9007199254740993n;
+		await element.update();
+		await sleep();
+
+		expect(p.textContent).toBe("9007199254740993");
 
 		cleanup(element);
 	});
@@ -1532,14 +1587,17 @@ describe("content updates", () => {
 
 	test("renders and updates a dynamic HTML comment binding", async () => {
 		// content.ts renderComment path: a comment whose content interpolates an
-		// expression (binding.values.length > 1) renders as a real comment node
-		// between its markers, and update() recreates it with the new value. No
-		// other rendering test exercises this branch.
+		// expression renders as a real comment node between its markers, and update()
+		// recreates it with the new value. The leading comment is the list key, which
+		// is stripped at parse time — only a later dynamic comment reaches the DOM.
 		const tag = uniqueTag();
+		const key = "note";
 		let note = "first";
 
 		const MyElement = component(function* () {
-			yield () => html`<section><!-- ${note} --></section>`;
+			yield () =>
+				html`<!--${key}-->
+					<section><!-- ${note} --></section>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -1571,10 +1629,13 @@ describe("content updates", () => {
 		// binding as `<!-- ${x} -->`, so the value lands in comment data, not as
 		// rendered content in the section.
 		const tag = uniqueTag();
+		const key = "note";
 		let note = "hidden";
 
 		const MyElement = component(function* () {
-			yield () => html`<section><!--${note}--></section>`;
+			yield () =>
+				html`<!--${key}-->
+					<section><!--${note}--></section>`;
 		});
 
 		customElements.define(tag, MyElement);
@@ -1607,11 +1668,14 @@ describe("content updates", () => {
 		// `<!-- ${a} and ${b} -->` folds both expressions into a single comment
 		// binding; changing one must re-render the comment with both current values.
 		const tag = uniqueTag();
+		const key = "pair";
 		let left = "a";
 		let right = "b";
 
 		const MyElement = component(function* () {
-			yield () => html`<section><!-- ${left} and ${right} --></section>`;
+			yield () =>
+				html`<!--${key}-->
+					<section><!-- ${left} and ${right} --></section>`;
 		});
 
 		customElements.define(tag, MyElement);

@@ -267,6 +267,64 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				cleanup(element);
 			});
 
+			test("a keyed list hydrates and then reorders by key", async () => {
+				//the key comment is stripped at parse time, so server markup carries no marker for
+				//it — hydration must still pair every remaining marker with the right binding
+				const serverTag = uniqueTag();
+				const clientTag = uniqueTag();
+				let items = [
+					{ id: "a", text: "alpha" },
+					{ id: "b", text: "bravo" },
+					{ id: "c", text: "charlie" },
+				];
+
+				const makeComponent = () =>
+					component(function* () {
+						yield () =>
+							html`<ul>
+								${items.map(
+									(item) =>
+										html`<!--${item.id}--><li class="${item.id}">
+												${item.text}
+											</li>`,
+								)}
+							</ul>`;
+					});
+
+				const serialized = await serverRender(serverTag, makeComponent());
+				const clientHTML = serialized.replace(
+					new RegExp(serverTag, "g"),
+					clientTag,
+				);
+				const element = hydrateFromHTML(clientHTML);
+				customElements.define(clientTag, makeComponent());
+				await sleep();
+
+				const rows = () =>
+					Array.from(element.shadowRoot!.querySelectorAll("li"));
+				const [aNode, bNode, cNode] = rows();
+				expect(rows().map((row) => row.className)).toEqual(["a", "b", "c"]);
+
+				items = [
+					{ id: "c", text: "Charlie-2" },
+					{ id: "a", text: "Alpha-2" },
+					{ id: "b", text: "Bravo-2" },
+				];
+				await (
+					element as InstanceType<ReturnType<typeof makeComponent>>
+				).update();
+				await sleep();
+
+				expect(rows()).toEqual([cNode, aNode, bNode]);
+				expect(rows().map((row) => row.textContent?.trim())).toEqual([
+					"Charlie-2",
+					"Alpha-2",
+					"Bravo-2",
+				]);
+
+				cleanup(element);
+			});
+
 			test("server skipping post-yield code does not affect the client (which sees a fresh run)", async () => {
 				//SSR-stop only affects the server pass; the client generator runs normally
 				const serverTag = uniqueTag();

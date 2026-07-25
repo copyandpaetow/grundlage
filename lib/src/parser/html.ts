@@ -1,6 +1,6 @@
 import { moveArrayContents } from "../utils/move-array-contents";
 import { hashValue } from "../utils/hashing";
-import { BINDING, NO_KEY_BINDING, PARSE_BINDING } from "./constants";
+import { BINDING, PARSE_BINDING } from "./constants";
 import {
 	AttributeBinding,
 	Binding,
@@ -10,7 +10,7 @@ import {
 	Part,
 	RawContentBinding,
 	StaticBinding,
-	TagBinding,
+	TagBinding
 } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
 import { compileStyleSheet } from "./css";
@@ -67,7 +67,7 @@ interface ParserState {
 	hasSeenTopLevelSibling: boolean;
 	hasOpenedAnyTag: boolean;
 	forceNoRootTemplate: boolean;
-	keyBindingIndex: number;
+	keyValueParts: Array<Part> | null;
 	openTagBindings: Array<TagBinding | null>;
 	resultBuffer: Array<Part>;
 	elementBuffer: Array<Part>;
@@ -102,7 +102,7 @@ const createParser = (): ParserState => ({
 	hasSeenTopLevelSibling: false,
 	hasOpenedAnyTag: false,
 	forceNoRootTemplate: false,
-	keyBindingIndex: NO_KEY_BINDING,
+	keyValueParts: null,
 	openTagBindings: [],
 	resultBuffer: [],
 	elementBuffer: [],
@@ -139,7 +139,7 @@ const resetParser = (
 	parser.hasSeenTopLevelSibling = false;
 	parser.hasOpenedAnyTag = false;
 	parser.forceNoRootTemplate = mode === PARSE_MODE.NO_ROOT_TEMPLATE;
-	parser.keyBindingIndex = NO_KEY_BINDING;
+	parser.keyValueParts = null;
 	parser.openTagBindings.length = 0;
 	parser.resultBuffer.length = 0;
 	parser.elementBuffer.length = 0;
@@ -256,11 +256,23 @@ const capture = (
 	if (slice) buffer.push(slice);
 };
 
+//the first dynamic comment is the list key: it never reaches the DOM, so its binding is
+//dropped here and the marker walkers never have to account for a slot without a marker
+const captureKeyBinding = (parser: ParserState) => {
+	parser.keyValueParts = [];
+	moveArrayContents(parser.commentBuffer, parser.keyValueParts);
+	parser.bindings.pop();
+};
+
 const completeComment = (parser: ParserState) => {
 	if (parser.activeBinding) {
-		const values = (parser.activeBinding as CommentBinding).values;
-		moveArrayContents(parser.commentBuffer, values);
-		parser.contentBuffer.push(openComment(parser), MARKUP.EMPTY_COMMENT);
+		if (parser.keyValueParts === null) {
+			captureKeyBinding(parser);
+		} else {
+			const values = (parser.activeBinding as CommentBinding).values;
+			moveArrayContents(parser.commentBuffer, values);
+			parser.contentBuffer.push(openComment(parser), MARKUP.EMPTY_COMMENT);
+		}
 	} else {
 		parser.contentBuffer.push(MARKUP.COMMENT_OPEN);
 		moveArrayContents(parser.commentBuffer, parser.contentBuffer);
@@ -388,17 +400,6 @@ const isExpandableSpread = (binding: AttributeBinding): boolean =>
 	binding.keys.length === 1 &&
 	typeof binding.keys[0] === "number";
 
-const recordKeyBinding = (
-	parser: ParserState,
-	attributeBinding: AttributeBinding,
-) => {
-	if (parser.keyBindingIndex !== NO_KEY_BINDING) return;
-	if (parser.openTagBindings.length !== 1) return;
-	if (attributeBinding.keys.length !== 1 || attributeBinding.keys[0] !== "key")
-		return;
-	parser.keyBindingIndex = parser.bindings.length - 1;
-};
-
 const finalizeAttributeBinding = (
 	parser: ParserState,
 	binding: AttributeBinding,
@@ -421,7 +422,6 @@ const completeAttribute = (parser: ParserState) => {
 			parser.hostBindingCount++;
 		} else {
 			parser.resultBuffer.push(openComment(parser));
-			recordKeyBinding(parser, attributeBinding);
 		}
 	} else if (parser.attributeKeyBuffer.length) {
 		if (parser.isRootTemplate) {
@@ -501,6 +501,64 @@ const endAttribute = (parser: ParserState, buffer: Array<Part>) => {
 	capture(parser, buffer, parser.splitIndex, parser.charIndex);
 	completeAttribute(parser);
 	parser.state = STATE.ELEMENT;
+};
+
+//without knowing the type of the expression slot we can detect if it is an event listener or something that just starts with "on" => "once", "online" etc/
+const isHandlerName = (binding: AttributeBinding): boolean =>
+	typeof binding.keys[0] === "string" &&
+	binding.keys[0].startsWith(MARKUP.EVENT_PREFIX) &&
+	isSingleHole(binding.values);
+
+const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
+	if (isHandlerName(binding)) {
+		return {
+			type: BINDING.NAMED_DYNAMIC,
+			name: binding.keys[0] as string,
+			valueIndex: binding.values[0] as number,
+		};
+	}
+	if (binding.isExpandable) {
+		return {
+			type: BINDING.DYNAMIC_ATTRIBUTE,
+			valueIndex: binding.values[0] as number,
+		};
+	}
+	if (isSingleHole(binding.values)) {
+		return {
+			type: BINDING.SINGLE_VALUE_ATTRIBUTE,
+			nameParts: binding.keys.slice(),
+			valueIndex: binding.values[0] as number,
+		};
+	}
+	const valueParts: Array<Part> =
+		binding.values.length > 0 ? binding.values.slice() : [""];
+	return {
+		type: BINDING.ATTRIBUTE,
+		nameParts: binding.keys.slice(),
+		valueParts,
+	};
+};
+
+const toStaticBinding = (binding: Binding): StaticBinding => {
+	switch (binding.type) {
+		case PARSE_BINDING.TAG:
+			return {
+				type: BINDING.TAG,
+				parts: binding.values.slice(),
+			};
+		case PARSE_BINDING.ATTRIBUTE:
+			return toAttributeStaticBinding(binding);
+		case PARSE_BINDING.CONTENT:
+			return { type: BINDING.CONTENT, valueIndex: binding.values[0] as number };
+		case PARSE_BINDING.COMMENT:
+			return { type: BINDING.COMMENT, parts: binding.values.slice() };
+		case PARSE_BINDING.RAW_CONTENT:
+			return {
+				type: BINDING.RAW_CONTENT,
+				parts: binding.values.slice(),
+				compiledStyleSheet: binding.compiledStyleSheet,
+			};
+	}
 };
 
 const parse = (
@@ -772,71 +830,13 @@ const parse = (
 		templateHash: parser.templateHash,
 		fragmentCloneSource: null,
 		hostBindingCount: parser.hostBindingCount,
-		keyBindingIndex: parser.keyBindingIndex,
+		keyValueParts: parser.keyValueParts,
 		hasStyleSheetBinding: parser.bindings.some(
 			(binding) =>
 				binding.type === PARSE_BINDING.RAW_CONTENT &&
 				binding.compiledStyleSheet,
 		),
 	};
-};
-
-//deliberately wide: without knowing the type of the expression slot we can detect if it is an event listener or something that just starts with "on" => "once", "online" etc/
-const isHandlerName = (binding: AttributeBinding): boolean =>
-	typeof binding.keys[0] === "string" &&
-	binding.keys[0].startsWith(MARKUP.EVENT_PREFIX) &&
-	isSingleHole(binding.values);
-
-const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
-	if (isHandlerName(binding)) {
-		return {
-			type: BINDING.NAMED_DYNAMIC,
-			name: binding.keys[0] as string,
-			valueIndex: binding.values[0] as number,
-		};
-	}
-	if (binding.isExpandable) {
-		return {
-			type: BINDING.DYNAMIC_ATTRIBUTE,
-			valueIndex: binding.values[0] as number,
-		};
-	}
-	if (isSingleHole(binding.values)) {
-		return {
-			type: BINDING.SINGLE_VALUE_ATTRIBUTE,
-			nameParts: binding.keys.slice(),
-			valueIndex: binding.values[0] as number,
-		};
-	}
-	const valueParts: Array<Part> =
-		binding.values.length > 0 ? binding.values.slice() : [""];
-	return {
-		type: BINDING.ATTRIBUTE,
-		nameParts: binding.keys.slice(),
-		valueParts,
-	};
-};
-
-const toStaticBinding = (binding: Binding): StaticBinding => {
-	switch (binding.type) {
-		case PARSE_BINDING.TAG:
-			return {
-				type: BINDING.TAG,
-				parts: binding.values.slice(),
-			};
-		case PARSE_BINDING.ATTRIBUTE:
-			return toAttributeStaticBinding(binding);
-		case PARSE_BINDING.CONTENT:
-			return { type: BINDING.CONTENT, valueIndex: binding.values[0] as number };
-		case PARSE_BINDING.COMMENT:
-			return { type: BINDING.COMMENT, parts: binding.values.slice() };
-		case PARSE_BINDING.RAW_CONTENT:
-			return {
-				type: BINDING.RAW_CONTENT,
-				parts: binding.values.slice(),
-				compiledStyleSheet: binding.compiledStyleSheet,
-			};
-	}
 };
 
 const parser = createParser();

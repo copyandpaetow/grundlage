@@ -1,4 +1,3 @@
-export const NO_KEY_BINDING = -1;
 
 export const PARSE_BINDING = {
 	TAG: 0,
