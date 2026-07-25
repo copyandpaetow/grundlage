@@ -25,20 +25,25 @@
 		"grundlage"
 	],
 	"type": "module",
+	"sideEffects": false,
 	"main": "./dist/index.mjs",
 	"types": "./dist/index.d.mts",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.mts",
 			"import": "./dist/index.mjs"
-		}
+		},
+		"./llms.txt": "./llms.txt",
+		"./package.json": "./package.json"
 	},
 	"files": [
 		"dist",
 		"llms.txt"
 	],
 	"scripts": {
-		"build": "tsdown"
+		"build": "tsdown",
+		"prepack": "tsdown",
+		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"devDependencies": {
 		"tsdown": "^0.22.0"

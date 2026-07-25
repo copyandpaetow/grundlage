@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { FORM_EVENTS, type FormBase } from "../forms";
+import { FORM_EVENTS, type FormAssociatedBase } from "../forms";
 import { html, component } from "../index";
 
 const sleep = (duration = 0) =>
@@ -18,7 +18,7 @@ const formOptions = { mode: "open", formAssociated: true } as const;
 
 const mountInForm = (tag: string) => {
 	const form = document.createElement("form");
-	const field = document.createElement(tag) as FormBase;
+	const field = document.createElement(tag) as FormAssociatedBase;
 	form.appendChild(field);
 	document.body.appendChild(form);
 	return { form, field };
@@ -107,7 +107,7 @@ describe("form-associated component in a live form", () => {
 
 			const form = document.createElement("form");
 			const fieldset = document.createElement("fieldset");
-			const field = document.createElement(tag) as FormBase;
+			const field = document.createElement(tag) as FormAssociatedBase;
 			fieldset.appendChild(field);
 			form.appendChild(fieldset);
 			document.body.appendChild(form);

@@ -2,7 +2,7 @@ import { html, component } from "../../../lib/src";
 import { type ComponentConstructor } from "../../../lib/src/types";
 
 // form-associated custom element. it submits through ElementInternals.setFormValue
-// and reacts to the form's lifecycle declaratively: FormBase re-broadcasts the
+// and reacts to the form's lifecycle declaratively: the form-associated base re-broadcasts the
 // browser's formResetCallback / formDisabledCallback as on-form-reset /
 // on-form-disabled listeners on this host.
 const FormField = component(

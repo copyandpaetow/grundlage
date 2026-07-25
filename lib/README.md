@@ -15,27 +15,27 @@ npm install grundlage
 #### example
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "count-seconds",
-    component(function* (host) {
-        // this runs only once
-        const {start} = props(host, {start: [Number, 0]}); // helper to deal with string attributes
-        let seconds = start;
-        const interval = setInterval(() => {
-            seconds++;
-            host.update();
-        }, 1000);
+	"count-seconds",
+	component(function* (host) {
+		// this runs only once
+		const { start } = props(host, { start: [Number, 0] }); // helper to deal with string attributes
+		let seconds = start;
+		const interval = setInterval(() => {
+			seconds++;
+			host.update();
+		}, 1000);
 
-        // this runs on every update
-        yield () => html`<p>${seconds} seconds</p>`;
+		// this runs on every update
+		yield () => html`<p>${seconds} seconds</p>`;
 
-        // this runs on component disconnect
-        return () => {
-            clearInterval(interval);
-        };
-    }),
+		// this runs on component disconnect
+		return () => {
+			clearInterval(interval);
+		};
+	}),
 );
 ```
 
@@ -94,34 +94,34 @@ There is a small helper to avoid re-fetching data when the component is transfer
 
 - component renders from top to bottom
 - stops at yields like any other generator
-    - yield a renderable (render fn / static template / inner generator) → renders and remembers
-    - yield something else → returns the value
+  - yield a renderable (render fn / static template / inner generator) → renders and remembers
+  - yield something else → returns the value
 - update-calls re-render the last remembered renderable
 - an attribute change on the host re-renders as well, a MutationObserver on the element calls update()
 - update() can be awaited and resolves once the DOM is patched, after the renderable has fully settled
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "user-disclosure",
-    component(function* (host) {
-        yield () => html`<p>loading…</p>`; // first render of a static template
+	"user-disclosure",
+	component(function* (host) {
+		yield () => html`<p>loading…</p>`; // first render of a static template
 
-        const user = yield fetchUser(); // yield a promise → the const becomes its resolved value
+		const user = yield fetchUser(); // yield a promise → the const becomes its resolved value
 
-        let isExpanded = false;
-        const toggle = async () => {
-            isExpanded = !isExpanded;
-            await host.update(); // resolves once the re-render is in the DOM
-            host.scrollIntoView(); // safe now, DOM is current
-        };
+		let isExpanded = false;
+		const toggle = async () => {
+			isExpanded = !isExpanded;
+			await host.update(); // resolves once the re-render is in the DOM
+			host.scrollIntoView(); // safe now, DOM is current
+		};
 
-        yield () => html`
+		yield () => html`
 			<button onClick=${toggle}>${user.name}</button>
 			${isExpanded ? html`<pre>${JSON.stringify(user, null, 2)}</pre>` : null}
 		`; // second render, replaces loading → will re-render on update calls
-    }),
+	}),
 );
 ```
 
@@ -137,23 +137,23 @@ customElements.define(
 - an error from a nested generator is thrown into the main body at its `yield` first, so a try/catch there handles it
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "data-view",
-    component(function* (host) {
-        const {src} = props(host, {src: [String]});
-        if (!src) throw new Error("<data-view> requires a src"); // → root #fail
+	"data-view",
+	component(function* (host) {
+		const { src } = props(host, { src: [String] });
+		if (!src) throw new Error("<data-view> requires a src"); // → root #fail
 
-        let data;
-        try {
-            data = yield fetchJson(src);
-        } catch (error) {
-            data = {error}; // handle locally instead of letting it reach #fail
-        }
+		let data;
+		try {
+			data = yield fetchJson(src);
+		} catch (error) {
+			data = { error }; // handle locally instead of letting it reach #fail
+		}
 
-        yield () => html`<p>${data.error ? "failed" : data.title}</p>`;
-    }),
+		yield () => html`<p>${data.error ? "failed" : data.title}</p>`;
+	}),
 );
 ```
 
@@ -165,24 +165,24 @@ customElements.define(
 
 - yielding a template ``yield html`...` `` directly will not re-render it again. It can be dynamic but will not update
 - most parts of the component can be dynamic
-    - content (raw values, nested templates, lists)
-    - comments (from the second one on, the first dynamic comment is the row key, see [lists](#lists))
-    - tags
-    - attributes (names, values, parts of those)
+  - content (raw values, nested templates, lists)
+  - comments (from the second one on, the first dynamic comment is the row key, see [lists](#lists))
+  - tags
+  - attributes (names, values, parts of those)
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "ui-badge",
-    component(function* (host) {
-        const {label, href, size} = props(host, {
-            label: String,
-            href: String,
-            size: [String, "md"],
-        });
-        yield html`<a class="badge ${size}" href=${href}>${label}</a>`;
-    }),
+	"ui-badge",
+	component(function* (host) {
+		const { label, href, size } = props(host, {
+			label: String,
+			href: String,
+			size: [String, "md"],
+		});
+		yield html`<a class="badge ${size}" href=${href}>${label}</a>`;
+	}),
 );
 ```
 
@@ -190,27 +190,27 @@ customElements.define(
 - the function has to return the template, everything else is up to the author
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "disclosure-widget",
-    component(function* (host) {
-        let isOpen = false;
-        const toggle = () => {
-            isOpen = !isOpen;
-            host.update();
-        };
-        yield () => {
-            console.log("updated");
+	"disclosure-widget",
+	component(function* (host) {
+		let isOpen = false;
+		const toggle = () => {
+			isOpen = !isOpen;
+			host.update();
+		};
+		yield () => {
+			console.log("updated");
 
-            return html`
+			return html`
 				<button onClick=${toggle} aria-expanded=${isOpen ? "true" : "false"}>
 					${isOpen ? "hide" : "show"}
 				</button>
 				<p hidden=${!isOpen}>details</p>
 			`;
-        }; // content and attributes both re-read each render
-    }),
+		}; // content and attributes both re-read each render
+	}),
 );
 ```
 
@@ -220,19 +220,19 @@ customElements.define(
 - the tag name and raw text slots (style / script / textarea) are their own binding forms:
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 const SECTION_CSS = "h2, h3 { margin-block: 0 }";
 
 customElements.define(
-    "section-block",
-    component(function* (host) {
-        const {level} = props(host, {level: [Number, 2]});
-        yield html`
+	"section-block",
+	component(function* (host) {
+		const { level } = props(host, { level: [Number, 2] });
+		yield html`
             <h${level}>section title</h${level}> <!-- dynamic tag -->
             <style>${SECTION_CSS}</style>        <!-- raw slot -->
         `;
-    }),
+	}),
 );
 ```
 
@@ -247,20 +247,20 @@ customElements.define(
 A template is a plain value. It can be passed around, returned from a helper, or dropped into another template.
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 const statusBadge = (status) =>
-    html`<em class="badge badge--${status}">${status}</em>`;
+	html`<em class="badge badge--${status}">${status}</em>`;
 
 customElements.define(
-    "order-row",
-    component(function* (host) {
-        const {reference, status} = props(host, {
-            reference: String,
-            status: String,
-        });
-        yield () => html`<p>${reference} ${statusBadge(status)}</p>`;
-    }),
+	"order-row",
+	component(function* (host) {
+		const { reference, status } = props(host, {
+			reference: String,
+			status: String,
+		});
+		yield () => html`<p>${reference} ${statusBadge(status)}</p>`;
+	}),
 );
 ```
 
@@ -273,40 +273,40 @@ are read before the yield, and after the patch the elements are measured again, 
 animated home:
 
 ```typescript
-import {html} from "grundlage";
+import { html } from "grundlage";
 
 // captureRects and playFlip are user-land helpers and excluded for readability
 export const flipList = (items, onShuffle) =>
-    function* (host) {
-        const first = captureRects(host); // before the yield: old positions, read from the live DOM
-        yield () => html`
+	function* (host) {
+		const first = captureRects(host); // before the yield: old positions, read from the live DOM
+		yield () => html`
 			<button onClick=${onShuffle}>shuffle</button>
 			<ul>
 				${items.map(
-            (item) => html`<li data-flip-id=${item.id}>${item.label}</li>`,
-        )}
+					(item) => html`<li data-flip-id=${item.id}>${item.label}</li>`,
+				)}
 			</ul>
 		`; // patched to the new order
-        const last = captureRects(host); // after the patch, before paint
-        playFlip(first, last); // invert each row to its old spot, then transition home
-    };
+		const last = captureRects(host); // after the patch, before paint
+		playFlip(first, last); // invert each row to its old spot, then transition home
+	};
 ```
 
 ```typescript
-import {component} from "grundlage";
-import {flipList} from "./flip-list.js";
+import { component } from "grundlage";
+import { flipList } from "./flip-list.js";
 
 customElements.define(
-    "shuffle-list",
-    component(function* (host) {
-        let items = loadItems();
-        const shuffleItems = () => {
-            items = [...items].sort(() => Math.random() - 0.5);
-            host.update();
-        };
+	"shuffle-list",
+	component(function* (host) {
+		let items = loadItems();
+		const shuffleItems = () => {
+			items = [...items].sort(() => Math.random() - 0.5);
+			host.update();
+		};
 
-        yield flipList(items, shuffleItems);
-    }),
+		yield flipList(items, shuffleItems);
+	}),
 );
 ```
 
@@ -319,17 +319,17 @@ shares setup and first render, and it takes arguments:
 
 ```typescript
 // user-card.ts, a self-contained component: its own loading → loaded lifecycle
-import {html, props} from "grundlage";
+import { html, props } from "grundlage";
 
 export async function* userCard(
-    host,
-    userId = props(host, {userid: String}).userid,
+	host,
+	userId = props(host, { userid: String }).userid,
 ) {
-    yield () => html`<p aria-busy="true">loading…</p>`; // first paint
+	yield () => html`<p aria-busy="true">loading…</p>`; // first paint
 
-    const user = await fetchUser(userId);
+	const user = await fetchUser(userId);
 
-    yield () => html`
+	yield () => html`
 		<article>
 			<h3>${user.name}</h3>
 			<p>${user.email}</p>
@@ -339,19 +339,19 @@ export async function* userCard(
 ```
 
 ```typescript
-import {component, props} from "grundlage";
-import {userCard} from "./user-card.js";
+import { component, props } from "grundlage";
+import { userCard } from "./user-card.js";
 
 // as its own element
 customElements.define("user-card", component(userCard));
 
 // …or mixed into a parent:
 customElements.define(
-    "user-panel",
-    component(async function* (host) {
-        const {activeuserid} = props(host, {activeuserid: String}); // outer runs once
-        yield* userCard(host, activeuserid); // becomes this body's loading → loaded run
-    }),
+	"user-panel",
+	component(async function* (host) {
+		const { activeuserid } = props(host, { activeuserid: String }); // outer runs once
+		yield* userCard(host, activeuserid); // becomes this body's loading → loaded run
+	}),
 );
 ```
 
@@ -374,19 +374,19 @@ children become the shadow DOM, and its attributes are applied to the custom ele
 - a `<template>` carrying attributes in a nested position (content hole, list row) throws
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "pinnable-card",
-    component(function* (host) {
-        const {variant} = props(host, {variant: [String, "default"]});
-        let isPinned = false;
-        const togglePin = () => {
-            isPinned = !isPinned;
-            host.update();
-        };
+	"pinnable-card",
+	component(function* (host) {
+		const { variant } = props(host, { variant: [String, "default"] });
+		let isPinned = false;
+		const togglePin = () => {
+			isPinned = !isPinned;
+			host.update();
+		};
 
-        yield () => html`
+		yield () => html`
 			<template
 				role="article"
 				class="card card--${variant}"
@@ -397,21 +397,21 @@ customElements.define(
 				<slot></slot>
 			</template>
 		`;
-    }),
+	}),
 );
 ```
 
 Attributes can also be added by spreading out an object (key values) or an array (boolean attributes).
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "spread-card",
-    component(function* () {
-        const hostAttributes = {class: "card", role: "article", tabindex: "0"};
-        yield () => html`<template ${hostAttributes}><slot></slot></template>`;
-    }),
+	"spread-card",
+	component(function* () {
+		const hostAttributes = { class: "card", role: "article", tabindex: "0" };
+		yield () => html`<template ${hostAttributes}><slot></slot></template>`;
+	}),
 );
 ```
 
@@ -424,21 +424,21 @@ that is no longer rendered is removed.
 - custom events: emit with `dispatchEvent`, listen with the `on-` prefix (`on-my-event=${handler}`)
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "search-box",
-    component(function* (host) {
-        let query = "";
-        const onInput = (event) => {
-            query = event.target.value;
-            host.update();
-        };
-        yield () => html`
+	"search-box",
+	component(function* (host) {
+		let query = "";
+		const onInput = (event) => {
+			query = event.target.value;
+			host.update();
+		};
+		yield () => html`
 			<input onInput=${onInput} placeholder="search" />
 			<p>searching for ${query}</p>
 		`;
-    }),
+	}),
 );
 ```
 
@@ -446,40 +446,40 @@ A component talks to the outside world by dispatching a `CustomEvent` (`composed
 shadow boundary). A parent listens with the `on-` prefix. The hyphenated name is kept literally:
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "color-swatch",
-    component(function* (host) {
-        const select = (value) =>
-            host.dispatchEvent(
-                new CustomEvent("swatch-select", {
-                    detail: value,
-                    bubbles: true,
-                    composed: true,
-                }),
-            );
-        yield () => html`<button onClick=${() => select("#f00")}>red</button>`;
-    }),
+	"color-swatch",
+	component(function* (host) {
+		const select = (value) =>
+			host.dispatchEvent(
+				new CustomEvent("swatch-select", {
+					detail: value,
+					bubbles: true,
+					composed: true,
+				}),
+			);
+		yield () => html`<button onClick=${() => select("#f00")}>red</button>`;
+	}),
 );
 ```
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "swatch-picker",
-    component(function* (host) {
-        let color = "#000";
-        const pick = (event) => {
-            color = event.detail;
-            host.update();
-        };
-        yield () => html`
+	"swatch-picker",
+	component(function* (host) {
+		let color = "#000";
+		const pick = (event) => {
+			color = event.detail;
+			host.update();
+		};
+		yield () => html`
 			<p style="color: ${color}">selected ${color}</p>
 			<color-swatch on-swatch-select=${pick}></color-swatch>
 		`;
-    }),
+	}),
 );
 ```
 
@@ -489,25 +489,25 @@ A custom listener needs the `on-` prefix because otherwise `onSwatchSelect` woul
 Global events are not bound in markup, they are registered manually.
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "escape-dialog",
-    component(function* (host) {
-        let isOpen = true;
-        const close = () => {
-            isOpen = false;
-            host.update();
-        };
-        const onKeydown = (event) => {
-            if (event.key === "Escape") close();
-        };
-        document.addEventListener("keydown", onKeydown);
+	"escape-dialog",
+	component(function* (host) {
+		let isOpen = true;
+		const close = () => {
+			isOpen = false;
+			host.update();
+		};
+		const onKeydown = (event) => {
+			if (event.key === "Escape") close();
+		};
+		document.addEventListener("keydown", onKeydown);
 
-        yield () => html`<dialog open=${isOpen}><slot></slot></dialog>`;
+		yield () => html`<dialog open=${isOpen}><slot></slot></dialog>`;
 
-        return () => document.removeEventListener("keydown", onKeydown); // acquire in setup, release here
-    }),
+		return () => document.removeEventListener("keydown", onKeydown); // acquire in setup, release here
+	}),
 );
 ```
 
@@ -518,21 +518,21 @@ customElements.define(
 - an error is just another branch, renders a fallback instead of throwing
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "accordion-list",
-    component(function* (host) {
-        const {items} = props(host, {items: [Array, []]});
-        let expandedId = null;
-        const toggle = (id) => {
-            expandedId = expandedId === id ? null : id;
-            host.update();
-        };
-        yield () => html`
+	"accordion-list",
+	component(function* (host) {
+		const { items } = props(host, { items: [Array, []] });
+		let expandedId = null;
+		const toggle = (id) => {
+			expandedId = expandedId === id ? null : id;
+			host.update();
+		};
+		yield () => html`
 			<ul>
 				${items.map(
-            (item) => html`
+					(item) => html`
 						<li>
 							<button
 								onClick=${() => toggle(item.id)}
@@ -543,10 +543,10 @@ customElements.define(
 							${expandedId === item.id ? html`<p>${item.details}</p>` : null}
 						</li>
 					`,
-        )}
+				)}
 			</ul>
 		`;
-    }),
+	}),
 );
 ```
 
@@ -560,28 +560,28 @@ templates the old subtree is torn down and the new one mounted, which resets foc
 state inside it.
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "text-block",
-    component(function* (host) {
-        const {readonly} = props(host, {readonly: [Boolean, false]});
+	"text-block",
+	component(function* (host) {
+		const { readonly } = props(host, { readonly: [Boolean, false] });
 
-        if (readonly) {
-            yield () => html`<pre>${host.textContent}</pre>`;
-            return;
-        }
+		if (readonly) {
+			yield () => html`<pre>${host.textContent}</pre>`;
+			return;
+		}
 
-        let draft = "";
-        const onInput = (event) => {
-            draft = event.target.value;
-            host.update();
-        };
-        yield () => html`
+		let draft = "";
+		const onInput = (event) => {
+			draft = event.target.value;
+			host.update();
+		};
+		yield () => html`
 			<textarea onInput=${onInput}></textarea>
 			<p>${draft.length} characters</p>
 		`;
-    }),
+	}),
 );
 ```
 
@@ -589,26 +589,26 @@ Errors work the same way. The failure is held in state and rendered as a branch.
 component cannot recover from, because it replaces the whole shadow tree with [`#fail`](#errors):
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "safe-image",
-    component(function* (host) {
-        const {src} = props(host, {src: [String, ""]});
-        let error = src ? null : new Error("missing src");
+	"safe-image",
+	component(function* (host) {
+		const { src } = props(host, { src: [String, ""] });
+		let error = src ? null : new Error("missing src");
 
-        yield () =>
-            error
-                ? html`<p role="alert">${error.message}</p>`
-                : html`<img
+		yield () =>
+			error
+				? html`<p role="alert">${error.message}</p>`
+				: html`<img
 						src=${src}
 						alt=""
 						onError=${() => {
-                    error = new Error("failed to load");
-                    host.update();
-                }}
+							error = new Error("failed to load");
+							host.update();
+						}}
 					/>`;
-    }),
+	}),
 );
 ```
 
@@ -623,24 +623,24 @@ without extra work.
 - anything else (plain object, `Date`, function, symbol) → throws
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "todo-list",
-    component(function* (host) {
-        let todos = [
-            {id: 1, text: "walk the dog", done: false},
-            {id: 2, text: "write docs", done: true},
-        ];
-        const toggle = (id) => {
-            const todo = todos.find((entry) => entry.id === id);
-            todo.done = !todo.done; // mutating in place is possible
-            host.update();
-        };
-        yield () => html`
+	"todo-list",
+	component(function* (host) {
+		let todos = [
+			{ id: 1, text: "walk the dog", done: false },
+			{ id: 2, text: "write docs", done: true },
+		];
+		const toggle = (id) => {
+			const todo = todos.find((entry) => entry.id === id);
+			todo.done = !todo.done; // mutating in place is possible
+			host.update();
+		};
+		yield () => html`
 			<ul>
 				${todos.map(
-            (todo) => html`
+					(todo) => html`
 						<li class=${todo.done ? "done" : ""}>
 							<button onClick=${() => toggle(todo.id)}>
 								${todo.done ? "✓" : "○"}
@@ -648,10 +648,10 @@ customElements.define(
 							${todo.text}
 						</li>
 					`,
-        )}
+				)}
 			</ul>
 		`;
-    }),
+	}),
 );
 ```
 
@@ -659,22 +659,22 @@ When template and content are not enough to tell rows apart, a **dynamic comment
 key. It binds a row's DOM to that identity. The comment can sit anywhere in the row, and is stripped at parse time.
 
 ```typescript
-import {component, html} from "grundlage";
+import { component, html } from "grundlage";
 
 customElements.define(
-    "score-board",
-    component(function* (host) {
-        let players = loadPlayers(); // [{ id, name, score }, …]
-        const bump = (id) => {
-            const player = players.find((entry) => entry.id === id);
-            player.score += 1;
-            players.sort((a, b) => b.score - a.score); // re-sorts AND changes content
-            host.update();
-        };
-        yield () => html`
+	"score-board",
+	component(function* (host) {
+		let players = loadPlayers(); // [{ id, name, score }, …]
+		const bump = (id) => {
+			const player = players.find((entry) => entry.id === id);
+			player.score += 1;
+			players.sort((a, b) => b.score - a.score); // re-sorts AND changes content
+			host.update();
+		};
+		yield () => html`
 			<ol>
 				${players.map(
-            (player) => html`
+					(player) => html`
 						<!--${player.id}-->
 						<li>
 							<input placeholder="note" />
@@ -683,10 +683,10 @@ customElements.define(
 							<button onClick=${() => bump(player.id)}>+1</button>
 						</li>
 					`,
-        )}
+				)}
 			</ol>
 		`;
-    }),
+	}),
 );
 ```
 
@@ -694,15 +694,15 @@ The key is the **first dynamic comment** in the row template, wherever it sits. 
 content around can be anything: `<!--${player.id}-->`, `<!-- id: ${player.id} -->` and `<!-- key: ${player.id} -->`.
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "tag-line",
-    component(function* (host) {
-        const {tags} = props(host, {tags: [Array, []]}); // [{ id, label }, …]
-        yield () =>
-            html`<p>${tags.map((tag) => html`<!--${tag.id}-->${tag.label}, `)}</p>`;
-    }),
+	"tag-line",
+	component(function* (host) {
+		const { tags } = props(host, { tags: [Array, []] }); // [{ id, label }, …]
+		yield () =>
+			html`<p>${tags.map((tag) => html`<!--${tag.id}-->${tag.label}, `)}</p>`;
+	}),
 );
 ```
 
@@ -712,19 +712,19 @@ The generator itself can be async, so `await` works inside the main function bod
 and returns its resolved value.
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "latest-price",
-    component(async function* (host) {
-        const {symbol} = props(host, {symbol: String});
+	"latest-price",
+	component(async function* (host) {
+		const { symbol } = props(host, { symbol: String });
 
-        yield () => html`<p aria-busy="true">loading ${symbol}…</p>`; // SSR serializes this first paint
+		yield () => html`<p aria-busy="true">loading ${symbol}…</p>`; // SSR serializes this first paint
 
-        const price = await fetchPrice(symbol); // rejection throws here, wrap it in try/catch to handle it
+		const price = await fetchPrice(symbol); // rejection throws here, wrap it in try/catch to handle it
 
-        yield () => html`<output>${symbol} ${price}</output>`; // client resumes and swaps it in
-    }),
+		yield () => html`<output>${symbol} ${price}</output>`; // client resumes and swaps it in
+	}),
 );
 ```
 
@@ -742,44 +742,44 @@ data is better kept in a variable and re-rendered with `update()`.
 - react to them declaratively with `on-form-*` on the host `<template>`, or imperatively with `host.addEventListener`
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "text-field",
-    component(
-        function* (host) {
-            const {name, value: initial} = props(host, {
-                name: String,
-                value: [String, ""],
-            });
-            let value = initial;
-            let isDisabled = false;
+	"text-field",
+	component(
+		function* (host) {
+			const { name, value: initial } = props(host, {
+				name: String,
+				value: [String, ""],
+			});
+			let value = initial;
+			let isDisabled = false;
 
-            const internals = host.internals; // null on the server, so every use below is optional
-            const publish = () => {
-                internals?.setFormValue(value); // submitted with the form under `name`
-                internals?.setValidity(value ? {} : {valueMissing: true}, "required");
-            };
-            const onInput = (event) => {
-                value = event.target.value;
-                publish();
-                host.update();
-            };
-            const onDisabled = (event) => {
-                isDisabled = event.detail.disabled;
-                host.update();
-            };
-            const onReset = () => {
-                const input = host.shadowRoot.querySelector("input");
-                if (input) input.value = initial; // the input is uncontrolled: its dirty value survives an attribute write
-                value = initial;
-                publish();
-                host.update();
-            };
+			const internals = host.internals; // null on the server, so every use below is optional
+			const publish = () => {
+				internals?.setFormValue(value); // submitted with the form under `name`
+				internals?.setValidity(value ? {} : { valueMissing: true }, "required");
+			};
+			const onInput = (event) => {
+				value = event.target.value;
+				publish();
+				host.update();
+			};
+			const onDisabled = (event) => {
+				isDisabled = event.detail.disabled;
+				host.update();
+			};
+			const onReset = () => {
+				const input = host.shadowRoot.querySelector("input");
+				if (input) input.value = initial; // the input is uncontrolled: its dirty value survives an attribute write
+				value = initial;
+				publish();
+				host.update();
+			};
 
-            publish(); // seed the form value before the first paint
+			publish(); // seed the form value before the first paint
 
-            yield () => html`
+			yield () => html`
 				<template on-form-reset=${onReset} on-form-disabled=${onDisabled}>
 					<input
 						name=${name}
@@ -790,9 +790,9 @@ customElements.define(
 					/>
 				</template>
 			`;
-        },
-        {formAssociated: true},
-    ),
+		},
+		{ formAssociated: true },
+	),
 );
 ```
 
@@ -806,18 +806,18 @@ customElements.define(
 - each instance owns a private sheet; `getHTML` serializes the last text write, not later `setProperty` updates
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "progress-bar",
-    component(function* (host) {
-        const {accent} = props(host, {accent: [String, "rebeccapurple"]});
-        let progress = 0;
-        const advance = () => {
-            progress = Math.min(progress + 5, 100);
-            host.update();
-        };
-        yield () => html`
+	"progress-bar",
+	component(function* (host) {
+		const { accent } = props(host, { accent: [String, "rebeccapurple"] });
+		let progress = 0;
+		const advance = () => {
+			progress = Math.min(progress + 5, 100);
+			host.update();
+		};
+		yield () => html`
 			<style>
 				.bar {
 					width: ${progress}%;
@@ -827,7 +827,7 @@ customElements.define(
 			</style>
 			<div class="bar" onClick=${advance}></div>
 		`;
-    }),
+	}),
 );
 ```
 
@@ -836,17 +836,17 @@ browser reparses it. A whole-sheet hole and any **structural** hole (selector, p
 prelude) end up here:
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "themed-panel",
-    component(function* (host) {
-        const {theme} = props(host, {theme: [String, "light"]});
-        yield () =>
-            html`<style>
+	"themed-panel",
+	component(function* (host) {
+		const { theme } = props(host, { theme: [String, "light"] });
+		yield () =>
+			html`<style>
 				${themeSheet(theme)}
 			</style>`; // whole sheet is a hole → text path
-    }),
+	}),
 );
 ```
 
@@ -857,19 +857,19 @@ customElements.define(
 - never hang methods/state off `host` at runtime ([see antipatterns](#antipatterns))
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 class TokenField extends component(function* (host) {
-    // …generator body: reads props, yields the render…
+	// …generator body: reads props, yields the render…
 }) {
-    get value() {
-        // has access to this.update() if needed
-        return this.getAttribute("value") ?? "";
-    }
+	get value() {
+		// has access to this.update() if needed
+		return this.getAttribute("value") ?? "";
+	}
 
-    clear() {
-        this.removeAttribute("value");
-    }
+	clear() {
+		this.removeAttribute("value");
+	}
 }
 
 customElements.define("token-field", TokenField);
@@ -878,7 +878,7 @@ customElements.define("token-field", TokenField);
 ## options
 
 | option           | default  | platform default | effect                                                                             |
-|------------------|----------|------------------|------------------------------------------------------------------------------------|
+| ---------------- | -------- | ---------------- | ---------------------------------------------------------------------------------- |
 | `mode`           | `"open"` | `"open"`         | `open` exposes the root on `host.shadowRoot`; `closed` hides it there              |
 | `serializable`   | `true`   | `false`          | the shadow root serializes with `getHTML`, required for SSR output and hydration   |
 | `clonable`       | `true`   | `false`          | the shadow tree is copied on `cloneNode`, so cloned hosts keep their content       |
@@ -888,18 +888,18 @@ customElements.define("token-field", TokenField);
 Any other `ShadowRootInit` field works too, e.g. `slotAssignment: "manual"`.
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "secure-badge",
-    component(
-        function* (host) {
-            const {label} = props(host, {label: String});
-            // no host.shadowRoot here, outside code reaches the root via host.internals.shadowRoot
-            yield () => html`<span>${label}</span>`;
-        },
-        {mode: "closed"},
-    ),
+	"secure-badge",
+	component(
+		function* (host) {
+			const { label } = props(host, { label: String });
+			// no host.shadowRoot here, outside code reaches the root via host.internals.shadowRoot
+			yield () => html`<span>${label}</span>`;
+		},
+		{ mode: "closed" },
+	),
 );
 ```
 
@@ -924,24 +924,24 @@ Outside code uses `setProp` to hand a value to a mounted component. A stringable
 ```typescript
 const cell = document.querySelector("price-cell") as BaseComponent;
 cell.setProp("currency", "EUR"); // stringable → attribute
-cell.setProp("quote", {bid: 1.08, ask: 1.09}); // complex → property
+cell.setProp("quote", { bid: 1.08, ask: 1.09 }); // complex → property
 ```
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "price-cell",
-    component(function* (host) {
-        yield () => {
-            // read inside the render function, so each setProp is picked up
-            const {currency, quote} = props(host, {
-                currency: [String, "USD"],
-                quote: [Object, {bid: 0, ask: 0}],
-            });
-            return html`<output>${quote.bid} ${currency}</output>`;
-        };
-    }),
+	"price-cell",
+	component(function* (host) {
+		yield () => {
+			// read inside the render function, so each setProp is picked up
+			const { currency, quote } = props(host, {
+				currency: [String, "USD"],
+				quote: [Object, { bid: 0, ask: 0 }],
+			});
+			return html`<output>${quote.bid} ${currency}</output>`;
+		};
+	}),
 );
 ```
 
@@ -965,19 +965,19 @@ properties. Each schema entry says how to read one name:
   (`Array`, `Object`, `Function`, a class) is read from the property and only types the result
 
 ```typescript
-import {component, html, props} from "grundlage";
+import { component, html, props } from "grundlage";
 
 customElements.define(
-    "labeled-count",
-    component(function* (host) {
-        const {label, count, disabled, items} = props(host, {
-            label: String, // required
-            count: [Number, 0], // default 0
-            disabled: Boolean, // present attribute → true
-            items: [Array], // optional, property channel
-        });
-        yield () => html`<p aria-disabled=${disabled}>${label}: ${count}</p>`;
-    }),
+	"labeled-count",
+	component(function* (host) {
+		const { label, count, disabled, items } = props(host, {
+			label: String, // required
+			count: [Number, 0], // default 0
+			disabled: Boolean, // present attribute → true
+			items: [Array], // optional, property channel
+		});
+		yield () => html`<p aria-disabled=${disabled}>${label}: ${count}</p>`;
+	}),
 );
 ```
 
@@ -989,16 +989,16 @@ hydration so the fetcher doesn't run and every call after that runs normally. It
 `yield` it (or `await` it in an async generator):
 
 ```typescript
-import {component, html, load} from "grundlage";
+import { component, html, load } from "grundlage";
 
 customElements.define(
-    "user-name",
-    component(function* (host) {
-        const user = yield load(host, () =>
-            fetch("/api/user").then((response) => response.json()),
-        );
-        yield () => html`<p>${user.name}</p>`;
-    }),
+	"user-name",
+	component(function* (host) {
+		const user = yield load(host, () =>
+			fetch("/api/user").then((response) => response.json()),
+		);
+		yield () => html`<p>${user.name}</p>`;
+	}),
 );
 ```
 
@@ -1026,11 +1026,11 @@ npm install --save-dev vite-plugin-grundlage
 
 ```typescript
 // vite.config.ts
-import {defineConfig} from "vite";
-import {prerenderWebcomponents} from "vite-plugin-grundlage";
+import { defineConfig } from "vite";
+import { prerenderWebcomponents } from "vite-plugin-grundlage";
 
 export default defineConfig({
-    plugins: [prerenderWebcomponents()],
+	plugins: [prerenderWebcomponents()],
 });
 ```
 
@@ -1042,8 +1042,8 @@ tags those modules registered are read back from `customElements`, so module sid
 
 ```typescript
 prerenderWebcomponents({
-    include: ["src/components/**/*.ts"],
-    exclude: ["**/*.stories.ts"],
+	include: ["src/components/**/*.ts"],
+	exclude: ["**/*.stories.ts"],
 });
 ```
 
@@ -1069,7 +1069,7 @@ them into their `<slot>`s while parsing, so slotted content is styled and laid o
 
 ```html
 <user-card ssr>
-    <h2 slot="name">Ada</h2>
+	<h2 slot="name">Ada</h2>
 </user-card>
 ```
 
@@ -1080,7 +1080,7 @@ component sitting in that light DOM is rendered along with its parent, sentinel 
 **options**
 
 | option                | default            | effect                                                                               |
-|-----------------------|--------------------|--------------------------------------------------------------------------------------|
+| --------------------- | ------------------ | ------------------------------------------------------------------------------------ |
 | `include`             | every source file  | globs (relative to the Vite root) of the modules to import for component definitions |
 | `exclude`             | —                  | globs added to the built-in skip list                                                |
 | `componentLoader`     | `"project-config"` | `"isolated"` loads component modules without re-running the project's `vite.config`  |

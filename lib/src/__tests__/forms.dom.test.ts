@@ -1,5 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
-import { FORM_EVENTS, FormBase } from "../forms";
+import {
+	FORM_EVENTS,
+	type FormAssociatedBase,
+	getFormAssociatedBaseClass,
+} from "../forms";
 import { html, component, type BaseComponent } from "../index";
 
 const sleep = (duration = 0) =>
@@ -9,16 +13,16 @@ let tagId = 0;
 const uniqueTag = (prefix: string) => `${prefix}-${tagId++}-${Date.now()}`;
 
 // custom elements can't be `new`-ed in happy-dom until the tag is registered, so every
-// FormBase instance goes through a freshly-defined element
+// FormAssociatedBase instance goes through a freshly-defined element
 const makeField = () => {
 	const tag = uniqueTag("direct-field");
-	customElements.define(tag, class extends FormBase {});
-	return document.createElement(tag) as FormBase;
+	customElements.define(tag, class extends getFormAssociatedBaseClass() {});
+	return document.createElement(tag) as FormAssociatedBase;
 };
 
-describe("FormBase - static surface", () => {
+describe("FormAssociatedBase - static surface", () => {
 	test("declares itself form-associated for the upgrade-time read", () => {
-		expect(FormBase.formAssociated).toBe(true);
+		expect(getFormAssociatedBaseClass().formAssociated).toBe(true);
 	});
 
 	test("the four lifecycle callbacks map onto the public event names", () => {
@@ -52,7 +56,7 @@ describe("FormBase - static surface", () => {
 	});
 });
 
-describe("FormBase - lifecycle callbacks re-broadcast as events", () => {
+describe("FormAssociatedBase - lifecycle callbacks re-broadcast as events", () => {
 	test("formAssociatedCallback carries the form in detail", () => {
 		const field = makeField();
 		const form = document.createElement("form");
@@ -124,7 +128,7 @@ describe("component(..., { formAssociated }) parent selection", () => {
 	// formAssociated replaces the default options, so a full ShadowRootInit comes with it
 	const formOptions = { mode: "open", formAssociated: true } as const;
 
-	test("opting in inherits FormBase and its static flag", () => {
+	test("opting in inherits FormAssociatedBase and its static flag", () => {
 		const tag = uniqueTag("opt-in");
 		const Element = component(function* () {
 			yield () => html`<p>field</p>`;
@@ -134,7 +138,9 @@ describe("component(..., { formAssociated }) parent selection", () => {
 		expect(
 			(Element as unknown as { formAssociated?: boolean }).formAssociated,
 		).toBe(true);
-		expect(document.createElement(tag)).toBeInstanceOf(FormBase);
+		expect(document.createElement(tag)).toBeInstanceOf(
+			getFormAssociatedBaseClass(),
+		);
 	});
 
 	test("the default component is a plain element, never form-associated", () => {
@@ -147,11 +153,13 @@ describe("component(..., { formAssociated }) parent selection", () => {
 		expect(
 			(Element as unknown as { formAssociated?: boolean }).formAssociated,
 		).toBeUndefined();
-		expect(document.createElement(tag)).not.toBeInstanceOf(FormBase);
+		expect(document.createElement(tag)).not.toBeInstanceOf(
+			getFormAssociatedBaseClass(),
+		);
 	});
 
 	test("a declared on-form-reset listener runs when the host resets", async () => {
-		// the end-to-end wiring: FormBase re-broadcasts formResetCallback, and the
+		// the end-to-end wiring: FormAssociatedBase re-broadcasts formResetCallback, and the
 		// root-template `on-form-reset` mirror binds the handler onto the host.
 		const tag = uniqueTag("form-field");
 		const onReset = vi.fn();
@@ -162,7 +170,7 @@ describe("component(..., { formAssociated }) parent selection", () => {
 		}, formOptions);
 		customElements.define(tag, Element);
 
-		const field = document.createElement(tag) as FormBase;
+		const field = document.createElement(tag) as FormAssociatedBase;
 		document.body.appendChild(field);
 		await sleep();
 

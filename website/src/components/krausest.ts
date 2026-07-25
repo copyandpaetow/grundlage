@@ -489,25 +489,25 @@ customElements.define(
 										<div>${measurement.medianMutations}</div>
 										<div class="delta">
 											${
-											previous
-												? html`
-														<span class="${msClass}"
-															>${formatDelta(
+												previous
+													? html`
+															<span class="${msClass}"
+																>${formatDelta(
 																measurement.medianMs,
 																previous.medianMs,
 															)}
-															ms</span
-														>
-														<span class="${writesClass}"
-															>${formatDelta(
+																ms</span
+															>
+															<span class="${writesClass}"
+																>${formatDelta(
 																measurement.medianMutations,
 																previous.medianMutations,
 															)}
-															writes</span
-														>
-													`
-												: "—"
-										}
+																writes</span
+															>
+														`
+													: "—"
+											}
 										</div>
 									`;
 								})}

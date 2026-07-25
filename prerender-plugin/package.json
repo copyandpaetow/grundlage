@@ -29,7 +29,8 @@
 		".": {
 			"types": "./dist/index.d.mts",
 			"import": "./dist/index.mjs"
-		}
+		},
+		"./package.json": "./package.json"
 	},
 	"files": [
 		"dist"
@@ -39,12 +40,14 @@
 	},
 	"scripts": {
 		"build": "tsdown",
+		"prepack": "tsdown",
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
 		"happy-dom": "^20.3.7"
 	},
 	"peerDependencies": {
+		"grundlage": ">=0.7.0",
 		"vite": "^8.0.1"
 	},
 	"devDependencies": {

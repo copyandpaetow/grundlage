@@ -25,11 +25,11 @@ npm install --save-dev vite-plugin-grundlage
 
 ```typescript
 // vite.config.ts
-import {defineConfig} from "vite";
-import {prerenderWebcomponents} from "vite-plugin-grundlage";
+import { defineConfig } from "vite";
+import { prerenderWebcomponents } from "vite-plugin-grundlage";
 
 export default defineConfig({
-    plugins: [prerenderWebcomponents()],
+	plugins: [prerenderWebcomponents()],
 });
 ```
 
@@ -58,8 +58,8 @@ modules registered are read back from `customElements`, which means module side 
 
 ```typescript
 prerenderWebcomponents({
-    include: ["src/components/**/*.ts"],
-    exclude: ["**/*.stories.ts"],
+	include: ["src/components/**/*.ts"],
+	exclude: ["**/*.stories.ts"],
 });
 ```
 
@@ -86,7 +86,7 @@ Children are kept as they were written, next to the inlined shadow root, so the 
 
 ```html
 <user-card ssr>
-    <h2 slot="name">Ada</h2>
+	<h2 slot="name">Ada</h2>
 </user-card>
 ```
 
@@ -97,7 +97,7 @@ Children are kept as they were written, next to the inlined shadow root, so the 
 ## options
 
 | option                | default            | effect                                                                               |
-|-----------------------|--------------------|--------------------------------------------------------------------------------------|
+| --------------------- | ------------------ | ------------------------------------------------------------------------------------ |
 | `include`             | every source file  | globs (relative to the Vite root) of the modules to import for component definitions |
 | `exclude`             | —                  | globs added to the built-in skip list                                                |
 | `componentLoader`     | `"project-config"` | `"isolated"` loads component modules without re-running the project's `vite.config`  |

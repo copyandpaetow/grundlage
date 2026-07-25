@@ -2,17 +2,15 @@
 
 A small, vanilla-flavored, zero-dependency library for building web components with tagged template literals.
 
-## introduction
+## getting started
 
-### getting started
-
-#### installation
+### installation
 
 ```bash
 npm install grundlage
 ```
 
-#### example
+### example
 
 ```typescript
 import {component, html, props} from "grundlage";
@@ -62,7 +60,8 @@ gets cleaned up.
 Reactivity in the current framework landscape boils down to having a compiler, a special signal/observable primitive
 that sometimes
 looks like a normal value but requires special care, or re-rendering all the time but requires state to be special.
-Besides the compiler approach, it requires a lot of domain specific language (DSL) and concepts that don't translate very
+Besides the compiler approach, it requires a lot of domain specific language (DSL) and concepts that don't translate
+very
 well and usually bring their own footguns.
 To keep the library specific DSL to a minimum, we leave the control over updating with the user, enabling them for
 even finer grained performance.
@@ -1058,6 +1057,7 @@ The plugin then scans `index.html` for elements carrying the sentinel attribute,
 whose tag a scanned module actually defined:
 
 ```html
+
 <click-counter start="3" ssr></click-counter>
 <!-- prerendered into the page -->
 <click-counter start="3"></click-counter>
@@ -1068,6 +1068,7 @@ Light-DOM children are kept as they were written, next to the inlined shadow roo
 them into their `<slot>`s while parsing, so slotted content is styled and laid out at first paint too:
 
 ```html
+
 <user-card ssr>
     <h2 slot="name">Ada</h2>
 </user-card>

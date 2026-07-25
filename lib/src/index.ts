@@ -1,4 +1,4 @@
-import { FormBase } from "./forms";
+import { getFormAssociatedBaseClass } from "./forms";
 import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
 import {
 	commitLiveBinding,
@@ -74,7 +74,7 @@ export const component = (
 		);
 	const mergedOptions = { ...defaultOptions, ...options };
 	const ParentClass: typeof HTMLElement = mergedOptions.formAssociated
-		? FormBase
+		? getFormAssociatedBaseClass()
 		: HTMLElement;
 
 	class BaseElement extends ParentClass implements BaseComponent {
