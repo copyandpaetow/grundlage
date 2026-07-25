@@ -1,4 +1,4 @@
-import { html, render } from "../../../../lib/src";
+import { html, component } from "../../../../lib/src";
 import {
 	blocksBoundsPx,
 	HALF_UNIT,
@@ -50,7 +50,7 @@ const slottedBlocks = (element: HTMLElement): Element[] => {
 
 customElements.define(
 	"scene-select",
-	render(function* (element) {
+	component(function* (element) {
 		// A Render function: re-invoked on every update(). It measures the blocks (each
 		// renders independently, so they are already laid out) and bakes the world-aligned
 		// box straight into the markup as bindings. update() is driven by the editor on a

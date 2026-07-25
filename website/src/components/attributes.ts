@@ -1,9 +1,9 @@
-import { html, render } from "../../../lib/src";
+import { component, html } from "../../../lib/src";
 import { type ComponentConstructor } from "../../../lib/src/types";
 
 let attrs = ["disabled", "hidden"];
 
-const component = render(function* (element) {
+const AttributeComponent = component(function* (element) {
 	let attr = "data-name";
 
 	const updateAttr = () => {
@@ -22,10 +22,10 @@ const component = render(function* (element) {
 	`;
 }) as ComponentConstructor;
 
-customElements.define("attribute-component", component);
+customElements.define("attribute-component", AttributeComponent);
 
 declare global {
 	interface HTMLElementTagNameMap {
-		"attribute-component": InstanceType<typeof component>;
+		"attribute-component": InstanceType<typeof AttributeComponent>;
 	}
 }

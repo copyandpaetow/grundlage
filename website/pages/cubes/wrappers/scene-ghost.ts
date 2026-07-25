@@ -1,4 +1,4 @@
-import { html, render } from "../../../../lib/src";
+import { html, component } from "../../../../lib/src";
 import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 // <scene-ghost> — the placement preview. It wraps the geometry being placed
@@ -18,7 +18,7 @@ import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 customElements.define(
 	"scene-ghost",
-	render(function* (element) {
+	component(function* (element) {
 		yield () => {
 			const {
 				position: [positionX, positionY, positionZ],

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../index";
+import { html, component } from "../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -22,7 +22,7 @@ describe("template switching", () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				showFirst ? html` <div>first</div>` : html`<span>second</span>`;
 		});
@@ -50,7 +50,7 @@ describe("template switching", () => {
 		const tag = uniqueTag();
 		let mode: "a" | "b" = "a";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				mode === "a" ? html`<div>mode-a</div>` : html`<span>mode-b</span>`;
 		});
@@ -92,7 +92,7 @@ describe("template switching", () => {
 		let text = "initial";
 		let cls = "one";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p class="${cls}">${text}</p>`;
 		});
 
@@ -121,7 +121,7 @@ describe("template switching", () => {
 		const tag = uniqueTag();
 		let view: "list" | "detail" | "empty" = "empty";
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => {
 				if (view === "list")
 					return html`<ul>
@@ -170,7 +170,7 @@ describe("template switching", () => {
 		const tag = uniqueTag();
 		let dynamic = true;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				dynamic
 					? html`<header>head</header>

@@ -1,85 +1,115 @@
 import { describe, test, expect } from "vitest";
-import { html } from "../html";
-import { buildFragment } from "../../rendering/build-fragment";
-import { BINDING_TYPES, ContentBinding } from "../types";
+import { getParsedTemplate } from "../html";
+import { buildFragment } from "../../rendering/dom";
+import { BINDING } from "../constants";
+import { CommentStaticBinding } from "../types";
+
+const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
+	getParsedTemplate(strings);
+
+const literalParts = (binding: CommentStaticBinding) =>
+	binding.parts.filter((part): part is string => typeof part === "string");
 
 describe("html parser — comment bindings", () => {
-	test("expression inside HTML comment", () => {
-		const msg = "debug info";
-		const template = html`<!-- ${msg} -->`;
+	test("the first dynamic comment is the list key, not a binding", () => {
+		const identifier = "row-1";
+		const parsed = parse`<!-- ${identifier} -->`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings).toHaveLength(0);
+		expect(parsed.keyValueParts).toEqual([" ", 0, " "]);
+	});
+
+	test("a key comment is stripped — it leaves no node in the markup", () => {
+		const identifier = "row-1";
+		const parsed = parse`<!-- ${identifier} --><li>row</li>`;
+
+		expect(parsed.htmlWithMarkers).toBe("<li>row</li>");
+	});
+
+	test("the literal text around a key expression does not change the key", () => {
+		const identifier = "row-1";
+		const bare = parse`<!--${identifier}-->`;
+		const prose = parse`<!-- id: ${identifier} -->`;
+
+		expect(bare.keyValueParts).toEqual([0]);
+		expect(prose.keyValueParts).toEqual([" id: ", 0, " "]);
+		expect(bare.htmlWithMarkers).toBe(prose.htmlWithMarkers);
+	});
+
+	test("a dynamic comment after the key stays a comment binding", () => {
+		const identifier = "row-1";
+		const msg = "debug info";
+		const parsed = parse`<!--${identifier}--><!-- ${msg} -->`;
+
+		expect(parsed.keyValueParts).toEqual([0]);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.COMMENT);
 	});
 
 	test("comment with no expressions is not a binding", () => {
-		const template = html`<!-- static comment -->`;
+		const parsed = parse`<!-- static comment -->`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(0);
 	});
 
 	test("comment between elements with bindings", () => {
 		const a = "first";
 		const b = "second";
-		const template = html`<p>${a}</p>
+		const parsed = parse`<p>${a}</p>
 			<!-- separator -->
 			<p>${b}</p>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
-		expect(template.parsedHTML.bindings[1].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.CONTENT,
+			BINDING.CONTENT,
+		]);
 	});
 
-	test("multiple expressions in one comment share one binding", () => {
+	test("multiple expressions in one comment share one key", () => {
 		const a = "x";
 		const b = "y";
-		const template = html`<!-- ${a} and ${b} -->`;
+		const parsed = parse`<!-- ${a} and ${b} -->`;
 
-		// Both expressions in the same comment share one content binding
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.expressionToBinding).toEqual([0, 0]);
+		expect(parsed.bindings).toHaveLength(0);
+		expect(
+			parsed.keyValueParts!.filter((part) => typeof part === "number"),
+		).toEqual([0, 1]);
 	});
 
-	test("comment binding values do not include delimiters", () => {
+	test("comment binding parts do not include delimiters", () => {
+		const identifier = "row-1";
 		const msg = "debug";
-		const template = html`<!-- ${msg} -->`;
+		const parsed = parse`<!--${identifier}--><!-- ${msg} -->`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as ContentBinding;
-		// Values should contain only the expression index and surrounding whitespace,
-		// not the "<!--" or "-->" delimiters
-		for (const value of binding.values) {
-			if (typeof value === "string") {
-				expect(value).not.toContain("<!--");
-				expect(value).not.toContain("-->");
-			}
+		const binding = parsed.bindings[0] as CommentStaticBinding;
+		for (const part of literalParts(binding)) {
+			expect(part).not.toContain("<!--");
+			expect(part).not.toContain("-->");
 		}
 	});
 
-	test("multi-expression comment binding values do not include delimiters", () => {
+	test("multi-expression comment binding parts do not include delimiters", () => {
+		const identifier = "row-1";
 		const a = "x";
 		const b = "y";
-		const template = html`<!-- ${a} and ${b} -->`;
+		const parsed = parse`<!--${identifier}--><!-- ${a} and ${b} -->`;
 
-		const binding = template.parsedHTML.bindings[0] as ContentBinding;
-		for (const value of binding.values) {
-			if (typeof value === "string") {
-				expect(value).not.toContain("<!--");
-				expect(value).not.toContain("-->");
-			}
+		const binding = parsed.bindings[0] as CommentStaticBinding;
+		for (const part of literalParts(binding)) {
+			expect(part).not.toContain("<!--");
+			expect(part).not.toContain("-->");
 		}
 	});
 
 	test("static comment is preserved in fragment", () => {
-		const template = html`<div>text</div>
+		const parsed = parse`<div>text</div>
 			<!-- static -->`;
 
-		// Static comments should be present in the fragment output
 		const walker = document.createTreeWalker(
-			buildFragment(template.parsedHTML.result),
+			buildFragment(parsed.htmlWithMarkers),
 			NodeFilter.SHOW_COMMENT,
 		);
-		const comments: Comment[] = [];
+		const comments: Array<Comment> = [];
 		let node;
 		while ((node = walker.nextNode())) {
 			comments.push(node as Comment);
@@ -89,26 +119,29 @@ describe("html parser — comment bindings", () => {
 	});
 
 	test("static comment containing HTML-like text does not affect parsing", () => {
-		//inside COMMENT state '<' and '>' are plain characters — only '-->' exits
-		const template = html`<div>before</div>
+		const parsed = parse`<div>before</div>
 			<!-- <fake-tag class="x"> -->
 			<p>after</p>`;
-		expect(template.parsedHTML.bindings).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(0);
 		expect(
-			buildFragment(template.parsedHTML.result).querySelector("div"),
+			buildFragment(parsed.htmlWithMarkers).querySelector("div"),
 		).not.toBeNull();
 		expect(
-			buildFragment(template.parsedHTML.result).querySelector("p"),
+			buildFragment(parsed.htmlWithMarkers).querySelector("p"),
 		).not.toBeNull();
 		expect(
-			buildFragment(template.parsedHTML.result).querySelector("fake-tag"),
+			buildFragment(parsed.htmlWithMarkers).querySelector("fake-tag"),
 		).toBeNull();
 	});
 
-	test("comment with no whitespace around the expression", () => {
+	test("a single-hole comment after the key stays a comment — whitespace does not flip its semantics", () => {
+		const identifier = "row-1";
 		const msg = "x";
-		const template = html`<!--${msg}-->`;
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.CONTENT);
+		const tight = parse`<!--${identifier}--><!--${msg}-->`;
+		expect(tight.bindings).toHaveLength(1);
+		expect(tight.bindings[0].type).toBe(BINDING.COMMENT);
+
+		const spaced = parse`<!--${identifier}--><!-- ${msg} -->`;
+		expect(spaced.bindings[0].type).toBe(BINDING.COMMENT);
 	});
 });

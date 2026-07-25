@@ -1,4 +1,4 @@
-import { html, props, render } from "../../../../lib/src";
+import { html, props, component } from "../../../../lib/src";
 import type { BaseComponent } from "../../../../lib/src/types";
 
 // <scene-palette> — the editor's 2D chrome: the toolbar (add / group / camera /
@@ -47,7 +47,7 @@ export interface ScenePaletteElement extends BaseComponent {
 
 customElements.define(
 	"scene-palette",
-	render(function* (element) {
+	component(function* (element) {
 		const host = element as ScenePaletteElement;
 		// Handlers arrive as a JS property before we mount, and never change — read
 		// them once rather than on every render.
@@ -199,11 +199,13 @@ customElements.define(
 						<button data-action="ungroup">Ungroup</button>
 						<button data-action="delete">Delete</button>
 						<span class="spacer"></span>
-						${handlers.onToggleCamera
-							? html`<button data-action="camera">
-									Camera: ${cameraLabel}
-								</button>`
-							: null}
+						${
+							handlers.onToggleCamera
+								? html`<button data-action="camera">
+										Camera: ${cameraLabel}
+									</button>`
+								: null
+						}
 						<button data-action="export">Export</button>
 					</div>
 					<div

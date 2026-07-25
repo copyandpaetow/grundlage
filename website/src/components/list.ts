@@ -1,4 +1,4 @@
-import { render, html } from "../../../lib/src";
+import { component, html } from "../../../lib/src";
 
 // const list = css`
 // 	border: 1px solid black;
@@ -23,7 +23,7 @@ import { render, html } from "../../../lib/src";
 
 customElements.define(
 	"list-component",
-	render(function* (element) {
+	component(function* (element) {
 		let entries = Array.from({ length: 10 }, (_, index) => index * 10);
 
 		const shuffleEntries = () => {

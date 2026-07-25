@@ -4,6 +4,7 @@
 	"scripts": {
 		"dev": "npm run dev -w website",
 		"build": "npm run build -w grundlage",
+		"build:plugin": "npm run build -w vite-plugin-grundlage",
 		"build:site": "npm run build -w website",
 		"preview": "npm run preview -w website",
 		"test": "vitest",
@@ -12,28 +13,37 @@
 		"test:cubes": "vitest  --project cubes",
 		"test:browser": "vitest --project browser",
 		"test:ci": "vitest run",
-		"test:bench": "node scripts/bench.mjs vitest bench --config vitest.bench.config.ts",
-		"bench:baseline": "node scripts/bench.mjs vitest bench --run --config vitest.bench.config.ts --outputJson=bench/baseline.json",
-		"bench:compare": "node scripts/bench.mjs vitest bench --run --config vitest.bench.config.ts --compare=bench/baseline.json",
-		"bench:gate": "node scripts/bench.mjs vitest bench --run --config vitest.bench.config.ts --outputJson=bench/current.json && node scripts/bench-compare.mjs bench/baseline.json bench/current.json",
 		"test:coverage": "vitest run --coverage",
 		"format:check": "prettier --check .",
 		"format:fix": "prettier --write .",
 		"version:patch": "npm version patch -w grundlage",
 		"version:minor": "npm version minor -w grundlage",
 		"version:major": "npm version major -w grundlage",
-		"release": "npm run build -w grundlage && npm test -- --run && npm publish -w grundlage"
+		"version:plugin:patch": "npm version patch -w vite-plugin-grundlage",
+		"version:plugin:minor": "npm version minor -w vite-plugin-grundlage",
+		"version:plugin:major": "npm version major -w vite-plugin-grundlage",
+		"release": "npm run build -w grundlage && npm test -- --run && npm publish -w grundlage",
+		"release:plugin": "npm run build -w vite-plugin-grundlage && npm test -- --run && npm publish -w vite-plugin-grundlage"
 	},
 	"devDependencies": {
-		"@types/node": "^25.6.0",
+		"@types/node": "^26.0.1",
 		"@vitest/browser-playwright": "^4.1.0",
 		"@vitest/coverage-v8": "^4.1.2",
-		"prettier": "3.8.3",
+		"happy-dom": "^20.3.7",
+		"prettier": "^3.9.6",
+		"typescript": "^7.0.2",
+		"vite": "^8.0.1",
 		"vitest": "^4.1.0"
+	},
+	"overrides": {
+		"happy-dom": "$happy-dom"
 	},
 	"workspaces": [
 		"lib",
 		"website",
 		"prerender-plugin"
-	]
+	],
+	"allowScripts": {
+		"fsevents": false
+	}
 }

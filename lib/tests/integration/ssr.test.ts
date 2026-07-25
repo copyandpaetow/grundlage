@@ -2,7 +2,7 @@
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { html, render } from "../../src/index";
+import { html, component } from "../../src/index";
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -42,7 +42,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let yieldCount = 0;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yieldCount++;
 			yield () => html`<p>first</p>`;
 			yieldCount++;
@@ -63,7 +63,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let postYieldRan = false;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield () => html`<p>only</p>`;
 			postYieldRan = true;
 		});
@@ -78,7 +78,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let postYieldRan = false;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield html`<p>static</p>`;
 			postYieldRan = true;
 			yield html`<p>after</p>`;
@@ -96,7 +96,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		let renderFnCalls = 0;
 		let postYieldRan = false;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield () => {
 				renderFnCalls++;
 				return html`<p>render-fn ${renderFnCalls}</p>`;
@@ -115,7 +115,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let innerYields = 0;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield function* inner() {
 				innerYields++;
 				yield () => html`<p>inner-first</p>`;
@@ -136,7 +136,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let postYieldRan = false;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			const data = yield Promise.resolve("from-server");
 			yield () => html`<p>${data as string}</p>`;
 			postYieldRan = true;
@@ -153,7 +153,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const Component = render(function* (host) {
+		const Component = component(function* (host) {
 			renderCount++;
 			yield () =>
 				html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
@@ -174,7 +174,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			renderCount++;
 			yield () => html`<p>${renderCount}</p>`;
 		});
@@ -195,7 +195,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let renderFunctionCalls = 0;
 
-		const Component = render(function* (host) {
+		const Component = component(function* (host) {
 			yield () => {
 				renderFunctionCalls++;
 				queueMicrotask(() => host.update());
@@ -211,12 +211,12 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(renderFunctionCalls).toBe(1);
 	});
 
-	test("setProperty on the server applies the attribute but does not trigger a re-render", async () => {
+	test("setProp on the server applies the attribute but does not trigger a re-render", async () => {
 		//two halves split across the boundary: applyAttributeBinding still writes (matters for serialization), update() is gated
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const Component = render(function* (host) {
+		const Component = component(function* (host) {
 			renderCount++;
 			yield () =>
 				html`<span>${host.getAttribute("data-value") ?? "missing"}</span>`;
@@ -227,9 +227,9 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		(
 			element as unknown as {
-				setProperty: (name: string, value: unknown) => void;
+				setProp: (name: string, value: unknown) => void;
 			}
-		).setProperty("data-value", "after");
+		).setProp("data-value", "after");
 		await flushMicrotasks();
 
 		expect(element.getAttribute("data-value")).toBe("after");
@@ -242,7 +242,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		//optional chaining in disconnectedCallback is the safety net; a throw here would break serialization-batch teardown
 		const tag = uniqueTag();
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield () => html`<p>hi</p>`;
 		});
 
@@ -261,7 +261,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		let postYieldRan = false;
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield Promise.reject(new Error("boom"));
 			yield () => html`<p>never</p>`;
 			postYieldRan = true;
@@ -283,7 +283,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		let finallyRan = false;
 		let cleanupReturnInvoked = false;
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			try {
 				yield () => html`<p>guarded</p>`;
 			} finally {
@@ -308,7 +308,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			try {
 				yield function* () {
 					yield () => {
@@ -335,14 +335,14 @@ describe("SSR: server stops at first renderable yield", () => {
 		let firstYields = 0;
 		let secondYields = 0;
 
-		const First = render(function* () {
+		const First = component(function* () {
 			firstYields++;
 			yield () => html`<p>first-a</p>`;
 			firstYields++;
 			yield () => html`<p>first-b</p>`;
 		});
 
-		const Second = render(function* () {
+		const Second = component(function* () {
 			secondYields++;
 			yield () => html`<p>second-a</p>`;
 			secondYields++;
@@ -362,7 +362,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		//mirrors the call path the plugin uses in production builds
 		const tag = uniqueTag();
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield () => html`<p>serialized-first</p>`;
 			yield () => html`<p>serialized-second</p>`;
 		});
@@ -384,7 +384,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		//root-template attrs live on the host, not the shadow root — SSR must apply them once before getHTML serializes
 		const tag = uniqueTag();
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield () =>
 				html`<template class="${"server-class"}" data-x="${"server-x"}">
 					<p>body</p>
@@ -401,7 +401,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let value = "before";
 
-		const Component = render(function* () {
+		const Component = component(function* () {
 			yield () => html`<p>${value}</p>`;
 			value = "after";
 			yield () => html`<p>${value}</p>`;

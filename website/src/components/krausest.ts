@@ -1,13 +1,24 @@
-import { html, render } from "../../../lib/src";
+import { component, html } from "../../../lib/src";
+import {
+	type Baseline,
+	clearBaseline,
+	formatDelta,
+	loadBaseline,
+	measureOperation,
+	type Operation,
+	type OperationResult,
+	saveBaseline,
+} from "../measure";
 
 /*
     Krausest-style benchmark harness. Runs the canonical
     js-framework-benchmark operation suite (create, replace, partial update,
-    select, swap, remove, append, clear) and surfaces per-op timings.
+    select, swap, remove, append, clear) against the renderer.
 
-    Timing convention follows krausest: mark start, apply the data mutation,
-    force a render, then wait for paint via double rAF before stopping the
-    clock — so the measurement covers JS work and the browser's commit.
+    All measurement (paint-gated timing, DOM-mutation count, baseline/delta)
+    comes from the shared ../measure harness — the executable form of the
+    "Measuring" contract in lib/CONVENTIONS.md. This component only defines the
+    operations and renders the results.
 
     "Run suite" executes every op a configurable number of times (with one
     warmup) and records the median. Results can be frozen as a baseline in
@@ -16,20 +27,6 @@ import { html, render } from "../../../lib/src";
 */
 
 type Row = { identifier: number; label: string };
-
-type SampleStats = {
-	label: string;
-	itemCount: number;
-	medianMs: number;
-	minMs: number;
-	maxMs: number;
-	samples: number;
-};
-
-type Baseline = {
-	capturedAt: string;
-	results: Array<SampleStats>;
-};
 
 const ADJECTIVES = [
 	"pretty",
@@ -93,55 +90,19 @@ const pickRandom = <T>(items: ReadonlyArray<T>): T =>
 
 const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline";
 
-const median = (samples: ReadonlyArray<number>): number => {
-	const sorted = samples.slice().sort((left, right) => left - right);
-	const middle = sorted.length >> 1;
-	return sorted.length % 2 === 0
-		? (sorted[middle - 1] + sorted[middle]) / 2
-		: sorted[middle];
-};
-
-const waitForPaint = () =>
-	new Promise<void>((resolve) => {
-		requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-	});
-
-const loadBaseline = (): Baseline | null => {
-	try {
-		const raw = localStorage.getItem(BASELINE_STORAGE_KEY);
-		return raw ? (JSON.parse(raw) as Baseline) : null;
-	} catch {
-		return null;
-	}
-};
-
-const saveBaseline = (baseline: Baseline) => {
-	try {
-		localStorage.setItem(BASELINE_STORAGE_KEY, JSON.stringify(baseline));
-	} catch {
-		// localStorage may be unavailable in private modes; non-fatal
-	}
-};
-
-const clearBaseline = () => {
-	try {
-		localStorage.removeItem(BASELINE_STORAGE_KEY);
-	} catch {
-		// non-fatal
-	}
-};
-
 customElements.define(
 	"krausest-bench",
-	render(function* (element) {
+	component(function* (element) {
 		let rows: Array<Row> = [];
 		let selectedIdentifier: number | null = null;
 		let nextIdentifier = 1;
 		let sampleCount = Number(element.getAttribute("samples") ?? 10);
 		let isRunning = false;
 		let activeOperation: string | null = null;
-		const measurements = new Map<string, SampleStats>();
-		let baseline: Baseline | null = loadBaseline();
+		const measurements = new Map<string, OperationResult>();
+		const itemCounts = new Map<string, number>();
+		let baseline: Baseline<OperationResult[]> | null =
+			loadBaseline<OperationResult[]>(BASELINE_STORAGE_KEY);
 
 		const buildLabel = () =>
 			`${pickRandom(ADJECTIVES)} ${pickRandom(COLORS)} ${pickRandom(NOUNS)}`;
@@ -264,22 +225,29 @@ customElements.define(
 			},
 		];
 
-		const timeOnce = async (op: (typeof operations)[number]) => {
-			op.prepare();
-			element.update();
-			await waitForPaint();
+		// Observe only the list, not the harness chrome, so mutation counts
+		// reflect the op under test. The list container is structurally stable
+		// across renders; fall back to the shadow root before the first paint.
+		const listRoot = (): Node =>
+			element.shadowRoot?.querySelector(".list-shell") ??
+			element.shadowRoot ??
+			element;
 
-			const itemCountBefore = rows.length;
-			const startTime = performance.now();
-			op.apply();
-			element.update();
-			await waitForPaint();
-			const durationMs = performance.now() - startTime;
-
-			// Report the post-apply count — that's what the renderer actually
-			// painted in the measured window.
-			return { durationMs, itemCount: Math.max(itemCountBefore, rows.length) };
-		};
+		// Wrap a domain op as a measurable one: apply mutates state AND triggers
+		// the render (the harness times to paint), and records the painted count.
+		const measurableOf = (op: (typeof operations)[number]): Operation => ({
+			label: op.label,
+			prepare: () => {
+				op.prepare();
+				element.update();
+			},
+			apply: () => {
+				const before = rows.length;
+				op.apply();
+				itemCounts.set(op.label, Math.max(before, rows.length));
+				element.update();
+			},
+		});
 
 		const runOperation = async (op: (typeof operations)[number]) => {
 			if (isRunning) return;
@@ -287,25 +255,10 @@ customElements.define(
 			activeOperation = op.label;
 			element.update();
 
-			const samples: Array<number> = [];
-			let lastItemCount = 0;
-			// One warmup pass: JIT, layout caches, and any first-render setup work
-			// shouldn't poison the medians.
-			await timeOnce(op);
-			for (let index = 0; index < sampleCount; index++) {
-				const result = await timeOnce(op);
-				samples.push(result.durationMs);
-				lastItemCount = result.itemCount;
-			}
-
-			measurements.set(op.label, {
-				label: op.label,
-				itemCount: lastItemCount,
-				medianMs: median(samples),
-				minMs: Math.min(...samples),
-				maxMs: Math.max(...samples),
-				samples: samples.length,
+			const result = await measureOperation(listRoot(), measurableOf(op), {
+				samples: sampleCount,
 			});
+			measurements.set(op.label, result);
 
 			isRunning = false;
 			activeOperation = null;
@@ -334,30 +287,23 @@ customElements.define(
 
 		const promoteToBaseline = () => {
 			if (measurements.size === 0) return;
-			baseline = {
-				capturedAt: new Date().toISOString(),
-				results: Array.from(measurements.values()),
-			};
-			saveBaseline(baseline);
+			baseline = saveBaseline(
+				BASELINE_STORAGE_KEY,
+				Array.from(measurements.values()),
+			);
 			element.update();
 		};
 
 		const dropBaseline = () => {
 			baseline = null;
-			clearBaseline();
+			clearBaseline(BASELINE_STORAGE_KEY);
 			element.update();
 		};
 
 		const formatMs = (value: number) => value.toFixed(2);
 
-		const baselineFor = (label: string): SampleStats | undefined =>
-			baseline?.results.find((entry) => entry.label === label);
-
-		const formatDelta = (current: number, previous: number) => {
-			const delta = ((current - previous) / previous) * 100;
-			const sign = delta >= 0 ? "+" : "";
-			return `${sign}${delta.toFixed(1)}%`;
-		};
+		const baselineFor = (label: string): OperationResult | undefined =>
+			baseline?.value.find((entry) => entry.label === label);
 
 		yield () => html`
 			<style>
@@ -397,7 +343,7 @@ customElements.define(
 				.results {
 					margin-top: 12px;
 					display: grid;
-					grid-template-columns: max-content repeat(5, max-content);
+					grid-template-columns: max-content repeat(6, max-content);
 					gap: 4px 24px;
 				}
 
@@ -416,11 +362,18 @@ customElements.define(
 					border-bottom-color: #333;
 				}
 
-				.delta.regress {
+				.delta {
+					display: flex;
+					flex-direction: column;
+					align-items: flex-end;
+					gap: 2px;
+				}
+
+				.regress {
 					color: #b00020;
 				}
 
-				.delta.improve {
+				.improve {
 					color: #006a2b;
 				}
 
@@ -485,62 +438,94 @@ customElements.define(
 				<button onclick="${dropBaseline}" disabled="${!baseline || isRunning}">
 					clear baseline
 				</button>
-				${baseline
-					? html`<span>baseline captured ${baseline.capturedAt}</span>`
-					: html`<span>no baseline saved</span>`}
+				${
+					baseline
+						? html`<span>baseline captured ${baseline.capturedAt}</span>`
+						: html`<span>no baseline saved</span>`
+				}
 			</div>
 
 			<div class="status">
-				${isRunning
-					? html`running: ${activeOperation ?? "suite"}…`
-					: html`idle`}
+				${
+					isRunning ? html`running: ${activeOperation ?? "suite"}…` : html`idle`
+				}
 			</div>
 
-			${measurements.size > 0
-				? html`
-						<div class="results">
-							<div class="label head">operation</div>
-							<div class="head">items</div>
-							<div class="head">median (ms)</div>
-							<div class="head">min</div>
-							<div class="head">max</div>
-							<div class="head">vs baseline</div>
-							${Array.from(measurements.values()).map((measurement) => {
-								const previous = baselineFor(measurement.label);
-								const deltaClass = previous
-									? measurement.medianMs > previous.medianMs * 1.02
-										? "regress"
-										: measurement.medianMs < previous.medianMs * 0.98
-											? "improve"
-											: ""
-									: "";
-								return html`
-									<div class="label">${measurement.label}</div>
-									<div>${measurement.itemCount}</div>
-									<div>${formatMs(measurement.medianMs)}</div>
-									<div>${formatMs(measurement.minMs)}</div>
-									<div>${formatMs(measurement.maxMs)}</div>
-									<div class="delta ${deltaClass}">
-										${previous
-											? formatDelta(measurement.medianMs, previous.medianMs)
-											: "—"}
-									</div>
-								`;
-							})}
-						</div>
-					`
-				: html``}
+			${
+				measurements.size > 0
+					? html`
+							<div class="results">
+								<div class="label head">operation</div>
+								<div class="head">items</div>
+								<div class="head">median (ms)</div>
+								<div class="head">min</div>
+								<div class="head">max</div>
+								<div class="head">DOM writes</div>
+								<div class="head">vs baseline</div>
+								${Array.from(measurements.values()).map((measurement) => {
+									const previous = baselineFor(measurement.label);
+									// ms uses a 2% noise band; DOM writes are deterministic, so
+									// compare them exactly — any drift is a real false-write signal.
+									const msClass = !previous
+										? ""
+										: measurement.medianMs > previous.medianMs * 1.02
+											? "regress"
+											: measurement.medianMs < previous.medianMs * 0.98
+												? "improve"
+												: "";
+									const writesClass = !previous
+										? ""
+										: measurement.medianMutations > previous.medianMutations
+											? "regress"
+											: measurement.medianMutations < previous.medianMutations
+												? "improve"
+												: "";
+									return html`
+										<div class="label">${measurement.label}</div>
+										<div>${itemCounts.get(measurement.label) ?? "—"}</div>
+										<div>${formatMs(measurement.medianMs)}</div>
+										<div>${formatMs(measurement.minMs)}</div>
+										<div>${formatMs(measurement.maxMs)}</div>
+										<div>${measurement.medianMutations}</div>
+										<div class="delta">
+											${
+												previous
+													? html`
+															<span class="${msClass}"
+																>${formatDelta(
+																	measurement.medianMs,
+																	previous.medianMs,
+																)}
+																ms</span
+															>
+															<span class="${writesClass}"
+																>${formatDelta(
+																	measurement.medianMutations,
+																	previous.medianMutations,
+																)}
+																writes</span
+															>
+														`
+													: "—"
+											}
+										</div>
+									`;
+								})}
+							</div>
+						`
+					: html``
+			}
 
 			<div class="list-shell">
 				<table>
 					<tbody>
 						${rows.map(
 							(row) => html`
+								<!--${row.identifier}-->
 								<tr
-									data-key="${row.identifier}"
-									class="${row.identifier === selectedIdentifier
-										? "selected"
-										: ""}"
+									class="${
+										row.identifier === selectedIdentifier ? "selected" : ""
+									}"
 								>
 									<td>${row.identifier}</td>
 									<td>${row.label}</td>

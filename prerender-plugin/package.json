@@ -1,33 +1,56 @@
 {
-	"name": "grundlage-prerender",
-	"version": "0.5.0",
+	"name": "vite-plugin-grundlage",
+	"version": "0.1.0",
 	"description": "Vite plugin that prerenders grundlage web components to declarative shadow DOM at build time.",
 	"license": "MIT",
+	"author": "Lucas Paetow",
+	"homepage": "https://github.com/copyandpaetow/grundlage/tree/main/prerender-plugin#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/copyandpaetow/grundlage.git",
+		"directory": "prerender-plugin"
+	},
+	"bugs": {
+		"url": "https://github.com/copyandpaetow/grundlage/issues"
+	},
 	"keywords": [
 		"web-components",
 		"vite-plugin",
+		"vite",
 		"ssr",
-		"declarative-shadow-dom"
+		"prerender",
+		"declarative-shadow-dom",
+		"grundlage"
 	],
 	"type": "module",
+	"main": "./dist/index.mjs",
+	"types": "./dist/index.d.mts",
 	"exports": {
-		".": "./index.ts"
+		".": {
+			"types": "./dist/index.d.mts",
+			"import": "./dist/index.mjs"
+		},
+		"./package.json": "./package.json"
 	},
 	"files": [
-		"index.ts",
-		"ssr-render.ts"
+		"dist"
 	],
+	"engines": {
+		"node": ">=24"
+	},
 	"scripts": {
+		"build": "tsdown",
+		"prepack": "tsdown",
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
 		"happy-dom": "^20.3.7"
 	},
 	"peerDependencies": {
+		"grundlage": ">=0.7.0",
 		"vite": "^8.0.1"
 	},
 	"devDependencies": {
-		"vite": "^8.0.1",
-		"vitest": "^4.1.0"
+		"tsdown": "^0.22.0"
 	}
 }

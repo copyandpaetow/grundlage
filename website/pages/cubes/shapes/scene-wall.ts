@@ -1,4 +1,4 @@
-import { html, render } from "../../../../lib/src";
+import { html, component } from "../../../../lib/src";
 import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 // <scene-wall> — one element per geometry. A thin upright panel: its own unit
@@ -17,7 +17,7 @@ const HALF_THICKNESS = THICKNESS / 2;
 
 customElements.define(
 	"scene-wall",
-	render(function* (element) {
+	component(function* (element) {
 		yield () => {
 			const {
 				size: [width, height, depth],

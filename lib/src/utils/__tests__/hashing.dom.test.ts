@@ -70,6 +70,23 @@ describe("hashValue - primitives", () => {
 		expect(hashValue("")).toBe(hashValue(""));
 		expect(hashValue("")).not.toBe(hashValue(null));
 	});
+
+	test("bigints hash deterministically and distinctly", () => {
+		expect(hashValue(42n)).toBe(hashValue(42n));
+		expect(hashValue(42n)).not.toBe(hashValue(43n));
+		expect(hashValue(0n)).not.toBe(hashValue(null));
+	});
+
+	test("bigints beyond the 32-bit range stay distinct", () => {
+		expect(hashValue(2n ** 64n)).not.toBe(hashValue(2n ** 64n + 1n));
+	});
+
+	//a bigint reaching the reference registry would throw on a WeakMap primitive key
+	test("a nested bigint hashes instead of throwing", () => {
+		expect(() => hashValue([1n, { total: 2n }])).not.toThrow();
+		expect(hashValue([1n])).toBe(hashValue([1n]));
+		expect(hashValue([1n])).not.toBe(hashValue([2n]));
+	});
 });
 
 describe("hashValue - arrays", () => {

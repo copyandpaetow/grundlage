@@ -1,159 +1,143 @@
 import { describe, test, expect } from "vitest";
-import { html } from "../html";
-import { buildFragment } from "../../rendering/build-fragment";
-import { BINDING_TYPES, RawContentBinding } from "../types";
+import { getParsedTemplate } from "../html";
+import { buildFragment } from "../../rendering/dom";
+import { BINDING } from "../constants";
+import { RawContentStaticBinding } from "../types";
+
+const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
+	getParsedTemplate(strings);
 
 describe("html parser — raw content bindings", () => {
 	test("dynamic style content", () => {
 		const color = "red";
-		const template = html` <style>
+		const parsed = parse` <style>
 			div {
 				color: ${color};
 			}
 		</style>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
 	test("dynamic content inside textarea", () => {
 		const val = "user input";
-		const template = html`<textarea>${val}</textarea>`;
+		const parsed = parse`<textarea>${val}</textarea>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
 	test("dynamic content inside script", () => {
 		const code = "console.log('hi')";
-		const template = html` <script>
+		const parsed = parse` <script>
 			${code};
 		</script>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
 	test("dynamic content inside non-root template element", () => {
-		//root templates get host-element treatment (their content becomes the fragment children);
-		//=> to keep raw-content treatment we wrap the template so it isn't the root
 		const content = "<p>slot</p>";
-		const template = html` <div><template>${content}</template></div>`;
+		const parsed = parse` <div><template>${content}</template></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
 	test("multiple expressions in style element share one binding", () => {
 		const color = "red";
 		const size = "16px";
-		const template = html` <style>
+		const parsed = parse` <style>
 			p {
 				color: ${color};
 				font-size: ${size};
 			}
 		</style>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as RawContentBinding;
-		expect(binding.type).toBe(BINDING_TYPES.RAW_CONTENT);
-		// Both expressions map to the same binding
-		expect(template.parsedHTML.expressionToBinding).toEqual([0, 0]);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as RawContentStaticBinding;
+		expect(binding.type).toBe(BINDING.RAW_CONTENT);
+		expect(binding.parts.filter((part) => typeof part === "number")).toEqual([
+			0, 1,
+		]);
 	});
 
 	test("static raw content produces no bindings", () => {
-		const template = html` <style>
+		const parsed = parse` <style>
 			p {
 				color: red;
 			}
 		</style>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(0);
 	});
 
 	test("raw content element followed by regular element with binding", () => {
 		const color = "red";
 		const text = "hello";
-		const template = html` <style>
+		const parsed = parse` <style>
 				p {
 					color: ${color};
 				}
 			</style>
 			<p>${text}</p>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.bindings[0].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
-		expect(template.parsedHTML.bindings[1].type).toBe(BINDING_TYPES.CONTENT);
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.RAW_CONTENT,
+			BINDING.CONTENT,
+		]);
 	});
 
 	test("raw content preserves inner HTML-like text without parsing", () => {
 		const injection = "<div>not a real tag</div>";
-		const template = html` <style>
+		const parsed = parse` <style>
 			${injection}
 		</style>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
-		// Should not create extra bindings from the HTML-like content
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
 	test("style element with attributes and dynamic content", () => {
 		const css = "color: red";
-		const template = html` <style type="text/css">
+		const parsed = parse` <style type="text/css">
 			p {
 			                ${css}
 			            }
 		</style>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		expect(template.parsedHTML.bindings[0].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
 	test("adjacent raw-content elements each get their own binding", () => {
 		const a = "red";
 		const b = "blue";
-		const template = html`<style>
+		const parsed = parse`<style>
 				${a}</style
 			><style>
 				${b}
 			</style>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.bindings[0].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
-		expect(template.parsedHTML.bindings[1].type).toBe(
-			BINDING_TYPES.RAW_CONTENT,
-		);
-		const styles = buildFragment(template.parsedHTML.result).querySelectorAll(
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.RAW_CONTENT,
+			BINDING.RAW_CONTENT,
+		]);
+		const styles = buildFragment(parsed.htmlWithMarkers).querySelectorAll(
 			"style",
 		);
 		expect(styles).toHaveLength(2);
 	});
 
 	test("script content with stray '</other>' does not exit raw-content early", () => {
-		//raw-content state only exits when the match targets the SAME tag name;
-		//stray close-tags of other elements must be treated as plain script text
-		const template = html`<script>
+		const parsed = parse`<script>
 			if (a < 10) {
 				log("</other>");
 			}
 		</script>`;
-		const script = buildFragment(template.parsedHTML.result).querySelector(
+		const script = buildFragment(parsed.htmlWithMarkers).querySelector(
 			"script",
 		)!;
 		expect(script).not.toBeNull();
@@ -161,12 +145,106 @@ describe("html parser — raw content bindings", () => {
 	});
 
 	test("script content with '<' not followed by '/' stays in raw-content", () => {
-		const template = html`<script>
+		const parsed = parse`<script>
 			if (a < b) return;
 		</script>`;
-		const script = buildFragment(template.parsedHTML.result).querySelector(
+		const script = buildFragment(parsed.htmlWithMarkers).querySelector(
 			"script",
 		)!;
 		expect(script.textContent).toContain("<");
+	});
+});
+
+describe("html parser — css plan attachment", () => {
+	const rawContentBinding = (parsed: ReturnType<typeof parse>) =>
+		parsed.bindings[0] as RawContentStaticBinding;
+
+	test("a style value hole gets a css plan addressing the declaration", () => {
+		const color = "red";
+		const parsed = parse`<style>div { color: ${color}; }</style>`;
+
+		const compiledStyleSheet = rawContentBinding(parsed).compiledStyleSheet;
+		expect(compiledStyleSheet?.dynamicDeclarations).toEqual([
+			{
+				rulePath: [0],
+				propertyName: "color",
+				priority: "",
+				valueParts: [" ", 0],
+			},
+		]);
+		//the sheet text is composed with literal values at first commit — the cached
+		//markup carries an empty <style>
+		expect(parsed.htmlWithMarkers).toContain("<style></style>");
+	});
+
+	test("templates differing only in raw-content statics get distinct hashes", () => {
+		const color = "red";
+		const first = parse`<style>p { color: ${color}; }</style>`;
+		const second = parse`<style>div { background: ${color}; }</style>`;
+
+		expect(first.templateHash).not.toBe(second.templateHash);
+	});
+
+	test("a structural style hole gets no css plan", () => {
+		const selector = "div";
+		const parsed = parse`<style>${selector} { color: red; }</style>`;
+
+		expect(rawContentBinding(parsed).compiledStyleSheet).toBeNull();
+	});
+
+	test("script and textarea holes get no css plan", () => {
+		const code = "let a = 1;";
+		const value = "user input";
+		const scriptParsed = parse`<script>${code}</script>`;
+		const textareaParsed = parse`<textarea>${value}</textarea>`;
+
+		expect(rawContentBinding(scriptParsed).compiledStyleSheet).toBeNull();
+		expect(rawContentBinding(textareaParsed).compiledStyleSheet).toBeNull();
+	});
+
+	test("a nested template hole gets no css plan", () => {
+		const content = "div { color: red; }";
+		const parsed = parse`<div><template>${content}</template></div>`;
+
+		expect(rawContentBinding(parsed).compiledStyleSheet).toBeNull();
+	});
+
+	//values live on each instance's own CSSStyleSheet, so a host style binding no longer
+	//conflicts with the fast path
+	test("a dynamic host style binding leaves the css plan attached", () => {
+		const inline = "color: red";
+		const color = "blue";
+		const parsed = parse`<template style="${inline}"><style>div { color: ${color}; }</style></template>`;
+
+		const rawContent = parsed.bindings.find(
+			(binding) => binding.type === BINDING.RAW_CONTENT,
+		) as RawContentStaticBinding;
+		expect(rawContent.compiledStyleSheet).not.toBeNull();
+	});
+
+	test("two style elements in one template get separate plans", () => {
+		const a = "red";
+		const b = "10px";
+		const parsed = parse`<style>.a { color: ${a}; }</style
+		><style>.b { width: ${b}; }</style>`;
+
+		const [firstBinding, secondBinding] =
+			parsed.bindings as Array<RawContentStaticBinding>;
+		expect(firstBinding.compiledStyleSheet?.dynamicDeclarations).toEqual([
+			{
+				rulePath: [0],
+				propertyName: "color",
+				priority: "",
+				valueParts: [" ", 0],
+			},
+		]);
+		expect(secondBinding.compiledStyleSheet?.dynamicDeclarations).toEqual([
+			{
+				rulePath: [0],
+				propertyName: "width",
+				priority: "",
+				valueParts: [" ", 1],
+			},
+		]);
 	});
 });

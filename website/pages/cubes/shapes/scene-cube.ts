@@ -1,4 +1,4 @@
-import { html, render } from "../../../../lib/src";
+import { html, component } from "../../../../lib/src";
 import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 // <scene-cube> — one element per geometry. It owns its six faces and a fixed
@@ -10,7 +10,7 @@ import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 customElements.define(
 	"scene-cube",
-	render(function* (element) {
+	component(function* (element) {
 		yield () => {
 			// The attribute → variable bridge: committed attributes in, concrete
 			// render variables out. CSS downstream reads only the resolved values.

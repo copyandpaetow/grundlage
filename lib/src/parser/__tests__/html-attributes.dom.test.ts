@@ -1,262 +1,272 @@
 import { describe, test, expect } from "vitest";
-import { html } from "../html";
-import { buildFragment } from "../../rendering/build-fragment";
-import { AttributeBinding, BINDING_TYPES } from "../types";
+import { getParsedTemplate } from "../html";
+import { buildFragment } from "../../rendering/dom";
+import { BINDING } from "../constants";
+import {
+	AttributeStaticBinding,
+	NamedDynamicStaticBinding,
+	SingleValueAttributeStaticBinding,
+} from "../types";
+
+const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
+	getParsedTemplate(strings);
 
 describe("html parser — attribute bindings", () => {
-	test("single dynamic value", () => {
+	test("single dynamic value lowers to a single-value attribute", () => {
 		const cls = "active";
-		const template = html` <div class="${cls}"></div>`;
+		const parsed = parse` <div class="${cls}"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual(["class"]);
-		expect(binding.values).toContainEqual(expect.any(Number));
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(binding.nameParts).toEqual(["class"]);
+		expect(binding.valueIndex).toBe(0);
 	});
 
-	test("multi-part attribute value shares one binding", () => {
+	test("multi-part attribute value shares one composed binding", () => {
 		const a = "hello";
 		const b = "world";
-		const template = html` <div class="${a} ${b}"></div>`;
+		const parsed = parse` <div class="${a} ${b}"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		// both expressions map to the same binding
-		expect(template.parsedHTML.expressionToBinding).toEqual([0, 0]);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
+		expect(binding.valueParts).toEqual([0, " ", 1]);
 	});
 
-	test("dynamic attribute name (boolean)", () => {
+	test("dynamic attribute name (boolean) lowers to a spread", () => {
 		const name = "disabled";
-		const template = html` <button ${name}></button>`;
+		const parsed = parse` <button ${name}></button>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		// the expression slot lives in values; keys is empty (no static name parts)
-		expect(binding.values).toEqual([0]);
-		expect(binding.keys).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
+		expect((parsed.bindings[0] as { valueIndex: number }).valueIndex).toBe(0);
 	});
 
-	test("dynamic attribute name with static prefix", () => {
+	test("dynamic attribute name with static prefix and static value", () => {
 		const suffix = "name";
-		const template = html` <div data-${suffix}="value"></div>`;
+		const parsed = parse` <div data-${suffix}="value"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys[0]).toBe("data-");
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
+		expect(binding.nameParts).toEqual(["data-", 0]);
+		expect(binding.valueParts).toEqual(["value"]);
 	});
 
 	test("multiple attributes on one element create separate bindings", () => {
 		const cls = "red";
 		const id = "main";
-		const template = html` <div class="${cls}" id="${id}"></div>`;
+		const parsed = parse` <div class="${cls}" id="${id}"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.ATTR);
-		expect(template.parsedHTML.bindings[1].type).toBe(BINDING_TYPES.ATTR);
-		expect(template.parsedHTML.expressionToBinding).toEqual([0, 1]);
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.SINGLE_VALUE_ATTRIBUTE,
+		]);
 	});
 
-	test("event handler attribute", () => {
+	test("event handler attribute lowers to a named-dynamic binding", () => {
 		const handler = () => {};
-		const template = html` <button onclick="${handler}"></button>`;
+		const parsed = parse` <button onclick="${handler}"></button>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual(["onclick"]);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as NamedDynamicStaticBinding;
+		expect(binding.type).toBe(BINDING.NAMED_DYNAMIC);
+		expect(binding.name).toBe("onclick");
+		expect(binding.valueIndex).toBe(0);
 	});
 
 	test("unquoted attribute value", () => {
 		const val = "test";
-		const template = html` <div class=${val}></div>`;
+		const parsed = parse` <div class=${val}></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
 	});
 
-	test("boolean attribute followed by regular attribute", () => {
+	test("boolean (spread) attribute followed by regular attribute", () => {
 		const flag = "hidden";
 		const cls = "red";
-		const template = html` <div ${flag} class="${cls}"></div>`;
+		const parsed = parse` <div ${flag} class="${cls}"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		const boolBinding = template.parsedHTML.bindings[0] as AttributeBinding;
-		const attrBinding = template.parsedHTML.bindings[1] as AttributeBinding;
-		expect(boolBinding.keys).toHaveLength(0);
-		expect(attrBinding.keys).toEqual(["class"]);
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.DYNAMIC_ATTRIBUTE,
+			BINDING.SINGLE_VALUE_ATTRIBUTE,
+		]);
+		expect(
+			(parsed.bindings[1] as SingleValueAttributeStaticBinding).nameParts,
+		).toEqual(["class"]);
 	});
 });
 
 describe("html parser — expandable attributes", () => {
-	test("array expandable has values=[expressionIndex] and empty keys", () => {
+	test("array expandable is a dynamic attribute at the expression index", () => {
 		const attrs = ["disabled", "hidden"];
-		const template = html` <button ${attrs}>click</button>`;
+		const parsed = parse` <button ${attrs}>click</button>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.values).toEqual([0]);
-		expect(binding.keys).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
+		expect((parsed.bindings[0] as { valueIndex: number }).valueIndex).toBe(0);
 	});
 
-	test("object expandable has values=[expressionIndex] and empty keys", () => {
+	test("object expandable is a dynamic attribute at the expression index", () => {
 		const attrs = { class: "red", id: "main" };
-		const template = html` <div ${attrs}>content</div>`;
+		const parsed = parse` <div ${attrs}>content</div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.values).toEqual([0]);
-		expect(binding.keys).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
+		expect((parsed.bindings[0] as { valueIndex: number }).valueIndex).toBe(0);
 	});
 
 	test("expandable after static attribute", () => {
 		const extra = { title: "hello" };
-		const template = html` <div class="base" ${extra}></div>`;
+		const parsed = parse` <div class="base" ${extra}></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.values).toEqual([0]);
-		expect(binding.keys).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
 	});
 
 	test("expandable before static attribute", () => {
 		const extra = { title: "hello" };
-		const template = html` <div ${extra} class="base"></div>`;
+		const parsed = parse` <div ${extra} class="base"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.values).toEqual([0]);
-		expect(binding.keys).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
 	});
 
 	test("expandable between static attributes", () => {
 		const extra = ["hidden"];
-		const template = html` <div id="a" ${extra} class="b"></div>`;
+		const parsed = parse` <div id="a" ${extra} class="b"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.values).toEqual([0]);
-		expect(binding.keys).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
 	});
 });
 
 describe("html parser — attribute edge cases", () => {
 	test("single-quoted attribute value", () => {
 		const val = "test";
-		const template = html` <div class="${val}"></div>`;
+		const parsed = parse` <div class="${val}"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual(["class"]);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(binding.nameParts).toEqual(["class"]);
 	});
 
 	test("unquoted attribute value followed by closing bracket", () => {
 		const val = "test";
-		const template = html` <div class=${val}>text</div>`;
+		const parsed = parse` <div class=${val}>text</div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
 	});
 
-	test("multiple boolean attributes", () => {
+	test("multiple boolean (spread) attributes", () => {
 		const a = "disabled";
 		const b = "hidden";
-		const template = html` <div ${a} ${b}></div>`;
+		const parsed = parse` <div ${a} ${b}></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		expect(template.parsedHTML.bindings[0].type).toBe(BINDING_TYPES.ATTR);
-		expect(template.parsedHTML.bindings[1].type).toBe(BINDING_TYPES.ATTR);
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.DYNAMIC_ATTRIBUTE,
+			BINDING.DYNAMIC_ATTRIBUTE,
+		]);
 	});
 
 	test("dynamic attribute key with dynamic value", () => {
 		const key = "data-x";
 		const val = "123";
-		const template = html` <div ${key}="${val}"></div>`;
+		const parsed = parse` <div ${key}="${val}"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(binding.nameParts).toEqual([0]);
+		expect(binding.valueIndex).toBe(1);
 	});
 
 	test("attribute with empty string value", () => {
 		const val = "";
-		const template = html` <div class="${val}"></div>`;
+		const parsed = parse` <div class="${val}"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual(["class"]);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(binding.nameParts).toEqual(["class"]);
 	});
 
 	test("attribute on self-closing element", () => {
 		const val = "text";
-		const template = html`<input type="${val}" />`;
+		const parsed = parse`<input type="${val}" />`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual(["type"]);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(binding.nameParts).toEqual(["type"]);
 	});
 
-	test("boolean attribute on self-closing element", () => {
+	test("boolean (spread) attribute on self-closing element", () => {
 		const attr = "disabled";
-		const template = html`<input ${attr} />`;
+		const parsed = parse`<input ${attr} />`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.values).toEqual([0]);
-		expect(binding.keys).toHaveLength(0);
+		expect(parsed.bindings).toHaveLength(1);
+		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
+		expect((parsed.bindings[0] as { valueIndex: number }).valueIndex).toBe(0);
 	});
 
 	test("mixed static and dynamic attributes on same element", () => {
 		const dyn = "dynamic-value";
-		const template = html` <div
+		const parsed = parse` <div
 			id="static"
 			class="${dyn}"
 			data-fixed="true"
 		></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.keys).toEqual(["class"]);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		expect(binding.nameParts).toEqual(["class"]);
 	});
 
 	test("attribute value with static prefix and suffix", () => {
 		const mid = "dynamic";
-		const template = html` <div class="prefix-${mid}-suffix"></div>`;
+		const parsed = parse` <div class="prefix-${mid}-suffix"></div>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		// The binding values should include static parts and the expression index
-		expect(binding.values.length).toBeGreaterThanOrEqual(1);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
+		expect(binding.valueParts).toEqual(["prefix-", 0, "-suffix"]);
 	});
 
-	test("event handler without quotes", () => {
+	test("event handler without quotes lowers to a named-dynamic binding", () => {
 		const handler = () => {};
-		const template = html` <button onclick=${handler}></button>`;
+		const parsed = parse` <button onclick=${handler}></button>`;
 
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.type).toBe(BINDING_TYPES.ATTR);
-		expect(binding.keys).toEqual(["onclick"]);
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as NamedDynamicStaticBinding;
+		expect(binding.type).toBe(BINDING.NAMED_DYNAMIC);
+		expect(binding.name).toBe("onclick");
+	});
+
+	test("an on-prefixed non-handler keeps its whole name (no eventType slice)", () => {
+		const value = () => {};
+		//the whole name survives to commit-time resolution; the old bug sliced "once" → event "ce"
+		const once = parse` <button once=${value}></button>`
+			.bindings[0] as NamedDynamicStaticBinding;
+		expect(once.type).toBe(BINDING.NAMED_DYNAMIC);
+		expect(once.name).toBe("once");
+
+		const online = parse` <button online=${value}></button>`
+			.bindings[0] as NamedDynamicStaticBinding;
+		expect(online.type).toBe(BINDING.NAMED_DYNAMIC);
+		expect(online.name).toBe("online");
 	});
 });
 
 describe("html parser — custom element and namespaced attribute names", () => {
 	test("hyphenated custom element tag with static attribute", () => {
-		const template = html`<my-component id="x"></my-component>`;
-		expect(template.parsedHTML.bindings).toHaveLength(0);
-		const element = buildFragment(template.parsedHTML.result).querySelector(
+		const parsed = parse`<my-component id="x"></my-component>`;
+		expect(parsed.bindings).toHaveLength(0);
+		const element = buildFragment(parsed.htmlWithMarkers).querySelector(
 			"my-component",
 		)!;
 		expect(element).not.toBeNull();
@@ -265,34 +275,34 @@ describe("html parser — custom element and namespaced attribute names", () => 
 
 	test("hyphenated custom element tag with dynamic attribute", () => {
 		const value = "red";
-		const template = html`<my-component class="${value}"></my-component>`;
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.keys).toEqual(["class"]);
+		const parsed = parse`<my-component class="${value}"></my-component>`;
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		expect(binding.nameParts).toEqual(["class"]);
 		expect(
-			buildFragment(template.parsedHTML.result).querySelector("my-component"),
+			buildFragment(parsed.htmlWithMarkers).querySelector("my-component"),
 		).not.toBeNull();
 	});
 
 	test("aria-* and data-* attribute names preserve hyphens", () => {
 		const label = "submit";
 		const id = "main";
-		const template = html`<button
+		const parsed = parse`<button
 			aria-label="${label}"
 			data-test-id="${id}"
 		></button>`;
-		expect(template.parsedHTML.bindings).toHaveLength(2);
-		const first = template.parsedHTML.bindings[0] as AttributeBinding;
-		const second = template.parsedHTML.bindings[1] as AttributeBinding;
-		expect(first.keys).toEqual(["aria-label"]);
-		expect(second.keys).toEqual(["data-test-id"]);
+		expect(parsed.bindings).toHaveLength(2);
+		const first = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		const second = parsed.bindings[1] as SingleValueAttributeStaticBinding;
+		expect(first.nameParts).toEqual(["aria-label"]);
+		expect(second.nameParts).toEqual(["data-test-id"]);
 	});
 
 	test("namespaced attribute name with colon", () => {
 		const value = "en";
-		const template = html`<div xml:lang="${value}"></div>`;
-		expect(template.parsedHTML.bindings).toHaveLength(1);
-		const binding = template.parsedHTML.bindings[0] as AttributeBinding;
-		expect(binding.keys).toEqual(["xml:lang"]);
+		const parsed = parse`<div xml:lang="${value}"></div>`;
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		expect(binding.nameParts).toEqual(["xml:lang"]);
 	});
 });

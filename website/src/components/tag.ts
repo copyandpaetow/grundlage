@@ -1,8 +1,8 @@
-import { html, props, render } from "../../../lib/src";
+import { html, props, component } from "../../../lib/src";
 
 customElements.define(
 	"tag-component",
-	render(function* (element) {
+	component(function* (element) {
 		let { headingLevel } = props(element, { headingLevel: Number });
 		let previous = headingLevel;
 

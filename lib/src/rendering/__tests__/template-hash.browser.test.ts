@@ -1,35 +1,34 @@
 import { describe, expect, test } from "vitest";
-import { render } from "../../index";
-//white-box test of the template hash, so we use the internal parser export (real type) rather than the opaque public html
-import { html } from "../../parser/html";
-import { hashTemplate } from "../template-html";
+import { component } from "../../index";
+import { html } from "../../template";
+import { hashValue } from "../../utils/hashing";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
-describe("HTMLTemplate.hash", () => {
+describe("template value hashing", () => {
 	test("is stable for identical expressions", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<p>${"a"}</p>`;
-		expect(hashTemplate(template1)).toBe(hashTemplate(template2));
+		expect(hashValue(template1)).toBe(hashValue(template2));
 	});
 
 	test("changes when expressions change", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<p>${"b"}</p>`;
-		expect(hashTemplate(template1)).not.toBe(hashTemplate(template2));
+		expect(hashValue(template1)).not.toBe(hashValue(template2));
 	});
 
 	test("differs between templates with different structure but same expressions", () => {
 		const template1 = html`<p>${"a"}</p>`;
 		const template2 = html`<div>${"a"}</div>`;
-		expect(hashTemplate(template1)).not.toBe(hashTemplate(template2));
+		expect(hashValue(template1)).not.toBe(hashValue(template2));
 	});
 
 	test("is stable across repeated reads on the same instance", () => {
 		const template = html`<p class="${"x"}">${"y"}</p>`;
-		const first = hashTemplate(template);
-		const second = hashTemplate(template);
+		const first = hashValue(template);
+		const second = hashValue(template);
 		expect(first).toBe(second);
 	});
 
@@ -43,15 +42,15 @@ describe("HTMLTemplate.hash", () => {
 		const template2 = html`<div style="width:${50.10001}%"></div>`;
 		const template3 = html`<div style="width:${50.2}%"></div>`;
 		const hashes = new Set([
-			hashTemplate(template1),
-			hashTemplate(template2),
-			hashTemplate(template3),
+			hashValue(template1),
+			hashValue(template2),
+			hashValue(template3),
 		]);
 		expect(hashes.size).toBe(3);
 	});
 });
 
-describe("update() dirty-binding behaviour", () => {
+describe("update() change propagation", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-hash-${tagId++}-${Date.now()}`;
 
@@ -68,7 +67,7 @@ describe("update() dirty-binding behaviour", () => {
 		// for primitives, we must still mark the binding dirty on `!==`.
 		const tag = uniqueTag();
 		let value = 1;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${value}</p>`;
 		});
 		customElements.define(tag, MyElement);
@@ -87,7 +86,7 @@ describe("update() dirty-binding behaviour", () => {
 	test("updates DOM across successive tiny decimal changes", async () => {
 		const tag = uniqueTag();
 		let value = 50.1;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>${value}</p>`;
 		});
 		customElements.define(tag, MyElement);
@@ -122,7 +121,7 @@ describe("update() dirty-binding behaviour", () => {
 		let width = 50.1;
 		let hue = 120.5;
 		let opacity = 0.4;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<div
 					style="width:${width}%;background:hsl(${hue},70%,50%);opacity:${opacity}"
@@ -155,7 +154,7 @@ describe("update() dirty-binding behaviour", () => {
 		// to the previous, so the engine should reuse the old DOM subtree.
 		const tag = uniqueTag();
 		let outer = 1;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<section>
 					<h1>${outer}</h1>
@@ -185,7 +184,7 @@ describe("update() dirty-binding behaviour", () => {
 		// regresses the lazy getter, list items should still match by content.
 		const tag = uniqueTag();
 		let items = ["one", "two", "three"];
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
@@ -227,7 +226,7 @@ describe("update() dirty-binding behaviour", () => {
 		// mark it dirty, but the resulting DOM must still be empty either way.
 		const tag = uniqueTag();
 		let value: unknown = null;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>before${value}after</p>`;
 		});
 		customElements.define(tag, MyElement);
@@ -251,7 +250,7 @@ describe("update() dirty-binding behaviour", () => {
 		// node identity must not change.
 		const tag = uniqueTag();
 		let outer = 0;
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				html`<section>
 					<h1>${outer}</h1>

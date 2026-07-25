@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 // <scene-world> — projection only. It holds the perspective and the single
 // inverse-camera wrapper transform the whole scene inherits through, plus the viewport
@@ -27,7 +27,7 @@ const CAMERA_VARIABLES = [
 
 customElements.define(
 	"scene-world",
-	render(function* (element) {
+	component(function* (element) {
 		yield html`
 			<style>
 				:host {

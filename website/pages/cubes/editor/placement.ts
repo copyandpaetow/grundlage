@@ -1,9 +1,4 @@
-import {
-	blockRendered,
-	formatNumber,
-	snapToGrid,
-	UNIT_SIZE,
-} from "../scene-shared";
+import { blockRendered, formatNumber, snapToGrid } from "../scene-shared";
 import type { EditorState } from "./context";
 import "./scene-ground";
 
@@ -54,17 +49,22 @@ export const createPlacement = (
 
 	// The ground reports where the pointer sits on the floor, in world units; we snap
 	// it to the authoring lattice (the floor stays policy-free) and drive the ghost's
-	// vars live (no re-render).
+	// position attribute — the render channel is fast enough per frame now that the
+	// sheet stays static (css value-indirection), so there is no inline-var side lane.
+	// The direct update() skips the attribute observer's microtask hops so the ghost
+	// re-renders in the same frame as the pointer move; the observer's own trailing
+	// update lands on the skip path (nothing changed) and writes no DOM.
 	const onFloorPoint = (event: Event): void => {
 		if (state.placement === null) return;
 		const { x, z } = (event as CustomEvent<{ x: number; z: number }>).detail;
 		const worldX = snapToGrid(x);
 		const worldZ = snapToGrid(z);
 		state.placement.position = [worldX, 0, worldZ];
-		const { style } = state.placement.ghost;
-		style.setProperty("--block-x", `${worldX * UNIT_SIZE}px`);
-		style.setProperty("--block-y", "0px");
-		style.setProperty("--block-z", `${worldZ * UNIT_SIZE}px`);
+		state.placement.ghost.setAttribute(
+			"position",
+			`${formatNumber(worldX)} 0 ${formatNumber(worldZ)}`,
+		);
+		void blockRendered(state.placement.ghost);
 	};
 
 	const dropPlacement = (): void => {

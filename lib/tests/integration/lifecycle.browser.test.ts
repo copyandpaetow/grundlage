@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, render } from "../../src/index";
+import { html, component } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -22,7 +22,7 @@ describe("component lifecycle", () => {
 	test("mounts and renders into shadow DOM", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>hello</p>`;
 		});
 
@@ -42,7 +42,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let count = 0;
 
-		const Counter = render(function* () {
+		const Counter = component(function* () {
 			yield () => html`<span>${count}</span>`;
 		});
 
@@ -65,7 +65,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let cleaned = false;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>temp</p>`;
 			return () => {
 				cleaned = true;
@@ -87,7 +87,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let cleaned = false;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>movable</p>`;
 			return () => {
 				cleaned = true;
@@ -115,7 +115,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let count = 0;
 
-		const Counter = render(function* () {
+		const Counter = component(function* () {
 			yield () => html`<span>${count}</span>`;
 		});
 
@@ -146,7 +146,7 @@ describe("component lifecycle", () => {
 	test("yields a static HTMLTemplate (not a function)", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield html`<p>static template</p>`;
 		});
 
@@ -164,7 +164,7 @@ describe("component lifecycle", () => {
 	test("attribute mutation triggers re-render", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* (el) {
+		const MyElement = component(function* (el) {
 			yield () => html`<span>${el.getAttribute("data-label") ?? "none"}</span>`;
 		});
 
@@ -191,7 +191,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let useList = false;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () =>
 				useList
 					? html`<ul>
@@ -222,7 +222,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let count = 0;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<span>${count}</span>`;
 			return () => {};
 		});
@@ -247,7 +247,7 @@ describe("component lifecycle", () => {
 	test("multiple sync yields replace render functions in sequence", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			yield () => html`<p>first</p>`;
 			yield () => html`<p>second</p>`;
 			yield () => html`<p>third</p>`;
@@ -266,7 +266,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let receivedHost: HTMLElement | null = null;
 
-		const MyElement = render(function* () {
+		const MyElement = component(function* () {
 			const host = yield () => html`<p>hello</p>`;
 			receivedHost = host as HTMLElement;
 		});
@@ -284,7 +284,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			yield () => {
 				renderCount++;
 				return html`<span>${renderCount}</span>`;
@@ -313,7 +313,7 @@ describe("component lifecycle", () => {
 		const tag = uniqueTag();
 		let timesGeneratorRan = 0;
 
-		const ComponentClass = render(function* () {
+		const ComponentClass = component(function* () {
 			timesGeneratorRan++;
 			// A bare HTMLTemplate yield installs a TEMPLATE_SOURCE_TYPE.STATIC source —
 			// update() should do nothing for it (no re-render, no generator restart).
@@ -342,7 +342,7 @@ describe("component lifecycle", () => {
 	test("custom shadow root options are applied", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = render(
+		const MyElement = component(
 			function* () {
 				yield () => html`<p>closed</p>`;
 			},
@@ -381,7 +381,7 @@ describe.skipIf("happyDOM" in globalThis)(
 			//before upgrade: no shadowRoot, no rendered content
 			expect(element.shadowRoot).toBeNull();
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () => html`<p>upgraded</p>`;
 			});
 			customElements.define(tag, MyElement);
@@ -404,7 +404,7 @@ describe.skipIf("happyDOM" in globalThis)(
 			element.setAttribute("data-label", "pre-define");
 			document.body.appendChild(element);
 
-			const MyElement = render(function* (host) {
+			const MyElement = component(function* (host) {
 				yield () =>
 					html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
 			});
@@ -432,7 +432,7 @@ describe.skipIf("happyDOM" in globalThis)(
 			//no .update() yet — the prototype has not been swapped in
 			expect(element.update).toBeUndefined();
 
-			const MyElement = render(function* () {
+			const MyElement = component(function* () {
 				yield () => html`<p>after</p>`;
 			});
 			customElements.define(tag, MyElement);
@@ -472,7 +472,7 @@ describe("MutationObserver and update() interleaving", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const MyElement = render(function* (host) {
+		const MyElement = component(function* (host) {
 			yield () => {
 				renderCount++;
 				return html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
@@ -505,7 +505,7 @@ describe("MutationObserver and update() interleaving", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const MyElement = render(function* (host) {
+		const MyElement = component(function* (host) {
 			yield () => {
 				renderCount++;
 				return html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;

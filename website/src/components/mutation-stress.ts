@@ -1,4 +1,4 @@
-import { html, render } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 /*
     Measures list mutations that should hit the head/tail peel fast paths:
@@ -31,7 +31,7 @@ const buildRows = (count: number): Array<Row> => {
 
 customElements.define(
 	"mutation-stress",
-	render(function* (element) {
+	component(function* (element) {
 		let itemCount = Number(element.getAttribute("items") ?? 1000);
 		let rows: Array<Row> = buildRows(itemCount);
 		let nextIdentifier = itemCount;
@@ -269,26 +269,28 @@ customElements.define(
 				<span>current: ${rows.length}</span>
 			</div>
 
-			${measurements.size > 0
-				? html`
-						<div class="results">
-							<div class="label head">operation</div>
-							<div class="head">items</div>
-							<div class="head">last (ms)</div>
-							<div class="head">avg (ms)</div>
-							<div class="head">samples</div>
-							${Array.from(measurements.values()).map(
-								(measurement) => html`
-									<div class="label">${measurement.label}</div>
-									<div>${measurement.itemCount}</div>
-									<div>${formatMs(measurement.lastDurationMs)}</div>
-									<div>${formatMs(measurement.averageDurationMs)}</div>
-									<div>${measurement.sampleCount}</div>
-								`,
-							)}
-						</div>
-					`
-				: html``}
+			${
+				measurements.size > 0
+					? html`
+							<div class="results">
+								<div class="label head">operation</div>
+								<div class="head">items</div>
+								<div class="head">last (ms)</div>
+								<div class="head">avg (ms)</div>
+								<div class="head">samples</div>
+								${Array.from(measurements.values()).map(
+									(measurement) => html`
+										<div class="label">${measurement.label}</div>
+										<div>${measurement.itemCount}</div>
+										<div>${formatMs(measurement.lastDurationMs)}</div>
+										<div>${formatMs(measurement.averageDurationMs)}</div>
+										<div>${measurement.sampleCount}</div>
+									`,
+								)}
+							</div>
+						`
+					: html``
+			}
 
 			<ul>
 				${rows.map(

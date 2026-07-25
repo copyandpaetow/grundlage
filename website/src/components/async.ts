@@ -1,4 +1,4 @@
-import { render, html } from "../../../lib/src";
+import { component, html } from "../../../lib/src";
 
 const mockFetch = () =>
 	new Promise<{ name: string; lastName: string; age: string }>(
@@ -15,7 +15,7 @@ const mockFetch = () =>
 
 customElements.define(
 	"async-component",
-	render(async function* () {
+	component(async function* () {
 		yield html`<p>loading</p>`;
 
 		try {
