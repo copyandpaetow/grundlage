@@ -1,80 +1,213 @@
-import type { Window as HappyWindow } from "happy-dom";
+//happy-dom's Window is a separate realm: its Array/Object/Error/Promise are
+//distinct constructors, so replacing the global ones would break cross-realm
+//`instanceof`. The language fixes this set; every web API sits outside it and is
+//exposed automatically, so new APIs never need adding here.
+const ecmascriptIntrinsics = new Set([
+	"Object",
+	"Function",
+	"Array",
+	"Number",
+	"Boolean",
+	"String",
+	"Symbol",
+	"BigInt",
+	"Math",
+	"JSON",
+	"Date",
+	"RegExp",
+	"Promise",
+	"Proxy",
+	"Reflect",
+	"Intl",
+	"Error",
+	"EvalError",
+	"RangeError",
+	"ReferenceError",
+	"SyntaxError",
+	"TypeError",
+	"URIError",
+	"AggregateError",
+	"Map",
+	"Set",
+	"WeakMap",
+	"WeakSet",
+	"WeakRef",
+	"FinalizationRegistry",
+	"ArrayBuffer",
+	"SharedArrayBuffer",
+	"DataView",
+	"Atomics",
+	"Int8Array",
+	"Uint8Array",
+	"Uint8ClampedArray",
+	"Int16Array",
+	"Uint16Array",
+	"Int32Array",
+	"Uint32Array",
+	"Float32Array",
+	"Float64Array",
+	"BigInt64Array",
+	"BigUint64Array",
+	"eval",
+	"isFinite",
+	"isNaN",
+	"parseFloat",
+	"parseInt",
+	"decodeURI",
+	"decodeURIComponent",
+	"encodeURI",
+	"encodeURIComponent",
+	"escape",
+	"unescape",
+]);
 
-//one-time happy-dom polyfill onto globalThis; `window` is deliberately not assigned so `typeof window === "undefined"` stays true
-//we cache the promise (not a bool) so concurrent first calls all wait on the same import
-let setupPromise: Promise<void> | null = null;
+const nodeRuntimeGlobals = new Set([
+	"setTimeout",
+	"clearTimeout",
+	"setInterval",
+	"clearInterval",
+	"queueMicrotask",
+	"console",
+]);
 
-const setupHappyDom = (
-	componentLoaders: ReadonlyArray<() => Promise<unknown>>,
+const realmSelfReferences = new Set([
+	"window",
+	"self",
+	"globalThis",
+	"top",
+	"parent",
+	"frames",
+	"global",
+]);
+
+let registrationPromise: Promise<void> | null = null;
+
+//happy-dom neither exposes closed roots via internals nor serializes them, so we
+//record them at attach time — enough to detect and skip, not to prerender
+const hostsWithClosedRoot = new WeakSet<object>();
+
+const captureClosedRoots = (): void => {
+	const elementPrototype = (
+		globalThis as unknown as {
+			HTMLElement: { prototype: Record<string, unknown> };
+		}
+	).HTMLElement.prototype;
+	const attachShadow = elementPrototype.attachShadow as (init: {
+		mode?: string;
+	}) => ShadowRoot;
+	elementPrototype.attachShadow = function (
+		this: object,
+		init: { mode?: string },
+	) {
+		if (init?.mode === "closed") hostsWithClosedRoot.add(this);
+		return attachShadow.call(this, init);
+	};
+};
+
+//exposes happy-dom's entire DOM surface, then forces server mode via the library's
+//own __grundlage_ssr__ switch — `window` is left unset so `typeof window` stays "undefined"
+const registerHappyDom = (
+	componentModuleLoaders: ReadonlyArray<() => Promise<unknown>>,
 ): Promise<void> => {
-	if (setupPromise) return setupPromise;
-	setupPromise = (async () => {
+	if (registrationPromise) return registrationPromise;
+	registrationPromise = (async () => {
 		const { Window } = await import("happy-dom");
-		const happyWindow: HappyWindow = new Window();
-		Object.assign(globalThis, {
-			document: happyWindow.document,
-			customElements: happyWindow.customElements,
-			HTMLElement: happyWindow.HTMLElement,
-			HTMLTemplateElement: happyWindow.HTMLTemplateElement,
-			Comment: happyWindow.Comment,
-			DocumentFragment: happyWindow.DocumentFragment,
-			Element: happyWindow.Element,
-			Range: happyWindow.Range,
-			NodeFilter: happyWindow.NodeFilter,
-			MutationObserver: happyWindow.MutationObserver,
-			CSSStyleSheet: happyWindow.CSSStyleSheet,
-		});
-		await Promise.all(componentLoaders.map((load) => load()));
+		const happyDomWindow = new Window() as unknown as Record<string, unknown>;
+		for (const name of Object.getOwnPropertyNames(happyDomWindow)) {
+			if (
+				realmSelfReferences.has(name) ||
+				ecmascriptIntrinsics.has(name) ||
+				nodeRuntimeGlobals.has(name)
+			) {
+				continue;
+			}
+			const existing = Object.getOwnPropertyDescriptor(globalThis, name);
+			if (existing && !existing.writable && !existing.configurable) continue;
+			Object.defineProperty(globalThis, name, {
+				value: happyDomWindow[name],
+				writable: true,
+				enumerable: false,
+				configurable: true,
+			});
+		}
+		(globalThis as { __grundlage_ssr__?: boolean }).__grundlage_ssr__ = true;
+		captureClosedRoots();
+		await Promise.all(componentModuleLoaders.map((load) => load()));
 	})();
-	return setupPromise;
+	return registrationPromise;
 };
 
 const parseAttributes = (rawAttributes: string): Array<[string, string]> => {
 	const pairs: Array<[string, string]> = [];
-	const pattern = /([^\s=]+)(?:="([^"]*)")?/g;
+	const pattern =
+		/([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 	let match: RegExpExecArray | null;
 	while ((match = pattern.exec(rawAttributes)) !== null) {
-		pairs.push([match[1], match[2] ?? ""]);
+		const [, name, doubleQuoted, singleQuoted, bare] = match;
+		pairs.push([name, doubleQuoted ?? singleQuoted ?? bare ?? ""]);
 	}
 	return pairs;
 };
 
-/**
- * Mounts the host under happy-dom, waits for first-yield content, returns
- * serialized declarative-shadow-DOM HTML.
- *
- * Serializes via `document.body.getHTML(...)` because happy-dom's
- * `Element.getHTML` only walks children — the `<template>` wrapper is
- * emitted in the parent's ELEMENT_NODE branch.
- */
+type FirstYieldOutcome = "rendered" | "closed-root" | "timeout";
+
+const waitForFirstYield = async (
+	host: HTMLElement,
+	timeoutMs: number,
+): Promise<FirstYieldOutcome> => {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (hostsWithClosedRoot.has(host)) return "closed-root";
+		if (host.shadowRoot && host.shadowRoot.childNodes.length > 0) {
+			return "rendered";
+		}
+		await new Promise((resolve) => setTimeout(resolve, 16));
+	}
+	return "timeout";
+};
+
 export const renderHost = async (
 	tagName: string,
 	rawAttributes: string,
-	componentLoaders: ReadonlyArray<() => Promise<unknown>>,
-	pollTimeoutMs = 5000,
-): Promise<string> => {
-	await setupHappyDom(componentLoaders);
+	componentModuleLoaders: ReadonlyArray<() => Promise<unknown>>,
+	firstYieldTimeoutMs = 5000,
+): Promise<string | null> => {
+	await registerHappyDom(componentModuleLoaders);
 
-	const documentRef = (globalThis as { document: Document }).document;
-	const host = documentRef.createElement(tagName);
+	const serverDocument = (globalThis as { document: Document }).document;
+	const host = serverDocument.createElement(tagName);
 	for (const [name, value] of parseAttributes(rawAttributes)) {
 		host.setAttribute(name, value);
 	}
-	documentRef.body.appendChild(host);
 
-	//poll rather than sleep — async-before-yield settle times are workload-dependent
-	const deadline = Date.now() + pollTimeoutMs;
-	while (Date.now() < deadline) {
-		if (host.shadowRoot && host.shadowRoot.childNodes.length > 0) break;
-		await new Promise((resolve) => setTimeout(resolve, 16));
-	}
-
-	const serialized = (
-		documentRef.body as unknown as {
-			getHTML(options: { serializableShadowRoots: boolean }): string;
+	try {
+		serverDocument.body.appendChild(host);
+		const outcome = await waitForFirstYield(host, firstYieldTimeoutMs);
+		if (outcome === "closed-root") {
+			console.warn(
+				`[prerender] <${tagName}> uses a closed shadow root, which happy-dom cannot serialize — rendering on client.`,
+			);
+			return null;
 		}
-	).getHTML({ serializableShadowRoots: true });
+		if (outcome === "timeout") {
+			console.warn(
+				`[prerender] <${tagName}> produced no shadow content within ${firstYieldTimeoutMs}ms — leaving it for client render.`,
+			);
+			return null;
+		}
 
-	host.remove();
-	return serialized;
+		return (
+			serverDocument.body as unknown as {
+				getHTML(options: { serializableShadowRoots: boolean }): string;
+			}
+		).getHTML({ serializableShadowRoots: true });
+	} catch (error) {
+		console.warn(
+			`[prerender] <${tagName}> threw during prerender — leaving it for client render.`,
+			error,
+		);
+		return null;
+	} finally {
+		host.remove();
+	}
 };

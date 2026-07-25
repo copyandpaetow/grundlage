@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { prerenderWebcomponents } from "./index";
 
 //unique-ish tags per scenario so plugin instances don't collide on the shared customElements registry
@@ -13,6 +13,10 @@ const TAGS = {
 	noSentinel: "ssr-no-sentinel",
 	loadSingle: "ssr-load-single",
 	loadShared: "ssr-load-shared",
+	wideWebApi: "ssr-wide-web-api",
+	neverYields: "ssr-never-yields",
+	quotedAttrs: "ssr-quoted-attrs",
+	closedRoot: "ssr-closed-root",
 } as const;
 
 //lazy import: the happy-dom polyfill (set up before loaders are awaited) must be in place when parser/html.ts runs its module-load createElement
@@ -47,6 +51,16 @@ const ensureDefined = (): Promise<void> => {
 			component(function* () {
 				yield () => html`<p>simple-first</p>`;
 				yield () => html`<p>simple-second</p>`;
+			}),
+		);
+
+		//touches web APIs outside the old hand-picked global list — a ReferenceError here means registration regressed
+		customElements.define(
+			TAGS.wideWebApi,
+			component(function* (host) {
+				host.dispatchEvent(new CustomEvent("mounted"));
+				const display = getComputedStyle(host).display;
+				yield () => html`<p>display=${display || "block"}</p>`;
 			}),
 		);
 
@@ -100,6 +114,34 @@ const ensureDefined = (): Promise<void> => {
 				yield () => html`<p>no-sentinel-rendered</p>`;
 			}),
 		);
+
+		customElements.define(
+			TAGS.neverYields,
+			component(function* () {
+				//parks before the first render yield — the prerender must time out, not hang
+				yield new Promise(() => {});
+				yield () => html`<p>unreachable</p>`;
+			}),
+		);
+
+		customElements.define(
+			TAGS.quotedAttrs,
+			component(function* (host) {
+				const expr = host.getAttribute("data-expr") ?? "none";
+				const note = host.getAttribute("data-note") ?? "none";
+				yield () => html`<p>expr=${expr} note=${note}</p>`;
+			}),
+		);
+
+		customElements.define(
+			TAGS.closedRoot,
+			component(
+				function* () {
+					yield () => html`<p>closed-rendered</p>`;
+				},
+				{ mode: "closed" },
+			),
+		);
 	})();
 	return definedPromise;
 };
@@ -108,10 +150,13 @@ const allComponents = Object.fromEntries(
 	Object.values(TAGS).map((tag) => [tag, ensureDefined]),
 );
 
-const buildPlugin = (sentinel?: string) =>
+const buildPlugin = (
+	overrides: { sentinel?: string; firstYieldTimeoutMs?: number } = {},
+) =>
 	prerenderWebcomponents({
 		components: allComponents,
-		sentinelAttribute: sentinel,
+		sentinelAttribute: overrides.sentinel,
+		firstYieldTimeoutMs: overrides.firstYieldTimeoutMs,
 	});
 
 //handles both shapes vite exposes for transformIndexHtml — function or `{ handler }`
@@ -224,7 +269,7 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 	});
 
 	test("custom sentinel attribute name is honoured", async () => {
-		const plugin = buildPlugin("prerender");
+		const plugin = buildPlugin({ sentinel: "prerender" });
 		const input = `<html><body>
 			<${TAGS.customSentinel} prerender></${TAGS.customSentinel}>
 			<${TAGS.customSentinel} ssr></${TAGS.customSentinel}>
@@ -245,6 +290,55 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 
 		expect(output).toContain("ssr");
 		expect(output).toContain("no-sentinel-rendered");
+	});
+
+	test("a component using web APIs beyond the core DOM subset still renders", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.wideWebApi} ssr></${TAGS.wideWebApi}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain("shadowrootmode");
+		expect(output).toContain("display=");
+	});
+
+	test("attribute values may be single-quoted or contain `>`", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.quotedAttrs} ssr data-expr="a > b" data-note='hi there'></${TAGS.quotedAttrs}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain("shadowrootmode");
+		expect(output).toContain("a &gt; b");
+		expect(output).toContain("hi there");
+	});
+
+	test("a closed-root component is skipped fast (not prerendered) with a closed-specific warning", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		//large timeout: the test only stays fast if closed detection short-circuits instead of polling to the deadline
+		const plugin = buildPlugin({ firstYieldTimeoutMs: 4000 });
+		const input = `<html><body><${TAGS.closedRoot} ssr></${TAGS.closedRoot}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).not.toContain("shadowrootmode");
+		expect(output).not.toContain("closed-rendered");
+		expect(output).toContain(`<${TAGS.closedRoot} ssr></${TAGS.closedRoot}>`);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("closed shadow root"),
+		);
+		warn.mockRestore();
+	});
+
+	test("a component that never reaches its first yield is left for client render, with a warning", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const plugin = buildPlugin({ firstYieldTimeoutMs: 60 });
+		const input = `<html><body><${TAGS.neverYields} ssr></${TAGS.neverYields}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).not.toContain("shadowrootmode");
+		expect(output).toContain(`<${TAGS.neverYields} ssr></${TAGS.neverYields}>`);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(`<${TAGS.neverYields}>`),
+		);
+		warn.mockRestore();
 	});
 });
 
