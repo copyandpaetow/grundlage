@@ -1,6 +1,6 @@
 {
 	"name": "grundlage",
-	"version": "0.6.0",
+	"version": "0.7.0",
 	"description": "Zero-dependency library for building web components with tagged template literals, server-rendered and hydrated on the client.",
 	"license": "MIT",
 	"author": "Lucas Paetow",
