@@ -493,16 +493,16 @@ customElements.define(
 													? html`
 															<span class="${msClass}"
 																>${formatDelta(
-																measurement.medianMs,
-																previous.medianMs,
-															)}
+																	measurement.medianMs,
+																	previous.medianMs,
+																)}
 																ms</span
 															>
 															<span class="${writesClass}"
 																>${formatDelta(
-																measurement.medianMutations,
-																previous.medianMutations,
-															)}
+																	measurement.medianMutations,
+																	previous.medianMutations,
+																)}
 																writes</span
 															>
 														`
