@@ -17,6 +17,7 @@
 		"index.ts",
 		"ssr-render.ts",
 		"index.test.ts",
+		"tsdown.config.ts",
 		"__fixtures__/**/*.ts"
 	]
 }

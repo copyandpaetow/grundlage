@@ -1,10 +1,28 @@
 {
 	"name": "grundlage",
 	"version": "0.6.0",
+	"description": "Zero-dependency library for building web components with tagged template literals, server-rendered and hydrated on the client.",
 	"license": "MIT",
-	"description": "a web component base render function",
+	"author": "Lucas Paetow",
+	"homepage": "https://github.com/copyandpaetow/grundlage/tree/main/lib#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/copyandpaetow/grundlage.git",
+		"directory": "lib"
+	},
+	"bugs": {
+		"url": "https://github.com/copyandpaetow/grundlage/issues"
+	},
 	"keywords": [
-		"web-components"
+		"web-components",
+		"custom-elements",
+		"shadow-dom",
+		"declarative-shadow-dom",
+		"template-literals",
+		"ssr",
+		"hydration",
+		"zero-dependency",
+		"grundlage"
 	],
 	"type": "module",
 	"main": "./dist/index.mjs",

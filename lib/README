@@ -1018,10 +1018,16 @@ customElements.define(
 - components are discovered by importing the project's source files and reading the element registry back
 - anything it can't serialize is left untouched and rendered on the client
 
+It ships as its own package, `vite-plugin-grundlage`, versioned separately and younger than the library:
+
+```bash
+npm install --save-dev vite-plugin-grundlage
+```
+
 ```typescript
 // vite.config.ts
 import {defineConfig} from "vite";
-import {prerenderWebcomponents} from "grundlage/prerender-plugin";
+import {prerenderWebcomponents} from "vite-plugin-grundlage";
 
 export default defineConfig({
     plugins: [prerenderWebcomponents()],
