@@ -463,54 +463,54 @@ customElements.define(
 								<div class="head">DOM writes</div>
 								<div class="head">vs baseline</div>
 								${Array.from(measurements.values()).map((measurement) => {
-								const previous = baselineFor(measurement.label);
-								// ms uses a 2% noise band; DOM writes are deterministic, so
-								// compare them exactly — any drift is a real false-write signal.
-								const msClass = !previous
-									? ""
-									: measurement.medianMs > previous.medianMs * 1.02
-										? "regress"
-										: measurement.medianMs < previous.medianMs * 0.98
-											? "improve"
-											: "";
-								const writesClass = !previous
-									? ""
-									: measurement.medianMutations > previous.medianMutations
-										? "regress"
-										: measurement.medianMutations < previous.medianMutations
-											? "improve"
-											: "";
-								return html`
-									<div class="label">${measurement.label}</div>
-									<div>${itemCounts.get(measurement.label) ?? "—"}</div>
-									<div>${formatMs(measurement.medianMs)}</div>
-									<div>${formatMs(measurement.minMs)}</div>
-									<div>${formatMs(measurement.maxMs)}</div>
-									<div>${measurement.medianMutations}</div>
-									<div class="delta">
-										${
+									const previous = baselineFor(measurement.label);
+									// ms uses a 2% noise band; DOM writes are deterministic, so
+									// compare them exactly — any drift is a real false-write signal.
+									const msClass = !previous
+										? ""
+										: measurement.medianMs > previous.medianMs * 1.02
+											? "regress"
+											: measurement.medianMs < previous.medianMs * 0.98
+												? "improve"
+												: "";
+									const writesClass = !previous
+										? ""
+										: measurement.medianMutations > previous.medianMutations
+											? "regress"
+											: measurement.medianMutations < previous.medianMutations
+												? "improve"
+												: "";
+									return html`
+										<div class="label">${measurement.label}</div>
+										<div>${itemCounts.get(measurement.label) ?? "—"}</div>
+										<div>${formatMs(measurement.medianMs)}</div>
+										<div>${formatMs(measurement.minMs)}</div>
+										<div>${formatMs(measurement.maxMs)}</div>
+										<div>${measurement.medianMutations}</div>
+										<div class="delta">
+											${
 											previous
 												? html`
 														<span class="${msClass}"
 															>${formatDelta(
-															measurement.medianMs,
-															previous.medianMs,
-														)}
+																measurement.medianMs,
+																previous.medianMs,
+															)}
 															ms</span
 														>
 														<span class="${writesClass}"
 															>${formatDelta(
-															measurement.medianMutations,
-															previous.medianMutations,
-														)}
+																measurement.medianMutations,
+																previous.medianMutations,
+															)}
 															writes</span
 														>
 													`
 												: "—"
 										}
-									</div>
-								`;
-							})}
+										</div>
+									`;
+								})}
 							</div>
 						`
 					: html``

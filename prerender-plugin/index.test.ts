@@ -1,163 +1,45 @@
-import { describe, expect, test, vi } from "vitest";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, describe, expect, test, vi } from "vitest";
+import { TAGS } from "./__fixtures__/tags";
 import { prerenderWebcomponents } from "./index";
+import { closeModuleLoaderServers } from "./ssr-render";
 
-//unique-ish tags per scenario so plugin instances don't collide on the shared customElements registry
-const TAGS = {
-	simple: "ssr-simple",
-	withAttrs: "ssr-with-attrs",
-	asyncPreYield: "ssr-async-pre-yield",
-	falsePositive: "ssr-false-positive-guard",
-	multiInstance: "ssr-multi-instance",
-	customSentinel: "ssr-custom-sentinel",
-	unmarked: "ssr-unmarked",
-	noSentinel: "ssr-no-sentinel",
-	loadSingle: "ssr-load-single",
-	loadShared: "ssr-load-shared",
-	wideWebApi: "ssr-wide-web-api",
-	neverYields: "ssr-never-yields",
-	quotedAttrs: "ssr-quoted-attrs",
-	closedRoot: "ssr-closed-root",
-} as const;
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const fixtureModulePattern = "prerender-plugin/__fixtures__/components.ts";
 
-//lazy import: the happy-dom polyfill (set up before loaders are awaited) must be in place when parser/html.ts runs its module-load createElement
-//one shared idempotent definer keeps the lib import to a single side-effect
-let definedPromise: Promise<void> | null = null;
-const ensureDefined = (): Promise<void> => {
-	if (definedPromise) return definedPromise;
-	definedPromise = (async () => {
-		const { html, component } = await import("../lib/src");
-		const { load } = await import("../lib/src/load");
-
-		customElements.define(
-			TAGS.loadSingle,
-			component(async function* (host) {
-				const value = await load(host, () => Promise.resolve({ name: "Ada" }));
-				yield () => html`<p>${value.name}</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.loadShared,
-			component(async function* (host) {
-				const id = host.getAttribute("data-id") ?? "?";
-				//per-host serialization — each instance gets its own data-ssr script in its shadow root
-				const value = await load(host, () => Promise.resolve(`payload-${id}`));
-				yield () => html`<p>${id}:${value}</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.simple,
-			component(function* () {
-				yield () => html`<p>simple-first</p>`;
-				yield () => html`<p>simple-second</p>`;
-			}),
-		);
-
-		//touches web APIs outside the old hand-picked global list — a ReferenceError here means registration regressed
-		customElements.define(
-			TAGS.wideWebApi,
-			component(function* (host) {
-				host.dispatchEvent(new CustomEvent("mounted"));
-				const display = getComputedStyle(host).display;
-				yield () => html`<p>display=${display || "block"}</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.withAttrs,
-			component(function* (host) {
-				yield () =>
-					html`<p>label=${host.getAttribute("data-label") ?? "none"}</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.asyncPreYield,
-			component(function* () {
-				const value = yield Promise.resolve("resolved-value");
-				yield () => html`<p>${value as string}</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.falsePositive,
-			component(function* () {
-				yield () => html`<p>should-not-render</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.multiInstance,
-			component(function* (host) {
-				yield () => html`<p>${host.getAttribute("data-id") ?? "?"}</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.customSentinel,
-			component(function* () {
-				yield () => html`<p>custom-rendered</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.unmarked,
-			component(function* () {
-				yield () => html`<p>unmarked-rendered</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.noSentinel,
-			component(function* () {
-				yield () => html`<p>no-sentinel-rendered</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.neverYields,
-			component(function* () {
-				//parks before the first render yield — the prerender must time out, not hang
-				yield new Promise(() => {});
-				yield () => html`<p>unreachable</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.quotedAttrs,
-			component(function* (host) {
-				const expr = host.getAttribute("data-expr") ?? "none";
-				const note = host.getAttribute("data-note") ?? "none";
-				yield () => html`<p>expr=${expr} note=${note}</p>`;
-			}),
-		);
-
-		customElements.define(
-			TAGS.closedRoot,
-			component(
-				function* () {
-					yield () => html`<p>closed-rendered</p>`;
-				},
-				{ mode: "closed" },
-			),
-		);
-	})();
-	return definedPromise;
-};
-
-const allComponents = Object.fromEntries(
-	Object.values(TAGS).map((tag) => [tag, ensureDefined]),
-);
-
+//the fixture components are files on disk: the plugin discovers them by glob and loads them
+//through vite, exactly as it does in a real project
 const buildPlugin = (
-	overrides: { sentinel?: string; firstYieldTimeoutMs?: number } = {},
-) =>
-	prerenderWebcomponents({
-		components: allComponents,
+	overrides: {
+		sentinel?: string;
+		firstYieldTimeoutMs?: number;
+		root?: string;
+		configFile?: string;
+		componentLoader?: "project-config" | "isolated";
+		include?: Array<string>;
+		exclude?: Array<string>;
+	} = {},
+) => {
+	const plugin = prerenderWebcomponents({
+		include:
+			"include" in overrides ? overrides.include : [fixtureModulePattern],
+		exclude: overrides.exclude,
+		componentLoader: overrides.componentLoader,
 		sentinelAttribute: overrides.sentinel,
 		firstYieldTimeoutMs: overrides.firstYieldTimeoutMs,
 	});
+	(plugin.configResolved as (config: unknown) => void).call(undefined, {
+		root: overrides.root ?? repoRoot,
+		configFile: overrides.configFile,
+		resolve: {},
+	});
+	return plugin;
+};
+
+afterAll(async () => {
+	await closeModuleLoaderServers();
+});
 
 //handles both shapes vite exposes for transformIndexHtml — function or `{ handler }`
 const runTransform = async (
@@ -339,6 +221,201 @@ describe("prerender plugin: sentinel-attribute scan", () => {
 			expect.stringContaining(`<${TAGS.neverYields}>`),
 		);
 		warn.mockRestore();
+	});
+});
+
+describe("prerender plugin: component discovery", () => {
+	test("with no include, every source file under the root is scanned", async () => {
+		const plugin = buildPlugin({
+			root: resolve(repoRoot, "prerender-plugin/__fixtures__/default-scan"),
+			include: undefined,
+		});
+		const input = `<html><body><ssr-default-scan ssr></ssr-default-scan></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain("shadowrootmode");
+		expect(output).toContain("default-scan-rendered");
+	});
+
+	test("an excluded module is not loaded, so its component stays client-rendered", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const plugin = buildPlugin({
+			include: [
+				fixtureModulePattern,
+				"prerender-plugin/__fixtures__/excluded-component.ts",
+			],
+			exclude: ["**/excluded-component.ts"],
+		});
+		const input = `<html><body><${TAGS.excluded} ssr></${TAGS.excluded}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(`<${TAGS.excluded}>`),
+		);
+		warn.mockRestore();
+	});
+
+	test("a marked tag that no scanned module defines warns and is left for the client", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.undefinedTag} ssr></${TAGS.undefinedTag}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(`no scanned module defines`),
+		);
+		warn.mockRestore();
+	});
+
+	test("a page with no marked element loads nothing", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		//the include names a module that throws on import — silence proves the scan short-circuited first
+		const plugin = buildPlugin({
+			include: [
+				fixtureModulePattern,
+				"prerender-plugin/__fixtures__/broken/throws-on-load.ts",
+			],
+		});
+		const input = `<html><body><${TAGS.simple}></${TAGS.simple}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toBe(input);
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	test("the project config is re-run for the loader, so its plugins transform component modules", async () => {
+		const projectRoot = resolve(
+			repoRoot,
+			"prerender-plugin/__fixtures__/project-config",
+		);
+		const plugin = buildPlugin({
+			root: projectRoot,
+			configFile: resolve(projectRoot, "vite.config.ts"),
+			include: ["greeting-component.ts"],
+		});
+		const input = `<html><body><ssr-greeting ssr></ssr-greeting></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		//the import only resolves through the fixture config's own plugin
+		expect(output).toContain("greetings from a project plugin");
+		expect(output).toContain("shadowrootmode");
+	});
+
+	test("componentLoader `isolated` skips the project config, so its plugins do not apply", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const projectRoot = resolve(
+			repoRoot,
+			"prerender-plugin/__fixtures__/project-config",
+		);
+		const plugin = buildPlugin({
+			root: projectRoot,
+			configFile: resolve(projectRoot, "vite.config.ts"),
+			componentLoader: "isolated",
+			include: ["isolated-probe-component.ts"],
+		});
+		const input = `<html><body><ssr-isolated-probe ssr></ssr-isolated-probe></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("isolated-probe-component.ts"),
+			expect.anything(),
+		);
+		warn.mockRestore();
+	});
+
+	test("a module that throws on import warns, and the other components still render", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const plugin = buildPlugin({
+			include: [
+				fixtureModulePattern,
+				"prerender-plugin/__fixtures__/broken/throws-on-load.ts",
+			],
+		});
+		const input = `<html><body><${TAGS.simple} ssr></${TAGS.simple}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain("simple-first");
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("throws-on-load.ts"),
+			expect.anything(),
+		);
+		warn.mockRestore();
+	});
+});
+
+describe("prerender plugin: light-DOM children", () => {
+	test("light-DOM children survive alongside the declarative shadow root", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.slotted} ssr><h1>slotted heading</h1><p>slotted body</p></${TAGS.slotted}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain("shadowrootmode");
+		expect(output).toContain(`class="wrap"`);
+		expect(output).toContain("<slot></slot>");
+		expect(output).toContain("<h1>slotted heading</h1>");
+		expect(output).toContain("<p>slotted body</p>");
+		//children stay in the light DOM, outside the template that carries the shadow root
+		expect(output.indexOf("</template>")).toBeLessThan(
+			output.indexOf("slotted heading"),
+		);
+	});
+
+	test("children are attached before the component mounts", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.slotCounting} ssr><span>a</span><span>b</span></${TAGS.slotCounting}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain(">2<");
+	});
+
+	test("a registered component in the light DOM is prerendered with its parent", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.slotted} ssr><${TAGS.nestedChild}></${TAGS.nestedChild}></${TAGS.slotted}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain("nested-rendered");
+		const shadowMatches = output.match(/shadowrootmode/g) ?? [];
+		expect(shadowMatches.length).toBe(2);
+	});
+
+	test("an element with children but no sentinel is left alone", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.unmarked}><p>kept</p></${TAGS.unmarked}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toBe(input);
+	});
+
+	test("nesting the same tag inside itself matches the outer close tag", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.selfNesting} ssr data-depth="outer"><${TAGS.selfNesting} data-depth="inner"></${TAGS.selfNesting}></${TAGS.selfNesting}><p>after</p></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain(">outer<");
+		expect(output).toContain(">inner<");
+		//the outer close tag ends the match — trailing markup is neither swallowed nor duplicated
+		expect(output.match(/<p>after<\/p>/g)?.length).toBe(1);
+	});
+
+	test("markup inside an HTML comment is not prerendered", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><!-- <${TAGS.commented} ssr></${TAGS.commented}> --></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toBe(input);
+	});
+
+	test("a close tag inside a script does not end the element early", async () => {
+		const plugin = buildPlugin();
+		const input = `<html><body><${TAGS.slotted} ssr><script type="text/template">\`</${TAGS.slotted}>\`</script><p>real child</p></${TAGS.slotted}></body></html>`;
+		const output = await runTransform(plugin, input);
+
+		expect(output).toContain("shadowrootmode");
+		expect(output).toContain("<p>real child</p>");
 	});
 });
 

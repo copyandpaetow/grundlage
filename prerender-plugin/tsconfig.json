@@ -13,5 +13,10 @@
 		"noUncheckedSideEffectImports": true,
 		"strictPropertyInitialization": false
 	},
-	"include": ["index.ts", "ssr-render.ts", "index.test.ts"]
+	"include": [
+		"index.ts",
+		"ssr-render.ts",
+		"index.test.ts",
+		"__fixtures__/**/*.ts"
+	]
 }

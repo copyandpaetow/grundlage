@@ -233,65 +233,68 @@ customElements.define(
 									return html`
 										<div class="grid">
 											${metricRow(
-											"fps",
-											formatNumber(result.framesPerSecond),
-											base
-												? formatDelta(
-														result.framesPerSecond,
-														base.framesPerSecond,
-													)
-												: "",
-											base
-												? classWhenHigherIsBetter(
-														result.framesPerSecond,
-														base.framesPerSecond,
-													)
-												: "",
-										)}
+												"fps",
+												formatNumber(result.framesPerSecond),
+												base
+													? formatDelta(
+															result.framesPerSecond,
+															base.framesPerSecond,
+														)
+													: "",
+												base
+													? classWhenHigherIsBetter(
+															result.framesPerSecond,
+															base.framesPerSecond,
+														)
+													: "",
+											)}
 											${metricRow(
-											"median frame",
-											`${formatNumber(result.medianFrameMs, 3)} ms`,
-											base
-												? formatDelta(result.medianFrameMs, base.medianFrameMs)
-												: "",
-											base
-												? classWhenLowerIsBetter(
-														result.medianFrameMs,
-														base.medianFrameMs,
-													)
-												: "",
-										)}
+												"median frame",
+												`${formatNumber(result.medianFrameMs, 3)} ms`,
+												base
+													? formatDelta(
+															result.medianFrameMs,
+															base.medianFrameMs,
+														)
+													: "",
+												base
+													? classWhenLowerIsBetter(
+															result.medianFrameMs,
+															base.medianFrameMs,
+														)
+													: "",
+											)}
 											${metricRow("frames", String(result.frames), "", "")}
 											${metricRow(
-											"DOM writes / frame",
-											formatNumber(result.mutationsPerFrame),
-											base
-												? formatDelta(
-														result.mutationsPerFrame,
-														base.mutationsPerFrame,
-													)
-												: "",
-											base
-												? classWhenLowerIsBetter(
-														result.mutationsPerFrame,
-														base.mutationsPerFrame,
-													)
-												: "",
-										)}
+												"DOM writes / frame",
+												formatNumber(result.mutationsPerFrame),
+												base
+													? formatDelta(
+															result.mutationsPerFrame,
+															base.mutationsPerFrame,
+														)
+													: "",
+												base
+													? classWhenLowerIsBetter(
+															result.mutationsPerFrame,
+															base.mutationsPerFrame,
+														)
+													: "",
+											)}
 											${metricRow(
-											"DOM writes total",
-											String(result.mutations),
-											"",
-											"",
-										)}
+												"DOM writes total",
+												String(result.mutations),
+												"",
+												"",
+											)}
 											${metricRow(
-											"heap delta",
-											result.heapDeltaMb !== null
-												? `${formatNumber(result.heapDeltaMb)} MB`
-												: "n/a",
-											"",
-											"",
-										)}
+												"heap delta",
+												result.heapDeltaMb !== null
+													? `${formatNumber(result.heapDeltaMb)} MB`
+													: "n/a",
+												"",
+												"",
+											)}
 										</div>
 									`;
 								})()

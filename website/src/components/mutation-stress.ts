@@ -279,14 +279,14 @@ customElements.define(
 								<div class="head">avg (ms)</div>
 								<div class="head">samples</div>
 								${Array.from(measurements.values()).map(
-								(measurement) => html`
-									<div class="label">${measurement.label}</div>
-									<div>${measurement.itemCount}</div>
-									<div>${formatMs(measurement.lastDurationMs)}</div>
-									<div>${formatMs(measurement.averageDurationMs)}</div>
-									<div>${measurement.sampleCount}</div>
-								`,
-							)}
+									(measurement) => html`
+										<div class="label">${measurement.label}</div>
+										<div>${measurement.itemCount}</div>
+										<div>${formatMs(measurement.lastDurationMs)}</div>
+										<div>${formatMs(measurement.averageDurationMs)}</div>
+										<div>${measurement.sampleCount}</div>
+									`,
+								)}
 							</div>
 						`
 					: html``

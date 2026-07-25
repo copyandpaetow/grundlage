@@ -6,12 +6,13 @@ Server-rendered and hydrated on the client. `npm install grundlage`.
 ## Mental model
 
 A component is a generator function passed to `component`. It runs ONCE when the element
-mounts and runs to completion (never `while (true)`): setup code runs, you `yield`
-something renderable (a render function, an `html` template, or an inner generator), and
-the host element is both the first argument and the value every `yield` returns. The
-return value is a cleanup function. There are no signals or hooks — re-rendering happens
-only when you call `host.update()`. State you declare before the `yield` survives updates
-because the yielded render function closes over it; the generator itself does not re-run.
+mounts and runs to completion (never `while (true)`): setup code runs, then something
+renderable is yielded (a render function, an `html` template, or an inner generator). The
+host element is the generator's first argument, and a `yield` of a renderable evaluates
+back to that host. A returned function is the cleanup. There are no signals and no hooks —
+a re-render happens on `host.update()`, on `host.setProp(…)`, and when an attribute on the
+host element changes. State declared before the `yield` survives updates because the
+yielded render function closes over it; the generator body itself does not re-run.
 
 ## Complete example
 
@@ -38,45 +39,57 @@ customElements.define(
 
 `component(generator, options?) => CustomElementConstructor`
   Register the return value with `customElements.define`. The first argument MUST be a
-  generator function (`function*` or `async function*`) — a plain or arrow function
-  throws a `TypeError` at definition time, not at mount. `options` extends
-  `ShadowRootInit`; the defaults are `{ mode: "open", clonable: true,
-  delegatesFocus: true, serializable: true }` (any option you pass overrides its
-  default). Set `formAssociated: true` for form components. The generator may be sync
-  or async. `{ mode: "closed" }` hydrates and
-  replays `load` data like an open root — the closed shadow root is reached through
-  `attachInternals().shadowRoot` instead of `host.shadowRoot`, so server output is reused
-  rather than re-rendered. The return value is a class: `class extends component(fn) {}`
-  adds real methods, getters, or static fields — that is the extension point, not assigning
-  to `host` at runtime.
+  generator function (`function*` or `async function*`) — a plain or arrow function throws
+  a `TypeError` at definition time, not at mount. `options` extends `ShadowRootInit`; the
+  defaults are `{ mode: "open", clonable: true, delegatesFocus: true, serializable: true }`
+  and any option passed overrides its default. `formAssociated: true` swaps the base class
+  for the form-associated one. `{ mode: "closed" }` still hydrates and replays `load` data:
+  the closed root is reached through `attachInternals().shadowRoot` instead of
+  `host.shadowRoot`, so server output is reused rather than re-rendered. The return value is
+  a class — `class extends component(fn) {}` is the extension point for methods, getters and
+  static fields; nothing is assigned to `host` at runtime.
 
 `` html`...` `` => `Template` (opaque)
-  Tagged template literal. Parsed once and cached; later renders only touch dynamic
-  parts. Yield it, or embed it inside another `html` template.
+  Tagged template literal. Each distinct literal is parsed once and cached (keyed by its
+  strings array); later renders only touch dynamic parts. Yield it, or embed it inside
+  another `html` template.
 
 `props(host, schema) => typed object`
-  Reads typed values from attributes or properties. Only `String`, `Number`, `BigInt`, and
-  `Boolean` consult the attribute channel and coerce the string; `Function`, `Array`, and
-  a class are read from the own property ONLY — no attribute is inspected and no coercion
-  happens, the schema entry just types the result. `[Constructor]` allows `undefined`;
-  `[Constructor, fallback]` supplies a default. For the four coercing forms a present
-  attribute wins over the property channel: a `Boolean` is `true` when the attribute is
-  present, otherwise the own property is read (`el.checked = true`). `Number` and `BigInt`
-  treat an empty attribute as absent and THROW on a value they can't parse
-  (`count="hello"`, `total="3.14"`).
+  Reads typed values. `String`, `Number`, `BigInt` and `Boolean` consult the ATTRIBUTE
+  channel and coerce the string; every other constructor (`Array`, `Object`, `Function`, a
+  class) is read from the PROPERTY channel only — no attribute is inspected and no coercion
+  happens, the schema entry just types the result. `Constructor` is required and THROWS when
+  neither channel supplies it (`Boolean` is the exception: absent reads as `false`);
+  `[Constructor]` allows `undefined`; `[Constructor, fallback]` supplies a default. For the
+  coercing forms a present attribute wins over the property channel: a `Boolean` is `true`
+  when the attribute is present, otherwise the own property is read (`el.checked = true`).
+  `Number` and `BigInt` treat an empty attribute as absent. `Number` throws only on a string
+  that parses to `NaN` (`count="hello"`) — `"3.14"` is a valid number. `BigInt` throws on
+  anything that is not an integer literal (`total="3.14"`).
 
 `load(host, fetcher, options?) => Promise<Value>`
-  Data needed before first render. On the server the fetcher runs and the result is
-  serialized into the markup; on the client it's replayed once during hydration, then
-  the fetcher runs normally. `options` is `{ key?, skipSsr? }`, or a string shorthand
-  for `{ key }`.
+  Data needed before the first render. On the server the fetcher runs and the result is
+  serialized into the markup as a `<script type="application/json" data-ssr>`; on the client
+  that payload is replayed once during hydration (the script is consumed) and every later
+  call runs the fetcher normally. `options` is `{ key?, skipSsr? }`, or a string shorthand
+  for `{ key }`. `skipSsr` skips the serialization only — the fetcher still runs on the
+  server, and the client always fetches. Unkeyed replay is POSITIONAL (first payload to
+  first `load`), so a conditional or reordered `load` can claim the wrong payload; a key
+  pins each payload to its call, and unclaimed payloads warn on hydration.
+
+`host.update() => Promise<void>`
+  The re-render trigger — see Rules for what it re-fires and when it resolves.
 
 `host.setProp(name, value, oldValue?) => void`
   Imperative counterpart to a markup binding, for a framework/interop driver feeding props
-  from outside. Sets one host binding with the same resolution as a dynamic attribute —
-  stringable value → attribute, non-stringable → own property, `on*` + function → event
-  listener — then triggers `update()`. Pass `oldValue` so a previous function listener is
-  removed and a stale property slot is cleared.
+  from outside. Applies one binding with the same resolution as a dynamic attribute —
+  stringable → attribute, non-stringable → property, `on*`/`on-*` plus a function → event
+  listener — then calls `update()`. Pass `oldValue` so a previously bound listener is
+  removed and a stale property slot is deleted.
+
+`host.internals => ElementInternals | null`
+  Lazily attached on first read, on every component, not only form-associated ones. `null`
+  on the server.
 
 Types: `BaseComponent`, `ComponentOptions`, `LoadOptions`, `Template`.
 
@@ -86,80 +99,119 @@ Types: `BaseComponent`, `ComponentOptions`, `LoadOptions`, `Template`.
 content        <p>${text}</p>
 attribute      <div class=${className}>
 mixed attr     <div class="static ${dynamic}">
-event          <button onClick=${handler}>        // on + EventName, camelCase
+event          <button onClick=${handler}>          // on + EventName
+custom event   <color-swatch on-swatch-select=${handler}>
+spread         <div ${attributes}>                  // object → name/value, array → boolean attrs
 list           <ul>${items.map((i) => html`<li>${i}</li>`)}</ul>
-nested         <div>${show && html`<details>…</details>`}</div>    // false renders nothing
+list key       <li><!--${item.id}-->…</li>          // first dynamic comment = row identity
+nested         <div>${show && html`<details>…</details>`}</div>
 dynamic tag    <${tagName}>content</${tagName}>
-raw            <style>${css}</style>               // style/script/textarea
+raw            <style>${css}</style>                // style/script/textarea
+comment        <!-- note ${value} -->               // second and later dynamic comments
 ```
 
 ## Host attributes
 
-If the OUTERMOST element of a component's render output is a `<template>`, its attributes
-go on the host element and the wrapper is unwrapped (its children become the shadow DOM).
-This is how a component sets its own `class`/`id`/`role`/event handlers from the inside.
+If the OUTERMOST node of a render output is a `<template>` and it has no top-level siblings,
+the wrapper is unwrapped: its children become the shadow DOM and its attributes are applied
+to the host element. This is how a component sets its own `class`/`id`/`role`/handlers from
+the inside.
 
 ```javascript
 yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>…</template>`;
 ```
 
-- Static, dynamic, boolean, and multi-part attributes all work and update between renders.
-- Spread an object to fan out attributes: `<template ${attributes}>`.
+- Static, dynamic, boolean, multi-part attributes and spreads all work and update between
+  renders.
 - Event handlers bind here too (e.g. `on-form-*` for form components).
-- Attributes dropped by a later render are removed from the host.
-- The `<template>` must be top-level — one nested inside content throws.
+- Attributes dropped by a later render are reverted on the host.
+- A `<template>` WITH attributes in a nested position (content hole, list row) throws. A
+  `<template>` that has top-level siblings is parsed as an ordinary element instead.
+
+## Lists and keys
+
+An array in a content hole renders one row per entry. Rows are matched by the row template's
+identity and a content hash, which covers most reorders and edits without extra work. For
+explicit identity, put a dynamic comment in the row: the FIRST dynamic comment of a template
+is consumed as its key, never reaches the DOM, and binds that row's DOM (focus, scroll,
+input state) to the value. Text around the expression is fine — it is constant across the
+rows of one template, so only the expression tells rows apart: `<!--${id}-->` and
+`<!-- key: ${id} -->` work the same way.
+
+Row values: string / number / bigint render as text (`""`, `0`, `NaN` included); `null`,
+`undefined`, `true`, `false` render nothing but still occupy a row; a nested array renders
+recursively; anything else (plain object, `Date`, function, symbol) throws.
 
 ## Rules — get these right
 
-- The component generator runs ONCE per mount and runs to completion — no `while (true)`.
-  State declared before your `yield` persists across re-renders (the yielded render
-  function closes over it), so keep mutable state there rather than re-deriving it.
-- Don't hang state or methods off `host` (`host.query = …`, `host.close = () => …`) — the
-  host is not your instance bag. Keep state in generator-local variables and communicate
-  outward by dispatching events, inward by reading attributes/props. To add real methods,
-  extend the returned class (`class extends component(fn) {}`), never assign at runtime.
-- `host.update()` is the ONLY re-render trigger (no reactive primitive). It re-fires what
-  you last yielded: a render function is re-called, a yielded INNER generator restarts
-  from scratch, a yielded static `html` template does not re-run. The root never re-runs.
-- `await host.update()` resolves when the re-rendered thing has FINISHED: right after paint
-  for a template or render function (both synchronous), and — for an async inner generator —
-  only once its full run completes, so `await update()` waits for the settled UI, not an
-  intermediate frame. A reentrant `update()` called during an in-flight pass coalesces onto
-  that pass's promise.
-- `yield` returns the host element for a renderable (`html` template, render function, inner
-  generator): `const host = yield () => html`…``. A yielded promise returns its resolved
-  value (`const data = yield fetch(...)`); any other plain value is echoed back. Yielded
-  inner generators and render functions also receive the host as their first argument.
-- In a CONTENT hole, `null`, `undefined`, `false`, and `true` render nothing — a boolean is a
-  condition result, not a value. Numbers, bigints, and strings always render — `0`, `0n`,
-  `NaN`, and `""` included. So `${isOpen && html`…`}` is safe, but `${items.length && html`…`}` writes the
-  text `"0"` on an empty list — use a ternary for any non-boolean guard. ATTRIBUTE holes are
-  separate: there `false`/`null`/`undefined` REMOVE the attribute.
+- The generator runs ONCE per mount and runs to completion — no `while (true)`. State
+  declared before the `yield` persists across re-renders (the yielded render function closes
+  over it), so mutable state belongs there rather than being re-derived.
+- Don't hang state or methods on `host` (`host.query = …`, `host.close = () => …`) — the host
+  is not an instance bag. Keep state in generator-local variables, communicate outward by
+  dispatching events and inward by reading attributes/props. Real methods come from extending
+  the returned class (`class extends component(fn) {}`); a property assigned at runtime only
+  exists once `connectedCallback` has run.
+- Re-renders are triggered by `host.update()`, by `host.setProp(…)`, and by an attribute
+  change on the host element (a `MutationObserver` calls `update()`; it is suspended while
+  the component paints). There is no other reactivity.
+- `update()` re-fires whatever was yielded LAST: a render function is re-called, an inner
+  generator is torn down (its cleanup runs) and re-run from the top, and an `html` template
+  yielded plainly from the component body never re-renders — after that yield `update()` is
+  a no-op, as it is before the first paint. The generator body itself never re-runs.
+- `await host.update()` resolves once the DOM has been patched, in a microtask — not after
+  the browser paints, there is no rAF in the path. For an async inner generator it resolves
+  only when that generator's whole run completes, so the awaited state is the settled UI.
+  Concurrent `update()` calls coalesce onto the pending pass and share its promise.
+- A `yield` of a renderable (`html` template, render function, inner generator) evaluates to
+  the host element: ``const host = yield () => html`…` ``. A yielded promise evaluates to its
+  resolved value (`const data = yield fetch(...)`); any other value is echoed back. Render
+  functions and inner generators also receive the host as their first argument.
+- An inner generator may not yield another generator function — one level of nesting only,
+  the attempt throws into the parent.
+- A returned function is the cleanup: it runs on disconnect and before an inner generator is
+  re-run. `disconnectedCallback` waits a microtask and re-checks `isConnected`, so moving an
+  element inside the DOM does NOT tear the component down.
+- An uncaught error replaces the whole shadow tree with the error text and warns on the
+  console. An error from an inner generator is thrown INTO the outer generator at its
+  `yield`, so a `try/catch` there handles it; otherwise it reaches that root handler.
+- In a CONTENT hole `null`, `undefined`, `false` and `true` render nothing — a boolean is a
+  condition result, not a value. Numbers, bigints and strings always render — `0`, `0n`,
+  `NaN` and `""` included. So ``${isOpen && html`…`}`` is safe, but ``${items.length &&
+  html`…`}`` writes the text `"0"` on an empty list; use a ternary for any non-boolean guard.
+  An object, a function, a `Date` or a symbol in a content hole THROWS.
+- In an ATTRIBUTE hole `false`, `null` and `undefined` REMOVE the attribute and `true` sets
+  it to `"true"`. A non-stringable value (object, array, function) is assigned as a PROPERTY
+  instead, which is how data reaches a nested custom element.
+- Events bind as `onEventName=${handler}`. The name is matched case-insensitively against the
+  element's own `on*` properties, so `onClick` and `onclick` both bind `click`; a name with no
+  matching property is assigned as a dead property and warns on the console. Custom events
+  need the `on-` prefix (`on-swatch-select=${handler}`) and keep their hyphenated name
+  verbatim. A quoted string (`onclick="…"`) is never a binding.
 - Components render into SHADOW DOM by default. Light-DOM selectors won't reach inside.
 - Don't write literal `<!--^.^ …-->` or `<!--*.*-->` comments in template HTML — those
-  prefixes are reserved for internal markers and a collision silently misaligns hydration.
-- Events bind in markup as `onEventName=${handler}` (e.g. `onClick`, `onInput`) — not
-  `addEventListener` strings and not lowercase `onclick=""`.
-- Change detection is HASH-BASED for plain arrays/objects (and Map/Set): mutate-then-
-  `update()` we will detect. Other values — class instances, `Date`, typed arrays — are
-  compared by REFERENCE identity, so mutating one in place reads as unchanged and is
+  prefixes are the internal markers and a collision silently misaligns hydration.
+- Change detection is HASH-BASED for strings, numbers, bigints, booleans, plain objects,
+  arrays, `Map`, `Set` and nested templates: mutate-then-`update()` is detected (object
+  graphs are walked to a depth of 64). Class instances, `Date`, typed arrays and functions
+  are compared by REFERENCE identity, so mutating one in place reads as unchanged and is
   skipped. Pass plain data, or replace the reference to signal a change.
-- A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the mounted
-  (and server-rendered) sheet text carries the real literal values, and every later
-  update is a `setProperty` on the element's OWN stylesheet object (CSSOM) — never a
-  sheet reparse, never a write to the host. Duplicate instances each own a private sheet,
-  so they never collide, and a host `style` attribute (root-`<template>` bound or spread)
-  no longer affects the fast path. Structural holes (selector, property name, at-rule
-  prelude) and a holed property duplicated in one declaration block fall back to a full
-  text rewrite — always correct, just slower; a sheet the browser parses differently than
-  the library expects (e.g. it drops a rule it can't parse) demotes to the same fallback.
-  Consequences: a runtime value that fails to parse (including one that smuggles `;` or
-  `!important`) is dropped by the browser and the PREVIOUS value stays, a CSS-wide
-  keyword (`inherit`/`initial`/`unset`/`revert`) takes its normal effect, and serialized
-  output (`getHTML`) reflects the last full-text write, not later CSSOM updates.
+- A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the mounted (and
+  server-rendered) sheet text carries the real literal values, and every later update is a
+  `setProperty` on this element's OWN CSSOM sheet — never a reparse, never a write to the
+  host. Each instance owns a private sheet, so duplicates never collide. Structural holes
+  (selector, property name, at-rule prelude), the same holed property declared twice in one
+  block, an ambiguous `!important`, and a sheet the browser parses differently than the
+  library expects (e.g. it drops a rule it can't parse) fall back to a full text rewrite —
+  always correct, just slower. Consequences: a runtime value the browser rejects (including
+  one that smuggles `;` or `!important`) is dropped and the PREVIOUS value stays, a static
+  `!important` is preserved as CSSOM priority, a CSS-wide keyword
+  (`inherit`/`initial`/`unset`/`revert`) takes its normal effect, and serialized output
+  (`getHTML`) reflects the last full-text write, not later CSSOM updates.
 - Read inputs with `props(host, schema)`. Don't read attributes directly — they're strings
-  and skip the type coercion/defaults `props` gives you.
-- `load` replays SSR data on hydration; don't add your own fetch-once cache around it.
-- Form components: `component(gen, { formAssociated: true })` exposes `host.internals`
-  (`null` on the server) and re-dispatches lifecycle as events `form-associated`,
-  `form-disabled`, `form-reset`, `form-state-restore` (or declarative `on-form-*` attrs).
+  and skip the type coercion and defaults `props` gives.
+- `load` replays SSR data on hydration; don't add a fetch-once cache around it.
+- Form components: `component(gen, { formAssociated: true })` re-dispatches the four form
+  callbacks as host events `form-associated` `{form}`, `form-disabled` `{disabled}`,
+  `form-reset` (no detail) and `form-state-restore` `{state, mode}`, bindable declaratively
+  as `on-form-*` on the host `<template>`.

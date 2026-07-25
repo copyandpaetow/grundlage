@@ -30,11 +30,5 @@ export default defineConfig({
 			},
 		},
 	},
-	plugins: [
-		prerenderWebcomponents({
-			components: {
-				"demo-loader": () => import("./src/components/ssr-demo-loader"),
-			},
-		}),
-	],
+	plugins: [prerenderWebcomponents({ include: ["src/components/**/*.ts"] })],
 });
