@@ -199,11 +199,13 @@ customElements.define(
 						<button data-action="ungroup">Ungroup</button>
 						<button data-action="delete">Delete</button>
 						<span class="spacer"></span>
-						${handlers.onToggleCamera
-							? html`<button data-action="camera">
-									Camera: ${cameraLabel}
-								</button>`
-							: null}
+						${
+							handlers.onToggleCamera
+								? html`<button data-action="camera">
+										Camera: ${cameraLabel}
+									</button>`
+								: null
+						}
 						<button data-action="export">Export</button>
 					</div>
 					<div

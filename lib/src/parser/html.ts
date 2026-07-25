@@ -10,7 +10,7 @@ import {
 	Part,
 	RawContentBinding,
 	StaticBinding,
-	TagBinding
+	TagBinding,
 } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
 import { compileStyleSheet } from "./css";

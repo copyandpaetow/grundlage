@@ -269,15 +269,16 @@ customElements.define(
 				<span>current: ${rows.length}</span>
 			</div>
 
-			${measurements.size > 0
-				? html`
-						<div class="results">
-							<div class="label head">operation</div>
-							<div class="head">items</div>
-							<div class="head">last (ms)</div>
-							<div class="head">avg (ms)</div>
-							<div class="head">samples</div>
-							${Array.from(measurements.values()).map(
+			${
+				measurements.size > 0
+					? html`
+							<div class="results">
+								<div class="label head">operation</div>
+								<div class="head">items</div>
+								<div class="head">last (ms)</div>
+								<div class="head">avg (ms)</div>
+								<div class="head">samples</div>
+								${Array.from(measurements.values()).map(
 								(measurement) => html`
 									<div class="label">${measurement.label}</div>
 									<div>${measurement.itemCount}</div>
@@ -286,9 +287,10 @@ customElements.define(
 									<div>${measurement.sampleCount}</div>
 								`,
 							)}
-						</div>
-					`
-				: html``}
+							</div>
+						`
+					: html``
+			}
 
 			<ul>
 				${rows.map(

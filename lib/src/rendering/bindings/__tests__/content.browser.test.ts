@@ -334,9 +334,9 @@ describe("content updates", () => {
 		const MyElement = component(function* () {
 			yield () =>
 				html`<div>
-					${useArray
-						? ["a", "b"].map((i) => html`<span>${i}</span>`)
-						: "single"}
+					${
+						useArray ? ["a", "b"].map((i) => html`<span>${i}</span>`) : "single"
+					}
 				</div>`;
 		});
 
@@ -364,9 +364,9 @@ describe("content updates", () => {
 		const MyElement = component(function* () {
 			yield () =>
 				html`<div>
-					${useArray
-						? ["a", "b"].map((i) => html`<span>${i}</span>`)
-						: "single"}
+					${
+						useArray ? ["a", "b"].map((i) => html`<span>${i}</span>`) : "single"
+					}
 				</div>`;
 		});
 

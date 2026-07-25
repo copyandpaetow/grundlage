@@ -162,7 +162,7 @@ const hydrateInstanceWithWalker = (
 	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
 	const instance: Instance = { parsed, liveBindings, moveState };
 
-	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length; ) {
+	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length;) {
 		const open = nextOpenMarker(walker);
 		const staticBinding = bindings[bindingIndex];
 

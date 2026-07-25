@@ -26,7 +26,9 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 			yield () =>
 				html`<ul>
 					${read().map(
-						(row) => html`<!--${row.id}--><li>${row.text}</li>`,
+						(row) =>
+							html`<!--${row.id}-->
+								<li>${row.text}</li>`,
 					)}
 				</ul>`;
 		});

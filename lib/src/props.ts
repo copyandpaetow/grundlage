@@ -32,9 +32,7 @@ type InferSchema<Type extends Schema> = {
 };
 
 type StringableValue =
-	| StringConstructor
-	| NumberConstructor
-	| BigIntConstructor;
+	StringConstructor | NumberConstructor | BigIntConstructor;
 
 type ResolvedSchemaEntry = {
 	constructorValue: SchemaEntry;

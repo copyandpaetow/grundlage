@@ -1,4 +1,4 @@
-import { html, component } from "../../../lib/src";
+import { component, html } from "../../../lib/src";
 import {
 	type Baseline,
 	clearBaseline,
@@ -438,28 +438,31 @@ customElements.define(
 				<button onclick="${dropBaseline}" disabled="${!baseline || isRunning}">
 					clear baseline
 				</button>
-				${baseline
-					? html`<span>baseline captured ${baseline.capturedAt}</span>`
-					: html`<span>no baseline saved</span>`}
+				${
+					baseline
+						? html`<span>baseline captured ${baseline.capturedAt}</span>`
+						: html`<span>no baseline saved</span>`
+				}
 			</div>
 
 			<div class="status">
-				${isRunning
-					? html`running: ${activeOperation ?? "suite"}…`
-					: html`idle`}
+				${
+					isRunning ? html`running: ${activeOperation ?? "suite"}…` : html`idle`
+				}
 			</div>
 
-			${measurements.size > 0
-				? html`
-						<div class="results">
-							<div class="label head">operation</div>
-							<div class="head">items</div>
-							<div class="head">median (ms)</div>
-							<div class="head">min</div>
-							<div class="head">max</div>
-							<div class="head">DOM writes</div>
-							<div class="head">vs baseline</div>
-							${Array.from(measurements.values()).map((measurement) => {
+			${
+				measurements.size > 0
+					? html`
+							<div class="results">
+								<div class="label head">operation</div>
+								<div class="head">items</div>
+								<div class="head">median (ms)</div>
+								<div class="head">min</div>
+								<div class="head">max</div>
+								<div class="head">DOM writes</div>
+								<div class="head">vs baseline</div>
+								${Array.from(measurements.values()).map((measurement) => {
 								const previous = baselineFor(measurement.label);
 								// ms uses a 2% noise band; DOM writes are deterministic, so
 								// compare them exactly — any drift is a real false-write signal.
@@ -485,41 +488,44 @@ customElements.define(
 									<div>${formatMs(measurement.maxMs)}</div>
 									<div>${measurement.medianMutations}</div>
 									<div class="delta">
-										${previous
-											? html`
-													<span class="${msClass}"
-														>${formatDelta(
+										${
+											previous
+												? html`
+														<span class="${msClass}"
+															>${formatDelta(
 															measurement.medianMs,
 															previous.medianMs,
 														)}
-														ms</span
-													>
-													<span class="${writesClass}"
-														>${formatDelta(
+															ms</span
+														>
+														<span class="${writesClass}"
+															>${formatDelta(
 															measurement.medianMutations,
 															previous.medianMutations,
 														)}
-														writes</span
-													>
-												`
-											: "—"}
+															writes</span
+														>
+													`
+												: "—"
+										}
 									</div>
 								`;
 							})}
-						</div>
-					`
-				: html``}
+							</div>
+						`
+					: html``
+			}
 
 			<div class="list-shell">
 				<table>
 					<tbody>
 						${rows.map(
 							(row) => html`
+								<!--${row.identifier}-->
 								<tr
-									data-key="${row.identifier}"
-									class="${row.identifier === selectedIdentifier
-										? "selected"
-										: ""}"
+									class="${
+										row.identifier === selectedIdentifier ? "selected" : ""
+									}"
 								>
 									<td>${row.identifier}</td>
 									<td>${row.label}</td>

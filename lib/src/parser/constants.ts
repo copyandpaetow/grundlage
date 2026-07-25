@@ -1,4 +1,3 @@
-
 export const PARSE_BINDING = {
 	TAG: 0,
 	ATTRIBUTE: 1,

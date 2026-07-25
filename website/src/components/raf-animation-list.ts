@@ -121,9 +121,9 @@ customElements.define(
 		) => html`
 			<span>${label}</span>
 			<span
-				>${formatted}${delta
-					? html` <span class="delta ${deltaClass}">${delta}</span>`
-					: ""}</span
+				>${formatted}${
+					delta ? html` <span class="delta ${deltaClass}">${delta}</span>` : ""
+				}</span
 			>
 		`;
 
@@ -219,17 +219,20 @@ customElements.define(
 						>
 							clear baseline
 						</button>
-						${baseline
-							? html`<span>baseline ${baseline.capturedAt}</span>`
-							: html`<span>no baseline</span>`}
+						${
+							baseline
+								? html`<span>baseline ${baseline.capturedAt}</span>`
+								: html`<span>no baseline</span>`
+						}
 					</div>
 
-					${result
-						? (() => {
-								const base = baseline?.value;
-								return html`
-									<div class="grid">
-										${metricRow(
+					${
+						result
+							? (() => {
+									const base = baseline?.value;
+									return html`
+										<div class="grid">
+											${metricRow(
 											"fps",
 											formatNumber(result.framesPerSecond),
 											base
@@ -245,7 +248,7 @@ customElements.define(
 													)
 												: "",
 										)}
-										${metricRow(
+											${metricRow(
 											"median frame",
 											`${formatNumber(result.medianFrameMs, 3)} ms`,
 											base
@@ -258,8 +261,8 @@ customElements.define(
 													)
 												: "",
 										)}
-										${metricRow("frames", String(result.frames), "", "")}
-										${metricRow(
+											${metricRow("frames", String(result.frames), "", "")}
+											${metricRow(
 											"DOM writes / frame",
 											formatNumber(result.mutationsPerFrame),
 											base
@@ -275,13 +278,13 @@ customElements.define(
 													)
 												: "",
 										)}
-										${metricRow(
+											${metricRow(
 											"DOM writes total",
 											String(result.mutations),
 											"",
 											"",
 										)}
-										${metricRow(
+											${metricRow(
 											"heap delta",
 											result.heapDeltaMb !== null
 												? `${formatNumber(result.heapDeltaMb)} MB`
@@ -289,10 +292,11 @@ customElements.define(
 											"",
 											"",
 										)}
-									</div>
-								`;
-							})()
-						: html``}
+										</div>
+									`;
+								})()
+							: html``
+					}
 
 					<div class="bars">
 						${bars.map(

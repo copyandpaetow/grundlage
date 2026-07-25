@@ -1,4 +1,4 @@
-import { html, component } from "../../../lib/src";
+import { component, html } from "../../../lib/src";
 import { type ComponentConstructor } from "../../../lib/src/types";
 
 let attrs = ["disabled", "hidden"];

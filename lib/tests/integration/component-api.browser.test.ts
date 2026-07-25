@@ -78,7 +78,8 @@ describe("dynamic comment bindings", () => {
 		//under test has to sit after it
 		const MyElement = component(function* () {
 			yield () =>
-				html`<!--${key}--><div><!-- ${left} and ${right} --></div>`;
+				html`<!--${key}-->
+					<div><!-- ${left} and ${right} --></div>`;
 		});
 
 		customElements.define(tag, MyElement);

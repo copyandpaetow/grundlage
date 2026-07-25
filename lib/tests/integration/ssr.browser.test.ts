@@ -284,9 +284,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 							html`<ul>
 								${items.map(
 									(item) =>
-										html`<!--${item.id}--><li class="${item.id}">
-												${item.text}
-											</li>`,
+										html`<!--${item.id}-->
+											<li class="${item.id}">${item.text}</li>`,
 								)}
 							</ul>`;
 					});
