@@ -172,6 +172,67 @@ describe("update() scheduling contract", () => {
 		element.remove();
 	});
 
+	test("a render-time update() resolves after its ASYNC reflush painted, not before", async () => {
+		// the outer's COMPLETED resolves the pending promise, so it has to defer to a pass queued
+		// DURING this one. a synchronous reflush hides the difference (its microtask is already
+		// ahead of the resolve in the queue); an async one does not — resolving at COMPLETED would
+		// unblock the caller on the FIRST render's DOM, 20ms before the second one paints
+		const tag = uniqueTag();
+		let renders = 0;
+		let promiseFromInsideTheRender: Promise<void> | null = null;
+
+		const Component = component(function* () {
+			yield (host) => {
+				const mine = ++renders;
+				if (mine === 1) {
+					promiseFromInsideTheRender = host.update();
+					return html`<span>${mine}</span>`;
+				}
+				return sleep(20).then(() => html`<span>${mine}</span>`);
+			};
+		});
+		customElements.define(tag, Component);
+
+		const element = mount(tag) as InstanceType<typeof Component>;
+		await promiseFromInsideTheRender!;
+
+		expect(renders).toBe(2);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("2");
+
+		element.remove();
+	});
+
+	test("a render-time update() during a REFIRE resolves after its async reflush painted, not before", async () => {
+		// the twin of the test above, on the other resolve site: a refire has no yield to resume,
+		// so the render lane's PAINT resolves the promise. it has to defer to the pass queued
+		// during it the same way COMPLETED does
+		const tag = uniqueTag();
+		let renders = 0;
+
+		const Component = component(function* () {
+			yield (host) => {
+				const mine = ++renders;
+				if (mine === 2) {
+					host.update();
+					return html`<span>${mine}</span>`;
+				}
+				if (mine === 3) return sleep(20).then(() => html`<span>${mine}</span>`);
+				return html`<span>${mine}</span>`;
+			};
+		});
+		customElements.define(tag, Component);
+
+		const element = mount(tag) as InstanceType<typeof Component>;
+		await sleep();
+
+		await element.update();
+
+		expect(renders).toBe(3);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("3");
+
+		element.remove();
+	});
+
 	test("update() on a static template current resolves immediately as a no-op", async () => {
 		const tag = uniqueTag();
 

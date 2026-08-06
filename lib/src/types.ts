@@ -14,9 +14,28 @@ export interface BaseComponent extends HTMLElement {
 
 export type ComponentOptions = ShadowRootInit & {
 	formAssociated?: boolean;
+	clonable?: boolean
 };
 
-export type RenderFunction = (element: BaseComponent) => TemplateValue;
+//what a content position accepts: the same rulebook as a content hole, one level deep — array
+//items are validated where they are committed, not here
+export type ContentValue =
+	| Template
+	| TemplateValue
+	| string
+	| number
+	| bigint
+	| boolean
+	| null
+	| undefined
+	| Array<ContentValue>;
+
+export type RenderFunction = (
+	element: BaseComponent,
+) =>
+	| ContentValue
+	| ComponentGenerator
+	| Promise<ContentValue | ComponentGenerator>;
 
 export type ComponentGenerator = (
 	element: BaseComponent,

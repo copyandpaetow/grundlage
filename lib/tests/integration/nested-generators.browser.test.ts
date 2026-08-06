@@ -112,9 +112,7 @@ describe("outer yields a generator function (nested generator)", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.textContent).toContain(
-			"Inner generators cannot yield generator functions",
-		);
+		expect(element.shadowRoot?.textContent).toContain("grundlage");
 		warnSpy.mockRestore();
 		element.remove();
 	});
@@ -1054,5 +1052,204 @@ describe("cleanup contract for inner async generators on cancel", () => {
 		element.remove();
 		await sleep();
 		expect(cleanupSpy).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("the outer painting over a live inner generator abandons it", () => {
+	test("the abandoned inner's pending await cannot paint over the outer's content", async () => {
+		const tag = uniqueTag("abandoned-late-paint");
+		let releaseGate: ((value: string) => void) | null = null;
+		const gate = new Promise<string>((resolve) => {
+			releaseGate = resolve;
+		});
+
+		customElements.define(
+			tag,
+			component(function* () {
+				yield async function* () {
+					yield () => html`<p>inner</p>`;
+					const late = await gate;
+					yield () => html`<p>${late}</p>`;
+				};
+				yield html`<p>outer took over</p>`;
+			}),
+		);
+
+		const element = mount(tag);
+		await sleep();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"outer took over",
+		);
+
+		releaseGate!("late");
+		await sleep(20);
+		//the inner is no longer the live inner, so its resolved await is dropped rather than
+		//painting into a shadow root the outer owns
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"outer took over",
+		);
+		element.remove();
+	});
+
+	test("the abandoned inner's pending render promise cannot paint over the outer's content", async () => {
+		const tag = uniqueTag("abandoned-late-render");
+		let releaseGate: ((value: string) => void) | null = null;
+		const gate = new Promise<string>((resolve) => {
+			releaseGate = resolve;
+		});
+
+		customElements.define(
+			tag,
+			component(function* () {
+				yield function* () {
+					yield async () => html`<p>${await gate}</p>`;
+				};
+				yield html`<p>outer took over</p>`;
+			}),
+		);
+
+		const element = mount(tag);
+		await sleep();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"outer took over",
+		);
+
+		releaseGate!("late");
+		await sleep(20);
+		//the abandoned inner's render call is abandoned with it, on the other lane
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"outer took over",
+		);
+		element.remove();
+	});
+
+	test("the abandoned inner's captured cleanup runs at the outer's paint, not at disconnect", async () => {
+		const tag = uniqueTag("abandoned-cleanup");
+		const cleanupSpy = vi.fn();
+
+		customElements.define(
+			tag,
+			component(function* () {
+				yield function* () {
+					yield () => html`<p>inner</p>`;
+					return cleanupSpy;
+				};
+				yield html`<p>outer took over</p>`;
+			}),
+		);
+
+		const element = mount(tag);
+		await sleep();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"outer took over",
+		);
+		//a ResizeObserver in the abandoned body would otherwise stay connected until disconnect
+		expect(cleanupSpy).toHaveBeenCalledTimes(1);
+
+		element.remove();
+		await sleep();
+		expect(cleanupSpy).toHaveBeenCalledTimes(1);
+	});
+
+	test("update() does not reinstall the generator the outer painted over", async () => {
+		const tag = uniqueTag("abandoned-refire");
+		let setups = 0;
+
+		customElements.define(
+			tag,
+			component(function* () {
+				yield function* () {
+					setups++;
+					yield () => html`<p>inner</p>`;
+				};
+				yield html`<p>outer took over</p>`;
+			}),
+		);
+
+		const element = mount(tag) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(setups).toBe(1);
+
+		//the outer's last yield was a template, so there is nothing to re-run: reinstalling the
+		//abandoned generator would clobber the outer's content on every update()
+		await element.update();
+		expect(setups).toBe(1);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"outer took over",
+		);
+		element.remove();
+	});
+});
+
+describe("an outer that recovers from a failed inner is handed back exactly once", () => {
+	test("recovering into an async render does not let the install step it a second time", async () => {
+		const tag = uniqueTag("recover-async");
+		let stepsPastTheCatch = 0;
+
+		customElements.define(
+			tag,
+			component(function* () {
+				try {
+					yield function* () {
+						yield () => {
+							throw new Error("inner-failed");
+						};
+					};
+				} catch {
+					//an async render leaves the outer parked at this yield, so the INSTALL frame the
+					//failed inner unwound out of would step it again if it did not notice the handoff
+					yield async () => {
+						await sleep(5);
+						return html`<p>recovered</p>`;
+					};
+				}
+				stepsPastTheCatch++;
+				yield html`<p>after</p>`;
+			}),
+		);
+
+		const element = mount(tag);
+		await sleep(40);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
+		expect(stepsPastTheCatch).toBe(1);
+		element.remove();
+	});
+});
+
+describe("an update() that installs a branch while the body awaits a promise", () => {
+	test("the pending yield still resumes with the settled value", async () => {
+		const tag = uniqueTag("install-while-awaiting");
+		let showBranch = false;
+		let resumedWith: unknown = null;
+
+		customElements.define(
+			tag,
+			component(function* () {
+				yield () =>
+					showBranch
+						? function* () {
+								yield () => html`<p>branch</p>`;
+							}
+						: html`<p>read only</p>`;
+				resumedWith = yield sleep(5).then(() => "settled");
+				yield html`<p>done</p>`;
+			}),
+		);
+
+		const element = mount(tag);
+		await sleep();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"read only",
+		);
+
+		//the body is parked at the promise, not at a renderable, so installing the branch the
+		//refired render function returned has nowhere to resume it to
+		showBranch = true;
+		await (element as BaseComponent).update();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("branch");
+
+		await sleep(40);
+		expect(resumedWith).toBe("settled");
+		element.remove();
 	});
 });

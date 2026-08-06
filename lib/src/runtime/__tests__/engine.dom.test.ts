@@ -120,6 +120,49 @@ describe("engine terminal", () => {
 		expect(element.shadowRoot?.textContent).not.toContain("late-boom");
 		element.remove();
 	});
+
+	test("an outer parked on a yielded promise cannot catch its inner's failure", async () => {
+		//the yield a throw would land at is owned by the pending promise: catching there would let
+		//that promise step the generator a second time, from a position it had already left
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		let rejectInnerRender: (error: Error) => void = () => {};
+		const innerRender = new Promise((_resolve, reject) => {
+			rejectInnerRender = reject;
+		});
+		let resolveGate: (value: string) => void = () => {};
+		const gate = new Promise<string>((resolve) => {
+			resolveGate = resolve;
+		});
+		let caughtAtTheGate = 0;
+		let resumedPastTheGate = 0;
+
+		const element = mount(
+			component(function* () {
+				yield function* () {
+					yield () => innerRender;
+				};
+				try {
+					yield gate;
+					resumedPastTheGate++;
+				} catch {
+					caughtAtTheGate++;
+				}
+			}),
+		);
+		await sleep();
+
+		rejectInnerRender(new Error("inner-render-rejected"));
+		await sleep();
+
+		expect(caughtAtTheGate).toBe(0);
+		expect(element.shadowRoot?.textContent).toContain("inner-render-rejected");
+		expect(warn).toHaveBeenCalledTimes(1);
+
+		resolveGate("late");
+		await sleep();
+		expect(resumedPastTheGate).toBe(0); //nor does the gate resume the torn-down outer
+		element.remove();
+	});
 });
 
 describe("dismissed child errors", () => {
@@ -156,5 +199,201 @@ describe("dismissed child errors", () => {
 		element.remove();
 		await sleep();
 		expect(cleanupCalls).toBe(1);
+	});
+});
+
+describe("the refire enters the task loop", () => {
+	test("the outer generator is not stepped again on update", async () => {
+		//a refire re-calls the render function only; the generator ran to completion at mount and
+		//stepping it again would allocate an iterator result per update on the hot path
+		let timesResumedPastTheYield = 0;
+		let renders = 0;
+		const element = mount(
+			component(function* () {
+				yield () => html`<p>${++renders}</p>`;
+				timesResumedPastTheYield++;
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(timesResumedPastTheYield).toBe(1);
+
+		await element.update();
+		await element.update();
+		await element.update();
+
+		expect(renders).toBe(4);
+		expect(timesResumedPastTheYield).toBe(1);
+		expect(element.shadowRoot?.textContent).toContain("4");
+		element.remove();
+	});
+
+	test("the cleanup captured at mount survives every update", async () => {
+		let cleanupCalls = 0;
+		const element = mount(
+			component(function* () {
+				yield () => html`<p>x</p>`;
+				return () => {
+					cleanupCalls++;
+				};
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+
+		await element.update();
+		await element.update();
+		expect(cleanupCalls).toBe(0);
+
+		element.remove();
+		await sleep();
+		expect(cleanupCalls).toBe(1);
+	});
+
+	test("a re-installed branch does not step the completed outer past its cleanup", async () => {
+		//an install steps the outer to hand its yield the host, but a refire installs from a
+		//position the outer has already left — stepping a returned generator there would replace
+		//the cleanup it captured with the undefined of a second return
+		let cleanupCalls = 0;
+		let branchRuns = 0;
+		const branch = function* () {
+			branchRuns++;
+			yield () => html`<p>branch ${branchRuns}</p>`;
+		};
+		const element = mount(
+			component(function* () {
+				yield () => branch;
+				return () => {
+					cleanupCalls++;
+				};
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(branchRuns).toBe(1);
+
+		await element.update();
+		expect(branchRuns).toBe(2); //the same branch is still torn down and re-run
+		expect(cleanupCalls).toBe(0);
+
+		element.remove();
+		await sleep();
+		expect(cleanupCalls).toBe(1);
+	});
+
+	test("update() while the outer is suspended on a yielded promise does not disturb it", async () => {
+		let resolveGate: (value: string) => void = () => {};
+		const gate = new Promise<string>((resolve) => {
+			resolveGate = resolve;
+		});
+		const element = mount(
+			component(function* () {
+				const label = yield gate;
+				yield () => html`<p>${label}</p>`;
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(element.shadowRoot?.textContent).toBe("");
+
+		//nothing is refirable yet: no render function recorded, no generator installed
+		await element.update(); //must resolve rather than hang, and must not step the outer
+		expect(element.shadowRoot?.textContent).toBe("");
+
+		resolveGate("late");
+		await sleep();
+		expect(element.shadowRoot?.textContent).toContain("late");
+		element.remove();
+	});
+
+	test("a refire past a suspended outer paints without stepping it", async () => {
+		//the other suspended shape: a record IS set, so update() refires and the paint lands on a
+		//SUSPENDED outer — which must be left parked for its own promise to resume
+		let resolveGate: (value: string) => void = () => {};
+		const gate = new Promise<string>((resolve) => {
+			resolveGate = resolve;
+		});
+		let renders = 0;
+		let resumed = 0;
+		const element = mount(
+			component(function* () {
+				yield () => html`<p>render ${++renders}</p>`;
+				yield gate;
+				resumed++;
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(renders).toBe(1);
+		expect(resumed).toBe(0);
+
+		await element.update();
+		expect(renders).toBe(2);
+		expect(element.shadowRoot?.textContent).toContain("render 2");
+		expect(resumed).toBe(0); //the refire must not resume the parked generator
+
+		resolveGate("go");
+		await sleep();
+		expect(resumed).toBe(1); //the gate's own resolution still does
+		element.remove();
+	});
+
+	test("a render function yielded after an inner generator wins the refire", async () => {
+		//the two refire routes have separate fields now; the last yield decides which one answers
+		let innerRuns = 0;
+		let renders = 0;
+		const element = mount(
+			component(function* () {
+				yield function* () {
+					innerRuns++;
+					yield () => html`<p>inner</p>`;
+				};
+				yield () => html`<p>outer ${++renders}</p>`;
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(innerRuns).toBe(1);
+		expect(renders).toBe(1);
+
+		await element.update();
+		expect(renders).toBe(2);
+		expect(innerRuns).toBe(1); //the installed generator must NOT be restarted as well
+		expect(element.shadowRoot?.textContent).toContain("outer 2");
+		element.remove();
+	});
+
+	test("an inner generator yielded after a render function wins the refire", async () => {
+		let innerRuns = 0;
+		let renders = 0;
+		const element = mount(
+			component(function* () {
+				yield () => html`<p>outer ${++renders}</p>`;
+				yield function* () {
+					innerRuns++;
+					yield () => html`<p>inner ${innerRuns}</p>`;
+				};
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(renders).toBe(1);
+		expect(innerRuns).toBe(1);
+
+		await element.update();
+		expect(innerRuns).toBe(2);
+		expect(renders).toBe(1); //the outer's stale record must not answer the refire
+		expect(element.shadowRoot?.textContent).toContain("inner 2");
+		element.remove();
+	});
+
+	test("a paint throw during an update warns exactly once and is fatal", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		let bad = false;
+		const element = mount(
+			component(function* () {
+				yield () => (bad ? html`<p>${Symbol("x")}</p>` : html`<p>fine</p>`);
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(element.shadowRoot?.textContent).toContain("fine");
+
+		bad = true;
+		await element.update(); //must not be swallowed by the DONE outer falling through to NOOP
+		expect(warn).toHaveBeenCalledTimes(1);
+		element.remove();
 	});
 });

@@ -78,7 +78,8 @@ customElements.define(
   pins each payload to its call, and unclaimed payloads warn on hydration.
 
 `host.update() => Promise<void>`
-  The re-render trigger — see Rules for what it re-fires and when it resolves.
+  The re-render trigger — see Rules for what it re-fires and when it resolves. On the server
+  it is always a no-op: the single server paint ends the run.
 
 `host.setProp(name, value, oldValue?) => void`
   Imperative counterpart to a markup binding, for a framework/interop driver feeding props
@@ -158,7 +159,13 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
 - `update()` re-fires whatever was yielded LAST: a render function is re-called, an inner
   generator is torn down (its cleanup runs) and re-run from the top, and an `html` template
   yielded plainly from the component body never re-renders — after that yield `update()` is
-  a no-op, as it is before the first paint. The generator body itself never re-runs.
+  a no-op, as it is until the body reaches its FIRST renderable. The boundary is that yield,
+  not the paint: an `update()` while a first async render is still pending DOES re-call the
+  render function. The generator body itself never re-runs. A render
+  function that returns a generator function is re-called too, and the branch it picks is torn
+  down and re-installed. A component body that yields an inner generator and THEN paints its
+  own content takes the shadow root back for good: the abandoned body is torn down at that
+  paint, its pending async work can no longer land, and `update()` will not bring it back.
 - `await host.update()` resolves once the DOM has been patched, in a microtask — not after
   the browser paints, there is no rAF in the path. For an async inner generator it resolves
   only when that generator's whole run completes, so the awaited state is the settled UI.
@@ -167,11 +174,41 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   the host element: ``const host = yield () => html`…` ``. A yielded promise evaluates to its
   resolved value (`const data = yield fetch(...)`); any other value is echoed back. Render
   functions and inner generators also receive the host as their first argument.
-- An inner generator may not yield another generator function — one level of nesting only,
-  the attempt throws into the parent.
-- A returned function is the cleanup: it runs on disconnect and before an inner generator is
-  re-run. `disconnectedCallback` waits a microtask and re-checks `isConnected`, so moving an
-  element inside the DOM does NOT tear the component down.
+- A yielded FUNCTION is always a render function — the yield position decides that, not what
+  the function returns. Whatever it returns is committed as CONTENT, under the same rules as a
+  content hole below: a template renders, `null`/`undefined`/`true`/`false` render nothing,
+  strings/numbers/bigints render as text, an array renders as a list, and an object, a `Date`,
+  a plain function or a symbol THROWS. So `` () => isOpen && html`…` `` clears the UI when
+  `isOpen` goes false, and `` () => items.map(…) `` renders a list — the same values mean the
+  same things at the root as they do in `${…}`. Returning nothing renders nothing and warns on
+  the console: an arrow function with a block body needs an explicit `return`.
+- Two return values escape the content rules. A render function may return a GENERATOR
+  FUNCTION to choose which BODY runs — `` () => (isEditing ? editorBody : readOnlyBody) `` —
+  and each branch is a full component body with its own setup, `yield` and cleanup, sharing the
+  one shadow root. Switching branches runs the old branch's cleanup BEFORE the new branch's
+  setup. Staying on the same branch still tears it down and re-runs it on every `update()`, so
+  state that must survive belongs in the component body, not the branch. Returning content
+  instead — `` () => (isOpen ? panelBody : null) `` — ends the branch: it is torn down as the
+  content paints, so a `null` branch really is empty, not a body left running behind blank
+  output. Missing the `*` is the mistake to watch for: a plain function is not a body and
+  throws with that remedy.
+- A render function may also return a PROMISE, on the client and on the server: the resolved
+  value re-enters the same rulebook, so `` async () => html`…` `` renders once it settles and
+  `` async () => someBody `` installs that body. Nothing is painted while it is pending, and
+  `update()` re-calls the render function rather than waiting — the superseded call's result is
+  discarded when it settles, however late, so the newest call always wins. A REJECTED render
+  promise from a superseded call is discarded with it; a rejection from the current call is
+  FATAL and is NOT thrown into the generator that yielded the render function — a `try/catch`
+  around that `yield` will not see it, so catch inside the render function. An INNER
+  generator's render function is the one exception in reach: its rejection ends that inner
+  generator, so the outer's `try/catch` around `yield innerBody` does see it.
+- An inner generator may not introduce another generator function — one level of nesting only,
+  whether it yields one or returns one from its render function; the attempt throws into the
+  parent. So a delegated body may not delegate again.
+- A returned function is the cleanup: it runs on disconnect, before an inner generator is
+  re-run, and when the component body paints content over a running inner generator.
+  `disconnectedCallback` waits a microtask and re-checks `isConnected`, so moving an element
+  inside the DOM does NOT tear the component down.
 - An uncaught error replaces the whole shadow tree with the error text and warns on the
   console. An error from an inner generator is thrown INTO the outer generator at its
   `yield`, so a `try/catch` there handles it; otherwise it reaches that root handler.

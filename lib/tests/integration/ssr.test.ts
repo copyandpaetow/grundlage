@@ -131,6 +131,26 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(element.shadowRoot!.textContent).not.toContain("inner-second");
 	});
 
+	test("an ASYNC inner still wins the markup over the parent's own later yield", async () => {
+		//the second enforcement point of "the first renderable wins": stopping at the first paint is
+		//not enough, the parent must not be resumed past an install whose branch has not painted yet
+		const tag = uniqueTag();
+
+		const Component = component(function* () {
+			yield async function* inner() {
+				await Promise.resolve();
+				yield () => html`<p>inner-async</p>`;
+			};
+			yield html`<p>parent-took-over</p>`;
+		});
+
+		const element = track(await mount(tag, Component));
+		await flushMicrotasks();
+
+		expect(element.shadowRoot!.textContent).toContain("inner-async");
+		expect(element.shadowRoot!.textContent).not.toContain("parent-took-over");
+	});
+
 	test("async work BEFORE the first yield resolves, then the first yield renders", async () => {
 		//the first template depends on the await — SSR can't skip it
 		const tag = uniqueTag();
@@ -410,5 +430,58 @@ describe("SSR: server stops at first renderable yield", () => {
 		const element = track(await mount(tag, Component));
 		expect(element.shadowRoot!.textContent).toContain("before");
 		expect(element.shadowRoot!.textContent).not.toContain("after");
+	});
+
+	test("an async render function resolves, renders once, and stops", async () => {
+		//the position classifies on both sides or on neither: `yield async () => …` is a wait
+		//through a different door than a yielded promise, and the server already awaits those
+		const tag = uniqueTag();
+		let postYieldRan = false;
+
+		const Component = component(function* () {
+			yield async () => {
+				await Promise.resolve();
+				return html`<p>awaited-server</p>`;
+			};
+			postYieldRan = true;
+		});
+
+		const element = track(await mount(tag, Component));
+		await flushMicrotasks();
+
+		expect(element.shadowRoot!.textContent).toContain("awaited-server");
+		expect(postYieldRan).toBe(false);
+	});
+
+	test("a render function returning a generator function descends into it", async () => {
+		const tag = uniqueTag();
+		let innerRan = false;
+
+		const Component = component(function* () {
+			yield () =>
+				function* delegatedBody() {
+					innerRan = true;
+					yield html`<p>delegated-server</p>`;
+				};
+		});
+
+		const element = track(await mount(tag, Component));
+
+		expect(innerRan).toBe(true);
+		expect(element.shadowRoot!.textContent).toContain("delegated-server");
+	});
+
+	test("a render function returning an uncommittable value fails", async () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const tag = uniqueTag();
+
+		const Component = component(function* () {
+			yield () => new Map();
+		});
+
+		const element = track(await mount(tag, Component));
+
+		expect(element.shadowRoot!.textContent).toContain("grundlage");
+		warnSpy.mockRestore();
 	});
 });

@@ -12,18 +12,20 @@ import { ParsedTemplate } from "./parser/types";
 import { coerceToTemplate, TemplateValue } from "./template";
 import {
 	cancelTaskAndRunCleanup,
-	createCleanStepOutcome,
+	classifyRenderResultAsOperation,
+	classifySettledStepAsOperation,
 	createRenderTask,
-	createStepOutcome,
+	DriverStep,
+	endTaskWithError,
+	isParkedAtARenderableYield,
+	isStillParkedAt,
 	MODE,
-	nextOperation,
-	nextTaskStep,
 	OPERATION,
-	ROLE,
-	STEP_OUTCOME,
-	SteppedTask,
+	RELEASE_CONTROL,
+	RenderOperation,
+	stepTaskToNextOperation,
+	Suspension,
 	Task,
-	TASK_STATE,
 } from "./runtime/task";
 import { html as htmlValue } from "./template";
 import {
@@ -69,8 +71,7 @@ export const component = (
 ): ComponentConstructor => {
 	if (!isGeneratorFunction(componentGenerator))
 		throw new TypeError(
-			"grundlage: component(fn) expects a generator function — write `component(function* (host) { … })` " +
-				"or `component(async function* (host) { … })`. A plain function or arrow function is not accepted.",
+			"grundlage: component(fn) expects a generator function. A plain function or arrow function is not accepted.",
 		);
 	const mergedOptions = { ...defaultOptions, ...options };
 	const ParentClass: typeof HTMLElement = mergedOptions.formAssociated
@@ -78,7 +79,7 @@ export const component = (
 		: HTMLElement;
 
 	class BaseElement extends ParentClass implements BaseComponent {
-		#shadowRoot: ShadowRoot;
+		#shadowRoot: ShadowRoot; //needs to be property as for mode: "closed" the this.shadowRoot is null
 		#instance: Instance | null = null;
 		#attributeObserver: MutationObserver | null = null;
 		#isHydrationPending: boolean;
@@ -86,11 +87,13 @@ export const component = (
 			needsStyleSheetRefreshOnMove: false,
 			needsRerenderAfterMove: false,
 		};
-		#outer: Task | null = null;
-		#inner: Task | null = null;
-		#renderer: ComponentGenerator | RenderFunction | null = null;
+		#outerTask: Task | null = null;
+		#innerTask: Task | null = null;
+		#currentRenderable: RenderFunction | ComponentGenerator | null = null;
+		#currentRenderCallId = 0;
 		#isScheduled = false;
 		#pendingUpdate: PromiseWithResolvers<void> | null = null;
+		#isServerRun = false;
 		#internals: ElementInternals | null = null;
 
 		get internals(): ElementInternals | null {
@@ -108,7 +111,7 @@ export const component = (
 		}
 
 		connectedCallback() {
-			if (this.#outer) {
+			if (this.#outerTask) {
 				const instance = this.#instance;
 				if (instance) {
 					refreshStyleSheetsAfterMove(instance);
@@ -116,16 +119,19 @@ export const component = (
 				}
 				return;
 			}
-			this.#outer = createRenderTask(ROLE.OUTER, componentGenerator(this));
-			if (isServer()) return this.#runServerTask(this.#outer);
-			this.#setupAttributeObserver();
-			this.#runTask(this.#outer);
+			this.#isServerRun = isServer();
+			this.#outerTask = createRenderTask(componentGenerator(this));
+			if (!this.#isServerRun) this.#setupAttributeObserver();
+			this.#runOperationsUntilControlIsReleased(
+				this.#outerTask,
+				stepTaskToNextOperation(this.#outerTask, MODE.SEND, undefined),
+			);
 		}
 
 		async disconnectedCallback() {
 			await Promise.resolve();
 			if (this.isConnected) return;
-			if (this.#outer === null) return;
+			if (this.#outerTask === null) return;
 			this.#cancelBothTasks();
 			this.#teardownAttributeObserver();
 			this.#resolvePendingUpdatePromise();
@@ -137,27 +143,71 @@ export const component = (
 		}
 
 		update(): Promise<void> {
-			if (this.#renderer === null) return Promise.resolve();
+			if (this.#outerTask === null || this.#currentRenderable === null)
+				return Promise.resolve();
 			return this.#scheduleNextUpdate();
 		}
 
-		#isTaskLive(task: Task): boolean {
-			return (task.role === ROLE.INNER ? this.#inner : this.#outer) === task;
+		#scheduleNextUpdate(): Promise<void> {
+			this.#pendingUpdate ??= Promise.withResolvers<void>();
+			if (!this.#isScheduled) {
+				this.#isScheduled = true;
+				queueMicrotask(() => {
+					this.#isScheduled = false;
+					this.#rerunCurrentRenderable();
+				});
+			}
+			return this.#pendingUpdate.promise;
 		}
 
-		#resetInnerTask(source: ComponentGenerator): Task {
-			cancelTaskAndRunCleanup(this.#inner);
-			const inner = createRenderTask(ROLE.INNER, source(this));
-			this.#inner = inner;
-			return inner;
+		#rerunCurrentRenderable(): void {
+			const outerTask = this.#outerTask;
+			const renderable = this.#currentRenderable;
+			if (outerTask === null || renderable === null)
+				return this.#resolvePendingUpdatePromise();
+			if (isGeneratorFunction(renderable)) {
+				const branch = this.#installInnerTask(renderable as ComponentGenerator);
+				return this.#runOperationsUntilControlIsReleased(
+					branch,
+					stepTaskToNextOperation(branch, MODE.SEND, undefined),
+				);
+			}
+			this.#runOperationsUntilControlIsReleased(
+				outerTask,
+				this.#callRenderFunction(outerTask, renderable as RenderFunction),
+			);
+		}
+
+		#resolvePendingUpdatePromise(): void {
+			const updatePromise = this.#pendingUpdate;
+			if (updatePromise === null) return;
+			this.#pendingUpdate = null;
+			updatePromise.resolve();
+		}
+
+		#installInnerTask(source: ComponentGenerator): Task {
+			this.#cancelInnerTask();
+			const innerTask = createRenderTask(source(this));
+			this.#innerTask = innerTask;
+			return innerTask;
+		}
+
+		#cancelInnerTask(): void {
+			const innerTask = this.#innerTask;
+			if (innerTask === null) return;
+			this.#innerTask = null;
+			this.#currentRenderCallId++;
+			cancelTaskAndRunCleanup(innerTask);
 		}
 
 		#cancelBothTasks(): void {
-			const inner = this.#inner;
-			const outer = this.#outer;
-			this.#inner = this.#outer = this.#renderer = null;
-			cancelTaskAndRunCleanup(inner);
-			cancelTaskAndRunCleanup(outer);
+			const innerTask = this.#innerTask;
+			const outerTask = this.#outerTask;
+			this.#innerTask = this.#outerTask = null;
+			this.#currentRenderable = null;
+			this.#currentRenderCallId++;
+			cancelTaskAndRunCleanup(innerTask);
+			cancelTaskAndRunCleanup(outerTask);
 		}
 
 		#fail(error: unknown): void {
@@ -170,155 +220,253 @@ export const component = (
 			this.#resolvePendingUpdatePromise();
 		}
 
-		#resolvePendingUpdatePromise(): void {
-			const updatePromise = this.#pendingUpdate;
-			if (updatePromise === null) return;
-			this.#pendingUpdate = null;
-			updatePromise.resolve();
-		}
+		#runOperationsUntilControlIsReleased(
+			startTask: Task,
+			startStep: DriverStep,
+		): void {
+			let task = startTask;
+			let next = startStep;
+			let bodyAwaitingResumption: Task | null = null;
+			let bodySuspensionAtInstall: Suspension | null = null;
 
-		#runTask(
-			task: Task,
-			start: SteppedTask = nextTaskStep(task, MODE.SEND, undefined),
-		): boolean {
-			let next = start;
 			while (true) {
 				if (next instanceof Promise) {
-					next.then(
-						(result) => {
-							if (this.#isTaskLive(task))
-								this.#runTask(task, createCleanStepOutcome(result));
-						},
-						(error) => {
-							if (this.#isTaskLive(task))
-								this.#runTask(
-									task,
-									createStepOutcome(STEP_OUTCOME.THREW, error),
-								);
-						},
-					);
-					return false;
+					this.#resumeCoroutineWhenPendingStepSettles(task, next);
+					next = RELEASE_CONTROL;
+					continue;
 				}
 
-				const operation = nextOperation(task, next);
-				switch (operation.kind) {
-					case OPERATION.PAINT:
-					case OPERATION.PAINT_FROM:
-						if (task.role === ROLE.OUTER)
-							this.#renderer =
-								operation.kind === OPERATION.PAINT_FROM
-									? operation.payload
-									: null;
+				switch (next.kind) {
+					case RELEASE_CONTROL.kind: {
+						const body = bodyAwaitingResumption;
+						if (body === null) return;
+						bodyAwaitingResumption = null;
+						if (!isStillParkedAt(body, bodySuspensionAtInstall)) return;
+						task = body;
+						next = stepTaskToNextOperation(body, MODE.SEND, this);
+						break;
+					}
+
+					case OPERATION.PAINT: {
+						if (task === this.#outerTask) {
+							this.#cancelInnerTask();
+							this.#currentRenderable = null;
+						}
 						try {
-							const template =
-								operation.kind === OPERATION.PAINT
-									? operation.payload
-									: (operation.payload as RenderFunction)(this);
-							this.#paint(template);
+							this.#paint(next.payload);
 						} catch (error) {
-							next = createStepOutcome(STEP_OUTCOME.THREW, error);
+							next = endTaskWithError(task, error);
 							break;
 						}
-						next = nextTaskStep(task, MODE.SEND, this);
+						if (this.#isServerRun) return this.#cancelBothTasks();
+						next = stepTaskToNextOperation(task, MODE.SEND, this);
 						break;
+					}
+
+					case OPERATION.CALL_RENDER_FUNCTION:
+						if (task === this.#outerTask)
+							this.#currentRenderable = next.payload;
+						next = this.#callRenderFunction(task, next.payload);
+						break;
+
+					case OPERATION.INSTALL_FROM_YIELD:
+					case OPERATION.INSTALL_FROM_RENDER_RESULT: {
+						const theInstallerIsTheComponentBody = task === this.#outerTask;
+						if (!theInstallerIsTheComponentBody) {
+							next = endTaskWithError(
+								task,
+								new Error(
+									"grundlage: an inner generator may not install another one — one level of nesting only",
+								),
+							);
+							break;
+						}
+						//a generator the body yielded becomes the refire target; one a render function
+						//returned does not, so update() re-calls the function and re-picks the branch
+						if (next.kind === OPERATION.INSTALL_FROM_YIELD)
+							this.#currentRenderable = next.payload;
+						//only a renderable yield is somewhere to resume to, and on the server the branch
+						//owns the markup — so the body is not queued at all in either case
+						const theBodyWillResumeOnceTheBranchParks =
+							!this.#isServerRun && isParkedAtARenderableYield(task);
+						if (theBodyWillResumeOnceTheBranchParks) {
+							bodyAwaitingResumption = task;
+							bodySuspensionAtInstall = task.suspension;
+						}
+						task = this.#installInnerTask(next.payload);
+						next = stepTaskToNextOperation(task, MODE.SEND, undefined);
+						break;
+					}
 
 					case OPERATION.RESUME:
-						next = nextTaskStep(task, MODE.SEND, operation.payload);
+						next = stepTaskToNextOperation(task, MODE.SEND, next.payload);
 						break;
 
-					case OPERATION.THROW_INTO:
-						next = nextTaskStep(task, MODE.THROW, operation.payload);
+					case OPERATION.AWAIT:
+						this.#resumeCoroutineWhenYieldedPromiseSettles(task, next.payload);
+						next = RELEASE_CONTROL;
 						break;
-
-					case OPERATION.INSTALL: {
-						this.#renderer = operation.payload;
-						const innerThrewToParent = this.#runTask(
-							this.#resetInnerTask(operation.payload),
-						);
-						if (innerThrewToParent) return true;
-						next = nextTaskStep(task, MODE.SEND, this);
-						break;
-					}
-
-					case OPERATION.AWAIT: {
-						const promise = operation.payload;
-						promise.then(
-							(value) => {
-								if (this.#isTaskLive(task))
-									this.#runTask(
-										task,
-										createStepOutcome(STEP_OUTCOME.RESUMED, value),
-									);
-							},
-							(error) => {
-								if (this.#isTaskLive(task))
-									this.#runTask(
-										task,
-										createStepOutcome(STEP_OUTCOME.THREW, error),
-									);
-							},
-						);
-						return false;
-					}
-
-					case OPERATION.THROW_TO_PARENT: {
-						const error = operation.payload;
-						cancelTaskAndRunCleanup(this.#inner);
-						const parent = this.#outer;
-						const parentCanCatch =
-							parent && parent.state === TASK_STATE.DRIVING;
-						if (!parentCanCatch) {
-							this.#fail(error);
-							return true;
-						}
-						const reaction = nextTaskStep(parent, MODE.THROW, error);
-						const isDismissed =
-							!(reaction instanceof Promise) &&
-							reaction.kind === STEP_OUTCOME.RETURNED;
-						this.#runTask(parent, reaction);
-						if (isDismissed) this.#renderer = null;
-						return true;
-					}
 
 					case OPERATION.COMPLETED:
-						if (task.role === ROLE.INNER) this.#resolvePendingUpdatePromise();
-						return false;
+						if (this.#isServerRun) return this.#cancelBothTasks();
+						//a pass queued DURING this one (a render-time update()) resolves it instead
+						if (!this.#isScheduled) this.#resolvePendingUpdatePromise();
+						next = RELEASE_CONTROL;
+						break;
 
-					case OPERATION.FAIL:
-						this.#fail(operation.payload);
-						return false;
+					case OPERATION.ROUTE_ERROR: {
+						const error = next.payload;
+						const outerTask = this.#outerTask;
+						if (task === outerTask || outerTask === null)
+							return this.#fail(error);
+						this.#cancelInnerTask();
+						if (!isParkedAtARenderableYield(outerTask))
+							return this.#fail(error);
 
-					case OPERATION.NOOP:
-						return false;
+						this.#currentRenderable = null;
+						task = outerTask;
+						next = stepTaskToNextOperation(outerTask, MODE.THROW, error);
+						break;
+					}
+
+					default:
+						return next satisfies never;
 				}
 			}
 		}
 
-		#rerunCurrentRenderer(): void {
-			const renderer = this.#renderer;
-			if (renderer === null) return this.#resolvePendingUpdatePromise();
-			if (!isGeneratorFunction(renderer)) {
-				try {
-					this.#paint((renderer as RenderFunction)(this));
-					this.#resolvePendingUpdatePromise();
-				} catch (error) {
-					this.#fail(error);
-				}
-				return;
-			}
-			this.#runTask(this.#resetInnerTask(renderer as ComponentGenerator));
+		#resumeCoroutineWhenPendingStepSettles(
+			task: Task,
+			step: Promise<IteratorResult<unknown>>,
+		): void {
+			const suspension = task.suspension;
+			step.then(
+				(result) => {
+					if (!isStillParkedAt(task, suspension)) return;
+					this.#runOperationsUntilControlIsReleased(
+						task,
+						classifySettledStepAsOperation(task, result),
+					);
+				},
+				(error) => {
+					if (!isStillParkedAt(task, suspension)) return;
+					this.#runOperationsUntilControlIsReleased(
+						task,
+						endTaskWithError(task, error),
+					);
+				},
+			);
 		}
 
-		#scheduleNextUpdate(): Promise<void> {
-			this.#pendingUpdate ??= Promise.withResolvers<void>();
-			if (!this.#isScheduled) {
-				this.#isScheduled = true;
-				queueMicrotask(() => {
-					this.#isScheduled = false;
-					this.#rerunCurrentRenderer();
-				});
+		#resumeCoroutineWhenYieldedPromiseSettles(
+			task: Task,
+			promise: Promise<unknown>,
+		): void {
+			const suspension = task.suspension;
+			promise.then(
+				(value) => {
+					if (isStillParkedAt(task, suspension))
+						this.#runOperationsUntilControlIsReleased(
+							task,
+							stepTaskToNextOperation(task, MODE.SEND, value),
+						);
+				},
+				(error) => {
+					if (isStillParkedAt(task, suspension))
+						this.#runOperationsUntilControlIsReleased(
+							task,
+							stepTaskToNextOperation(task, MODE.THROW, error),
+						);
+				},
+			);
+		}
+
+		#callRenderFunction(
+			task: Task,
+			renderFunction: RenderFunction,
+		): DriverStep {
+			const renderCallId = ++this.#currentRenderCallId;
+			let produced: unknown;
+			try {
+				produced = renderFunction(this);
+			} catch (error) {
+				return endTaskWithError(task, error);
 			}
-			return this.#pendingUpdate.promise;
+			return this.#dispatchRenderOperation(
+				task,
+				classifyRenderResultAsOperation(task, produced),
+				renderCallId,
+			);
+		}
+
+		//this lane cannot step in THROW mode, which is what keeps a rejected render promise fatal
+		//rather than thrown into the generator that yielded the render function
+		#dispatchRenderOperation(
+			task: Task,
+			operation: RenderOperation,
+			renderCallId: number,
+		): DriverStep {
+			switch (operation.kind) {
+				case OPERATION.PAINT:
+					if (task === this.#outerTask) this.#cancelInnerTask();
+					try {
+						this.#paint(operation.payload);
+					} catch (error) {
+						return endTaskWithError(task, error);
+					}
+					if (this.#isServerRun) {
+						this.#cancelBothTasks();
+						return RELEASE_CONTROL;
+					}
+					if (!isParkedAtARenderableYield(task)) {
+						//a pass queued DURING this one (a render-time update()) resolves it instead
+						if (!this.#isScheduled) this.#resolvePendingUpdatePromise();
+						return RELEASE_CONTROL;
+					}
+					return stepTaskToNextOperation(task, MODE.SEND, this);
+
+				case OPERATION.AWAIT_RENDER_RESULT:
+					this.#continueRenderWhenPromiseSettles(
+						task,
+						operation.payload,
+						renderCallId,
+					);
+					return RELEASE_CONTROL;
+
+				case OPERATION.INSTALL_FROM_RENDER_RESULT:
+				case OPERATION.ROUTE_ERROR:
+					return operation;
+
+				default:
+					return operation satisfies never;
+			}
+		}
+
+		#continueRenderWhenPromiseSettles(
+			task: Task,
+			promise: Promise<unknown>,
+			renderCallId: number,
+		): void {
+			promise.then(
+				(value) => {
+					if (this.#currentRenderCallId !== renderCallId) return;
+					this.#runOperationsUntilControlIsReleased(
+						task,
+						this.#dispatchRenderOperation(
+							task,
+							classifyRenderResultAsOperation(task, value),
+							renderCallId,
+						),
+					);
+				},
+				(error) => {
+					if (this.#currentRenderCallId !== renderCallId) return;
+					this.#runOperationsUntilControlIsReleased(
+						task,
+						endTaskWithError(task, error),
+					);
+				},
+			);
 		}
 
 		#paint(value: unknown): void {
@@ -337,6 +485,7 @@ export const component = (
 			} finally {
 				this.#attributeObserver?.observe(this, { attributes: true });
 			}
+			if (this.#isServerRun) flushHostPayload(this);
 			this.#rerenderIfStyleSheetsDemoted();
 		}
 
@@ -372,15 +521,6 @@ export const component = (
 			this.#instance = instance;
 		}
 
-		#serverPaint(value: unknown): void {
-			const templateValue = coerceToTemplate(value);
-			this.#paintRoot(
-				templateValue,
-				getParsedTemplate(templateValue.__templateStrings),
-			);
-			flushHostPayload(this);
-		}
-
 		#revertAllHostBindings(): void {
 			const instance = this.#instance;
 			if (!instance) return;
@@ -406,91 +546,6 @@ export const component = (
 
 		#teardownAttributeObserver(): void {
 			this.#attributeObserver?.disconnect();
-		}
-
-		//unlike the client, server continuations need no isTaskLive supersession guard: a
-		//render runs to exactly one paint (which ends it via #cancelBothTasks) and the outer
-		//is never resumed after INSTALL, so no superseded continuation can ever exist here
-		#runServerTask(
-			task: Task,
-			start: SteppedTask = nextTaskStep(task, MODE.SEND, undefined),
-		): void {
-			let next = start;
-			while (true) {
-				if (next instanceof Promise) {
-					next.then(
-						(result) =>
-							this.#runServerTask(task, createCleanStepOutcome(result)),
-						(error) => this.#fail(error),
-					);
-					return;
-				}
-
-				const operation = nextOperation(task, next);
-				switch (operation.kind) {
-					case OPERATION.PAINT:
-					case OPERATION.PAINT_FROM: {
-						try {
-							const template =
-								operation.kind === OPERATION.PAINT
-									? operation.payload
-									: (operation.payload as RenderFunction)(this);
-							this.#serverPaint(template);
-						} catch (error) {
-							next = createStepOutcome(STEP_OUTCOME.THREW, error);
-							break;
-						}
-						return this.#cancelBothTasks();
-					}
-
-					case OPERATION.INSTALL:
-						return this.#runServerTask(this.#resetInnerTask(operation.payload));
-
-					case OPERATION.RESUME:
-						next = nextTaskStep(task, MODE.SEND, operation.payload);
-						break;
-
-					case OPERATION.THROW_INTO:
-						next = nextTaskStep(task, MODE.THROW, operation.payload);
-						break;
-
-					case OPERATION.AWAIT:
-						operation.payload.then(
-							(value) =>
-								this.#runServerTask(
-									task,
-									createStepOutcome(STEP_OUTCOME.RESUMED, value),
-								),
-							(error) =>
-								this.#runServerTask(
-									task,
-									createStepOutcome(STEP_OUTCOME.THREW, error),
-								),
-						);
-						return;
-
-					case OPERATION.THROW_TO_PARENT: {
-						const error = operation.payload;
-						cancelTaskAndRunCleanup(this.#inner);
-						const parent = this.#outer;
-						if (parent && parent.state === TASK_STATE.DRIVING)
-							return this.#runServerTask(
-								parent,
-								nextTaskStep(parent, MODE.THROW, error),
-							);
-						return this.#fail(error);
-					}
-
-					case OPERATION.COMPLETED:
-						return this.#cancelBothTasks();
-
-					case OPERATION.FAIL:
-						return this.#fail(operation.payload);
-
-					case OPERATION.NOOP:
-						return;
-				}
-			}
 		}
 	}
 

@@ -1,178 +1,197 @@
 import { ValueOf } from "../utils/types";
-import { ComponentGenerator, RenderFunction } from "../types";
+import { ComponentGenerator, ContentValue, RenderFunction } from "../types";
 import { isGeneratorFunction } from "../utils/guards";
-import { isTemplate, TemplateValue } from "../template";
-
-export const TASK_STATE = {
-	DRIVING: 0,
-	SUSPENDED: 1,
-	DONE: 2,
-	FAILED: 3,
-} as const;
-
-export const ROLE = { OUTER: 0, INNER: 1 } as const;
+import { isTemplate } from "../template";
 
 export const OPERATION = {
 	PAINT: 0,
-	PAINT_FROM: 1,
-	INSTALL: 2,
+	INSTALL_FROM_YIELD: 1,
+	INSTALL_FROM_RENDER_RESULT: 2,
 	RESUME: 3,
 	AWAIT: 4,
-	COMPLETED: 5,
-	THROW_TO_PARENT: 6,
-	FAIL: 7,
-	NOOP: 8,
-	THROW_INTO: 9,
-} as const;
-
-export const STEP_OUTCOME = {
-	YIELDED: 0,
-	RETURNED: 1,
-	THREW: 2,
-	RESUMED: 3,
+	CALL_RENDER_FUNCTION: 5,
+	AWAIT_RENDER_RESULT: 6,
+	COMPLETED: 7,
+	ROUTE_ERROR: 8,
+	RELEASE_CONTROL: 9,
 } as const;
 
 export const MODE = { SEND: 0, THROW: 1 } as const;
 
+export const PARKED = {
+	YIELDED_PROMISE: 0,
+	YIELDED_RENDERABLE: 1,
+	PENDING_STEP: 2,
+} as const;
+
 type OperationKind = ValueOf<typeof OPERATION>;
-type StepOutcomeKind = ValueOf<typeof STEP_OUTCOME>;
+
+//identity is the resume permit: a continuation may only step the task still parked on its own
+export interface Suspension {
+	parkedAt: ValueOf<typeof PARKED>;
+}
 
 export interface Task {
 	generator: Generator | AsyncGenerator;
-	role: ValueOf<typeof ROLE>;
-	state: ValueOf<typeof TASK_STATE>;
+	suspension: Suspension | null;
 	cleanup: VoidFunction | null;
 }
 
 export const createRenderTask = (
-	role: ValueOf<typeof ROLE>,
 	generator: Generator | AsyncGenerator,
 ): Task => ({
 	generator,
-	role,
-	state: TASK_STATE.DRIVING,
+	suspension: null,
 	cleanup: null,
 });
 
-export type Operation =
-	| { kind: typeof OPERATION.PAINT; payload: TemplateValue }
-	| { kind: typeof OPERATION.PAINT_FROM; payload: RenderFunction }
-	| { kind: typeof OPERATION.INSTALL; payload: ComponentGenerator }
+export const isParkedAtARenderableYield = (task: Task): boolean =>
+	task.suspension?.parkedAt === PARKED.YIELDED_RENDERABLE;
+
+export const isStillParkedAt = (
+	task: Task,
+	suspension: Suspension | null,
+): boolean => suspension !== null && task.suspension === suspension;
+
+type PaintOperation = { kind: typeof OPERATION.PAINT; payload: ContentValue };
+
+type InstallFromYieldOperation = {
+	kind: typeof OPERATION.INSTALL_FROM_YIELD;
+	payload: ComponentGenerator;
+};
+type InstallFromRenderResultOperation = {
+	kind: typeof OPERATION.INSTALL_FROM_RENDER_RESULT;
+	payload: ComponentGenerator;
+};
+type RouteErrorOperation = {
+	kind: typeof OPERATION.ROUTE_ERROR;
+	payload: unknown;
+};
+
+export type CoroutineOperation =
+	| PaintOperation
+	| InstallFromYieldOperation
 	| { kind: typeof OPERATION.RESUME; payload: unknown }
 	| { kind: typeof OPERATION.AWAIT; payload: Promise<unknown> }
+	| { kind: typeof OPERATION.CALL_RENDER_FUNCTION; payload: RenderFunction }
 	| { kind: typeof OPERATION.COMPLETED; payload: null }
-	| { kind: typeof OPERATION.THROW_TO_PARENT; payload: unknown }
-	| { kind: typeof OPERATION.FAIL; payload: unknown }
-	| { kind: typeof OPERATION.NOOP; payload: null }
-	| { kind: typeof OPERATION.THROW_INTO; payload: unknown };
+	| RouteErrorOperation;
 
-export type StepOutcome =
-	| { kind: typeof STEP_OUTCOME.YIELDED; payload: unknown }
-	| { kind: typeof STEP_OUTCOME.RETURNED; payload: unknown }
-	| { kind: typeof STEP_OUTCOME.THREW; payload: unknown }
-	| { kind: typeof STEP_OUTCOME.RESUMED; payload: unknown };
+export type RenderOperation =
+	| PaintOperation
+	| InstallFromRenderResultOperation
+	| { kind: typeof OPERATION.AWAIT_RENDER_RESULT; payload: Promise<unknown> }
+	| RouteErrorOperation;
 
-export type SteppedTask = StepOutcome | Promise<IteratorResult<unknown>>;
+type Operation = CoroutineOperation | RenderOperation;
 
-//singleton cells: module state avoids per-frame allocation on the update() path (an animation
-//calls update() every frame). Aliasing contract: a returned cell is valid only until the next
-//createOperation/createStepOutcome call — read kind/payload out before any nested step reuses
-//it, and never re-read it after.
-const operationCell = {
-	kind: OPERATION.NOOP as OperationKind,
-	payload: null as unknown,
-};
-const stepOutcomeCell = {
-	kind: STEP_OUTCOME.YIELDED as StepOutcomeKind,
-	payload: null as unknown,
-};
+//this task will not step again synchronously: it parked, failed or completed. the driver hands
+//control to a queued body if there is one, otherwise the loop ends
+export const RELEASE_CONTROL = {
+	kind: OPERATION.RELEASE_CONTROL,
+	payload: null,
+} as const;
 
-const createOperation = <K extends OperationKind>(
-	kind: K,
-	payload: Extract<Operation, { kind: K }>["payload"],
-): Extract<Operation, { kind: K }> => {
-	operationCell.kind = kind;
-	operationCell.payload = payload;
-	return operationCell as unknown as Extract<Operation, { kind: K }>;
-};
+export type DriverStep =
+	| CoroutineOperation
+	| InstallFromRenderResultOperation
+	| typeof RELEASE_CONTROL
+	| Promise<IteratorResult<unknown>>;
 
-export const createStepOutcome = (
-	kind: StepOutcomeKind,
-	payload: unknown,
-): StepOutcome => {
-	stepOutcomeCell.kind = kind;
-	stepOutcomeCell.payload = payload;
-	return stepOutcomeCell as unknown as StepOutcome;
-};
+const createOperation = <Kind extends OperationKind>(
+	kind: Kind,
+	payload: Extract<Operation, { kind: Kind }>["payload"],
+): Extract<Operation, { kind: Kind }> =>
+	({ kind, payload }) as Extract<Operation, { kind: Kind }>;
 
-export const nextOperation = (
+const canBeCommittedAsContent = (value: unknown): boolean =>
+	value === null ||
+	(typeof value !== "object" &&
+		typeof value !== "function" &&
+		typeof value !== "symbol") ||
+	isTemplate(value) ||
+	Array.isArray(value);
+
+export const endTaskWithError = (
 	task: Task,
-	incomingOutcome: StepOutcome,
-): Operation => {
-	switch (task.state) {
-		case TASK_STATE.DRIVING:
-			switch (incomingOutcome.kind) {
-				case STEP_OUTCOME.YIELDED: {
-					const value = incomingOutcome.payload;
-					if (isTemplate(value)) return createOperation(OPERATION.PAINT, value);
-					if (isGeneratorFunction(value)) {
-						if (task.role === ROLE.INNER) {
-							task.state = TASK_STATE.FAILED;
-							return createOperation(
-								OPERATION.THROW_TO_PARENT,
-								new Error("Inner generators cannot yield generator functions"),
-							);
-						}
-						return createOperation(
-							OPERATION.INSTALL,
-							value as ComponentGenerator,
-						);
-					}
-					if (typeof value === "function")
-						return createOperation(
-							OPERATION.PAINT_FROM,
-							value as RenderFunction,
-						);
-					if (value instanceof Promise) {
-						task.state = TASK_STATE.SUSPENDED;
-						return createOperation(OPERATION.AWAIT, value);
-					}
-					return createOperation(OPERATION.RESUME, value);
-				}
-				case STEP_OUTCOME.RETURNED:
-					task.cleanup =
-						typeof incomingOutcome.payload === "function"
-							? (incomingOutcome.payload as VoidFunction)
-							: null;
-					task.state = TASK_STATE.DONE;
-					return createOperation(OPERATION.COMPLETED, null);
-				case STEP_OUTCOME.THREW:
-					task.state = TASK_STATE.FAILED;
-					return task.role === ROLE.INNER
-						? createOperation(
-								OPERATION.THROW_TO_PARENT,
-								incomingOutcome.payload,
-							)
-						: createOperation(OPERATION.FAIL, incomingOutcome.payload);
-			}
-			break;
+	error: unknown,
+): RouteErrorOperation => {
+	task.suspension = null;
+	return createOperation(OPERATION.ROUTE_ERROR, error);
+};
 
-		case TASK_STATE.SUSPENDED:
-			switch (incomingOutcome.kind) {
-				case STEP_OUTCOME.RESUMED:
-					task.state = TASK_STATE.DRIVING;
-					return createOperation(OPERATION.RESUME, incomingOutcome.payload);
-				case STEP_OUTCOME.THREW:
-					task.state = TASK_STATE.DRIVING;
-					return createOperation(OPERATION.THROW_INTO, incomingOutcome.payload);
-			}
-			break;
+export const classifyRenderResultAsOperation = (
+	task: Task,
+	produced: unknown,
+): RenderOperation => {
+	if (produced instanceof Promise)
+		return createOperation(OPERATION.AWAIT_RENDER_RESULT, produced);
+	if (isGeneratorFunction(produced))
+		return createOperation(
+			OPERATION.INSTALL_FROM_RENDER_RESULT,
+			produced as ComponentGenerator,
+		);
+	if (canBeCommittedAsContent(produced)) {
+		if (produced === undefined)
+			console.warn(
+				"grundlage: the render function returned undefined, so nothing was rendered. A block body needs an explicit return.",
+			);
+		return createOperation(OPERATION.PAINT, produced as ContentValue);
 	}
-	return createOperation(OPERATION.NOOP, null);
+	if (typeof produced === "function")
+		return endTaskWithError(
+			task,
+			new Error(
+				"grundlage: the render function returned a plain function. A generator function body needs the *.",
+			),
+		);
+	return endTaskWithError(
+		task,
+		new Error(
+			"grundlage: the render function returned a value that cannot be rendered.",
+		),
+	);
+};
+
+const classifyYieldedValueAsOperation = (
+	task: Task,
+	value: unknown,
+): CoroutineOperation => {
+	if (isTemplate(value)) return createOperation(OPERATION.PAINT, value);
+	if (isGeneratorFunction(value)) {
+		task.suspension = { parkedAt: PARKED.YIELDED_RENDERABLE };
+		return createOperation(
+			OPERATION.INSTALL_FROM_YIELD,
+			value as ComponentGenerator,
+		);
+	}
+	if (typeof value === "function") {
+		task.suspension = { parkedAt: PARKED.YIELDED_RENDERABLE };
+		return createOperation(
+			OPERATION.CALL_RENDER_FUNCTION,
+			value as RenderFunction,
+		);
+	}
+	if (value instanceof Promise) {
+		task.suspension = { parkedAt: PARKED.YIELDED_PROMISE };
+		return createOperation(OPERATION.AWAIT, value);
+	}
+	return createOperation(OPERATION.RESUME, value);
+};
+
+export const classifySettledStepAsOperation = (
+	task: Task,
+	result: IteratorResult<unknown>,
+): CoroutineOperation => {
+	if (!result.done) return classifyYieldedValueAsOperation(task, result.value);
+	task.cleanup =
+		typeof result.value === "function" ? (result.value as VoidFunction) : null;
+	return createOperation(OPERATION.COMPLETED, null);
 };
 
 export const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	if (task === null) return;
+	task.suspension = null;
 	let ending: unknown;
 	try {
 		ending = task.generator.return?.(undefined);
@@ -187,18 +206,14 @@ export const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	}
 };
 
-export const createCleanStepOutcome = (
-	result: IteratorResult<unknown>,
-): StepOutcome =>
-	result.done
-		? createStepOutcome(STEP_OUTCOME.RETURNED, result.value)
-		: createStepOutcome(STEP_OUTCOME.YIELDED, result.value);
-
-export const nextTaskStep = (
+export const stepTaskToNextOperation = (
 	task: Task,
 	mode: ValueOf<typeof MODE>,
 	value: unknown,
-): SteppedTask => {
+): DriverStep => {
+	//cleared before the call, not after: an async generator has left its yield the moment it is
+	//resumed, long before the step settles, and nothing may resume it again in between
+	task.suspension = null;
 	let stepped: IteratorResult<unknown> | Promise<IteratorResult<unknown>>;
 	try {
 		stepped =
@@ -206,7 +221,10 @@ export const nextTaskStep = (
 				? (task.generator as Generator).throw!(value)
 				: task.generator.next(value);
 	} catch (error) {
-		return createStepOutcome(STEP_OUTCOME.THREW, error);
+		return endTaskWithError(task, error);
 	}
-	return stepped instanceof Promise ? stepped : createCleanStepOutcome(stepped);
+	if (!(stepped instanceof Promise))
+		return classifySettledStepAsOperation(task, stepped);
+	task.suspension = { parkedAt: PARKED.PENDING_STEP };
+	return stepped;
 };

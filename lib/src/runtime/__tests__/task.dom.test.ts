@@ -1,170 +1,303 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { html, TemplateValue } from "../../template";
 import {
-	nextOperation as step,
+	classifyRenderResultAsOperation as classifyRenderResult,
+	classifySettledStepAsOperation as classifyStep,
+	endTaskWithError,
+	isParkedAtARenderableYield,
+	MODE,
 	OPERATION,
-	ROLE,
-	STEP_OUTCOME,
-	StepOutcome,
+	PARKED,
+	stepTaskToNextOperation,
 	Task,
-	TASK_STATE,
 } from "../task";
 
 /*
-the reducer's synchronous core in isolation: step(task, incomingOutcome) -> Operation, driven purely by
-task.state. these pin the dispatch, the role split (outer installs / inner hits the depth limit, outer
-fails / inner bubbles), and the cleanup capture — all without a DOM, a timer, or a coroutine. supersession
-is not the reducer's job (it lives in the shell's slot identity), so it is not tested here. the async
-orchestration (drive, the flush, SSR) is exercised end-to-end by
-tests/integration. depth-2 is a recursion in the shell, not a state here, so there is no inner-nesting
-machine to test: the inner simply yields a generator function and the table routes it to the parent.
+the two classifiers in isolation, with no DOM, no timer and no coroutine. classifyStep(task,
+iteratorResult) -> CoroutineOperation says what a generator did; classifyRenderResult(task,
+produced) -> RenderOperation says what a render function returned. both speak one currency: an
+operation. there is no intermediate outcome object, so a throw is routed the moment it happens
+rather than re-entering a classifier wearing a yield's clothes — stepTaskToNextOperation returns
+the routed operation directly. the classifiers never call a render function or step anything; the
+driver in src/index.ts does that, and tests/integration covers it end-to-end. these pin the
+dispatch, the cleanup capture, and the suspension every guard reads. a task knows nothing about
+the element it renders into, so which task may install a branch and where an error goes are
+driver questions, covered in tests/integration.
 */
 
 const template = (): TemplateValue => html`<p>x</p>`;
 
 const makeTask = (overrides: Partial<Task> = {}): Task => ({
 	generator: (function* () {})(),
-	role: ROLE.OUTER,
-	state: TASK_STATE.DRIVING,
+	suspension: null,
 	cleanup: null,
 	...overrides,
 });
 
-const yielded = (payload: unknown): StepOutcome => ({
-	kind: STEP_OUTCOME.YIELDED,
-	payload,
+const parkedAtARenderable = (): Partial<Task> => ({
+	suspension: { parkedAt: PARKED.YIELDED_RENDERABLE },
 });
 
-describe("step: dispatch while driving", () => {
+const yielded = (value: unknown): IteratorResult<unknown> => ({
+	done: false,
+	value,
+});
+
+const returned = (value: unknown): IteratorResult<unknown> => ({
+	done: true,
+	value,
+});
+
+const messageOf = (operation: { payload: unknown }): string =>
+	String(operation.payload);
+
+describe("classifyStep: what the generator yielded", () => {
 	test("a template paints", () => {
 		const value = template();
-		const operation = step(makeTask(), yielded(value));
+		const operation = classifyStep(makeTask(), yielded(value));
 		expect(operation.kind).toBe(OPERATION.PAINT);
 		expect(operation.payload).toBe(value);
 	});
 
-	test("a render function paints from it", () => {
-		const renderFunction = () => template();
-		const operation = step(makeTask(), yielded(renderFunction));
-		expect(operation.kind).toBe(OPERATION.PAINT_FROM);
+	//the classifier hands the function to the render lane rather than calling it, which is what
+	//keeps a refire out of this switch
+	test("a render function is handed over, not called", () => {
+		let calls = 0;
+		const renderFunction = () => {
+			calls++;
+			return template();
+		};
+		const operation = classifyStep(makeTask(), yielded(renderFunction));
+		expect(operation.kind).toBe(OPERATION.CALL_RENDER_FUNCTION);
 		expect(operation.payload).toBe(renderFunction);
+		expect(calls).toBe(0);
 	});
 
-	test("an outer generator function installs an inner", () => {
+	//the two install kinds differ only in which of them makes the generator the refire target, so
+	//the driver's one arm can tell a yielded body from a returned one
+	test("a generator function is handed over as an install from a yield", () => {
 		const generator = function* () {};
-		const operation = step(makeTask({ role: ROLE.OUTER }), yielded(generator));
-		expect(operation.kind).toBe(OPERATION.INSTALL);
+		const operation = classifyStep(makeTask(), yielded(generator));
+		expect(operation.kind).toBe(OPERATION.INSTALL_FROM_YIELD);
 		expect(operation.payload).toBe(generator);
 	});
 
-	test("an inner generator function is the one depth-limit error — it bubbles to the parent", () => {
-		const task = makeTask({ role: ROLE.INNER });
-		const operation = step(
-			task,
-			yielded(function* () {}),
-		);
-		expect(operation.kind).toBe(OPERATION.THROW_TO_PARENT);
-		expect(String((operation as { payload: unknown }).payload)).toContain(
-			"Inner generators cannot yield generator functions",
-		);
-		expect(task.state).toBe(TASK_STATE.FAILED);
-	});
-
-	test("a yielded promise suspends and AWAITs", () => {
+	test("a yielded promise parks the task and AWAITs", () => {
 		const task = makeTask();
 		const promise = Promise.resolve("x");
-		const operation = step(task, yielded(promise));
+		const operation = classifyStep(task, yielded(promise));
 		expect(operation.kind).toBe(OPERATION.AWAIT);
 		expect(operation.payload).toBe(promise);
-		expect(task.state).toBe(TASK_STATE.SUSPENDED);
+		//a paint must not step it from here; only the promise settling may
+		expect(task.suspension?.parkedAt).toBe(PARKED.YIELDED_PROMISE);
+		expect(isParkedAtARenderableYield(task)).toBe(false);
 	});
 
 	test("a plain value resumes the coroutine", () => {
-		const operation = step(makeTask(), yielded(42));
+		const operation = classifyStep(makeTask(), yielded(42));
 		expect(operation.kind).toBe(OPERATION.RESUME);
 		expect(operation.payload).toBe(42);
 	});
 });
 
-describe("step: completion and cleanup", () => {
+describe("classifyRenderResult: the render function's return is content", () => {
+	test("a string paints as-is — the driver coerces, the classifier does not", () => {
+		const operation = classifyRenderResult(makeTask(), "hello");
+		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(operation.payload).toBe("hello");
+	});
+
+	test("an array paints as-is", () => {
+		const rows = [template(), template()];
+		const operation = classifyRenderResult(makeTask(), rows);
+		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(operation.payload).toBe(rows);
+	});
+
+	test("undefined paints nothing and warns once about the missing return", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const operation = classifyRenderResult(makeTask(), undefined);
+		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain("undefined");
+		warn.mockRestore();
+	});
+
+	test.each([
+		["a plain object", { a: 1 }],
+		["a Map", new Map()],
+		["a plain function", () => {}],
+		["a symbol", Symbol("x")],
+		["a Date", new Date()],
+	] as const)(
+		"%s cannot be committed, so the task fails",
+		(_label, produced) => {
+			const task = makeTask(parkedAtARenderable());
+			const operation = classifyRenderResult(task, produced);
+			expect(operation.kind).toBe(OPERATION.ROUTE_ERROR);
+			expect(messageOf(operation)).toContain("grundlage");
+			expect(task.suspension).toBe(null);
+		},
+	);
+
+	test("a generator function installs it, tagged as a render result", () => {
+		const body = function* () {};
+		const operation = classifyRenderResult(makeTask(), body);
+		expect(operation.kind).toBe(OPERATION.INSTALL_FROM_RENDER_RESULT);
+		expect(operation.payload).toBe(body);
+	});
+
+	test("a promise awaits the render result without ending the task", () => {
+		const task = makeTask(parkedAtARenderable());
+		const parkBeforeTheAwait = task.suspension;
+		const promise = Promise.resolve("later");
+		const operation = classifyRenderResult(task, promise);
+		expect(operation.kind).toBe(OPERATION.AWAIT_RENDER_RESULT);
+		expect(operation.payload).toBe(promise);
+		//the same permit, so the settlement may still resume the yield that started the render
+		expect(task.suspension).toBe(parkBeforeTheAwait);
+	});
+
+	test("a resolved result on a finished task paints and leaves it finished", () => {
+		const task = makeTask();
+		const operation = classifyRenderResult(task, "late");
+		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(task.suspension).toBe(null);
+	});
+});
+
+describe("completion and cleanup", () => {
 	test("a function return is captured as cleanup; the task is done", () => {
 		const cleanup = () => {};
 		const task = makeTask();
-		const operation = step(task, {
-			kind: STEP_OUTCOME.RETURNED,
-			payload: cleanup,
-		});
+		const operation = classifyStep(task, returned(cleanup));
 		expect(operation.kind).toBe(OPERATION.COMPLETED);
 		expect(task.cleanup).toBe(cleanup);
-		expect(task.state).toBe(TASK_STATE.DONE);
+	});
+
+	//the step clears the park before it resumes the generator, so a completed task holds no permit
+	test("a completing step leaves the task parked nowhere", () => {
+		const task = makeTask({
+			...parkedAtARenderable(),
+			generator: (function* () {})(),
+		});
+		expect(stepTaskToNextOperation(task, MODE.SEND, undefined)).toMatchObject({
+			kind: OPERATION.COMPLETED,
+		});
+		expect(task.suspension).toBe(null);
 	});
 
 	test("a non-function return captures no cleanup", () => {
 		const task = makeTask();
-		step(task, { kind: STEP_OUTCOME.RETURNED, payload: undefined });
+		classifyStep(task, returned(undefined));
 		expect(task.cleanup).toBe(null);
 	});
 });
 
-describe("step: error routing by role", () => {
-	test("an inner throw bubbles to the parent", () => {
-		const task = makeTask({ role: ROLE.INNER });
-		const error = new Error("inner-failed");
-		const operation = step(task, { kind: STEP_OUTCOME.THREW, payload: error });
-		expect(operation.kind).toBe(OPERATION.THROW_TO_PARENT);
+describe("ending a task with an error", () => {
+	//a rejected render promise reaches this same exit rather than a step in THROW mode, which is
+	//what keeps it out of the generator's try/catch; the lane enforces that structurally. one kind
+	//for both destinations: which one an error reaches is the driver's call, not this module's
+	test("the error is carried out as one kind and the park is cleared", () => {
+		const task = makeTask(parkedAtARenderable());
+		const error = new Error("boom");
+		const operation = endTaskWithError(task, error);
+		expect(operation.kind).toBe(OPERATION.ROUTE_ERROR);
 		expect(operation.payload).toBe(error);
-		expect(task.state).toBe(TASK_STATE.FAILED);
+		//one field, so routing cannot leave half a park behind
+		expect(task.suspension).toBe(null);
 	});
 
-	test("an outer throw is terminal", () => {
-		const task = makeTask({ role: ROLE.OUTER });
-		const operation = step(task, {
-			kind: STEP_OUTCOME.THREW,
-			payload: new Error("boom"),
+	//the step routes its own throw, so no synthesized outcome carries it back to a classifier
+	test("a generator that throws when stepped routes the error itself", () => {
+		const error = new Error("inner-failed");
+		const task = makeTask({
+			generator: (function* () {
+				throw error;
+			})(),
 		});
-		expect(operation.kind).toBe(OPERATION.FAIL);
-		expect(task.state).toBe(TASK_STATE.FAILED);
-	});
-});
-
-describe("step: suspended resume", () => {
-	test("a settled promise resumes the suspended coroutine", () => {
-		const task = makeTask({ state: TASK_STATE.SUSPENDED, role: ROLE.INNER });
-		const operation = step(task, {
-			kind: STEP_OUTCOME.RESUMED,
-			payload: "resolved",
+		expect(stepTaskToNextOperation(task, MODE.SEND, undefined)).toEqual({
+			kind: OPERATION.ROUTE_ERROR,
+			payload: error,
 		});
-		expect(operation.kind).toBe(OPERATION.RESUME);
-		expect(operation.payload).toBe("resolved");
-		expect(task.state).toBe(TASK_STATE.DRIVING);
 	});
 
-	test("a rejected await throws back into the coroutine so its try/catch can recover", () => {
-		const inner = makeTask({ state: TASK_STATE.SUSPENDED, role: ROLE.INNER });
-		const innerOperation = step(inner, {
-			kind: STEP_OUTCOME.THREW,
-			payload: 1,
-		});
-		expect(innerOperation.kind).toBe(OPERATION.THROW_INTO);
-		expect(innerOperation.payload).toBe(1);
-		expect(inner.state).toBe(TASK_STATE.DRIVING);
-
-		const outer = makeTask({ state: TASK_STATE.SUSPENDED, role: ROLE.OUTER });
-		const outerOperation = step(outer, {
-			kind: STEP_OUTCOME.THREW,
-			payload: 1,
-		});
-		expect(outerOperation.kind).toBe(OPERATION.THROW_INTO);
-		expect(outer.state).toBe(TASK_STATE.DRIVING);
-	});
-});
-
-describe("step: the reused operation cell", () => {
-	test("every step returns the same backing cell — write-once-read-once, zero per-yield allocation", () => {
+	test("routing ignores whether the task had already finished", () => {
 		const task = makeTask();
-		const first = step(task, yielded(1));
-		const second = step(task, yielded(2));
-		expect(second).toBe(first); //same object: the shell consumes each operation before the next step
-		expect(first.payload).toBe(2);
+		const operation = endTaskWithError(task, new Error("late"));
+		expect(operation.kind).toBe(OPERATION.ROUTE_ERROR);
+	});
+});
+
+describe("the suspension: what a task is parked on", () => {
+	//every late-arriving continuation guards on this one field, so which yields park the task and
+	//what clears it is the whole contract
+	test.each([
+		["a generator function", () => function* () {}],
+		["a render function", () => () => template()],
+	] as const)("%s parks the task at a renderable yield", (_label, make) => {
+		const task = makeTask();
+		classifyStep(task, yielded(make()));
+		expect(task.suspension?.parkedAt).toBe(PARKED.YIELDED_RENDERABLE);
+	});
+
+	test.each([
+		["a template", (): unknown => template()],
+		["a promise", (): unknown => Promise.resolve("x")],
+		["a plain value", (): unknown => 42],
+	] as const)("%s parks the task at nothing renderable", (_label, make) => {
+		const task = makeTask();
+		classifyStep(task, yielded(make()));
+		expect(isParkedAtARenderableYield(task)).toBe(false);
+	});
+
+	//the step is the only writer that clears it, which is what makes the field cover every route
+	//out of a yield rather than the ones a classifier happens to know about
+	test("stepping clears it, so a refire cannot resume a generator that moved on", () => {
+		const task = makeTask(parkedAtARenderable());
+		stepTaskToNextOperation(task, MODE.SEND, undefined);
+		expect(task.suspension).toBe(null);
+	});
+
+	test("an async step parks the task before the generator can settle", () => {
+		//an async generator has left its yield the moment it is resumed, not when the step resolves
+		const task = makeTask({
+			generator: (async function* () {
+				yield 1;
+			})(),
+		});
+		const stepped = stepTaskToNextOperation(task, MODE.SEND, undefined);
+		expect(stepped).toBeInstanceOf(Promise);
+		expect(task.suspension?.parkedAt).toBe(PARKED.PENDING_STEP);
+	});
+
+	//identity is the permit: leaving a park and returning to one of the SAME kind must invalidate
+	//whatever the first park handed out, which a compared value could never express
+	test("re-parking at the same kind still issues a new permit", () => {
+		const task = makeTask();
+		classifyStep(
+			task,
+			yielded(() => template()),
+		);
+		const firstPark = task.suspension;
+		stepTaskToNextOperation(task, MODE.SEND, undefined);
+		classifyStep(
+			task,
+			yielded(() => template()),
+		);
+		expect(task.suspension?.parkedAt).toBe(PARKED.YIELDED_RENDERABLE);
+		expect(task.suspension).not.toBe(firstPark);
+	});
+});
+
+describe("each operation is its own object", () => {
+	//every payload read used to be ordered against the next createOperation call; nothing aliases
+	//now, so an operation stays readable after the step that follows it
+	test("a later classification does not overwrite an earlier operation", () => {
+		const task = makeTask();
+		const first = classifyStep(task, yielded(1));
+		const second = classifyStep(task, yielded(2));
+		expect(second).not.toBe(first);
+		expect(first.payload).toBe(1);
 	});
 });
