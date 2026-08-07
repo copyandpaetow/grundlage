@@ -3,6 +3,7 @@ import { html, TemplateValue } from "../../template";
 import {
 	classifyRenderResultAsOperation as classifyRenderResult,
 	classifySettledStepAsOperation as classifyStep,
+	DriverStep,
 	endTaskWithError,
 	isParkedAtARenderableYield,
 	MODE,
@@ -82,15 +83,36 @@ describe("classifyStep: what the generator yielded", () => {
 		expect(operation.payload).toBe(generator);
 	});
 
-	test("a yielded promise parks the task and AWAITs", () => {
+	test("a yielded promise parks the task and defers a resume", async () => {
 		const task = makeTask();
-		const promise = Promise.resolve("x");
-		const operation = classifyStep(task, yielded(promise));
-		expect(operation.kind).toBe(OPERATION.AWAIT);
-		expect(operation.payload).toBe(promise);
+		const operation = classifyStep(task, yielded(Promise.resolve("x")));
+		expect(operation.kind).toBe(OPERATION.DEFERRED);
 		//a paint must not step it from here; only the promise settling may
 		expect(task.suspension?.parkedAt).toBe(PARKED.YIELDED_PROMISE);
 		expect(isParkedAtARenderableYield(task)).toBe(false);
+
+		const settled = await (operation.payload as Promise<DriverStep>);
+		expect(settled.kind).toBe(OPERATION.RESUME);
+		expect(settled.payload).toBe("x");
+	});
+
+	test("a yielded promise whose permit is revoked releases control instead", async () => {
+		const task = makeTask();
+		const operation = classifyStep(task, yielded(Promise.resolve("x")));
+		task.suspension = null;
+
+		const settled = await (operation.payload as Promise<DriverStep>);
+		expect(settled.kind).toBe(OPERATION.RELEASE_CONTROL);
+	});
+
+	test("a rejected yielded promise defers a throw into the generator", async () => {
+		const task = makeTask();
+		const failure = new Error("nope");
+		const operation = classifyStep(task, yielded(Promise.reject(failure)));
+
+		const settled = await (operation.payload as Promise<DriverStep>);
+		expect(settled.kind).toBe(OPERATION.RESUME_WITH_ERROR);
+		expect(settled.payload).toBe(failure);
 	});
 
 	test("a plain value resumes the coroutine", () => {
@@ -267,7 +289,7 @@ describe("the suspension: what a task is parked on", () => {
 			})(),
 		});
 		const stepped = stepTaskToNextOperation(task, MODE.SEND, undefined);
-		expect(stepped).toBeInstanceOf(Promise);
+		expect(stepped.kind).toBe(OPERATION.DEFERRED);
 		expect(task.suspension?.parkedAt).toBe(PARKED.PENDING_STEP);
 	});
 

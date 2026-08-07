@@ -13,7 +13,6 @@ import { coerceToTemplate, TemplateValue } from "./template";
 import {
 	cancelTaskAndRunCleanup,
 	classifyRenderResultAsOperation,
-	classifySettledStepAsOperation,
 	createRenderTask,
 	DriverStep,
 	endTaskWithError,
@@ -24,7 +23,6 @@ import {
 	RELEASE_CONTROL,
 	RenderOperation,
 	stepTaskToNextOperation,
-	Suspension,
 	Task,
 } from "./runtime/task";
 import { html as htmlValue } from "./template";
@@ -122,10 +120,7 @@ export const component = (
 			this.#isServerRun = isServer();
 			this.#outerTask = createRenderTask(componentGenerator(this));
 			if (!this.#isServerRun) this.#setupAttributeObserver();
-			this.#runOperationsUntilControlIsReleased(
-				this.#outerTask,
-				stepTaskToNextOperation(this.#outerTask, MODE.SEND, undefined),
-			);
+			this.#startRun(this.#outerTask);
 		}
 
 		async disconnectedCallback() {
@@ -166,13 +161,12 @@ export const component = (
 			if (outerTask === null || renderable === null)
 				return this.#resolvePendingUpdatePromise();
 			if (isGeneratorFunction(renderable)) {
-				const branch = this.#installInnerTask(renderable as ComponentGenerator);
-				return this.#runOperationsUntilControlIsReleased(
-					branch,
-					stepTaskToNextOperation(branch, MODE.SEND, undefined),
+				this.#startRun(
+					this.#installInnerTask(renderable as ComponentGenerator),
 				);
+				return;
 			}
-			this.#runOperationsUntilControlIsReleased(
+			void this.#runTaskUntilItParksOrEnds(
 				outerTask,
 				this.#callRenderFunction(outerTask, renderable as RenderFunction),
 			);
@@ -220,33 +214,33 @@ export const component = (
 			this.#resolvePendingUpdatePromise();
 		}
 
-		#runOperationsUntilControlIsReleased(
+		#startRun(task: Task): void {
+			void this.#runTaskUntilItParksOrEnds(
+				task,
+				stepTaskToNextOperation(task, MODE.SEND, undefined),
+			);
+		}
+
+		async #runTaskUntilItParksOrEnds(
 			startTask: Task,
 			startStep: DriverStep,
-		): void {
+		): Promise<void> {
 			let task = startTask;
 			let next = startStep;
-			let bodyAwaitingResumption: Task | null = null;
-			let bodySuspensionAtInstall: Suspension | null = null;
 
 			while (true) {
-				if (next instanceof Promise) {
-					this.#resumeCoroutineWhenPendingStepSettles(task, next);
-					next = RELEASE_CONTROL;
-					continue;
-				}
-
 				switch (next.kind) {
-					case RELEASE_CONTROL.kind: {
-						const body = bodyAwaitingResumption;
-						if (body === null) return;
-						bodyAwaitingResumption = null;
-						if (!isStillParkedAt(body, bodySuspensionAtInstall)) return;
-						task = body;
-						next = stepTaskToNextOperation(body, MODE.SEND, this);
+					//the next step is not known yet — awaiting it is the only place this loop waits
+					case OPERATION.DEFERRED:
+						next = await next.payload;
 						break;
-					}
 
+					//stop: the task is waiting on something else now, or a newer render replaced this one
+					case RELEASE_CONTROL.kind:
+						return;
+
+					//the generator yielded a template, so the component renders it itself and any
+					//nested generator loses the markup
 					case OPERATION.PAINT: {
 						if (task === this.#outerTask) {
 							this.#cancelInnerTask();
@@ -263,16 +257,22 @@ export const component = (
 						break;
 					}
 
+					//the generator yielded a render function: calling it produces the next step which can be a
+					//template to paint, a nested generator, a promise to wait on, or an error
 					case OPERATION.CALL_RENDER_FUNCTION:
 						if (task === this.#outerTask)
 							this.#currentRenderable = next.payload;
 						next = this.#callRenderFunction(task, next.payload);
 						break;
 
+					//the generator yielded or returned another generator: it runs until it parks, and
+					//only then does the component's own generator continue past the yield that
+					//installed it
 					case OPERATION.INSTALL_FROM_YIELD:
 					case OPERATION.INSTALL_FROM_RENDER_RESULT: {
-						const theInstallerIsTheComponentBody = task === this.#outerTask;
-						if (!theInstallerIsTheComponentBody) {
+						const theInstallerIsTheComponentGenerator =
+							task === this.#outerTask;
+						if (!theInstallerIsTheComponentGenerator) {
 							next = endTaskWithError(
 								task,
 								new Error(
@@ -281,39 +281,43 @@ export const component = (
 							);
 							break;
 						}
-						//a generator the body yielded becomes the refire target; one a render function
-						//returned does not, so update() re-calls the function and re-picks the branch
+
 						if (next.kind === OPERATION.INSTALL_FROM_YIELD)
 							this.#currentRenderable = next.payload;
-						//only a renderable yield is somewhere to resume to, and on the server the branch
-						//owns the markup — so the body is not queued at all in either case
-						const theBodyWillResumeOnceTheBranchParks =
+
+						const theComponentGeneratorMayResumeOnceTheNestedOneParks =
 							!this.#isServerRun && isParkedAtARenderableYield(task);
-						if (theBodyWillResumeOnceTheBranchParks) {
-							bodyAwaitingResumption = task;
-							bodySuspensionAtInstall = task.suspension;
-						}
-						task = this.#installInnerTask(next.payload);
-						next = stepTaskToNextOperation(task, MODE.SEND, undefined);
+						const componentGeneratorResumePermit =
+							theComponentGeneratorMayResumeOnceTheNestedOneParks
+								? task.suspension
+								: null;
+
+						this.#startRun(this.#installInnerTask(next.payload));
+						if (!isStillParkedAt(task, componentGeneratorResumePermit)) return;
+						next = stepTaskToNextOperation(task, MODE.SEND, this);
 						break;
 					}
 
+					//a promise the generator yielded resolved, so its value goes back into the generator
 					case OPERATION.RESUME:
 						next = stepTaskToNextOperation(task, MODE.SEND, next.payload);
 						break;
 
-					case OPERATION.AWAIT:
-						this.#resumeCoroutineWhenYieldedPromiseSettles(task, next.payload);
-						next = RELEASE_CONTROL;
+					//that promise rejected instead: the error is thrown at the yield, where the
+					//generator's own try/catch can take it
+					case OPERATION.RESUME_WITH_ERROR:
+						next = stepTaskToNextOperation(task, MODE.THROW, next.payload);
 						break;
 
+					//the generator returned; unless another run is already queued, this settles the
+					//promise update() handed out
 					case OPERATION.COMPLETED:
 						if (this.#isServerRun) return this.#cancelBothTasks();
-						//a pass queued DURING this one (a render-time update()) resolves it instead
 						if (!this.#isScheduled) this.#resolvePendingUpdatePromise();
-						next = RELEASE_CONTROL;
-						break;
+						return;
 
+					//every error ends up here: a nested generator's is thrown into the component's
+					//generator, the component's own goes to #fail
 					case OPERATION.ROUTE_ERROR: {
 						const error = next.payload;
 						const outerTask = this.#outerTask;
@@ -335,52 +339,6 @@ export const component = (
 			}
 		}
 
-		#resumeCoroutineWhenPendingStepSettles(
-			task: Task,
-			step: Promise<IteratorResult<unknown>>,
-		): void {
-			const suspension = task.suspension;
-			step.then(
-				(result) => {
-					if (!isStillParkedAt(task, suspension)) return;
-					this.#runOperationsUntilControlIsReleased(
-						task,
-						classifySettledStepAsOperation(task, result),
-					);
-				},
-				(error) => {
-					if (!isStillParkedAt(task, suspension)) return;
-					this.#runOperationsUntilControlIsReleased(
-						task,
-						endTaskWithError(task, error),
-					);
-				},
-			);
-		}
-
-		#resumeCoroutineWhenYieldedPromiseSettles(
-			task: Task,
-			promise: Promise<unknown>,
-		): void {
-			const suspension = task.suspension;
-			promise.then(
-				(value) => {
-					if (isStillParkedAt(task, suspension))
-						this.#runOperationsUntilControlIsReleased(
-							task,
-							stepTaskToNextOperation(task, MODE.SEND, value),
-						);
-				},
-				(error) => {
-					if (isStillParkedAt(task, suspension))
-						this.#runOperationsUntilControlIsReleased(
-							task,
-							stepTaskToNextOperation(task, MODE.THROW, error),
-						);
-				},
-			);
-		}
-
 		#callRenderFunction(
 			task: Task,
 			renderFunction: RenderFunction,
@@ -399,8 +357,8 @@ export const component = (
 			);
 		}
 
-		//this lane cannot step in THROW mode, which is what keeps a rejected render promise fatal
-		//rather than thrown into the generator that yielded the render function
+		//nothing here ever steps the generator in THROW mode: a render function's failure has no yield
+		//to surface at, so it stays fatal instead of becoming catchable inside the generator
 		#dispatchRenderOperation(
 			task: Task,
 			operation: RenderOperation,
@@ -419,19 +377,20 @@ export const component = (
 						return RELEASE_CONTROL;
 					}
 					if (!isParkedAtARenderableYield(task)) {
-						//a pass queued DURING this one (a render-time update()) resolves it instead
 						if (!this.#isScheduled) this.#resolvePendingUpdatePromise();
 						return RELEASE_CONTROL;
 					}
 					return stepTaskToNextOperation(task, MODE.SEND, this);
 
 				case OPERATION.AWAIT_RENDER_RESULT:
-					this.#continueRenderWhenPromiseSettles(
-						task,
-						operation.payload,
-						renderCallId,
-					);
-					return RELEASE_CONTROL;
+					return {
+						kind: OPERATION.DEFERRED,
+						payload: this.#settleRenderResult(
+							task,
+							operation.payload,
+							renderCallId,
+						),
+					};
 
 				case OPERATION.INSTALL_FROM_RENDER_RESULT:
 				case OPERATION.ROUTE_ERROR:
@@ -442,30 +401,25 @@ export const component = (
 			}
 		}
 
-		#continueRenderWhenPromiseSettles(
+		async #settleRenderResult(
 			task: Task,
 			promise: Promise<unknown>,
 			renderCallId: number,
-		): void {
-			promise.then(
-				(value) => {
-					if (this.#currentRenderCallId !== renderCallId) return;
-					this.#runOperationsUntilControlIsReleased(
-						task,
-						this.#dispatchRenderOperation(
-							task,
-							classifyRenderResultAsOperation(task, value),
-							renderCallId,
-						),
-					);
-				},
-				(error) => {
-					if (this.#currentRenderCallId !== renderCallId) return;
-					this.#runOperationsUntilControlIsReleased(
-						task,
-						endTaskWithError(task, error),
-					);
-				},
+		): Promise<DriverStep> {
+			let value: unknown;
+			try {
+				value = await promise;
+			} catch (error) {
+				return this.#currentRenderCallId === renderCallId
+					? endTaskWithError(task, error)
+					: RELEASE_CONTROL;
+			}
+			if (this.#currentRenderCallId !== renderCallId) return RELEASE_CONTROL;
+
+			return this.#dispatchRenderOperation(
+				task,
+				classifyRenderResultAsOperation(task, value),
+				renderCallId,
 			);
 		}
 

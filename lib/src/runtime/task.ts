@@ -8,12 +8,13 @@ export const OPERATION = {
 	INSTALL_FROM_YIELD: 1,
 	INSTALL_FROM_RENDER_RESULT: 2,
 	RESUME: 3,
-	AWAIT: 4,
+	RESUME_WITH_ERROR: 4,
 	CALL_RENDER_FUNCTION: 5,
 	AWAIT_RENDER_RESULT: 6,
 	COMPLETED: 7,
 	ROUTE_ERROR: 8,
 	RELEASE_CONTROL: 9,
+	DEFERRED: 10,
 } as const;
 
 export const MODE = { SEND: 0, THROW: 1 } as const;
@@ -68,13 +69,20 @@ type RouteErrorOperation = {
 	payload: unknown;
 };
 
+//the one suspension shape: a promise of the next step, already guarded by the lane that built it
+type DeferredOperation = {
+	kind: typeof OPERATION.DEFERRED;
+	payload: Promise<DriverStep>;
+};
+
 export type CoroutineOperation =
 	| PaintOperation
 	| InstallFromYieldOperation
 	| { kind: typeof OPERATION.RESUME; payload: unknown }
-	| { kind: typeof OPERATION.AWAIT; payload: Promise<unknown> }
+	| { kind: typeof OPERATION.RESUME_WITH_ERROR; payload: unknown }
 	| { kind: typeof OPERATION.CALL_RENDER_FUNCTION; payload: RenderFunction }
 	| { kind: typeof OPERATION.COMPLETED; payload: null }
+	| DeferredOperation
 	| RouteErrorOperation;
 
 export type RenderOperation =
@@ -85,8 +93,8 @@ export type RenderOperation =
 
 type Operation = CoroutineOperation | RenderOperation;
 
-//this task will not step again synchronously: it parked, failed or completed. the driver hands
-//control to a queued body if there is one, otherwise the loop ends
+//this run is over: the task parked, failed or completed, or the continuation that produced this
+//found its permit revoked while it was pending
 export const RELEASE_CONTROL = {
 	kind: OPERATION.RELEASE_CONTROL,
 	payload: null,
@@ -95,8 +103,7 @@ export const RELEASE_CONTROL = {
 export type DriverStep =
 	| CoroutineOperation
 	| InstallFromRenderResultOperation
-	| typeof RELEASE_CONTROL
-	| Promise<IteratorResult<unknown>>;
+	| typeof RELEASE_CONTROL;
 
 const createOperation = <Kind extends OperationKind>(
 	kind: Kind,
@@ -153,6 +160,23 @@ export const classifyRenderResultAsOperation = (
 	);
 };
 
+const settleYieldedPromise = async (
+	task: Task,
+	promise: Promise<unknown>,
+	suspension: Suspension,
+): Promise<DriverStep> => {
+	try {
+		const value = await promise;
+		return isStillParkedAt(task, suspension)
+			? createOperation(OPERATION.RESUME, value)
+			: RELEASE_CONTROL;
+	} catch (error) {
+		return isStillParkedAt(task, suspension)
+			? createOperation(OPERATION.RESUME_WITH_ERROR, error)
+			: RELEASE_CONTROL;
+	}
+};
+
 const classifyYieldedValueAsOperation = (
 	task: Task,
 	value: unknown,
@@ -173,8 +197,12 @@ const classifyYieldedValueAsOperation = (
 		);
 	}
 	if (value instanceof Promise) {
-		task.suspension = { parkedAt: PARKED.YIELDED_PROMISE };
-		return createOperation(OPERATION.AWAIT, value);
+		const suspension: Suspension = { parkedAt: PARKED.YIELDED_PROMISE };
+		task.suspension = suspension;
+		return createOperation(
+			OPERATION.DEFERRED,
+			settleYieldedPromise(task, value, suspension),
+		);
 	}
 	return createOperation(OPERATION.RESUME, value);
 };
@@ -206,6 +234,23 @@ export const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	}
 };
 
+const settlePendingStep = async (
+	task: Task,
+	stepped: Promise<IteratorResult<unknown>>,
+	suspension: Suspension,
+): Promise<DriverStep> => {
+	try {
+		const result = await stepped;
+		return isStillParkedAt(task, suspension)
+			? classifySettledStepAsOperation(task, result)
+			: RELEASE_CONTROL;
+	} catch (error) {
+		return isStillParkedAt(task, suspension)
+			? endTaskWithError(task, error)
+			: RELEASE_CONTROL;
+	}
+};
+
 export const stepTaskToNextOperation = (
 	task: Task,
 	mode: ValueOf<typeof MODE>,
@@ -225,6 +270,10 @@ export const stepTaskToNextOperation = (
 	}
 	if (!(stepped instanceof Promise))
 		return classifySettledStepAsOperation(task, stepped);
-	task.suspension = { parkedAt: PARKED.PENDING_STEP };
-	return stepped;
+	const suspension: Suspension = { parkedAt: PARKED.PENDING_STEP };
+	task.suspension = suspension;
+	return createOperation(
+		OPERATION.DEFERRED,
+		settlePendingStep(task, stepped, suspension),
+	);
 };
