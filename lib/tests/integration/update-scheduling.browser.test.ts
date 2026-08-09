@@ -149,8 +149,10 @@ describe("update() scheduling contract", () => {
 		let renders = 0;
 		let triggerOnce = true;
 
-		const Component = component(function* () {
-			yield (host) => {
+		//the host is closed over rather than taken as a parameter: a yield carries no contextual
+		//type, so a render function's own parameter list is untyped
+		const Component = component(function* ({ host }) {
+			yield () => {
 				renders++;
 				if (triggerOnce) {
 					triggerOnce = false;
@@ -181,8 +183,8 @@ describe("update() scheduling contract", () => {
 		let renders = 0;
 		let promiseFromInsideTheRender: Promise<void> | null = null;
 
-		const Component = component(function* () {
-			yield (host) => {
+		const Component = component(function* ({ host }) {
+			yield () => {
 				const mine = ++renders;
 				if (mine === 1) {
 					promiseFromInsideTheRender = host.update();
@@ -209,8 +211,8 @@ describe("update() scheduling contract", () => {
 		const tag = uniqueTag();
 		let renders = 0;
 
-		const Component = component(function* () {
-			yield (host) => {
+		const Component = component(function* ({ host }) {
+			yield () => {
 				const mine = ++renders;
 				if (mine === 2) {
 					host.update();

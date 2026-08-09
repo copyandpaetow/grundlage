@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../src/index";
+import { ComponentConstructor } from "../../src/types";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -28,7 +29,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 	 */
 	const serverRender = async (
 		tag: string,
-		ComponentClass: ReturnType<typeof render>,
+		ComponentClass: ComponentConstructor,
 	): Promise<string> => {
 		(globalThis as { __grundlage_ssr__?: boolean }).__grundlage_ssr__ = true;
 		try {
@@ -453,7 +454,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				let renderFunctionCalls = 0;
 				let secondYieldRan = false;
 
-				const Component = component(function* (host) {
+				const Component = component(function* ({ host }) {
 					yield () => {
 						renderFunctionCalls++;
 						queueMicrotask(() => host.update());
@@ -647,11 +648,17 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
+			//declared, because only a declared attribute re-renders — an undeclared write is ignored
 			const makeComponent = () =>
-				component(function* (element) {
-					yield () =>
-						html`<span>${element.getAttribute("data-label") ?? "none"}</span>`;
-				});
+				component(
+					function* ({ host: element }) {
+						yield () =>
+							html`<span
+								>${element.getAttribute("data-label") ?? "none"}</span
+							>`;
+					},
+					{ props: { "data-label": String } },
+				);
 
 			const serialized = await serverRender(serverTag, makeComponent());
 			const clientHTML = serialized.replace(

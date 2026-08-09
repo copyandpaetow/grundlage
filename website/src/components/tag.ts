@@ -1,21 +1,25 @@
-import { html, props, component } from "../../../lib/src";
+import { html, component } from "../../../lib/src";
 
 customElements.define(
 	"tag-component",
-	component(function* (element) {
-		let { headingLevel } = props(element, { headingLevel: Number });
-		let previous = headingLevel;
+	component(
+		function* ({ host, headingLevel }) {
+			//a seed: the generator runs once, and the local is what the click advances
+			let level = headingLevel;
+			let previous = level;
 
-		const updateHeadingLevel = () => {
-			previous = headingLevel;
-			headingLevel++;
-			element.update();
-		};
+			const updateHeadingLevel = () => {
+				previous = level;
+				level++;
+				host.update();
+			};
 
-		yield () =>
-			html`
-                <!-- ${headingLevel} and ${previous}  -->
-                <h${headingLevel} onclick=${updateHeadingLevel}> headingLevel: ${headingLevel}</h${headingLevel}>
+			yield () =>
+				html`
+                <!-- ${level} and ${previous}  -->
+                <h${level} onclick=${updateHeadingLevel}> headingLevel: ${level}</h${level}>
             `;
-	}),
+		},
+		{ props: { headingLevel: [Number, 1] } },
+	),
 );

@@ -11,7 +11,7 @@ const fetchUser = (delayMilliseconds: number) =>
 
 customElements.define(
 	"demo-loader",
-	component(async function* (host) {
+	component(async function* ({ host }) {
 		const label = host.getAttribute("data-label") ?? "?";
 		const delayMilliseconds = parseInt(
 			host.getAttribute("data-delay-ms") ?? "0",

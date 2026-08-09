@@ -14,7 +14,7 @@ import { GROUND_HALF_UNITS, GROUND_SIZE, UNIT_SIZE } from "../scene-shared";
 
 customElements.define(
 	"scene-ground",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		// Map the local hit on the flat sheet to a world point, in grid units, and hand
 		// it out. We emit the raw (unsnapped) point: snapping to the authoring lattice is
 		// the editor's policy, not the floor's.

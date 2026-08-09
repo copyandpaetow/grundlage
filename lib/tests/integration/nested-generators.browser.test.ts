@@ -1,6 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, component } from "../../src/index";
-import { BaseComponent, ComponentGenerator } from "../../src/types";
+import {
+	BaseComponent,
+	ComponentGenerator,
+	ComponentProps,
+} from "../../src/types";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -477,7 +481,7 @@ describe("yield resumes the generator with the host element", () => {
 	});
 });
 
-describe("renderer and inner generator receive the host as their first argument", () => {
+describe("renderer and inner generator receive the props object", () => {
 	test("outer renderer is invoked with the host element", async () => {
 		const tag = uniqueTag("outer-renderer-arg");
 		const received: unknown[] = [];
@@ -485,7 +489,7 @@ describe("renderer and inner generator receive the host as their first argument"
 		customElements.define(
 			tag,
 			component(function* () {
-				yield (host: BaseComponent) => {
+				yield ({ host }: ComponentProps) => {
 					received.push(host);
 					return html`<p>${host.tagName.toLowerCase()}</p>`;
 				};
@@ -505,7 +509,7 @@ describe("renderer and inner generator receive the host as their first argument"
 		const received: unknown[] = [];
 
 		const ComponentClass = component(function* () {
-			yield (host: BaseComponent) => {
+			yield ({ host }: ComponentProps) => {
 				received.push(host);
 				return html`<span>${received.length}</span>`;
 			};
@@ -534,7 +538,7 @@ describe("renderer and inner generator receive the host as their first argument"
 			tag,
 			component(function* () {
 				yield function* () {
-					yield (host: BaseComponent) => {
+					yield ({ host }: ComponentProps) => {
 						received.push(host);
 						return html`<p>inner</p>`;
 					};
@@ -556,7 +560,7 @@ describe("renderer and inner generator receive the host as their first argument"
 		customElements.define(
 			tag,
 			component(function* () {
-				yield function* (host: BaseComponent) {
+				yield function* ({ host }: ComponentProps) {
 					received = host;
 					yield () => html`<p>${host.tagName.toLowerCase()}</p>`;
 				};
@@ -578,7 +582,7 @@ describe("renderer and inner generator receive the host as their first argument"
 		customElements.define(
 			tag,
 			component(function* () {
-				yield async function* (host: BaseComponent) {
+				yield async function* ({ host }: ComponentProps) {
 					received = host;
 					yield () => html`<p>async</p>`;
 				};
@@ -597,7 +601,7 @@ describe("renderer and inner generator receive the host as their first argument"
 		const received: unknown[] = [];
 
 		const ComponentClass = component(function* () {
-			yield function* (host: BaseComponent) {
+			yield function* ({ host }: ComponentProps) {
 				received.push(host);
 				yield () => html`<span>${received.length}</span>`;
 			};
@@ -623,15 +627,18 @@ describe("identity and isolation", () => {
 		// held inside it does not survive an update. Isolation here is about
 		// per-instance shadow roots, not retained inner state.
 		const tag = uniqueTag("isolated");
-		const innerGen: ComponentGenerator = function* (element) {
+		const innerGen: ComponentGenerator = function* ({ host: element }) {
 			yield () => html`<span>${element.getAttribute("label") ?? "?"}</span>`;
 		};
 
 		customElements.define(
 			tag,
-			component(function* () {
-				yield innerGen;
-			}),
+			component(
+				function* () {
+					yield innerGen;
+				},
+				{ props: { label: String } },
+			),
 		);
 
 		const first = mount(tag) as BaseComponent;
@@ -688,7 +695,7 @@ describe("inner generator post-yield work and cancellation", () => {
 		// a return on the async generator but does not abort in-flight awaits.
 		expect(events).toEqual([]);
 
-		resolveAwait?.();
+		resolveAwait!();
 		await sleep();
 		// Once the await settles, the queued return processes and finally fires.
 		// The body line after the await is skipped (queued return short-circuits).
@@ -762,7 +769,7 @@ describe("inner generator post-yield work and cancellation", () => {
 			"attempt-2",
 		);
 
-		resolveSlow?.();
+		resolveSlow!();
 		await sleep(20);
 
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
@@ -986,7 +993,7 @@ describe("cleanup contract for inner async generators on cancel", () => {
 
 		// Even once the await settles, the queued .return() short-circuits past
 		// the explicit `return cleanupFn` line. Cleanup is never captured.
-		resolveAwait?.();
+		resolveAwait!();
 		await sleep();
 		expect(cleanupSpy).not.toHaveBeenCalled();
 	});
@@ -1022,7 +1029,7 @@ describe("cleanup contract for inner async generators on cancel", () => {
 		// settle for the queued return to drain through it.
 		expect(cleanupSpy).not.toHaveBeenCalled();
 
-		resolveAwait?.();
+		resolveAwait!();
 		await sleep();
 		expect(cleanupSpy).toHaveBeenCalledTimes(1);
 	});

@@ -3,16 +3,14 @@ import "./ssr-setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { html, component } from "../../src/index";
+import { ComponentConstructor } from "../../src/types";
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 let nextTagId = 0;
 const uniqueTag = () => `ssr-node-${nextTagId++}-${Date.now()}`;
 
-const mount = async (
-	tag: string,
-	ComponentClass: ReturnType<typeof render>,
-) => {
+const mount = async (tag: string, ComponentClass: ComponentConstructor) => {
 	customElements.define(tag, ComponentClass);
 	const element = document.createElement(tag) as InstanceType<
 		typeof ComponentClass
@@ -173,7 +171,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const Component = component(function* (host) {
+		const Component = component(function* ({ host }) {
 			renderCount++;
 			yield () =>
 				html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
@@ -215,7 +213,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let renderFunctionCalls = 0;
 
-		const Component = component(function* (host) {
+		const Component = component(function* ({ host }) {
 			yield () => {
 				renderFunctionCalls++;
 				queueMicrotask(() => host.update());
@@ -236,7 +234,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const Component = component(function* (host) {
+		const Component = component(function* ({ host }) {
 			renderCount++;
 			yield () =>
 				html`<span>${host.getAttribute("data-value") ?? "missing"}</span>`;
@@ -483,5 +481,34 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		expect(element.shadowRoot!.textContent).toContain("grundlage");
 		warnSpy.mockRestore();
+	});
+});
+
+describe("SSR: an attribute write after the server paint schedules nothing", () => {
+	test("attributeChangedCallback fires on the server and reaches no render", async () => {
+		//isServer() is `typeof window === "undefined"`, so there is a real DOM here and aCC does
+		//fire — what makes dropping the old `!isServerRun` observer guard safe is that
+		//#cancelBothTasks() runs immediately after the server's first paint
+		const tag = uniqueTag();
+		let renderCount = 0;
+
+		const Component = component(
+			function* ({ host }) {
+				yield () => {
+					renderCount++;
+					return html`<p>${host.getAttribute("label") ?? "none"}</p>`;
+				};
+			},
+			{ props: { label: String } },
+		);
+
+		const element = track(await mount(tag, Component));
+		expect(renderCount).toBe(1);
+
+		element.setAttribute("label", "after");
+		await flushMicrotasks();
+
+		expect(renderCount).toBe(1);
+		expect(element.shadowRoot!.textContent).toContain("none");
 	});
 });

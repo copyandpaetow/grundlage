@@ -2,7 +2,7 @@ import { html, component } from "../../../lib/src";
 
 customElements.define(
 	"raf-animation",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		let time = 0;
 		let remainingFrames = 30_000;
 

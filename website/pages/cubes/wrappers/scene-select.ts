@@ -50,7 +50,7 @@ const slottedBlocks = (element: HTMLElement): Element[] => {
 
 customElements.define(
 	"scene-select",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		// A Render function: re-invoked on every update(). It measures the blocks (each
 		// renders independently, so they are already laid out) and bakes the world-aligned
 		// box straight into the markup as bindings. update() is driven by the editor on a

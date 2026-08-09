@@ -92,7 +92,7 @@ const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline";
 
 customElements.define(
 	"krausest-bench",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		let rows: Array<Row> = [];
 		let selectedIdentifier: number | null = null;
 		let nextIdentifier = 1;

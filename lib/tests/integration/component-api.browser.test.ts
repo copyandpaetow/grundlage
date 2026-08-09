@@ -17,7 +17,7 @@ describe("BaseComponent.setProp", () => {
 	test("applies a string value as an attribute and triggers a re-render", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = component(function* (element) {
+		const MyElement = component(function* ({ host: element }) {
 			yield () =>
 				html`<span>${element.getAttribute("data-label") ?? "none"}</span>`;
 		});

@@ -3,7 +3,7 @@ import { type ComponentConstructor } from "../../../lib/src/types";
 
 let attrs = ["disabled", "hidden"];
 
-const AttributeComponent = component(function* (element) {
+const AttributeComponent = component(function* ({ host: element }) {
 	let attr = "data-name";
 
 	const updateAttr = () => {

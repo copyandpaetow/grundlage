@@ -164,9 +164,13 @@ describe("component lifecycle", () => {
 	test("attribute mutation triggers re-render", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = component(function* (el) {
-			yield () => html`<span>${el.getAttribute("data-label") ?? "none"}</span>`;
-		});
+		const MyElement = component(
+			function* ({ host: el }) {
+				yield () =>
+					html`<span>${el.getAttribute("data-label") ?? "none"}</span>`;
+			},
+			{ props: { "data-label": String } },
+		);
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag);
@@ -177,7 +181,6 @@ describe("component lifecycle", () => {
 		);
 
 		element.setAttribute("data-label", "updated");
-		// MutationObserver fires asynchronously
 		await sleep(50);
 
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
@@ -396,18 +399,27 @@ describe.skipIf("happyDOM" in globalThis)(
 		});
 
 		test("attributes set before upgrade are visible to the generator on first render", async () => {
-			//setAttribute before upgrade is fine because the MutationObserver only attaches in connectedCallback (post-upgrade)
-			//=> the first render reads the attribute through getAttribute as if it had always been there
+			//attributeChangedCallback replays every pre-existing attribute during upgrade, before
+			//connectedCallback — update()'s early return absorbs those, so the first render is the
+			//one that reads them and there is exactly one of it
 			const tag = uniqueTag();
+			let renderCount = 0;
 
 			const element = document.createElement(tag);
 			element.setAttribute("data-label", "pre-define");
 			document.body.appendChild(element);
 
-			const MyElement = component(function* (host) {
-				yield () =>
-					html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
-			});
+			const MyElement = component(
+				//the count sits in the render function, not the body: an absorbed replay would re-call
+				//this one, where the body runs once per mount whether the early return holds or not
+				function* (componentProps) {
+					yield () => {
+						renderCount++;
+						return html`<span>${componentProps["data-label"] ?? "none"}</span>`;
+					};
+				},
+				{ props: { "data-label": String } },
+			);
 			customElements.define(tag, MyElement);
 
 			await sleep();
@@ -415,6 +427,7 @@ describe.skipIf("happyDOM" in globalThis)(
 			expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
 				"pre-define",
 			);
+			expect(renderCount).toBe(1);
 
 			element.remove();
 		});
@@ -472,12 +485,17 @@ describe("MutationObserver and update() interleaving", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const MyElement = component(function* (host) {
-			yield () => {
-				renderCount++;
-				return html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
-			};
-		});
+		const MyElement = component(
+			function* ({ host }) {
+				yield () => {
+					renderCount++;
+					return html`<span
+						>${host.getAttribute("data-label") ?? "none"}</span
+					>`;
+				};
+			},
+			{ props: { "data-label": String } },
+		);
 		customElements.define(tag, MyElement);
 
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -505,12 +523,17 @@ describe("MutationObserver and update() interleaving", () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 
-		const MyElement = component(function* (host) {
-			yield () => {
-				renderCount++;
-				return html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
-			};
-		});
+		const MyElement = component(
+			function* ({ host }) {
+				yield () => {
+					renderCount++;
+					return html`<span
+						>${host.getAttribute("data-label") ?? "none"}</span
+					>`;
+				};
+			},
+			{ props: { "data-label": String } },
+		);
 		customElements.define(tag, MyElement);
 
 		const element = mount(tag) as InstanceType<typeof MyElement>;

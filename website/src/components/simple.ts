@@ -2,7 +2,7 @@ import { component, html } from "../../../lib/src";
 
 customElements.define(
 	"simple-component",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		let seconds = parseInt(element.getAttribute("start") ?? "0");
 		const interval = setInterval(() => {
 			seconds++;

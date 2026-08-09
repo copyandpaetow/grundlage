@@ -1,7 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, props, component, type Template } from "../../src/index";
 import { hashValue } from "../../src/utils/hashing";
-import { BaseComponent, ComponentGenerator } from "../../src/types";
+import {
+	BaseComponent,
+	ComponentGenerator,
+	ComponentProps,
+} from "../../src/types";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -51,10 +55,13 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			component(function* (element) {
-				yield () =>
-					html`<span>${element.getAttribute("label") ?? "empty"}</span>`;
-			}),
+			component(
+				function* ({ host: element }) {
+					yield () =>
+						html`<span>${element.getAttribute("label") ?? "empty"}</span>`;
+				},
+				{ props: { label: String } },
+			),
 		);
 
 		let label = "first";
@@ -87,7 +94,7 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			component(function* (element) {
+			component(function* ({ host: element }) {
 				yield () => {
 					const data = (element as Child).data;
 					return html`<span>${data ? data.value : "none"}</span>`;
@@ -124,7 +131,7 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			component(function* (element) {
+			component(function* ({ host: element }) {
 				const emit = () => {
 					element.dispatchEvent(
 						new CustomEvent("pinged", {
@@ -139,7 +146,7 @@ describe("nested components", () => {
 		);
 
 		const received: number[] = [];
-		const ParentClass = component(function* (element) {
+		const ParentClass = component(function* ({ host: element }) {
 			element.addEventListener("pinged", (event) => {
 				received.push((event as CustomEvent<number>).detail);
 			});
@@ -166,10 +173,13 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			component(function* (element) {
-				yield () =>
-					html`<span>${element.getAttribute("label") ?? "none"}</span>`;
-			}),
+			component(
+				function* ({ host: element }) {
+					yield () =>
+						html`<span>${element.getAttribute("label") ?? "none"}</span>`;
+				},
+				{ props: { label: String } },
+			),
 		);
 
 		let label = "a";
@@ -203,7 +213,7 @@ describe("nested components", () => {
 
 		customElements.define(
 			childTag,
-			component(function* (element) {
+			component(function* ({ host: element }) {
 				yield () => html`<span>${element.getAttribute("value") ?? ""}</span>`;
 			}),
 		);
@@ -334,9 +344,7 @@ describe("nested components", () => {
 		const element = mount(parentTag) as InstanceType<typeof ParentClass>;
 		await sleep();
 
-		const child = element.shadowRoot?.querySelector(childTag) as InstanceType<
-			ReturnType<typeof render>
-		>;
+		const child = element.shadowRoot?.querySelector(childTag) as BaseComponent;
 		counterInternal = 5;
 		await child.update();
 		await sleep();
@@ -563,7 +571,7 @@ describe("shared template generator functions", () => {
 
 		customElements.define(
 			childTag,
-			component(function* (element) {
+			component(function* ({ host: element }) {
 				yield () =>
 					card(
 						element.getAttribute("title") ?? "",
@@ -622,7 +630,7 @@ describe("shared generator functions", () => {
 
 	test("same generator reused for two instances of the same tag keeps state isolated", async () => {
 		const tag = uniqueTag("shared-gen-isolated");
-		const stateGenerator: ComponentGenerator = function* (element) {
+		const stateGenerator: ComponentGenerator = function* ({ host: element }) {
 			//per-instance state captured in the generator closure
 			let count = 0;
 			element.addEventListener("increment", () => {
@@ -652,7 +660,9 @@ describe("shared generator functions", () => {
 	test("yield* delegates to a shared sub-generator", async () => {
 		//a sub-generator acts like a reusable behavior block — its yields flow
 		//up through the parent generator into the framework's #step.
-		const loadingThenData: ComponentGenerator = function* () {
+		//no ComponentGenerator annotation: that type admits an async generator, and `yield*` inside a
+		//sync generator can only delegate to a sync one
+		const loadingThenData = function* () {
 			yield html`<p>loading</p>`;
 			const data: string = (yield Promise.resolve("ready")) as string;
 			yield () => html`<p>${data}</p>`;
@@ -661,8 +671,8 @@ describe("shared generator functions", () => {
 		const tag = uniqueTag("delegated");
 		customElements.define(
 			tag,
-			component(function* (host) {
-				yield* loadingThenData(host);
+			component(function* () {
+				yield* loadingThenData();
 			}),
 		);
 
@@ -679,16 +689,17 @@ describe("shared generator functions", () => {
 
 		const withLifecycleLog = (
 			name: string,
-			inner: ComponentGenerator,
+			//the sync half of ComponentGenerator, for the same reason as above
+			inner: (componentProps: ComponentProps) => Generator,
 		): ComponentGenerator =>
-			function* (element) {
+			function* (componentProps) {
 				calls.push(`${name}:setup`);
-				yield* inner(element);
+				yield* inner(componentProps);
 				calls.push(`${name}:teardown-registered`);
 				return () => calls.push(`${name}:cleanup`);
 			};
 
-		const body: ComponentGenerator = function* () {
+		const body = function* () {
 			yield () => html`<p>wrapped</p>`;
 		};
 
@@ -749,7 +760,7 @@ describe("shared generator functions", () => {
 		const tag = uniqueTag("async-delegate");
 		customElements.define(
 			tag,
-			component(async function* (element) {
+			component(async function* ({ host: element }) {
 				yield* loadInTwoStages(element);
 			}),
 		);
@@ -826,7 +837,7 @@ describe("framework-parity patterns", () => {
 
 	test("two-way-style input binding: user input updates state and triggers re-render", async () => {
 		const tag = uniqueTag("two-way");
-		const ComponentClass = component(function* (element) {
+		const ComponentClass = component(function* ({ host: element }) {
 			let value = "";
 			const onInput = (event: Event) => {
 				value = (event.target as HTMLInputElement).value;
@@ -865,7 +876,7 @@ describe("framework-parity patterns", () => {
 		const providerTag = uniqueTag("theme-provider");
 		customElements.define(
 			providerTag,
-			component(function* (element) {
+			component(function* ({ host: element }) {
 				element.addEventListener("request-theme", (event) => {
 					(event as CustomEvent<ThemeRequest>).detail.theme = "dark";
 					event.stopPropagation();
@@ -877,7 +888,7 @@ describe("framework-parity patterns", () => {
 		const consumerTag = uniqueTag("theme-consumer");
 		customElements.define(
 			consumerTag,
-			component(function* (element) {
+			component(function* ({ host: element }) {
 				//defer one microtask: connectedCallback order is only guaranteed
 				//in tree order in spec-compliant engines, and the provider's
 				//listener must be registered before we dispatch. Yielding a
@@ -912,20 +923,24 @@ describe("framework-parity patterns", () => {
 	test("props helper coerces attributes, properties, and fallbacks", async () => {
 		const tag = uniqueTag("props-helper");
 		type ValidatedProps = {
-			label: string;
-			count: number;
+			label: string | undefined;
+			count: number | undefined;
 			disabled: boolean;
 			missing: string;
 		};
 		let captured: ValidatedProps | null = null;
 
-		const ComponentClass = component(function* (element) {
-			captured = props(element, {
+		const ComponentClass = component(function* ({ host: element }) {
+			//assigned through a local: `captured`'s annotation would contextually type the call and
+			//widen [String, "fallback"] to an array, which the schema rejects. Inferring first and
+			//assigning after is also the stronger check — ValidatedProps gates what was inferred
+			const resolved = props(element, {
 				label: String,
 				count: Number,
 				disabled: Boolean,
 				missing: [String, "fallback"],
 			});
+			captured = resolved;
 			yield () =>
 				html`<p>${captured!.label}-${captured!.count}-${captured!.missing}</p>`;
 		});
@@ -953,7 +968,7 @@ describe("framework-parity patterns", () => {
 
 	test("component instances mounted from the same class keep state isolated", async () => {
 		const tag = uniqueTag("instance-isolation");
-		const ComponentClass = component(function* (element) {
+		const ComponentClass = component(function* ({ host: element }) {
 			let count = 0;
 			element.addEventListener("bump", () => {
 				count++;
@@ -1028,7 +1043,7 @@ describe("framework-parity patterns", () => {
 		const listTag = uniqueTag("renderprop-list");
 		customElements.define(
 			listTag,
-			component(function* (element) {
+			component(function* ({ host: element }) {
 				yield () => {
 					const rows =
 						(element as HTMLElement & { items?: string[] }).items ?? [];

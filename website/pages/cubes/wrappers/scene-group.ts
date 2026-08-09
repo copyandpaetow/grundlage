@@ -17,7 +17,7 @@ import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 customElements.define(
 	"scene-group",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		yield () => {
 			// A group has no size of its own (scaling would distort its children),
 			// so we resolve all three triples and simply ignore the size.

@@ -213,7 +213,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		let receivedElement: HTMLElement | null = null;
 
-		const MyElement = component(async function* (el) {
+		const MyElement = component(async function* ({ host: el }) {
 			receivedElement = el;
 			yield () => html`<p>check</p>`;
 		});

@@ -19,7 +19,7 @@ const HALF_SLOPE = SLOPE_LENGTH / 2;
 
 customElements.define(
 	"scene-ramp",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		yield () => {
 			const {
 				size: [width, height, depth],

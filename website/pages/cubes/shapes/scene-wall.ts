@@ -17,7 +17,7 @@ const HALF_THICKNESS = THICKNESS / 2;
 
 customElements.define(
 	"scene-wall",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		yield () => {
 			const {
 				size: [width, height, depth],

@@ -55,7 +55,7 @@ const FIELD_SPECIFIC: Record<
 
 customElements.define(
 	"scene-editor",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		// The editor is transparent: it renders the palette chrome over the slotted
 		// scene. `:host` is a positioned block so the absolutely-placed palette anchors
 		// to the viewport; the slot keeps the wrapped camera/world in flow with

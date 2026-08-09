@@ -42,7 +42,7 @@ const classWhenLowerIsBetter = (current: number, previous: number): string =>
 
 customElements.define(
 	"perf-harness",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		const busyValues = Array.from({ length: 20 }, (_, index) => index * 0.123);
 
 		let frame = 0;

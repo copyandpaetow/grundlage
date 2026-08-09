@@ -18,7 +18,7 @@ import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 customElements.define(
 	"scene-ghost",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		yield () => {
 			const {
 				position: [positionX, positionY, positionZ],

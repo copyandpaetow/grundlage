@@ -42,7 +42,7 @@ const classWhenLowerIsBetter = (current: number, previous: number): string =>
 
 customElements.define(
 	"raf-animation-list",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		const barCount = Number(element.getAttribute("bars") ?? 20);
 		const phases = Array.from({ length: barCount }, (_, index) => index * 0.3);
 
