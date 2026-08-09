@@ -32,7 +32,7 @@ describe("form-associated component in a live form", () => {
 			let captured: ElementInternals | null | undefined;
 			customElements.define(
 				tag,
-				component(function* (host) {
+				component(function* ({ host }) {
 					captured = host.internals;
 					yield () => html`<template><input /></template>`;
 				}, formOptions),
@@ -54,7 +54,7 @@ describe("form-associated component in a live form", () => {
 			const tag = uniqueTag();
 			customElements.define(
 				tag,
-				component(function* (host) {
+				component(function* ({ host }) {
 					host.internals?.setFormValue("ada");
 					yield () => html`<template><input /></template>`;
 				}, formOptions),

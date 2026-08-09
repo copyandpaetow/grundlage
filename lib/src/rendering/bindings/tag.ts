@@ -53,11 +53,12 @@ const swapElement = (
 		newElement.setAttribute(attribute.name, attribute.value);
 	}
 	while (element.firstChild) newElement.appendChild(element.firstChild);
-	element.replaceWith(newElement);
-	focusElement?.focus();
 
 	for (let index = 0; index < carried.length; index++)
 		reapplyOnSwap(carried[index], newElement, values);
+
+	element.replaceWith(newElement);
+	focusElement?.focus();
 };
 
 const tagGateHash = (

@@ -829,7 +829,7 @@ describe("root-template host attribute updates within a single template (refacto
 	});
 });
 
-describe("root-template host attribute writes do not feed back through the MutationObserver", () => {
+describe("root-template host attribute writes do not feed back into the component", () => {
 	//the host MutationObserver in index.ts watches `this` with { attributes: true }
 	//framework-driven writes to the host (from root-template host bindings) must not be observed as user mutations; otherwise every render that writes a host attr would queue an extra re-render one microtask later
 	let tagId = 0;
@@ -918,14 +918,17 @@ describe("root-template host attribute writes do not feed back through the Mutat
 		//regression guard: we must suppress the MO only for framework-driven writes, not disable it entirely
 		const tag = uniqueTag();
 		let renderCount = 0;
-		const MyElement = component(function* (host) {
-			yield () => {
-				renderCount++;
-				return html`<template class="card"
-					><p>${host.getAttribute("data-label") ?? "none"}</p></template
-				>`;
-			};
-		});
+		const MyElement = component(
+			function* ({ host }) {
+				yield () => {
+					renderCount++;
+					return html`<template class="card"
+						><p>${host.getAttribute("data-label") ?? "none"}</p></template
+					>`;
+				};
+			},
+			{ props: { "data-label": String } },
+		);
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep(50);

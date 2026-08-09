@@ -8,7 +8,12 @@ import {
 import { hasHashChanged } from "../compose";
 import { ATTRIBUTE_MODE } from "../constants";
 import { triggerComponentUpdate, resolveTargetElement } from "../dom";
-import { resolveAttributeMode } from "./attribute-single-value";
+import {
+	assignDeclaredProp,
+	isAwaitingDefinition,
+	isDeclaredPropName,
+	resolveAttributeMode,
+} from "./attribute-single-value";
 import { AppliedAttribute, DynamicAttributeLiveBinding } from "./types";
 
 const resolveEventNameFromKey = (
@@ -37,12 +42,26 @@ const warnIfDeadNativeHandler = (key: string, element: Element): void => {
 	);
 };
 
+//which channel holds the value is read off the element, so the two-argument setProp(name, value)
+//clears as reliably as a caller that tracked an oldValue
+const clearPropertyChannel = (element: Element, key: string): void => {
+	if (!Object.hasOwn(element, key)) return;
+	delete (element as unknown as Record<string, unknown>)[key];
+	triggerComponentUpdate(element);
+};
+
 export const applyDynamicAttribute = (
 	element: Element,
 	key: string,
 	value: unknown,
 	oldValue?: unknown,
 ): void => {
+	//ahead of the event check: that one takes any key starting with "on" as a native handler once
+	//`key in element` is true, which a prop's own accessor makes true. A prop named `once` would
+	//add a listener for "ce" instead of being assigned
+	if (isDeclaredPropName(element, key))
+		return assignDeclaredProp(element, key, value);
+
 	const listenerName = resolveEventNameFromKey(key, element);
 	if (listenerName !== null) {
 		if (typeof oldValue === "function")
@@ -54,22 +73,21 @@ export const applyDynamicAttribute = (
 
 	if (typeof value === "function") warnIfDeadNativeHandler(key, element);
 
-	const clearsProperty = oldValue !== undefined && !isStringable(oldValue);
-
 	switch (resolveAttributeMode(value)) {
 		case ATTRIBUTE_MODE.ABSENT:
-			if (clearsProperty) {
-				delete (element as unknown as Record<string, unknown>)[key];
-				triggerComponentUpdate(element);
-			}
+			clearPropertyChannel(element, key);
 			element.removeAttribute(key);
+			if (value === false && isAwaitingDefinition(element))
+				(element as unknown as Record<string, unknown>)[key] = false;
 			return;
 		case ATTRIBUTE_MODE.ATTRIBUTE:
-			if (clearsProperty)
-				delete (element as unknown as Record<string, unknown>)[key];
+			clearPropertyChannel(element, key);
 			element.setAttribute(key, String(value));
 			return;
 		case ATTRIBUTE_MODE.PROPERTY:
+			//a stringable → object switch would otherwise leave both channels populated and the
+			//reader takes the stale attribute
+			element.removeAttribute(key);
 			(element as unknown as Record<string, unknown>)[key] = value;
 			triggerComponentUpdate(element);
 			return;
@@ -147,8 +165,8 @@ export const hydrateDynamic = (
 	liveBinding.appliedAttributes = snapshotAttributeMap(
 		normalizeToAttributeMap(value),
 	);
-	//server HTML carries only stringable entries; handlers and property-mode values must be
-	//attached to the hydrated element here, the same non-stringable set a tag swap reapplies
+	//server HTML carries only attributes; handlers, property-mode values and declared props are
+	//attached to the hydrated element here, the same set a tag swap reapplies
 	reapplyOnSwap(liveBinding, resolveTargetElement(liveBinding), values);
 };
 
@@ -157,7 +175,11 @@ export const reapplyOnSwap = (
 	element: Element,
 	_values: Array<unknown>,
 ): void => {
-	for (const [name, entry] of liveBinding.appliedAttributes)
-		if (!isStringable(entry.value))
-			applyDynamicAttribute(element, name, entry.value);
+	for (const [name, entry] of liveBinding.appliedAttributes) {
+		//a declared prop is reassigned even when stringable: reflection spells a value out, it does
+		//not preserve it
+		const isCarriedByMarkup =
+			isStringable(entry.value) && !isDeclaredPropName(element, name);
+		if (!isCarriedByMarkup) applyDynamicAttribute(element, name, entry.value);
+	}
 };

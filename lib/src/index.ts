@@ -38,48 +38,71 @@ import {
 	ComponentConstructor,
 	ComponentGenerator,
 	ComponentOptions,
+	ComponentProps,
 	RenderFunction,
+	Schema,
 	Template,
 } from "./types";
+import {
+	assertPropNamesAreAvailable,
+	normalizeSchema,
+	Prop,
+} from "./props/schema";
+import {
+	attributeSpellingOf,
+	createComponentProps,
+	PropValues,
+	recoverPreUpgradeAssignments,
+	writeProp,
+} from "./props/values";
 import { isGeneratorFunction, isServer } from "./utils/guards";
 
-export { props } from "./props";
+export { props } from "./props/read";
 export {
-	type ComponentOptions,
 	type BaseComponent,
+	type ComponentOptions,
+	type ComponentProps,
+	type Resolve,
+	type Schema,
 	type Template,
 } from "./types";
 export { load, type LoadOptions } from "./load";
 
-const defaultOptions: ComponentOptions = {
+const defaultOptions = {
 	clonable: true,
 	delegatesFocus: true,
 	mode: "open",
 	serializable: true,
-} as const;
+} as const satisfies ComponentOptions;
 
 export const html = htmlValue as unknown as (
 	tokens: TemplateStringsArray,
 	...dynamicValues: Array<unknown>
 ) => Template;
 
-export const component = (
-	componentGenerator: ComponentGenerator,
-	options: ComponentOptions = defaultOptions,
+export const component = <DeclaredSchema extends Schema = {}>(
+	componentGenerator: ComponentGenerator<DeclaredSchema>,
+	options: ComponentOptions<DeclaredSchema> = defaultOptions,
 ): ComponentConstructor => {
 	if (!isGeneratorFunction(componentGenerator))
 		throw new TypeError(
-			"grundlage: component(fn) expects a generator function. A plain function or arrow function is not accepted.",
+			"grundlage: component(fn) expects a generator function.",
 		);
 	const mergedOptions = { ...defaultOptions, ...options };
 	const ParentClass: typeof HTMLElement = mergedOptions.formAssociated
 		? getFormAssociatedBaseClass()
 		: HTMLElement;
 
+	const props = normalizeSchema(mergedOptions.props ?? {});
+
 	class BaseElement extends ParentClass implements BaseComponent {
+		static observedAttributes = [...props.keys()];
+		static declaredPropNames: ReadonlySet<string> = new Set(
+			[...props.values()].map((prop) => prop.propName),
+		);
+
 		#shadowRoot: ShadowRoot; //needs to be property as for mode: "closed" the this.shadowRoot is null
 		#instance: Instance | null = null;
-		#attributeObserver: MutationObserver | null = null;
 		#isHydrationPending: boolean;
 		#styleSheetMoveState: StyleSheetMoveState = {
 			needsStyleSheetRefreshOnMove: false,
@@ -87,15 +110,53 @@ export const component = (
 		};
 		#outerTask: Task | null = null;
 		#innerTask: Task | null = null;
-		#currentRenderable: RenderFunction | ComponentGenerator | null = null;
+		#currentRenderable:
+			| RenderFunction<DeclaredSchema>
+			| ComponentGenerator<DeclaredSchema>
+			| null = null;
 		#currentRenderCallId = 0;
 		#isScheduled = false;
 		#pendingUpdate: PromiseWithResolvers<void> | null = null;
 		#isServerRun = false;
 		#internals: ElementInternals | null = null;
+		#isWritingHostBindings = false;
+		#props: PropValues = createComponentProps(props, this);
+		#isReflecting = false;
 
 		get internals(): ElementInternals | null {
 			return (this.#internals ??= this.attachInternals?.() ?? null);
+		}
+
+		static {
+			assertPropNamesAreAvailable(this.prototype, props);
+			for (const [attributeName, prop] of props)
+				Object.defineProperty(this.prototype, prop.propName, {
+					enumerable: true,
+					configurable: true,
+					get(this: BaseElement) {
+						return this.#props[prop.propName];
+					},
+					set(this: BaseElement, incoming: unknown) {
+						if (!writeProp(this.#props, prop, incoming)) return;
+						this.#reflect(attributeName, prop);
+						this.update();
+					},
+				});
+		}
+
+		#reflect(attributeName: string, prop: Prop): void {
+			const spelling = attributeSpellingOf(prop, this.#props[prop.propName]);
+			if (spelling === null) {
+				if (!this.hasAttribute(attributeName)) return;
+				this.#isReflecting = true;
+				this.removeAttribute(attributeName);
+				this.#isReflecting = false;
+				return;
+			}
+			if (this.getAttribute(attributeName) === spelling) return;
+			this.#isReflecting = true;
+			this.setAttribute(attributeName, spelling);
+			this.#isReflecting = false;
 		}
 
 		constructor() {
@@ -118,8 +179,16 @@ export const component = (
 				return;
 			}
 			this.#isServerRun = isServer();
-			this.#outerTask = createRenderTask(componentGenerator(this));
-			if (!this.#isServerRun) this.#setupAttributeObserver();
+			try {
+				recoverPreUpgradeAssignments(this, props);
+			} catch (error) {
+				return this.#fail(error);
+			}
+			this.#outerTask = createRenderTask(
+				componentGenerator(
+					this.#props as unknown as ComponentProps<DeclaredSchema>,
+				),
+			);
 			this.#startRun(this.#outerTask);
 		}
 
@@ -128,8 +197,19 @@ export const component = (
 			if (this.isConnected) return;
 			if (this.#outerTask === null) return;
 			this.#cancelBothTasks();
-			this.#teardownAttributeObserver();
 			this.#resolvePendingUpdatePromise();
+		}
+
+		attributeChangedCallback(
+			attributeName: string,
+			oldValue: string | null,
+			newValue: string | null,
+		) {
+			if (this.#isReflecting) return;
+			if (oldValue === newValue) return;
+			const prop = props.get(attributeName);
+			if (prop === undefined) return;
+			if (writeProp(this.#props, prop, newValue)) this.update();
 		}
 
 		setProp(name: string, value: unknown, oldValue?: unknown) {
@@ -138,6 +218,8 @@ export const component = (
 		}
 
 		update(): Promise<void> {
+			//four paths reach here from inside a host-binding write; this is the one funnel
+			if (this.#isWritingHostBindings) return Promise.resolve();
 			if (this.#outerTask === null || this.#currentRenderable === null)
 				return Promise.resolve();
 			return this.#scheduleNextUpdate();
@@ -162,13 +244,18 @@ export const component = (
 				return this.#resolvePendingUpdatePromise();
 			if (isGeneratorFunction(renderable)) {
 				this.#startRun(
-					this.#installInnerTask(renderable as ComponentGenerator),
+					this.#installInnerTask(
+						renderable as ComponentGenerator<DeclaredSchema>,
+					),
 				);
 				return;
 			}
 			void this.#runTaskUntilItParksOrEnds(
 				outerTask,
-				this.#callRenderFunction(outerTask, renderable as RenderFunction),
+				this.#callRenderFunction(
+					outerTask,
+					renderable as RenderFunction<DeclaredSchema>,
+				),
 			);
 		}
 
@@ -179,9 +266,11 @@ export const component = (
 			updatePromise.resolve();
 		}
 
-		#installInnerTask(source: ComponentGenerator): Task {
+		#installInnerTask(source: ComponentGenerator<DeclaredSchema>): Task {
 			this.#cancelInnerTask();
-			const innerTask = createRenderTask(source(this));
+			const innerTask = createRenderTask(
+				source(this.#props as unknown as ComponentProps<DeclaredSchema>),
+			);
 			this.#innerTask = innerTask;
 			return innerTask;
 		}
@@ -207,7 +296,6 @@ export const component = (
 		#fail(error: unknown): void {
 			this.#cancelBothTasks();
 			this.#revertAllHostBindings();
-			this.#teardownAttributeObserver();
 			console.warn(error);
 			this.#shadowRoot.textContent = `${error}`;
 			this.#instance = null;
@@ -341,12 +429,14 @@ export const component = (
 
 		#callRenderFunction(
 			task: Task,
-			renderFunction: RenderFunction,
+			renderFunction: RenderFunction<DeclaredSchema>,
 		): DriverStep {
 			const renderCallId = ++this.#currentRenderCallId;
 			let produced: unknown;
 			try {
-				produced = renderFunction(this);
+				produced = renderFunction(
+					this.#props as unknown as ComponentProps<DeclaredSchema>,
+				);
 			} catch (error) {
 				return endTaskWithError(task, error);
 			}
@@ -427,17 +517,12 @@ export const component = (
 			const templateValue = coerceToTemplate(value);
 			const parsed = getParsedTemplate(templateValue.__templateStrings);
 
-			this.#attributeObserver?.disconnect();
-			try {
-				if (this.#isHydrationPending) {
-					this.#hydrateRoot(templateValue, parsed);
-					this.#isHydrationPending = false;
-					warnOnUnclaimedSsrPayloads(this.#shadowRoot);
-				} else {
-					this.#paintRoot(templateValue, parsed);
-				}
-			} finally {
-				this.#attributeObserver?.observe(this, { attributes: true });
+			if (this.#isHydrationPending) {
+				this.#hydrateRoot(templateValue, parsed);
+				this.#isHydrationPending = false;
+				warnOnUnclaimedSsrPayloads(this.#shadowRoot);
+			} else {
+				this.#paintRoot(templateValue, parsed);
 			}
 			if (this.#isServerRun) flushHostPayload(this);
 			this.#rerenderIfStyleSheetsDemoted();
@@ -451,11 +536,16 @@ export const component = (
 			);
 			if (!mounted) return;
 			if (this.#instance) releaseInstance(this.#instance);
-			this.#revertAllHostBindings();
-			for (let index = 0; index < parsed.hostBindingCount; index++) {
-				const live = createLiveBinding(parsed.bindings[index], this);
-				commitLiveBinding(mounted.instance, live, value.values);
-				mounted.instance.liveBindings[index] = live;
+			this.#isWritingHostBindings = true;
+			try {
+				this.#revertAllHostBindings();
+				for (let index = 0; index < parsed.hostBindingCount; index++) {
+					const live = createLiveBinding(parsed.bindings[index], this);
+					commitLiveBinding(mounted.instance, live, value.values);
+					mounted.instance.liveBindings[index] = live;
+				}
+			} finally {
+				this.#isWritingHostBindings = false;
 			}
 			this.#shadowRoot.replaceChildren(mounted.fragment);
 			this.#instance = mounted.instance;
@@ -467,10 +557,15 @@ export const component = (
 				this.#shadowRoot,
 				this.#styleSheetMoveState,
 			);
-			for (let index = 0; index < parsed.hostBindingCount; index++) {
-				const live = createLiveBinding(parsed.bindings[index], this);
-				commitLiveBinding(instance, live, value.values);
-				instance.liveBindings[index] = live;
+			this.#isWritingHostBindings = true;
+			try {
+				for (let index = 0; index < parsed.hostBindingCount; index++) {
+					const live = createLiveBinding(parsed.bindings[index], this);
+					commitLiveBinding(instance, live, value.values);
+					instance.liveBindings[index] = live;
+				}
+			} finally {
+				this.#isWritingHostBindings = false;
 			}
 			this.#instance = instance;
 		}
@@ -489,17 +584,6 @@ export const component = (
 			if (!this.#styleSheetMoveState.needsRerenderAfterMove) return;
 			this.#styleSheetMoveState.needsRerenderAfterMove = false;
 			this.update();
-		}
-
-		#setupAttributeObserver(): void {
-			this.#attributeObserver?.disconnect();
-			const observer = new MutationObserver(() => this.update());
-			observer.observe(this, { attributes: true });
-			this.#attributeObserver = observer;
-		}
-
-		#teardownAttributeObserver(): void {
-			this.#attributeObserver?.disconnect();
 		}
 	}
 

@@ -403,4 +403,42 @@ describe("tag updates", () => {
 
 		cleanup(element);
 	});
+
+	test("carried props arrive before the swapped-in element mounts", async () => {
+		const childTag = uniqueTag();
+		customElements.define(
+			childTag,
+			component(
+				function* ({ items }) {
+					yield () => html`<span>${items.length}</span>`;
+				},
+				{
+					props: {
+						items: [(incoming: unknown) => incoming as Array<unknown>, []],
+					},
+				},
+			),
+		);
+
+		const tag = uniqueTag();
+		let tagName = "div";
+		const rows = ["a", "b"];
+
+		const MyElement = component(function* () {
+			yield () => html`<${tagName} items=${rows}></${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		tagName = childTag;
+		await element.update();
+		await sleep();
+
+		const child = element.shadowRoot?.querySelector(childTag);
+		expect(child?.shadowRoot?.textContent).toContain("2");
+
+		cleanup(element);
+	});
 });

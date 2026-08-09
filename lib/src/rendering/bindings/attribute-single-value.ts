@@ -25,6 +25,30 @@ export const resolveAttributeMode = (
 	return ATTRIBUTE_MODE.PROPERTY;
 };
 
+//the definition, not the instance: a fragment's elements upgrade on insertion, so a binding
+//routinely commits against a child that has not upgraded yet
+export const isDeclaredPropName = (element: Element, name: string): boolean => {
+	if (!element.localName.includes("-")) return false;
+	const definition = customElements.get(element.localName) as
+		| (CustomElementConstructor & { declaredPropNames?: ReadonlySet<string> })
+		| undefined;
+	return definition?.declaredPropNames?.has(name) ?? false;
+};
+
+export const isAwaitingDefinition = (element: Element): boolean =>
+	element.localName.includes("-") &&
+	customElements.get(element.localName) === undefined;
+
+//before upgrade there is no accessor, so this lands as an own property that
+//recoverPreUpgradeAssignments runs back through the setter at mount
+export const assignDeclaredProp = (
+	element: Element,
+	propName: string,
+	value: unknown,
+): void => {
+	(element as unknown as Record<string, unknown>)[propName] = value;
+};
+
 export const clearAppliedAttribute = (
 	element: Element,
 	liveBinding: SingleValueAttributeLiveBinding,
@@ -38,6 +62,9 @@ export const clearAppliedAttribute = (
 				liveBinding.lastComposedName
 			];
 			triggerComponentUpdate(element);
+			break;
+		case ATTRIBUTE_MODE.DECLARED_PROP:
+			assignDeclaredProp(element, liveBinding.lastComposedName, null);
 			break;
 	}
 	liveBinding.appliedAttributeMode = ATTRIBUTE_MODE.ABSENT;
@@ -64,10 +91,16 @@ export const commitSingleValue = (
 		liveBinding.lastComposedName = name;
 	}
 
-	const nextAttributeMode = resolveAttributeMode(value);
+	const nextAttributeMode = isDeclaredPropName(element, name)
+		? ATTRIBUTE_MODE.DECLARED_PROP
+		: resolveAttributeMode(value);
 	if (nextAttributeMode !== liveBinding.appliedAttributeMode)
 		clearAppliedAttribute(element, liveBinding);
 	switch (nextAttributeMode) {
+		case ATTRIBUTE_MODE.ABSENT:
+			if (value === false && isAwaitingDefinition(element))
+				(element as unknown as Record<string, unknown>)[name] = false;
+			break;
 		case ATTRIBUTE_MODE.ATTRIBUTE: {
 			const stringValue = String(value);
 			if (element.getAttribute(name) !== stringValue)
@@ -77,6 +110,9 @@ export const commitSingleValue = (
 		case ATTRIBUTE_MODE.PROPERTY:
 			(element as unknown as Record<string, unknown>)[name] = value;
 			triggerComponentUpdate(element);
+			break;
+		case ATTRIBUTE_MODE.DECLARED_PROP:
+			assignDeclaredProp(element, name, value);
 			break;
 	}
 	liveBinding.appliedAttributeMode = nextAttributeMode;
@@ -89,7 +125,10 @@ export const hydrateSingleValue = (
 	const { nameParts, valueIndex } = liveBinding.staticBinding;
 	const value = values[valueIndex];
 	const name = composeParts(nameParts, values);
-	const mode = resolveAttributeMode(value);
+	const element = resolveTargetElement(liveBinding);
+	const mode = isDeclaredPropName(element, name)
+		? ATTRIBUTE_MODE.DECLARED_PROP
+		: resolveAttributeMode(value);
 	liveBinding.lastComposedName = name;
 	liveBinding.appliedAttributeMode = mode;
 	liveBinding.lastValueHash = singleValueGateHash(
@@ -97,21 +136,26 @@ export const hydrateSingleValue = (
 		values,
 	);
 	if (mode === ATTRIBUTE_MODE.PROPERTY) {
-		const element = resolveTargetElement(liveBinding);
 		(element as unknown as Record<string, unknown>)[name] = value;
 		triggerComponentUpdate(element);
 	}
+	//the value the binding holds, not the spelling the server wrote
+	if (mode === ATTRIBUTE_MODE.DECLARED_PROP)
+		assignDeclaredProp(element, name, value);
 };
 
+//the mode is recomputed rather than carried over: the new element may be defined where the old
+//one was not
 export const reapplyOnSwap = (
 	liveBinding: SingleValueAttributeLiveBinding,
 	element: Element,
 	values: Array<unknown>,
 ): void => {
-	if (liveBinding.appliedAttributeMode !== ATTRIBUTE_MODE.PROPERTY) return;
+	const name = liveBinding.lastComposedName;
 	const value = values[liveBinding.staticBinding.valueIndex];
-	(element as unknown as Record<string, unknown>)[
-		liveBinding.lastComposedName
-	] = value;
+	if (isDeclaredPropName(element, name))
+		return assignDeclaredProp(element, name, value);
+	if (resolveAttributeMode(value) !== ATTRIBUTE_MODE.PROPERTY) return;
+	(element as unknown as Record<string, unknown>)[name] = value;
 	triggerComponentUpdate(element);
 };

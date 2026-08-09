@@ -1,339 +1,167 @@
-import { describe, it, expect } from "vitest";
-import { props } from "../props";
+import { describe, expect, it, vi } from "vitest";
+import { props } from "../props/read";
+
+const asList = (incoming: unknown): Array<unknown> | undefined =>
+	Array.isArray(incoming) ? incoming : undefined;
+const asCallback = (incoming: unknown): (() => void) | undefined =>
+	typeof incoming === "function" ? (incoming as () => void) : undefined;
 
 const createElement = (
 	attributes: Record<string, string> = {},
 	properties: Record<string, unknown> = {},
 ): HTMLElement => {
 	const element = document.createElement("div");
-	for (const [key, value] of Object.entries(attributes)) {
+	for (const [key, value] of Object.entries(attributes))
 		element.setAttribute(key, value);
-	}
-	for (const [key, value] of Object.entries(properties)) {
+	for (const [key, value] of Object.entries(properties))
 		(element as unknown as Record<string, unknown>)[key] = value;
-	}
 	return element;
 };
 
-describe("props", () => {
-	describe("String", () => {
-		it("reads from attribute", () => {
-			const element = createElement({ label: "hello" });
-			const { label } = props(element, { label: String });
-			expect(label).toBe("hello");
+describe("props on a plain element", () => {
+	describe("the attribute channel", () => {
+		it("reads and parses each shipped token", () => {
+			const element = createElement({
+				label: "hello",
+				count: "42",
+				total: "9",
+				open: "",
+			});
+			expect(
+				props(element, {
+					label: String,
+					count: Number,
+					total: BigInt,
+					open: Boolean,
+				}),
+			).toEqual({ label: "hello", count: 42, total: 9n, open: true });
 		});
 
-		it("returns empty string for empty attribute", () => {
-			const element = createElement({ label: "" });
-			const { label } = props(element, { label: String });
-			expect(label).toBe("");
+		it("reads the attribute under the lowercased prop name", () => {
+			const element = createElement({ userid: "8" });
+			expect(props(element, { userId: String }).userId).toBe("8");
 		});
 
-		it("falls back to property when attribute is missing", () => {
-			const element = createElement({}, { label: "from-prop" });
-			const { label } = props(element, { label: String });
-			expect(label).toBe("from-prop");
-		});
-
-		it("throws when required and missing", () => {
+		it("resolves absence through the prop's own function", () => {
 			const element = createElement();
-			expect(() => props(element, { label: String })).toThrow(
-				'Missing required prop: "label"',
+			expect(props(element, { label: String }).label).toBe(undefined);
+			expect(props(element, { label: [String, "anon"] }).label).toBe("anon");
+			expect(props(element, { open: Boolean }).open).toBe(false);
+		});
+
+		it("treats an empty Number or BigInt attribute as absent", () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const element = createElement({ count: "", total: "" });
+			expect(props(element, { count: [Number, 7] }).count).toBe(7);
+			expect(props(element, { total: [BigInt, 3n] }).total).toBe(3n);
+			warn.mockRestore();
+		});
+
+		it('reads x="false" as false for every boolean shape', () => {
+			const element = createElement({ open: "false" });
+			expect(props(element, { open: Boolean }).open).toBe(false);
+			expect(props(element, { open: [Boolean, true] }).open).toBe(false);
+		});
+
+		it("warns and keeps the absent value on a malformed number or bigint", () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			expect(
+				props(createElement({ count: "hello" }), { count: [Number, 0] }).count,
+			).toBe(0);
+			expect(
+				props(createElement({ total: "3.14" }), { total: BigInt }).total,
+			).toBe(undefined);
+			expect(warn).toHaveBeenCalledTimes(2);
+			warn.mockRestore();
+		});
+
+		it("reads back the NaN the library itself writes", () => {
+			expect(
+				props(createElement({ count: "NaN" }), { count: Number }).count,
+			).toBeNaN();
+		});
+	});
+
+	describe("the property channel", () => {
+		it("an own property wins over the attribute, case intact", () => {
+			const payload = [1, 2];
+			const element = createElement(
+				{ usertags: "ignored" },
+				{
+					userTags: payload,
+				},
+			);
+			expect(props(element, { userTags: asList }).userTags).toBe(payload);
+		});
+
+		it("runs the prop's function on what it finds", () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const element = createElement({}, { tags: "not-a-list" });
+			expect(props(element, { tags: [asList, []] }).tags).toEqual([]);
+			expect(warn).toHaveBeenCalledWith(
+				expect.stringContaining('prop "tags" refused a string'),
+			);
+			warn.mockRestore();
+		});
+
+		it("hands each call its own copy of a mutable fallback", () => {
+			const element = createElement();
+			const first = props(element, { tags: [asList, []] }).tags;
+			const second = props(element, { tags: [asList, []] }).tags;
+			expect(first).not.toBe(second);
+		});
+
+		it("reads a function-typed prop from the property channel", () => {
+			const handler = () => {};
+			const element = createElement({}, { onSelect: handler });
+			expect(props(element, { onSelect: asCallback }).onSelect).toBe(handler);
+		});
+
+		it("takes own properties only, so a built-in accessor is not a value", () => {
+			const element = createElement();
+			element.append(document.createElement("span"));
+			expect(
+				props(element, { children: (incoming: unknown) => incoming }).children,
+			).toBe(undefined);
+		});
+	});
+
+	describe("define-time checks still apply", () => {
+		it("rejects a prop name the platform cannot carry", () => {
+			expect(() => props(createElement(), { UserId: String })).toThrow(
+				/must start with a lowercase letter/,
 			);
 		});
 
-		it("uses default when missing", () => {
-			const element = createElement();
-			const { label } = props(element, { label: [String, "fallback"] });
-			expect(label).toBe("fallback");
-		});
-
-		it("returns undefined when optional and missing", () => {
-			const element = createElement();
-			const { label } = props(element, { label: [String] });
-			expect(label).toBeUndefined();
-		});
-	});
-
-	describe("Number", () => {
-		it("reads and coerces from attribute", () => {
-			const element = createElement({ count: "42" });
-			const { count } = props(element, { count: Number });
-			expect(count).toBe(42);
-		});
-
-		it("handles zero correctly", () => {
-			const element = createElement({ count: "0" });
-			const { count } = props(element, { count: Number });
-			expect(count).toBe(0);
-		});
-
-		it("handles negative numbers", () => {
-			const element = createElement({ count: "-5" });
-			const { count } = props(element, { count: Number });
-			expect(count).toBe(-5);
-		});
-
-		it("handles floating point", () => {
-			const element = createElement({ ratio: "3.14" });
-			const { ratio } = props(element, { ratio: Number });
-			expect(ratio).toBeCloseTo(3.14);
-		});
-
-		it("throws on NaN", () => {
-			const element = createElement({ count: "hello" });
-			expect(() => props(element, { count: Number })).toThrow(
-				'Invalid number value for attribute "count": "hello"',
-			);
-		});
-
-		it("falls back to property when attribute is missing", () => {
-			const element = createElement({}, { count: 99 });
-			const { count } = props(element, { count: Number });
-			expect(count).toBe(99);
-		});
-
-		it("uses default when missing", () => {
-			const element = createElement();
-			const { count } = props(element, { count: [Number, 0] });
-			expect(count).toBe(0);
-		});
-
-		it("throws when required and missing", () => {
-			const element = createElement();
-			expect(() => props(element, { count: Number })).toThrow(
-				'Missing required prop: "count"',
-			);
-		});
-	});
-
-	describe("BigInt", () => {
-		it("reads and coerces from attribute", () => {
-			const element = createElement({ total: "9007199254740993" });
-			const { total } = props(element, { total: BigInt });
-			expect(total).toBe(9007199254740993n);
-		});
-
-		it("handles zero correctly", () => {
-			const element = createElement({ total: "0" });
-			const { total } = props(element, { total: BigInt });
-			expect(total).toBe(0n);
-		});
-
-		it("handles negative values", () => {
-			const element = createElement({ total: "-5" });
-			const { total } = props(element, { total: BigInt });
-			expect(total).toBe(-5n);
-		});
-
-		it("throws on a malformed attribute", () => {
-			const element = createElement({ total: "3.14" });
-			expect(() => props(element, { total: BigInt })).toThrow(
-				'Invalid bigint value for attribute "total": "3.14"',
-			);
-		});
-
-		it("treats an empty attribute as absent, like Number", () => {
-			const element = createElement({ total: "" });
-			const { total } = props(element, { total: [BigInt, 7n] });
-			expect(total).toBe(7n);
-		});
-
-		it("falls back to property when attribute is missing", () => {
-			const element = createElement({}, { total: 99n });
-			const { total } = props(element, { total: BigInt });
-			expect(total).toBe(99n);
-		});
-
-		it("uses default when missing", () => {
-			const element = createElement();
-			const { total } = props(element, { total: [BigInt, 0n] });
-			expect(total).toBe(0n);
-		});
-
-		it("throws when required and missing", () => {
-			const element = createElement();
-			expect(() => props(element, { total: BigInt })).toThrow(
-				'Missing required prop: "total"',
-			);
-		});
-	});
-
-	describe("Boolean", () => {
-		it("returns true when attribute is present", () => {
-			const element = createElement({ disabled: "" });
-			const { disabled } = props(element, { disabled: Boolean });
-			expect(disabled).toBe(true);
-		});
-
-		it("returns true when attribute has a value", () => {
-			const element = createElement({ disabled: "anything" });
-			const { disabled } = props(element, { disabled: Boolean });
-			expect(disabled).toBe(true);
-		});
-
-		it("returns false when attribute is absent", () => {
-			const element = createElement();
-			const { disabled } = props(element, { disabled: Boolean });
-			expect(disabled).toBe(false);
-		});
-
-		it("uses default when absent", () => {
-			const element = createElement();
-			const { enabled } = props(element, { enabled: [Boolean, true] });
-			expect(enabled).toBe(true);
-		});
-
-		it("returns true over default when present", () => {
-			const element = createElement({ enabled: "" });
-			const { enabled } = props(element, { enabled: [Boolean, false] });
-			expect(enabled).toBe(true);
-		});
-
-		it("reads true from the property channel when the attribute is absent", () => {
-			const element = createElement({}, { checked: true });
-			const { checked } = props(element, { checked: Boolean });
-			expect(checked).toBe(true);
-		});
-
-		it("reads false from the property channel over a truthy default", () => {
-			const element = createElement({}, { checked: false });
-			const { checked } = props(element, { checked: [Boolean, true] });
-			expect(checked).toBe(false);
-		});
-
-		it("lets a present attribute win over a false property", () => {
-			const element = createElement({ checked: "" }, { checked: false });
-			const { checked } = props(element, { checked: Boolean });
-			expect(checked).toBe(true);
-		});
-	});
-
-	describe("Function", () => {
-		it("reads from property", () => {
-			const fn = () => 42;
-			const element = createElement({}, { callback: fn });
-			const { callback } = props(element, { callback: Function });
-			expect(callback).toBe(fn);
-		});
-
-		it("throws when required and missing", () => {
-			const element = createElement();
-			expect(() => props(element, { callback: Function })).toThrow(
-				'Missing required prop: "callback"',
-			);
-		});
-
-		it("uses default when missing", () => {
-			const element = createElement();
-			const { callback } = props(element, { callback: [Function, null] });
-			expect(callback).toBeNull();
-		});
-
-		it("returns undefined when optional and missing", () => {
-			const element = createElement();
-			const { callback } = props(element, { callback: [Function] });
-			expect(callback).toBeUndefined();
-		});
-	});
-
-	describe("Array", () => {
-		it("reads from property", () => {
-			const items = [1, 2, 3];
-			const element = createElement({}, { items });
-			const { items: result } = props(element, { items: Array });
-			expect(result).toBe(items);
-		});
-
-		it("throws when required and missing", () => {
-			const element = createElement();
-			expect(() => props(element, { items: Array })).toThrow(
-				'Missing required prop: "items"',
-			);
-		});
-	});
-
-	describe("Object", () => {
-		it("reads from property", () => {
-			const config = { a: 1, b: 2 };
-			const element = createElement({}, { config });
-			const { config: result } = props(element, { config: Object });
-			expect(result).toBe(config);
-		});
-	});
-
-	describe("Map", () => {
-		it("reads from property", () => {
-			const data = new Map([["key", "value"]]);
-			const element = createElement({}, { data });
-			const { data: result } = props(element, { data: Map });
-			expect(result).toBe(data);
-		});
-	});
-
-	describe("Set", () => {
-		it("reads from property", () => {
-			const tags = new Set(["a", "b"]);
-			const element = createElement({}, { tags });
-			const { tags: result } = props(element, { tags: Set });
-			expect(result).toBe(tags);
-		});
-	});
-
-	describe("native element properties", () => {
-		it("reads children", () => {
-			const element = document.createElement("div");
-			element.innerHTML = "<span>a</span><span>b</span>";
-			const { children } = props(element, { children: HTMLCollection });
-			expect(children).toBe(element.children);
-			expect(children.length).toBe(2);
-		});
-
-		it("reads id from attribute", () => {
-			const element = createElement({ id: "my-id" });
-			const { id } = props(element, { id: String });
-			expect(id).toBe("my-id");
-		});
-
-		it("does not let a built-in reflected prop (title) mask the declared default", () => {
-			const element = document.createElement("div");
-			// no `title` attribute; element.title reads the prototype accessor as ""
-			const { title } = props(element, { title: [String, "fallback"] });
-			expect(title).toBe("fallback");
-		});
-
-		it("throws required for a built-in reflected prop when neither attr nor own prop is set", () => {
-			const element = document.createElement("div");
-			expect(() => props(element, { lang: String })).toThrow(
-				'Missing required prop: "lang"',
-			);
+		it("rejects two props colliding on one attribute", () => {
+			expect(() =>
+				props(createElement(), { userId: String, userid: String }),
+			).toThrow(/both map to the attribute "userid"/);
 		});
 	});
 
 	describe("mixed schema", () => {
-		it("resolves each type correctly", () => {
-			const fn = () => {};
-			const items = [1, 2];
+		it("resolves each channel independently", () => {
+			const tags = ["a"];
 			const element = createElement(
-				{ label: "hello", count: "5", disabled: "" },
-				{ callback: fn, items },
+				{ label: "hi", count: "3", open: "" },
+				{ tags },
 			);
-
-			const result = props(element, {
-				label: String,
-				count: Number,
-				disabled: Boolean,
-				callback: Function,
-				items: Array,
-				missing: [String, "default"],
+			expect(
+				props(element, {
+					label: String,
+					count: Number,
+					open: Boolean,
+					tags: asList,
+					missing: [String, "none"],
+				}),
+			).toEqual({
+				label: "hi",
+				count: 3,
+				open: true,
+				tags,
+				missing: "none",
 			});
-
-			expect(result.label).toBe("hello");
-			expect(result.count).toBe(5);
-			expect(result.disabled).toBe(true);
-			expect(result.callback).toBe(fn);
-			expect(result.items).toBe(items);
-			expect(result.missing).toBe("default");
 		});
 	});
 });

@@ -103,7 +103,7 @@ describe("closed shadow root — hydration + load replay", () => {
 			customElements.define(
 				tag,
 				component(
-					function* (host) {
+					function* ({ host }) {
 						got = yield load(host, async () => {
 							fetched = true;
 							return "client-value";
@@ -137,7 +137,7 @@ describe("closed shadow root — hydration + load replay", () => {
 			customElements.define(
 				tag,
 				component(
-					function* (host) {
+					function* ({ host }) {
 						firstRead = host.internals;
 						secondRead = host.internals;
 						yield () => html`<template><input /></template>`;

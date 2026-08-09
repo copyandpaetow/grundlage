@@ -522,9 +522,6 @@ describe("applyDynamicAttribute - non-stringable values", () => {
 });
 
 describe("applyDynamicAttribute - stringable to non-stringable transition", () => {
-	//we previously wrote the stringable value as a real attribute (line 49 in attribute.ts); now the new value is non-stringable, so the code assigns to the JS property
-	//=> nothing removes the prior attribute, which means a child custom element reading `getAttribute("config")` after the transition still sees the stale stringified previous value
-	//these tests document the current behavior so the user can decide whether the missing removeAttribute call is intentional or a latent bug
 	test("the JS property reflects the new non-stringable value", () => {
 		const element = document.createElement("div");
 		const payload = { nested: 1 };
@@ -535,16 +532,45 @@ describe("applyDynamicAttribute - stringable to non-stringable transition", () =
 		expect((element as unknown as { config: unknown }).config).toBe(payload);
 	});
 
-	test("the prior stringable attribute remains on the element after the transition", () => {
-		//this is the asymmetric half: the matching non-stringable → stringable transition does `delete element[key]` to remove the property (covered by the existing "transition from non-stringable oldValue to stringable value" test).
-		//going the other direction leaves the attribute behind. If this surprises a future caller, the fix is a `removeAttribute(key)` in the else branch of attribute.ts before the property assignment.
+	test("the prior stringable attribute is removed by the transition", () => {
+		//both channels populated is a silent stale render: a child reading getAttribute("config")
+		//after the switch would see the stringified previous value
 		const element = document.createElement("div");
 
 		applyDynamicAttribute(element, "config", "previous-string");
 		expect(element.getAttribute("config")).toBe("previous-string");
 
 		applyDynamicAttribute(element, "config", { nested: 1 }, "previous-string");
-		expect(element.getAttribute("config")).toBe("previous-string");
+		expect(element.getAttribute("config")).toBe(null);
+	});
+
+	test("a full stringable → object → stringable cycle leaves exactly one channel populated", () => {
+		const element = document.createElement("div");
+
+		applyDynamicAttribute(element, "config", "first");
+		expect(element.getAttribute("config")).toBe("first");
+		expect(Object.hasOwn(element, "config")).toBe(false);
+
+		applyDynamicAttribute(element, "config", { nested: 1 }, "first");
+		expect(element.getAttribute("config")).toBe(null);
+		expect(Object.hasOwn(element, "config")).toBe(true);
+
+		applyDynamicAttribute(element, "config", "second", { nested: 1 });
+		expect(element.getAttribute("config")).toBe("second");
+		expect(Object.hasOwn(element, "config")).toBe(false);
+	});
+
+	test("the other channel is cleared without an oldValue — the two-argument setProp form", () => {
+		//setProp(name, value) tracks nothing, so the element's own state has to be what decides
+		const element = document.createElement("div");
+
+		applyDynamicAttribute(element, "config", "first");
+		applyDynamicAttribute(element, "config", { nested: 1 });
+		expect(element.getAttribute("config")).toBe(null);
+
+		applyDynamicAttribute(element, "config", "second");
+		expect(Object.hasOwn(element, "config")).toBe(false);
+		expect(element.getAttribute("config")).toBe("second");
 	});
 
 	test("update() still fires on the property-assignment branch after the transition", () => {

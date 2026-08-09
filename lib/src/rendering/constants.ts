@@ -7,6 +7,11 @@ export const CONTENT_KIND = {
 	LIST: 3,
 } as const;
 
-export const ATTRIBUTE_MODE = { ABSENT: 0, ATTRIBUTE: 1, PROPERTY: 2 } as const;
+export const ATTRIBUTE_MODE = {
+	ABSENT: 0,
+	ATTRIBUTE: 1,
+	PROPERTY: 2,
+	DECLARED_PROP: 3,
+} as const;
 
 export const NO_KEY = 0;
