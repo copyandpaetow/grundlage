@@ -178,14 +178,12 @@ describe("async generator components", () => {
 		let data = "loading";
 
 		const MyElement = component(async function* () {
-			// Show nothing initially, wait for data
 			yield new Promise<void>((resolve) => {
 				setTimeout(() => {
 					data = "ready";
 					resolve();
 				}, 10);
 			});
-			// Then show render function with loaded data
 			yield () => html`<p>${data}</p>`;
 		});
 
@@ -197,7 +195,6 @@ describe("async generator components", () => {
 			"ready",
 		);
 
-		// Verify updates still work after async init
 		data = "updated";
 		await element.update();
 		await sleep();
@@ -456,7 +453,7 @@ describe("error handling", () => {
 
 		expect(element.shadowRoot?.textContent).toContain("fatal");
 
-		// further updates should be no-ops since #render was nulled
+		//further updates should be no-ops since #render was nulled
 		await element.update();
 		await sleep();
 

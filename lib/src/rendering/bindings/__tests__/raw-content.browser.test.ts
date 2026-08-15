@@ -26,9 +26,9 @@ describe("raw content updates", () => {
 	const ruleDeclarationOf = (style: HTMLStyleElement): CSSStyleDeclaration =>
 		(style.sheet!.cssRules[0] as CSSStyleRule).style;
 
-	// the browser-as-dom project runs this file under happy-dom, whose
-	// getComputedStyle returns specified values instead of resolving them, so
-	// computed-style assertions skip there and the chromium project carries them
+	//the browser-as-dom project runs this file under happy-dom, whose
+	//getComputedStyle returns specified values instead of resolving them, so
+	//computed-style assertions skip there and the chromium project carries them
 	const detectComputedColorResolution = () => {
 		const probe = document.createElement("div");
 		probe.style.color = "red";
@@ -440,14 +440,14 @@ describe("raw content updates", () => {
 
 		const template =
 			element.shadowRoot!.querySelector<HTMLTemplateElement>("template")!;
-		// Markup must live in .content — the render/serialize surface — not in
-		// light children, which never render and never serialize.
+		//markup must live in .content — the render/serialize surface — not in
+		//light children, which never render and never serialize
 		expect(template.childNodes.length).toBe(0);
 		expect(
 			normalizeWhitespace(template.content.querySelector("p")!.textContent),
 		).toBe("first");
 
-		// The template serializes from .content, so a round-trip must survive.
+		//the template serializes from .content, so a round-trip must survive
 		expect(template.outerHTML).toContain("<p>first</p>");
 
 		label = "second";

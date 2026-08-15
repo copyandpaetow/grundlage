@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { html, component } from "../../index";
 
-/*
-engine-level invariants that aren't a pure-step property (so they live here, not in vm.dom.test) but are
-narrower than the integration oracles: the terminal warns EXACTLY once (the linear recover->fail path
-replaces the old nested re-entrancy that could double-warn), and a torn-down generation neither paints
-nor resolves a late update() past disconnect. driven through the public component() surface.
-*/
+//engine-level invariants that are narrower than the integration oracles but are not pure-step
+//properties: the terminal warns exactly once along the linear recover-then-fail path, and a
+//torn-down generation neither paints nor resolves a late update() past disconnect. Driven through
+//the public component() surface.
 
 let counter = 0;
 const uniqueTag = () => `test-engine-${counter++}-${Date.now()}`;
@@ -115,7 +113,7 @@ describe("engine terminal", () => {
 		element.remove();
 		document.body.appendChild(element); //reconnect restarts the engine on the same element
 		await sleep();
-		//same-hash re-render must NOT patch the detached error text; it must remount live DOM
+		//same-hash re-render must not patch the detached error text; it must remount live DOM
 		expect(element.shadowRoot?.textContent).toContain("alive");
 		expect(element.shadowRoot?.textContent).not.toContain("late-boom");
 		element.remove();
@@ -186,7 +184,7 @@ describe("dismissed child errors", () => {
 		) as HTMLElement & { update(): Promise<void> };
 		await sleep();
 
-		//the outer swallowed the error: never a fatal, and cleanup is NOT run yet
+		//the outer swallowed the error: never a fatal, and cleanup is not run yet
 		expect(warn).not.toHaveBeenCalled();
 		expect(cleanupCalls).toBe(0);
 
@@ -303,7 +301,7 @@ describe("the refire enters the task loop", () => {
 	});
 
 	test("a refire past a suspended outer paints without stepping it", async () => {
-		//the other suspended shape: a record IS set, so update() refires and the paint lands on a
+		//the other suspended shape: a record is set, so update() refires and the paint lands on a
 		//SUSPENDED outer — which must be left parked for its own promise to resume
 		let resolveGate: (value: string) => void = () => {};
 		const gate = new Promise<string>((resolve) => {

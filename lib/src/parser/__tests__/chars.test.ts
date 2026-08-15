@@ -1,8 +1,8 @@
 import { describe, test, expect } from "vitest";
 import { isWhitespaceCode, isQuoteCode, MARKUP } from "../chars";
 
-//the parser hot loop reads char codes, so we test against `.charCodeAt(0)` of the
-//literal character to keep the intent readable while exercising the numeric predicate
+//the parser hot loop reads char codes, so the assertions go through `.charCodeAt(0)` of the literal
+//character: readable intent, numeric predicate
 const code = (char: string) => char.charCodeAt(0);
 
 describe("MARKUP.COMMENT_IDENTIFIER", () => {

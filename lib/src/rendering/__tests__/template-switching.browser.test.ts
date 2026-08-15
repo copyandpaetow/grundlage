@@ -109,7 +109,7 @@ describe("template switching", () => {
 		await element.update();
 		await sleep();
 
-		// Same element reference means in-place update, not replacement
+		//same element reference means in-place update, not replacement
 		expect(element.shadowRoot?.querySelector("p")).toBe(p);
 		expect(p.textContent).toContain("updated");
 		expect(p.getAttribute("class")).toBe("two");
@@ -196,7 +196,7 @@ describe("template switching", () => {
 		await element.update();
 		await sleep();
 
-		// Same template structure, so it should update in place
+		//same template structure, so it should update in place
 		expect(element.shadowRoot?.querySelector("main")?.textContent).toBe(
 			"content-b",
 		);

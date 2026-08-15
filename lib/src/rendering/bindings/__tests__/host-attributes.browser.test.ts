@@ -166,7 +166,8 @@ describe("root-template host attributes", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		//the static attr lowered into a binding must target the host, not get serialized as a child element attribute
+		//the static attribute lowered into a binding targets the host rather than serializing as a
+		//child element's attribute
 		expect(element.shadowRoot?.querySelector("[class='card']")).toBeNull();
 
 		cleanup(element);
@@ -207,8 +208,10 @@ describe("root-template host attributes", () => {
 });
 
 describe("root-template host attribute cleanup across template swaps", () => {
-	//these tests pin the contract that the *host* element behaves like the rest of the rendered tree: when a render returns a template whose host bindings differ from the previous one, leftover host attributes from the previous template must not survive
-	//without cleanup, swapping `<template class="card">` → `<template id="hero">` would leave `class="card"` stuck on the host alongside the new `id="hero"`
+	//the host behaves like the rest of the rendered tree: a template whose host bindings differ from
+	//the previous one leaves none of the previous attributes behind. Without that, swapping
+	//`<template class="card">` for `<template id="hero">` leaves `class="card"` stuck on the host
+	//alongside the new `id="hero"`
 	let tagId = 0;
 	const uniqueTag = () => `test-host-swap-${tagId++}-${Date.now()}`;
 
@@ -280,7 +283,8 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	});
 
 	test("shared host attribute name keeps the new value when both templates declare it", async () => {
-		//both templates write `class`, but at different source positions, so the templateHash differs and renderTemplate takes the swap path
+		//both templates write `class` at different source positions, so the template hash differs and
+		//the render takes the swap path
 		//the post-swap value must be the new template's value, not stale from the previous one
 		const tag = uniqueTag();
 		let showFirst = true;
@@ -549,7 +553,8 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	});
 
 	test("mixed binding forms on the host are all cleared in a single swap", async () => {
-		//exercises every host-binding shape in one template so clearHostAttributes' loop has to dispatch through every removeAttributeBinding branch
+		//every host-binding shape in one template, so the clearing loop has to dispatch through every
+		//removal branch
 		const tag = uniqueTag();
 		let showFirst = true;
 		const dynamicId = "alpha";
@@ -599,7 +604,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	});
 
 	test("three consecutive swaps each clean up the previous template's host attrs", async () => {
-		//A → B → C: each transition must clear the prior template's host attrs without leaking
+		//a → B → C: each transition must clear the prior template's host attrs without leaking
 		const tag = uniqueTag();
 		let stage = 0;
 		const MyElement = component(function* () {
@@ -631,7 +636,8 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	});
 
 	test("swapping back to an earlier template re-applies its host attrs cleanly", async () => {
-		//A → B → A: pin that returning to a previously-rendered template reapplies its host attrs and clears B's
+		//returning to a previously-rendered template reapplies its own host attributes and clears the
+		//other's
 		const tag = uniqueTag();
 		let showFirst = true;
 		const MyElement = component(function* () {
@@ -664,7 +670,9 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	});
 
 	test("nested generator source swap also clears the previous host attrs", async () => {
-		//the outer-generator → render-function path is what every other test exercises; this one routes through a nested-generator active source so dispatchCSRUpdate restarts the generator rather than the render-function re-call path
+		//every other test here goes through the outer generator's render function; this one routes
+		//through a nested-generator source, so the update restarts the generator instead of re-calling
+		//a render function
 		const tag = uniqueTag();
 		let showFirst = true;
 		const MyElement = component(function* () {
@@ -691,8 +699,8 @@ describe("root-template host attribute cleanup across template swaps", () => {
 });
 
 describe("root-template host attribute updates within a single template (refactor regression guards)", () => {
-	//the swap cleanup work refactored the previous-name removal in updateAttribute and updateExpandable to go through removeAttributeBinding
-	//these tests pin behavior that must not change: same-template renders that drop or rename host attributes still clean up correctly
+	//same-template renders that drop or rename a host attribute still clean up, which is the half the
+	//swap path does not cover
 	let tagId = 0;
 	const uniqueTag = () => `test-host-same-${tagId++}-${Date.now()}`;
 
@@ -831,7 +839,8 @@ describe("root-template host attribute updates within a single template (refacto
 
 describe("root-template host attribute writes do not feed back into the component", () => {
 	//the host MutationObserver in index.ts watches `this` with { attributes: true }
-	//framework-driven writes to the host (from root-template host bindings) must not be observed as user mutations; otherwise every render that writes a host attr would queue an extra re-render one microtask later
+	//a host write coming from a root-template binding is not a user mutation: observing it would
+	//queue an extra re-render one microtask after every render that writes one
 	let tagId = 0;
 	const uniqueTag = () => `test-host-mo-${tagId++}-${Date.now()}`;
 
@@ -906,7 +915,7 @@ describe("root-template host attribute writes do not feed back into the componen
 		await element.update();
 		await sleep(50);
 
-		//one render for the swap itself; the host-attribute writes during that render must not queue a third pass
+		//one render for the swap itself, and the host-attribute writes inside it queue no third pass
 		expect(renderCount).toBe(2);
 		expect(element.getAttribute("id")).toBe("hero");
 		expect(element.hasAttribute("class")).toBe(false);
@@ -915,7 +924,8 @@ describe("root-template host attribute writes do not feed back into the componen
 	});
 
 	test("a user-driven setAttribute on the host still triggers a re-render after the host bindings settle", async () => {
-		//regression guard: we must suppress the MO only for framework-driven writes, not disable it entirely
+		//the suppression covers framework-driven writes only, rather than disabling the observer
+		//outright
 		const tag = uniqueTag();
 		let renderCount = 0;
 		const MyElement = component(
@@ -949,8 +959,9 @@ describe("root-template host attribute writes do not feed back into the componen
 });
 
 describe("root-template host attributes are rejected when nested inside content", () => {
-	//root templates are a top-level-only feature; a `<template ...>` with attributes that ends up inside a parent's ${...} content has no well-defined host
-	//if we silently threaded the outer host into nested setups, list items and yielded sub-templates could clobber each other's host attrs and leave stale attrs on swap
+	//a root template is top-level only: one with attributes that ends up inside a parent's content
+	//hole has no well-defined host. Threading the outer host in silently would let list items and
+	//yielded sub-templates clobber each other's host attributes and leave stale ones on swap
 	//the contract is: nested root templates throw at setup
 	let tagId = 0;
 	const uniqueTag = () => `test-host-nested-${tagId++}-${Date.now()}`;
@@ -975,7 +986,8 @@ describe("root-template host attributes are rejected when nested inside content"
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		//renderTemplate doesn't catch synchronous setup throws on mount; the parser cache means subsequent users see the same failure
+		//a synchronous setup throw on mount is not caught, and the parser cache hands the same failure
+		//to every later user
 		expect(element.shadowRoot?.textContent).toMatch(
 			/top level of a component's render output/,
 		);

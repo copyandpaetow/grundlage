@@ -46,8 +46,8 @@ describe("hashValue - primitives", () => {
 	});
 
 	test("tightly-clustered floats produce distinct hashes", () => {
-		// Regression guard: the float hash must distinguish neighbouring values
-		// the animation stress test actually produces (widths like 50.1, 50.100001, 50.2).
+		//the float hash has to separate neighbouring values an animation actually produces, widths like
+		//50.1, 50.100001, 50.2
 		const values = [50.1, 50.1000001, 50.10001, 50.2, 50.20000001];
 		const hashes = new Set(values.map(hashValue));
 		expect(hashes.size).toBe(values.length);
@@ -142,8 +142,9 @@ describe("hashValue - reference types", () => {
 	});
 
 	test("two fresh class instances get distinct counter ids", () => {
-		//the WeakMap fallback path hands out monotonically increasing counter ids — two distinct objects must never collide
-		//we keep this test separate from the function case so a regression that only hits one branch surfaces here, not in the function test where lambda identity already differs
+		//the WeakMap fallback hands out monotonically increasing ids, so two distinct objects never
+		//collide. It stays separate from the function case because there lambda identity already
+		//differs, and a regression hitting only one branch would hide there
 		class Foo {}
 		const firstInstance = new Foo();
 		const secondInstance = new Foo();
@@ -156,7 +157,7 @@ describe("hashValue - reference types", () => {
 	});
 
 	test("two fresh Maps with identical contents hash equal", () => {
-		//Maps are walked for content now, so equal entries hash equal across references
+		//maps are walked for content now, so equal entries hash equal across references
 		const first = new Map<string, number>([["a", 1]]);
 		const second = new Map<string, number>([["a", 1]]);
 		expect(hashValue(first)).toBe(hashValue(second));
@@ -177,8 +178,9 @@ describe("hashValue - reference types", () => {
 });
 
 describe("hashValue - prototype-less objects", () => {
-	//`Object.create(null)` is a real object literal in disguise — it has no `.constructor`, so the `value.constructor === Object` guard in hashValue is `undefined === Object` which is false
-	//=> these objects fall through to the WeakMap reference branch. We pin that contract here so a future change (e.g. switching to a tag check) makes an intentional decision about prototype-less objects.
+	//`Object.create(null)` has no `.constructor`, so the plain-object guard reads `undefined ===
+	//Object` and is false: these fall through to the reference branch. Pinned so a later switch to a
+	//tag check is a deliberate decision about prototype-less objects
 	test("hashes the same reference equally across calls", () => {
 		const plain = Object.create(null) as Record<string, unknown>;
 		plain.value = 1;

@@ -1,5 +1,5 @@
-// Type-level fixture. It is never executed — `tsc --noEmit` is the assertion, and every
-// negative case is pinned with @ts-expect-error, which fails the build if the error goes away.
+//type-level fixture. It is never executed — `tsc --noEmit` is the assertion, and every
+//negative case is pinned with @ts-expect-error, which fails the build if the error goes away
 import { component, html } from "../index";
 import { Template } from "../types";
 

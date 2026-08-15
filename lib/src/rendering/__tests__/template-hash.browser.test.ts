@@ -33,11 +33,9 @@ describe("template value hashing", () => {
 	});
 
 	test("distinguishes tightly-clustered decimal expressions", () => {
-		// This is the animation hot-path regression guard.
-		// `bar.width` values fall within a narrow float range every frame;
-		// the overall template hash must reflect those differences so that
-		// list diffing / template swapping does not mistakenly treat
-		// consecutive frames as identical content.
+		//an animated value moves within a narrow float range every frame, and the template hash has
+		//to separate those so list diffing and template swapping do not read consecutive frames as
+		//identical content
 		const template1 = html`<div style="width:${50.1}%"></div>`;
 		const template2 = html`<div style="width:${50.10001}%"></div>`;
 		const template3 = html`<div style="width:${50.2}%"></div>`;
@@ -63,8 +61,7 @@ describe("update() change propagation", () => {
 	const cleanup = (element: HTMLElement) => element.remove();
 
 	test("updates DOM when only a primitive number changes", async () => {
-		// Regression guard for proposal (2): if we short-circuit the hash check
-		// for primitives, we must still mark the binding dirty on `!==`.
+		//a primitive that skips the hash comparison still has to dirty its binding on `!==`
 		const tag = uniqueTag();
 		let value = 1;
 		const MyElement = component(function* () {
@@ -114,9 +111,9 @@ describe("update() change propagation", () => {
 	});
 
 	test("updates multiple attribute expressions in the same style string", async () => {
-		// Mirrors the animation stress-test shape: one style attribute with
-		// multiple interpolated floats. All of them should propagate on every
-		// frame even if the fast-path skips the redundant hash comparison.
+		//mirrors the animation stress-test shape: one style attribute with
+		//multiple interpolated floats. All of them should propagate on every
+		//frame even if the fast-path skips the redundant hash comparison
 		const tag = uniqueTag();
 		let width = 50.1;
 		let hue = 120.5;
@@ -149,9 +146,9 @@ describe("update() change propagation", () => {
 	});
 
 	test("reuses nested-template DOM when content is equal across updates", async () => {
-		// Exercises the `expressions[index] = previousEntry` swap path:
-		// on the second render the new HTMLTemplate has identical content
-		// to the previous, so the engine should reuse the old DOM subtree.
+		//exercises the `expressions[index] = previousEntry` swap path:
+		//on the second render the new HTMLTemplate has identical content
+		//to the previous, so the engine should reuse the old DOM subtree
 		const tag = uniqueTag();
 		let outer = 1;
 		const MyElement = component(function* () {
@@ -172,7 +169,7 @@ describe("update() change propagation", () => {
 		await element.update();
 		await sleep();
 
-		// Nested template had identical expressions, so the DOM node survives.
+		//nested template had identical expressions, so the DOM node survives
 		expect(element.shadowRoot?.querySelector("span")).toBe(span);
 		expect(element.shadowRoot?.querySelector("h1")?.textContent).toContain("2");
 
@@ -180,8 +177,8 @@ describe("update() change propagation", () => {
 	});
 
 	test("list diffing reuses item DOM when hashes match across reorders", async () => {
-		// Guards the .hash-based keying used by renderList. If proposal (3)
-		// regresses the lazy getter, list items should still match by content.
+		//renderList keys on .hash, a lazy getter: a row whose content is unchanged has to keep
+		//matching by content across the reorder
 		const tag = uniqueTag();
 		let items = ["one", "two", "three"];
 		const MyElement = component(function* () {
@@ -212,7 +209,7 @@ describe("update() change propagation", () => {
 			"two",
 		]);
 
-		// Each reordered <li> should be one of the originals, not a fresh node.
+		//each reordered <li> should be one of the originals, not a fresh node
 		for (const li of reordered) {
 			expect(original).toContain(li);
 		}
@@ -221,9 +218,8 @@ describe("update() change propagation", () => {
 	});
 
 	test("null-to-undefined transition keeps the binding empty", async () => {
-		// Documents the observable DOM behaviour for null ↔ undefined. Both
-		// currently hash to 0 so the binding stays clean; proposal (2) would
-		// mark it dirty, but the resulting DOM must still be empty either way.
+		//null and undefined both hash to 0, so the binding stays clean; dirty or not, the rendered
+		//DOM is empty either way
 		const tag = uniqueTag();
 		let value: unknown = null;
 		const MyElement = component(function* () {
@@ -245,9 +241,9 @@ describe("update() change propagation", () => {
 	});
 
 	test("preserves nested-template DOM across repeated stable renders", async () => {
-		// Confirms the reference-preservation contract via a nested template
-		// whose expressions are stable. After many updates the nested <span>
-		// node identity must not change.
+		//confirms the reference-preservation contract via a nested template
+		//whose expressions are stable. After many updates the nested <span>
+		//node identity must not change
 		const tag = uniqueTag();
 		let outer = 0;
 		const MyElement = component(function* () {

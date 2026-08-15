@@ -233,7 +233,7 @@ describe("inner generator error contracts", () => {
 		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 			"recovered",
 		);
-		// recovery path is silent — no console.warn
+		//recovery path is silent — no console.warn
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();
 		element.remove();
@@ -244,11 +244,11 @@ describe("inner generator error contracts", () => {
 		const tag = uniqueTag("catch-return");
 		const events: string[] = [];
 
-		// Outer commits a static view first, then installs an inner that
-		// throws. Outer is parked at the inner-install yield when the error
-		// propagates, so its catch fires and it returns a cleanup. Per the
-		// error contract: the static view persists, the outer completes like any
-		// returning generator, and its captured cleanup is deferred to disconnect.
+		//outer commits a static view first, then installs an inner that
+		//throws. Outer is parked at the inner-install yield when the error
+		//propagates, so its catch fires and it returns a cleanup. Per the
+		//error contract: the static view persists, the outer completes like any
+		//returning generator, and its captured cleanup is deferred to disconnect
 		customElements.define(
 			tag,
 			component(function* () {
@@ -269,14 +269,14 @@ describe("inner generator error contracts", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("before");
-		// cleanup is captured but not run while still mounted
+		//cleanup is captured but not run while still mounted
 		expect(events).toEqual([]);
-		// Recovery path is silent — no terminal warning.
+		//recovery path is silent — no terminal warning
 		expect(warnSpy).not.toHaveBeenCalled();
 
 		element.remove();
 		await sleep();
-		// cleanup runs once, at disconnect
+		//cleanup runs once, at disconnect
 		expect(events).toEqual(["outer-cleanup-after-catch"]);
 
 		warnSpy.mockRestore();
@@ -332,7 +332,7 @@ describe("inner generator error contracts", () => {
 		shouldThrow = false;
 		await element.update();
 		await sleep();
-		// outer was nulled; no recovery on subsequent update
+		//outer was nulled; no recovery on subsequent update
 		expect(element.shadowRoot?.textContent).toContain("terminal-boom");
 
 		warnSpy.mockRestore();
@@ -404,10 +404,10 @@ describe("yield resumes the generator with the host element", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				// A resolved promise is unwrapped by the driver; the resolved
-				// value flows back as the yield result without being treated as
-				// a render target. Confirms host-replacement only fires on
-				// renderable yields.
+				//a resolved promise is unwrapped by the driver; the resolved
+				//value flows back as the yield result without being treated as
+				//a render target. Confirms host-replacement only fires on
+				//renderable yields
 				received = yield Promise.resolve("payload");
 				yield () => html`<p>ok</p>`;
 			}),
@@ -466,8 +466,8 @@ describe("yield resumes the generator with the host element", () => {
 
 		const ComponentClass = component(async function* () {
 			const host = (yield () => html`<span>${counter}</span>`) as BaseComponent;
-			// Re-rendering through the received host proves it really is the
-			// element instance and not just structurally similar.
+			//re-rendering through the received host proves it really is the
+			//element instance and not just structurally similar
 			counter = 99;
 			await host.update();
 		});
@@ -623,9 +623,9 @@ describe("renderer and inner generator receive the props object", () => {
 
 describe("identity and isolation", () => {
 	test("two host instances using the same nested generator render independently", async () => {
-		// Inner generator is restarted on every update by design, so any state
-		// held inside it does not survive an update. Isolation here is about
-		// per-instance shadow roots, not retained inner state.
+		//inner generator is restarted on every update by design, so any state
+		//held inside it does not survive an update. Isolation here is about
+		//per-instance shadow roots, not retained inner state
 		const tag = uniqueTag("isolated");
 		const innerGen: ComponentGenerator = function* ({ host: element }) {
 			yield () => html`<span>${element.getAttribute("label") ?? "?"}</span>`;
@@ -657,11 +657,11 @@ describe("identity and isolation", () => {
 });
 
 describe("inner generator post-yield work and cancellation", () => {
-	// Async generators paused at an internal `await` cannot be force-unblocked
-	// by .return() — the queued return only takes effect after the awaited
-	// promise settles. Userland post-yield work that needs to react to a
-	// disconnect must therefore use try/finally; the registered return-cleanup
-	// only runs on a graceful completion.
+	//async generators paused at an internal `await` cannot be force-unblocked
+	//by .return() — the queued return only takes effect after the awaited
+	//promise settles. Userland post-yield work that needs to react to a
+	//disconnect must therefore use try/finally; the registered return-cleanup
+	//only runs on a graceful completion
 	test("inner generator finally fires after disconnect once the pending await settles", async () => {
 		const tag = uniqueTag("post-yield-finally");
 		const events: string[] = [];
@@ -690,15 +690,15 @@ describe("inner generator post-yield work and cancellation", () => {
 
 		element.remove();
 		await sleep();
-		// Disconnect alone cannot unblock the pending await — finally has not
-		// run yet. This documents the framework's contract: cancelGenerator() queues
-		// a return on the async generator but does not abort in-flight awaits.
+		//disconnect alone cannot unblock the pending await — finally has not
+		//run yet. This documents the framework's contract: cancelGenerator() queues
+		//a return on the async generator but does not abort in-flight awaits
 		expect(events).toEqual([]);
 
 		resolveAwait!();
 		await sleep();
-		// Once the await settles, the queued return processes and finally fires.
-		// The body line after the await is skipped (queued return short-circuits).
+		//once the await settles, the queued return processes and finally fires.
+		//the body line after the await is skipped (queued return short-circuits)
 		expect(events).toEqual(["body-after-await", "inner-finally"]);
 	});
 
@@ -719,8 +719,8 @@ describe("inner generator post-yield work and cancellation", () => {
 		);
 
 		const element = mount(tag);
-		// Two macrotasks: one for outer install, one for the resolved
-		// microtask + final return that captures cleanup.
+		//two macrotasks: one for outer install, one for the resolved
+		//microtask + final return that captures cleanup
 		await sleep();
 		await sleep();
 		expect(events).toContain("post-yield-ran");
@@ -740,16 +740,15 @@ describe("inner generator post-yield work and cancellation", () => {
 			yield async function* () {
 				const id = ++attempt;
 				yield () => html`<span>attempt-${id}</span>`;
-				// Only the first attempt blocks on a slow promise we control;
-				// subsequent restarts return after the first yield. That
-				// keeps gen2's lifecycle short so the assertion targets the
-				// stale path and not gen2's own progression.
+				//only the first attempt blocks on a controlled slow promise; later restarts return after
+				//the first yield, which keeps gen2's lifecycle short so the assertion targets the stale
+				//path rather than gen2's own progression
 				if (id === 1) {
 					await new Promise<void>((resolve) => {
 						resolveSlow = resolve;
 					});
-					// If this ever renders, the framework failed to suppress
-					// stale resumption from the cancelled gen1.
+					//if this ever renders, the framework failed to suppress
+					//stale resumption from the cancelled gen1
 					yield () => html`<span>late-1</span>`;
 					events.push("completed-1");
 				}
@@ -801,8 +800,8 @@ describe("inner generator post-yield work and cancellation", () => {
 
 		await element.update();
 		await sleep();
-		// Restart cancels the prior inner — its finally fires, then a fresh
-		// inner is parked at its own try/finally.
+		//restart cancels the prior inner — its finally fires, then a fresh
+		//inner is parked at its own try/finally
 		expect(events).toEqual(["inner-finally", "inner-finally"]);
 
 		element.remove();
@@ -829,14 +828,12 @@ describe("inner generator post-yield work and cancellation", () => {
 	});
 });
 
-// The website's generator-nesting demo (and any inner async generator with post-yield work)
-// hits this pattern: update() supersedes an inner async generator while it is parked at an
-// await. Per the model, the stopped run's queued resumption must go nowhere — a superseded run
-// checks "am I still alive?" before resuming, so its late async work can neither paint stale
-// markup nor signal "done" for the live run. update() itself resolves on the FRESH run reaching
-// its end (ADR-0003: "the fresh run has finished"), so these tests drive the
-// timeline by hand — not awaiting update() across a still-parked run, which would (correctly) not
-// resolve until that run completes.
+//any inner async generator with post-yield work hits this: update() supersedes it while it is
+//parked at an await, and the stopped run's queued resumption must go nowhere. A superseded run
+//checks whether it is still the live one before resuming, so its late async work can neither paint
+//stale markup nor signal "done" for the live run. update() resolves only once the fresh run
+//finishes, so these tests drive the timeline by hand rather than awaiting it across a still-parked
+//run, which would correctly not resolve
 describe("rapid restart with in-flight inner async work", () => {
 	test("a superseded inner run's late await neither paints nor silences the live run", async () => {
 		const tag = uniqueTag("restart-stale-resolution");
@@ -852,11 +849,11 @@ describe("rapid restart with in-flight inner async work", () => {
 					await new Promise<void>((resolve) => {
 						releaseOld = resolve;
 					});
-					// cancelled before this lands
+					//cancelled before this lands
 					yield () => html`<span>attempt-1-late</span>`;
 				} else {
-					// the live run does its own async work BETWEEN its two yields — the window in
-					// which the superseded run's late resolution could wrongly silence it
+					//the live run does its own async work between its two yields — the window in
+					//which the superseded run's late resolution could wrongly silence it
 					yield () => html`<span>attempt-2-first</span>`;
 					await new Promise<void>((resolve) => {
 						releaseLive = resolve;
@@ -873,23 +870,23 @@ describe("rapid restart with in-flight inner async work", () => {
 			"attempt-1",
 		);
 
-		// supersede gen1 (now stopped, parked at its await) with gen2. update() resolves on the
-		// fresh run's completion, so hold the promise — gen2 is still mid-flight at its own await
+		//supersede gen1 (now stopped, parked at its await) with gen2. update() resolves on the
+		//fresh run's completion, so hold the promise — gen2 is still mid-flight at its own await
 		const flush = element.update();
 		await sleep();
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
 			"attempt-2-first",
 		);
 
-		// gen1's late await fires while gen2 is parked between its yields. it must not paint
-		// "attempt-1-late", and must not stop gen2 from landing its second yield
+		//gen1's late await fires while gen2 is parked between its yields. it must not paint
+		//"attempt-1-late", and must not stop gen2 from landing its second yield
 		releaseOld();
 		await sleep();
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
 			"attempt-2-first",
 		);
 
-		// gen2 runs on to its end; the flush resolves there (completion contract)
+		//gen2 runs on to its end; the flush resolves there (completion contract)
 		releaseLive();
 		await flush;
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
@@ -900,11 +897,11 @@ describe("rapid restart with in-flight inner async work", () => {
 	});
 
 	test("a superseded run's late await stays contained across a coalesced reflush", async () => {
-		// The serialization makes the old "two stacked live restarts" shape unreachable: a
-		// mid-flight update() coalesces into ONE reflush (with a fresh pull), it does not spawn a
-		// second concurrent run. So the superseded mount run stays parked across the WHOLE batch
-		// (initial render -> reflush). When its late await finally fires it must paint nothing and
-		// disturb neither the reflush nor its freshly pulled state.
+		//the serialization makes the old "two stacked live restarts" shape unreachable: a
+		//mid-flight update() coalesces into one reflush (with a fresh pull), it does not spawn a
+		//second concurrent run. So the superseded mount run stays parked across the whole batch
+		//(initial render -> reflush). When its late await finally fires it must paint nothing and
+		//disturb neither the reflush nor its freshly pulled state
 		const tag = uniqueTag("restart-stacked");
 		let releaseOld!: () => void;
 		let phase = "first";
@@ -918,10 +915,10 @@ describe("rapid restart with in-flight inner async work", () => {
 					await new Promise<void>((resolve) => {
 						releaseOld = resolve;
 					});
-					// cancelled before this lands
+					//cancelled before this lands
 					yield () => html`<span>mount-late</span>`;
 				} else {
-					// later runs read fresh state and complete promptly
+					//later runs read fresh state and complete promptly
 					const snapshot = phase;
 					await sleep(10);
 					yield () => html`<span>${snapshot}</span>`;
@@ -936,15 +933,15 @@ describe("rapid restart with in-flight inner async work", () => {
 			"mount",
 		);
 
-		// open a batch that supersedes the parked mount run, then a mid-flight update that
-		// coalesces into exactly one reflush carrying the latest state
+		//open a batch that supersedes the parked mount run, then a mid-flight update that
+		//coalesces into exactly one reflush carrying the latest state
 		phase = "second";
 		const flush = element.update();
 		await sleep(); // gen2 ("second") is mid-flight at its await
 		phase = "third";
 		element.update(); // RENDERING -> sets dirty, reflushes once after gen2 completes
 
-		// the superseded mount run's late await fires while the batch is still in flight
+		//the superseded mount run's late await fires while the batch is still in flight
 		releaseOld();
 
 		await flush; // resolves after the reflushed run ("third") lands
@@ -957,11 +954,9 @@ describe("rapid restart with in-flight inner async work", () => {
 	});
 });
 
-// Documents the cleanup-on-cancel contract end-to-end. The website demo
-// (lib/website/src/components/generator-nesting.ts) returns a cleanup that
-// calls controller.abort() — and discovers, on disconnect, that it never
-// runs unless the awaited promise settles first. These tests pin that
-// behavior so a future change is a deliberate one.
+//a cleanup that calls controller.abort() never runs unless the awaited promise settles first, so a
+//component relying on it to release resources on disconnect does not. Pinned so a change here is a
+//deliberate one
 describe("cleanup contract for inner async generators on cancel", () => {
 	test("`return cleanupFn` does NOT run when the inner generator is cancelled mid-await", async () => {
 		const tag = uniqueTag("cleanup-on-cancel");
@@ -991,8 +986,8 @@ describe("cleanup contract for inner async generators on cancel", () => {
 		await sleep();
 		expect(cleanupSpy).not.toHaveBeenCalled();
 
-		// Even once the await settles, the queued .return() short-circuits past
-		// the explicit `return cleanupFn` line. Cleanup is never captured.
+		//even once the await settles, the queued .return() short-circuits past
+		//the explicit `return cleanupFn` line. Cleanup is never captured
 		resolveAwait!();
 		await sleep();
 		expect(cleanupSpy).not.toHaveBeenCalled();
@@ -1024,9 +1019,9 @@ describe("cleanup contract for inner async generators on cancel", () => {
 
 		element.remove();
 		await sleep();
-		// Same constraint as "inner generator finally fires after disconnect once
-		// the pending await settles" above — finally requires the await to
-		// settle for the queued return to drain through it.
+		//same constraint as "inner generator finally fires after disconnect once
+		//the pending await settles" above — finally requires the await to
+		//settle for the queued return to drain through it
 		expect(cleanupSpy).not.toHaveBeenCalled();
 
 		resolveAwait!();
@@ -1035,10 +1030,10 @@ describe("cleanup contract for inner async generators on cancel", () => {
 	});
 
 	test("`return cleanupFn` from a sync inner generator that completes BEFORE disconnect runs on disconnect", async () => {
-		// Counterpart to the cancel-mid-await case: when the inner generator
-		// completes naturally, its cleanup IS captured, and disconnect fires it.
-		// Confirms the surface is consistent: cleanup-via-return only works on
-		// natural completion; cleanup-via-finally works on cancellation too.
+		//counterpart to the cancel-mid-await case: when the inner generator
+		//completes naturally, its cleanup is captured, and disconnect fires it.
+		//confirms the surface is consistent: cleanup-via-return only works on
+		//natural completion; cleanup-via-finally works on cancellation too
 		const tag = uniqueTag("cleanup-natural");
 		const cleanupSpy = vi.fn();
 
@@ -1203,7 +1198,7 @@ describe("an outer that recovers from a failed inner is handed back exactly once
 						};
 					};
 				} catch {
-					//an async render leaves the outer parked at this yield, so the INSTALL frame the
+					//an async render leaves the outer parked at this yield, so the install frame the
 					//failed inner unwound out of would step it again if it did not notice the handoff
 					yield async () => {
 						await sleep(5);

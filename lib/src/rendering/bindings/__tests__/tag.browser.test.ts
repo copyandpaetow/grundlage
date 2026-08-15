@@ -210,8 +210,9 @@ describe("tag updates", () => {
 	});
 
 	test("tag swap concurrent with attribute change lands new values on the new element", async () => {
-		//tag.ts replaces the element and re-points every related-attribute target at the new element, then marks them dirty for the next flush
-		//if the dirty-mark order were wrong, the new element would still carry the old value or the old element would receive the new value (visible only via DOM observation)
+		//the swap replaces the element, re-points every related attribute target at the new one and
+		//marks them dirty for the next flush. A wrong order leaves the new element carrying the old
+		//value, or the old element receiving the new one, visible only through the DOM
 		const tag = uniqueTag();
 		let tagName = "div";
 		let label = "first";
@@ -243,7 +244,8 @@ describe("tag updates", () => {
 	});
 
 	test("tag swap with concurrent content change updates the inner text on the new element", async () => {
-		//the content binding sits inside the dynamic tag; when the tag rewraps, the parser keeps the comment markers inside, so updateContent should still find its anchor on the new element's child list
+		//the content binding sits inside the dynamic tag, and a rewrap keeps the marker comments inside
+		//it, so the content update still finds its anchor on the new element's child list
 		const tag = uniqueTag();
 		let tagName = "div";
 		let text = "before";
@@ -274,8 +276,9 @@ describe("tag updates", () => {
 	});
 
 	test("event handler is reattached after a tag swap that also changes the handler", async () => {
-		//`onclick="${fn}"` compiles to a static EVENT binding (addEventListener); listeners are not copyable off element.attributes
-		//=> swapElement carries the EVENT binding onto the new element, and commitEvent's changed-handler path installs the new one
+		//`onclick="${fn}"` compiles to a static EVENT binding and a listener is not copyable off
+		//element.attributes, so the swap has to carry the binding itself onto the new element for the
+		//changed-handler path to install it
 		const tag = uniqueTag();
 		let tagName = "button";
 		const clicks: string[] = [];
@@ -306,8 +309,8 @@ describe("tag updates", () => {
 	});
 
 	test("static event listener survives a tag swap when the handler reference is unchanged", async () => {
-		//the load-bearing case for reapplyOnSwap: with an identical handler, commitEvent's gate returns early,
-		//so the listener only lands on the new element if swapElement carried the EVENT binding across
+		//with an identical handler the event gate returns early, so the listener only lands on the new
+		//element if the swap carried the EVENT binding across
 		const tag = uniqueTag();
 		let tagName = "button";
 		const clicks: string[] = [];

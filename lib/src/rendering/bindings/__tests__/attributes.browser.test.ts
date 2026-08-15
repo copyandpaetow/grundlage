@@ -389,7 +389,7 @@ describe("attribute updates", () => {
 		await sleep();
 
 		btn.click();
-		// Should still be just one click since listener was removed
+		//should still be just one click since listener was removed
 		expect(clicks).toEqual(["clicked"]);
 
 		cleanup(element);
@@ -713,9 +713,9 @@ describe("attribute updates", () => {
 	});
 
 	test("keeps an unchanged spread listener attached without re-binding it across renders", async () => {
-		// the spread diff skips entries whose value reference is unchanged, so a
-		// stable handler is neither detached nor reattached on update — only the
-		// changed sibling attribute is touched.
+		//the spread diff skips entries whose value reference is unchanged, so a
+		//stable handler is neither detached nor reattached on update — only the
+		//changed sibling attribute is touched
 		const tag = uniqueTag();
 		const handler = () => {};
 		let attrs: Record<string, unknown> = { class: "a", onclick: handler };
@@ -987,9 +987,9 @@ describe("attribute updates", () => {
 		await sleep();
 
 		const btn = element.shadowRoot?.querySelector("button")!;
-		// A fully-dynamic attribute name with a function value lowers to a
-		// single-value attribute; a function is assigned as an IDL property (not
-		// via addEventListener), so the native onclick fires.
+		//a fully-dynamic attribute name with a function value lowers to a
+		//single-value attribute; a function is assigned as an IDL property (not
+		//via addEventListener), so the native onclick fires
 		expect((btn as unknown as { onclick: unknown }).onclick).toBe(handler);
 		btn.click();
 		expect(events).toEqual(["click"]);
@@ -999,7 +999,7 @@ describe("attribute updates", () => {
 		await element.update();
 		await sleep();
 
-		// The new name binds the new handler as its own property.
+		//the new name binds the new handler as its own property
 		expect((btn as unknown as { ondblclick: unknown }).ondblclick).toBe(
 			handler,
 		);
@@ -1060,10 +1060,10 @@ describe("attribute updates", () => {
 	});
 
 	test("expandable expression resolves a primitive string to a boolean attribute", async () => {
-		// The expandable path has three shapes: array, plain object, and a single
-		// primitive string. The string case is the fallback in updateExpandable /
-		// removeExpandable. `<button ${name}>` where `name` is just `"disabled"` should
-		// land as a boolean attribute, and renaming should remove the old one.
+		//the expandable path has three shapes: array, plain object, and a single
+		//primitive string. The string case is the fallback in updateExpandable /
+		//removeExpandable. `<button ${name}>` where `name` is just `"disabled"` should
+		//land as a boolean attribute, and renaming should remove the old one
 		const tag = uniqueTag();
 		let attribute: string = "disabled";
 
@@ -1090,9 +1090,8 @@ describe("attribute updates", () => {
 	});
 
 	test("expandable switches from primitive string to array and back", async () => {
-		// A regression guard for the expandable dispatcher: the string fallback
-		// must hand off to the array branch (and vice versa) without leaving the
-		// previous attribute(s) behind.
+		//the expandable dispatcher's string fallback hands off to the array branch and back without
+		//leaving the previous attributes behind
 		const tag = uniqueTag();
 		let attributes: string | Array<string> = "disabled";
 
@@ -1127,10 +1126,10 @@ describe("attribute updates", () => {
 	});
 
 	test("boolean attribute with multi-part dynamic key", async () => {
-		// updateAttribute's DYNAMIC_NAME_BOOLEAN shape (updateDynamicNameBoolean):
-		// the binding has multiple key fragments and no
-		// value half. `<div data-${suffix}>` with no `="..."`. The old key must
-		// be removed when the suffix flips.
+		//updateAttribute's DYNAMIC_NAME_BOOLEAN shape (updateDynamicNameBoolean):
+		//the binding has multiple key fragments and no
+		//value half. `<div data-${suffix}>` with no `="..."`. The old key must
+		//be removed when the suffix flips
 		const tag = uniqueTag();
 		let suffix = "ready";
 

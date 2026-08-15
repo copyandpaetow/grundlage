@@ -4,14 +4,14 @@ import { html, component } from "../../src/index";
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
-//we rely on the host runtime exposing global.gc — Chromium with `--expose-gc`, or node-with-vitest run with --expose-gc
-//=> when it is missing we skip the leak assertions instead of producing flaky failures based on whatever heuristic GC happened to run
+//the leak assertions need global.gc, which is Chromium with `--expose-gc` or vitest run the same
+//way. Without it they skip rather than guess from whatever heuristic collection happened to run
 type GcHook = (() => void) | undefined;
 const gc = (globalThis as unknown as { gc?: GcHook }).gc;
 
 const tryCollect = async () => {
 	if (!gc) return false;
-	//we ask twice with a yield in between so any finalizer-queued cleanup also runs before we re-check
+	//twice with a yield in between, so finalizer-queued cleanup runs before the re-check
 	gc();
 	await sleep();
 	gc();
@@ -30,8 +30,9 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 	};
 
 	test("removed list items become collectable after the list shrinks to empty", async () => {
-		//we render a long list, capture WeakRefs to each item element, then shrink the list to empty
-		//if the reconciler retained any item (closure, expression slot, dirty bookkeeping) the WeakRef would still resolve after gc()
+		//a long list, one WeakRef per item element, then the list shrinks to empty
+		//any item the reconciler retained — closure, expression slot, dirty bookkeeping — leaves its
+		//WeakRef resolving after gc()
 		const tag = uniqueTag();
 		let items = Array.from({ length: 50 }, (_, index) => `item-${index}`);
 
@@ -48,7 +49,7 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 
 		const liNodes = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		const liRefs = liNodes.map((node) => new WeakRef(node));
-		//we null the strong references so only the WeakRefs remain
+		//nulled so only the WeakRefs remain
 		liNodes.length = 0;
 
 		items = [];
@@ -65,7 +66,8 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 	});
 
 	test("a disconnected component instance becomes collectable", async () => {
-		//the whole BaseElement instance should be reachable only from document.body while mounted; after .remove() and the cleanup tick, the only retainer should be our local variable
+		//while mounted the instance is reachable only from document.body; after .remove() and the
+		//cleanup tick the local variable is the last retainer
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
@@ -88,8 +90,9 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 	});
 
 	test("repeated mount/unmount cycles do not retain prior instances", async () => {
-		//if any global registry (cache, observer registration, listener) keeps a strong reference to the host element, this loop would leak one instance per cycle
-		//we cap at a small N so the test stays fast; the asymmetry (we collect after the loop) is what surfaces the leak
+		//a global registry holding the host strongly — cache, observer registration, listener — leaks
+		//one instance per cycle here
+		//the count stays small for speed; collecting only after the loop is what surfaces the leak
 		const tag = uniqueTag();
 		const MyElement = component(function* () {
 			yield () => html`<p>cycle</p>`;

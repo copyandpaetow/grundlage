@@ -194,7 +194,7 @@ describe("raw content with a css plan", () => {
 		const { shadowRoot, instance } = mountIntoShadow(sheet("red"));
 		const style = shadowRoot.querySelector("style")!;
 		//first patch resolves the sheet; same values, so the hash gate must skip.
-		//The marker must be a valid value — setProperty drops invalid ones
+		//the marker must be a valid value — setProperty drops invalid ones
 		patchInstance(instance, sheet("red").values);
 		declarationOf(style).setProperty("color", "teal");
 

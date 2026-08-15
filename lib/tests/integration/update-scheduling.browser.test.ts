@@ -1,18 +1,14 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../src/index";
 
-/*
-The update() scheduling contract (ADR-0003): update() resolves once the DOM reflects this
-call, coalescing with any concurrent update, across sync AND async renders. These tests pin
-the contract the old "flip IDLE in finally" machine could not honor — most importantly that
-`await update()` waits for an async render to actually land (no trailing `await sleep()`
-crutch), and that mid-flight updates coalesce into a single deferred reflush instead of
-restarting the in-flight render.
-
-update() re-runs the CURRENT source, not the root. So a re-runnable source is what the root
-yields: a render function (re-called) or a generator function (restarted). The root itself
-runs once per connection.
-*/
+//update() resolves once the DOM reflects this call, coalescing with any concurrent update, across
+//synchronous and asynchronous renders. The two halves that matter: `await update()` waits for an
+//async render to actually land, with no trailing `await sleep()` crutch, and a mid-flight update
+//coalesces into a single deferred reflush rather than restarting the in-flight render.
+//
+//update() re-runs the current source, not the root, so a re-runnable source is what the root
+//yields: a render function is re-called, a generator function is restarted. The root itself runs
+//once per connection.
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -31,9 +27,9 @@ describe("update() scheduling contract", () => {
 		const tag = uniqueTag();
 		let count = 0;
 
-		// async work happens BEFORE the yield, so the DOM lands a macrotask later. the
-		// old machine resolved update() at the synchronous dispatch boundary — this would
-		// then observe the stale count without a trailing sleep
+		//async work happens before the yield, so the DOM lands a macrotask later. the
+		//old machine resolved update() at the synchronous dispatch boundary — this would
+		//then observe the stale count without a trailing sleep
 		const Counter = component(function* () {
 			yield async function* () {
 				const snapshot = count;
@@ -49,7 +45,7 @@ describe("update() scheduling contract", () => {
 
 		count = 5;
 		await element.update();
-		// NO sleep here: the contract guarantees the DOM already reflects the call
+		//no sleep here: the contract guarantees the DOM already reflects the call
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("5");
 
 		element.remove();
@@ -77,7 +73,7 @@ describe("update() scheduling contract", () => {
 		element.update();
 		await element.update();
 
-		// three calls, one re-render
+		//the mount render plus one for the three coalesced calls
 		expect(renders).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("1");
 
@@ -135,10 +131,10 @@ describe("update() scheduling contract", () => {
 
 		await Promise.all([first, second]);
 
-		// init(1) + restart(2) + one deferred reflush(3). NOT four — the mid-flight call
-		// did not spin up its own render
+		//init(1) + restart(2) + one deferred reflush(3). not four — the mid-flight call
+		//did not spin up its own render
 		expect(renders).toBe(3);
-		// the reflush pulled fresh state, so the final value is the latest ("c"), not "b"
+		//the reflush pulled fresh state, so the final value is the latest ("c"), not "b"
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("c");
 
 		element.remove();
@@ -166,8 +162,8 @@ describe("update() scheduling contract", () => {
 		const element = mount(tag) as InstanceType<typeof Component>;
 		await sleep();
 
-		// initial render triggered exactly one reflush; the second render's condition is
-		// false, so it terminates. dirty being a single bit bounds it to one reflush
+		//initial render triggered exactly one reflush; the second render's condition is
+		//false, so it terminates. dirty being a single bit bounds it to one reflush
 		expect(renders).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("2");
 
@@ -175,10 +171,10 @@ describe("update() scheduling contract", () => {
 	});
 
 	test("a render-time update() resolves after its ASYNC reflush painted, not before", async () => {
-		// the outer's COMPLETED resolves the pending promise, so it has to defer to a pass queued
-		// DURING this one. a synchronous reflush hides the difference (its microtask is already
-		// ahead of the resolve in the queue); an async one does not — resolving at COMPLETED would
-		// unblock the caller on the FIRST render's DOM, 20ms before the second one paints
+		//the outer's COMPLETED resolves the pending promise, so it has to defer to a pass queued
+		//during this one. a synchronous reflush hides the difference (its microtask is already
+		//ahead of the resolve in the queue); an async one does not — resolving at COMPLETED would
+		//unblock the caller on the first render's DOM, 20ms before the second one paints
 		const tag = uniqueTag();
 		let renders = 0;
 		let promiseFromInsideTheRender: Promise<void> | null = null;
@@ -205,9 +201,9 @@ describe("update() scheduling contract", () => {
 	});
 
 	test("a render-time update() during a REFIRE resolves after its async reflush painted, not before", async () => {
-		// the twin of the test above, on the other resolve site: a refire has no yield to resume,
-		// so the render lane's PAINT resolves the promise. it has to defer to the pass queued
-		// during it the same way COMPLETED does
+		//the twin of the test above, on the other resolve site: a refire has no yield to resume,
+		//so the render lane's PAINT resolves the promise. it has to defer to the pass queued
+		//during it the same way COMPLETED does
 		const tag = uniqueTag();
 		let renders = 0;
 
@@ -247,7 +243,7 @@ describe("update() scheduling contract", () => {
 		await sleep();
 		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("static");
 
-		// must resolve (no createCurrent to re-run); awaiting must not hang
+		//must resolve (no createCurrent to re-run); awaiting must not hang
 		await element.update();
 		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("static");
 
@@ -295,7 +291,7 @@ describe("update() scheduling contract", () => {
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("ok");
 
 		shouldThrow = true;
-		// the flush must resolve (not hang) even though the render rejected
+		//the flush must resolve (not hang) even though the render rejected
 		await element.update();
 		expect(element.shadowRoot?.textContent).toContain("async boom");
 
@@ -322,7 +318,7 @@ describe("update() scheduling contract", () => {
 		await element.update(); // cancels the in-flight mount render, restarts with "new"
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("new");
 
-		// the superseded render's await now fires; its yield must be contained
+		//the superseded render's await now fires; its yield must be contained
 		await sleep(40);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("new");
 

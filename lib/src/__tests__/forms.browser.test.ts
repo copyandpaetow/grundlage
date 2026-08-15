@@ -5,9 +5,9 @@ import { html, component } from "../index";
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
-// the real form-association round-trip needs attachInternals + live form behavior.
-// the browser-as-dom project runs this file under happy-dom, which has neither, so
-// skip there and let the chromium project carry the coverage.
+//the real form-association round-trip needs attachInternals + live form behavior.
+//the browser-as-dom project runs this file under happy-dom, which has neither, so
+//skip there and let the chromium project carry the coverage
 const hasInternals =
 	typeof HTMLElement.prototype.attachInternals === "function";
 

@@ -2,12 +2,10 @@ import { describe, expect, test, vi } from "vitest";
 import { html, component } from "../../src/index";
 import { BaseComponent, ComponentProps } from "../../src/types";
 
-/*
-delegation: a render function may RETURN a generator function, so a component can swap which body
-runs — two setup/cleanup pairs sharing one shadow root — where a plainly yielded generator can only
-be the one installed at mount. the branch is re-chosen on every update() because the outer's refire
-record is the render function, not the generator it installed.
-*/
+//a render function may return a generator function, so a component can swap which body runs — two
+//setup and cleanup pairs sharing one shadow root — where a plainly yielded generator can only be
+//the one installed at mount. The branch is re-chosen on every update() because the outer's refire
+//record is the render function, not the generator it installed.
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));

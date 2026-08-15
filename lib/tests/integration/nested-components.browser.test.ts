@@ -356,7 +356,7 @@ describe("nested components", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("h1")?.textContent).toBe("two");
-		// child should be the same element and retain its last-rendered state
+		//child should be the same element and retain its last-rendered state
 		const sameChild = element.shadowRoot?.querySelector(childTag);
 		expect(sameChild).toBe(child);
 		expect(sameChild?.shadowRoot?.querySelector("span")?.textContent).toBe("5");
@@ -367,7 +367,7 @@ describe("nested components", () => {
 
 describe("shared template generator functions", () => {
 	//a template generator function returns an Template so it can be embedded
-	//as a child expression in any other template — reuse without recompiling.
+	//as a child expression in any other template — reuse without recompiling
 
 	const card = (title: string, body: string): Template =>
 		html`<article class="card">
@@ -720,7 +720,7 @@ describe("shared generator functions", () => {
 
 	test("sub-generator invoked and iterated manually inside the main generator", async () => {
 		//shows that a plain generator can be consumed imperatively — its yields
-		//are observed by the outer generator rather than delegated up.
+		//are observed by the outer generator rather than delegated up
 		const loadSteps = function* () {
 			yield "step-1";
 			yield "step-2";
@@ -870,7 +870,7 @@ describe("framework-parity patterns", () => {
 
 	test("context via bubbling events: provider answers a consumer request", async () => {
 		//equivalent to React context: the nearest ancestor intercepts a
-		//custom "request-context" event and writes the value into event.detail.
+		//custom "request-context" event and writes the value into event.detail
 		type ThemeRequest = { theme?: string };
 
 		const providerTag = uniqueTag("theme-provider");
@@ -889,10 +889,9 @@ describe("framework-parity patterns", () => {
 		customElements.define(
 			consumerTag,
 			component(function* ({ host: element }) {
-				//defer one microtask: connectedCallback order is only guaranteed
-				//in tree order in spec-compliant engines, and the provider's
-				//listener must be registered before we dispatch. Yielding a
-				//resolved promise lets both setups complete before the request.
+				//connectedCallback order is only guaranteed in tree order on spec-compliant engines, and
+				//the provider's listener has to be registered before the dispatch, so one microtask of
+				//deferral lets both setups complete first
 				yield Promise.resolve();
 				const request: ThemeRequest = {};
 				element.dispatchEvent(
@@ -1037,7 +1036,7 @@ describe("framework-parity patterns", () => {
 
 	test("render-prop pattern: parent passes a row renderer to a list child", async () => {
 		//React's render-prop / Vue scoped-slot equivalent: the child consumes a
-		//template factory supplied by the parent through a property binding.
+		//template factory supplied by the parent through a property binding
 		type RowRenderer = (item: string) => Template;
 
 		const listTag = uniqueTag("renderprop-list");
@@ -1082,8 +1081,8 @@ describe("framework-parity patterns", () => {
 	});
 
 	test("slot fallback shows when no light children are present, then hides on projection", async () => {
-		//`<slot>fallback</slot>` is a standard web-component idiom: the fallback renders only when nothing is slotted
-		//we don't do anything special for it, but a regression that broke slot child layout would surface here
+		//`<slot>fallback</slot>` renders its fallback only when nothing is slotted. Nothing in the
+		//library treats it specially, but a regression in slot child layout surfaces here
 		const tag = uniqueTag("slot-fallback");
 		customElements.define(
 			tag,
@@ -1111,8 +1110,8 @@ describe("framework-parity patterns", () => {
 		await sleep();
 
 		expect(slot.assignedNodes()).toContain(projected);
-		//the fallback element is still in the shadow DOM but it is not the slot's flat-tree contribution any more
-		//we verify projection took over by reading assignedNodes (which excludes fallback when something is assigned)
+		//the fallback element is still in the shadow DOM but no longer the slot's flat-tree
+		//contribution, which assignedNodes is what reads
 		expect(slot.assignedNodes().some((node) => node === fallback)).toBe(false);
 
 		projected.remove();
@@ -1126,7 +1125,8 @@ describe("framework-parity patterns", () => {
 	});
 
 	test("named slot fallback only shows when its named light child is absent", async () => {
-		//named slots compose with default slots; the fallback for `slot[name=title]` is independent of whether the default slot has children
+		//named and default slots compose: the fallback for `slot[name=title]` is independent of whether
+		//the default slot has children
 		const tag = uniqueTag("slot-named-fallback");
 		customElements.define(
 			tag,
@@ -1207,7 +1207,7 @@ describe("framework-parity patterns", () => {
 		"focus on nested child input survives parent re-render",
 		async () => {
 			//guards against the parent's content-binding update dropping the
-			//child element (and therefore its focused descendant).
+			//child element (and therefore its focused descendant)
 			const childTag = uniqueTag("focus-child");
 			customElements.define(
 				childTag,
@@ -1295,7 +1295,7 @@ describe("framework-parity patterns", () => {
 
 		//child is permanently broken — handleError nulls #render, so update()
 		//short-circuits. Even if the underlying throw condition is cleared,
-		//the child does not self-recover.
+		//the child does not self-recover
 		shouldChildThrow = false;
 		await (child as BaseComponent).update();
 		await sleep();

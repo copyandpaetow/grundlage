@@ -11,7 +11,7 @@ import { RawContentLiveBinding } from "../types";
 
 //a <style> whose live sheet parses to a different rule count than the compiler recorded
 //demotes to the full-text lane. The demotion nulls styleSheetState mid-commit, so the
-//text-lane seed step must read the live field, not a stale local, or it dereferences null.
+//text-lane seed step must read the live field, not a stale local, or it dereferences null
 describe("css demotion to the full-text lane", () => {
 	const buildConnectedStyleBinding = (
 		cssText: string,

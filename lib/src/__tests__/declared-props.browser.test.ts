@@ -2,10 +2,10 @@ import { describe, expect, test, vi } from "vitest";
 import { component, html } from "../index";
 import { BaseComponent } from "../types";
 
-// happy-dom neither upgrades an element in place — it builds a fresh instance and swaps it in,
-// dropping the own property an author assigned before the definition arrived — nor paints a
-// component nested inside another component's shadow root at all (true of 0.7.0 as well). Both
-// are exactly what the pre-upgrade and parent-binding cases are about, so chromium carries them.
+//happy-dom neither upgrades an element in place — it builds a fresh instance and swaps it in,
+//dropping the own property an author assigned before the definition arrived — nor paints a
+//component nested inside another component's shadow root at all (true of 0.7.0 as well). Both
+//are exactly what the pre-upgrade and parent-binding cases are about, so chromium carries them
 const isRealBrowser =
 	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 

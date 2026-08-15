@@ -98,7 +98,6 @@ describe("component lifecycle", () => {
 		const element = mount(tag);
 		await sleep();
 
-		// Move element to a new parent
 		const newParent = document.createElement("div");
 		document.body.appendChild(newParent);
 		newParent.appendChild(element);
@@ -128,13 +127,11 @@ describe("component lifecycle", () => {
 		await sleep();
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("10");
 
-		// Move to new parent
 		const newParent = document.createElement("div");
 		document.body.appendChild(newParent);
 		newParent.appendChild(element);
 		await sleep();
 
-		// Should still be able to update after move
 		count = 20;
 		await element.update();
 		await sleep();
@@ -237,13 +234,13 @@ describe("component lifecycle", () => {
 		cleanup(element);
 		await sleep();
 
-		// After cleanup, update should be a no-op (render is nulled for errored components,
-		// but for disconnected ones the render still exists — update just runs silently)
+		//after cleanup, update should be a no-op (render is nulled for errored components,
+		//but for disconnected ones the render still exists — update just runs silently)
 		count = 99;
 		await element.update();
 		await sleep();
 
-		// The element still has its last rendered state
+		//the element still has its last rendered state
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("0");
 	});
 
@@ -299,9 +296,9 @@ describe("component lifecycle", () => {
 		await sleep();
 		expect(renderCount).toBe(1);
 
-		// Three sync update() calls should batch into one re-render via the
-		// `await Promise.resolve()` in update(): the first transitions IDLE → SCHEDULED
-		// and the next two short-circuit on the SCHEDULED guard.
+		//three sync update() calls should batch into one re-render via the
+		//`await Promise.resolve()` in update(): the first transitions IDLE → SCHEDULED
+		//and the next two short-circuit on the SCHEDULED guard
 		const first = element.update();
 		const second = element.update();
 		const third = element.update();
@@ -318,8 +315,8 @@ describe("component lifecycle", () => {
 
 		const ComponentClass = component(function* () {
 			timesGeneratorRan++;
-			// A bare HTMLTemplate yield installs a TEMPLATE_SOURCE_TYPE.STATIC source —
-			// update() should do nothing for it (no re-render, no generator restart).
+			//a bare HTMLTemplate yield installs a TEMPLATE_SOURCE_TYPE.STATIC source —
+			//update() should do nothing for it (no re-render, no generator restart)
 			yield html`<p>static-content</p>`;
 		});
 		customElements.define(tag, ComponentClass);
@@ -356,7 +353,7 @@ describe("component lifecycle", () => {
 		const element = mount(tag);
 		await sleep();
 
-		// With mode: "closed", shadowRoot is not accessible from outside
+		//with mode: "closed", shadowRoot is not accessible from outside
 		expect(element.shadowRoot).toBeNull();
 
 		cleanup(element);
@@ -366,9 +363,9 @@ describe("component lifecycle", () => {
 describe.skipIf("happyDOM" in globalThis)(
 	"deferred custom-element upgrade",
 	() => {
-		//the realistic SSR / lazy-define scenario: createElement and DOM insertion happen before customElements.define, then the upgrade fires retroactively
-		//we want to make sure constructor + connectedCallback run in the right order and that rendering proceeds normally without a separate code path
-		//happy-dom does not implement retroactive upgrade — these tests only run against the real-browser project
+		//the lazy-define shape: createElement and insertion happen before the define, and the upgrade
+		//fires retroactively. happy-dom does not implement that, so only the real-browser project runs
+		//these
 		let tagId = 0;
 		const uniqueTag = () => `test-upgrade-${tagId++}-${Date.now()}`;
 
@@ -433,8 +430,8 @@ describe.skipIf("happyDOM" in globalThis)(
 		});
 
 		test("update() called before define is a no-op and does not throw post-upgrade", async () => {
-			//if the user grabs the element via createElement and calls a method that doesn't exist yet (because the class hasn't been defined), the call should be ignored quietly
-			//after define the element upgrades and renders fresh — the prior call should not have broken anything
+			//a method called before the class is defined does not exist yet and the call is ignored
+			//quietly; the upgrade that follows still renders fresh
 			const tag = uniqueTag();
 
 			const element = document.createElement(tag) as HTMLElement & {
@@ -453,7 +450,6 @@ describe.skipIf("happyDOM" in globalThis)(
 			await sleep();
 
 			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
-			//now update() is on the prototype
 			await (element as InstanceType<typeof MyElement>).update();
 			await sleep();
 			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
@@ -464,9 +460,10 @@ describe.skipIf("happyDOM" in globalThis)(
 );
 
 describe("MutationObserver and update() interleaving", () => {
-	//the renderer batches updates through the scheduler's flushPromise/dirty pair: the first update() opens a flush, any update() arriving while flushPromise is open just flags dirty and rides the same promise
-	//we have separate tests for "MO triggers re-render" and "update() coalesces", but nothing pins what happens when both arrive in the same task
-	//these tests pin the contract: setAttribute on the host inside an update flush does not cause an extra render to land, because the MO callback's update() rides the open flushPromise instead of opening a second one
+	//the first update() opens a flush and any update() arriving while it is open only flags dirty and
+	//rides the same promise. What these pin is the two arriving in one task: a setAttribute on the
+	//host inside an open flush lands no extra render, because the MutationObserver callback's
+	//update() rides that flush
 	let tagId = 0;
 	const uniqueTag = () => `test-observer-race-${tagId++}-${Date.now()}`;
 
@@ -480,8 +477,8 @@ describe("MutationObserver and update() interleaving", () => {
 	};
 
 	test("setAttribute fired while a sync update() is mid-flight does not double-render", async () => {
-		//we trigger a render via update() and inside that render we observe whether a same-tick setAttribute (queued in user code right before update()) caused a second pass
-		//the contract we pin: a MutationObserver callback firing while a flush is open rides the existing flushPromise (flagging dirty) rather than opening a second one, so the queued attribute mutation does not cause a duplicate render in the same task
+		//a same-tick setAttribute queued right before update(): its MutationObserver callback fires
+		//while the flush is open, flags dirty and rides it, so the mutation lands no duplicate render
 		const tag = uniqueTag();
 		let renderCount = 0;
 
@@ -502,12 +499,15 @@ describe("MutationObserver and update() interleaving", () => {
 		await sleep();
 		expect(renderCount).toBe(1);
 
-		//both lines are sync — the MutationObserver microtask is queued; update() then opens the flush (sets flushPromise) in the same task
+		//both lines are synchronous: the MutationObserver microtask queues, then update() opens the
+		//flush in the same task
 		element.setAttribute("data-label", "racy");
 		element.update();
 		await sleep(50);
 
-		//we accept one extra render: the MO microtask's update() and the explicit update() both resolve to the one open flushPromise — the second just flags dirty, and runFlushLoop clears dirty at the top of the iteration that renders the already-mutated DOM
+		//one extra render is accepted: both update() calls resolve to the single open flush, the second
+		//only flags dirty, and the loop clears dirty at the top of the iteration that renders the
+		//already-mutated DOM
 		//either ordering yields a single re-render, not two
 		expect(renderCount).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
@@ -518,8 +518,8 @@ describe("MutationObserver and update() interleaving", () => {
 	});
 
 	test("setAttribute outside any active render still triggers exactly one re-render", async () => {
-		//this is the lower bound: an attribute mutation arriving with the renderer fully idle must produce exactly one re-render (not zero, not multiple)
-		//paired with the test above, the two pin both ends of the coalescing contract: idle-mutation = one render; mutation-during-update = one render
+		//the lower bound: a mutation arriving with the renderer idle produces exactly one re-render,
+		//neither zero nor several. With the test above it pins both ends of coalescing
 		const tag = uniqueTag();
 		let renderCount = 0;
 

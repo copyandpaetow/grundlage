@@ -12,8 +12,8 @@ const sleep = (duration = 0) =>
 let tagId = 0;
 const uniqueTag = (prefix: string) => `${prefix}-${tagId++}-${Date.now()}`;
 
-// custom elements can't be `new`-ed in happy-dom until the tag is registered, so every
-// FormAssociatedBase instance goes through a freshly-defined element
+//custom elements can't be `new`-ed in happy-dom until the tag is registered, so every
+//FormAssociatedBase instance goes through a freshly-defined element
 const makeField = () => {
 	const tag = uniqueTag("direct-field");
 	customElements.define(tag, class extends getFormAssociatedBaseClass() {});
@@ -26,8 +26,8 @@ describe("FormAssociatedBase - static surface", () => {
 	});
 
 	test("the four lifecycle callbacks map onto the public event names", () => {
-		// the callbacks are the only surface the browser calls; FORM_EVENTS is the
-		// only surface users listen on. one missing pair means a dead lifecycle hook.
+		//the callbacks are the only surface the browser calls; FORM_EVENTS is the
+		//only surface users listen on. one missing pair means a dead lifecycle hook
 		const field = makeField();
 		expect(typeof field.formAssociatedCallback).toBe("function");
 		expect(typeof field.formDisabledCallback).toBe("function");
@@ -42,8 +42,8 @@ describe("FormAssociatedBase - static surface", () => {
 	});
 
 	test("the internals getter's attachInternals guard never throws and yields null-or-object", () => {
-		// happy-dom has no attachInternals, so the lazy getter must keep the read
-		// alive on the server. internals is null here; a live browser fills it in.
+		//happy-dom has no attachInternals, so the lazy getter must keep the read
+		//alive on the server. internals is null here; a live browser fills it in
 		const tag = uniqueTag("guarded-field");
 		customElements.define(
 			tag,
@@ -92,7 +92,7 @@ describe("FormAssociatedBase - lifecycle callbacks re-broadcast as events", () =
 		field.formResetCallback();
 
 		expect(received).toBeInstanceOf(Event);
-		// the reset event deliberately skips CustomEvent to avoid the detail allocation
+		//the reset event deliberately skips CustomEvent to avoid the detail allocation
 		expect(received).not.toBeInstanceOf(CustomEvent);
 	});
 
@@ -110,8 +110,8 @@ describe("FormAssociatedBase - lifecycle callbacks re-broadcast as events", () =
 	});
 
 	test("the broadcast events do not bubble", () => {
-		// listeners attach to the host itself; bubbling would leak form lifecycle
-		// into ancestors that never opted in.
+		//listeners attach to the host itself; bubbling would leak form lifecycle
+		//into ancestors that never opted in
 		const field = makeField();
 		let bubbles = true;
 		field.addEventListener(FORM_EVENTS.RESET, (event) => {
@@ -125,7 +125,7 @@ describe("FormAssociatedBase - lifecycle callbacks re-broadcast as events", () =
 });
 
 describe("component(..., { formAssociated }) parent selection", () => {
-	// formAssociated replaces the default options, so a full ShadowRootInit comes with it
+	//formAssociated replaces the default options, so a full ShadowRootInit comes with it
 	const formOptions = { mode: "open", formAssociated: true } as const;
 
 	test("opting in inherits FormAssociatedBase and its static flag", () => {
@@ -159,8 +159,8 @@ describe("component(..., { formAssociated }) parent selection", () => {
 	});
 
 	test("a declared on-form-reset listener runs when the host resets", async () => {
-		// the end-to-end wiring: FormAssociatedBase re-broadcasts formResetCallback, and the
-		// root-template `on-form-reset` mirror binds the handler onto the host.
+		//the end-to-end wiring: FormAssociatedBase re-broadcasts formResetCallback, and the
+		//root-template `on-form-reset` mirror binds the handler onto the host
 		const tag = uniqueTag("form-field");
 		const onReset = vi.fn();
 		const Element = component(function* () {

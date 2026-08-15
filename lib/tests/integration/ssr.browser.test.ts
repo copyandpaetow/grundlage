@@ -5,7 +5,8 @@ import { ComponentConstructor } from "../../src/types";
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
-//resolve as soon as the first-yield content lands; a fixed sleep would silently flake on slower async-before-yield generators
+//resolves as soon as the first-yield content lands; a fixed sleep flakes on slower
+//async-before-yield generators
 const waitForShadowContent = async (element: HTMLElement, timeoutMs = 200) => {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -22,11 +23,6 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		element.remove();
 	};
 
-	/**
-	 * Flips `__grundlage_ssr__`, mounts, polls for first-yield content,
-	 * serializes, removes the element, clears the flag.
-	 * Returns the declarative-shadow-DOM HTML the plugin would emit.
-	 */
 	const serverRender = async (
 		tag: string,
 		ComponentClass: ComponentConstructor,
@@ -38,13 +34,14 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			document.body.appendChild(element);
 			//poll rather than sleep — async-before-yield settle times are workload-dependent
 			await waitForShadowContent(element);
-			//host attrs land on the element itself; getHTML returns shadow content only, so we re-emit them around it
+			//host attributes land on the element itself and getHTML returns shadow content only, so they
+			//are re-emitted around it
 			const hostAttrs = Array.from(element.attributes)
 				.map((attribute) => ` ${attribute.name}="${attribute.value}"`)
 				.join("");
 			const serialized = element.getHTML({ serializableShadowRoots: true });
 			element.remove();
-			//let the async disconnectedCallback drain so the next test's customElements.define can't race teardown
+			//let the async disconnectedCallback drain, so the next define cannot race teardown
 			await sleep();
 			return `<${tag}${hostAttrs}>${serialized}</${tag}>`;
 		} finally {
@@ -52,11 +49,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		}
 	};
 
-	/**
-	 * Mounts serialized SSR HTML via setHTMLUnsafe — simulates the browser
-	 * parsing declarative shadow DOM. The custom element class must NOT be
-	 * defined yet at this point.
-	 */
+	//the tag must still be undefined when this runs, so the element is parsed and connected before
+	//anything upgrades it — the order a real page loads in
 	const hydrateFromHTML = (serializedHTML: string): HTMLElement => {
 		const wrapper = document.createElement("div");
 		wrapper.setHTMLUnsafe(serializedHTML);
@@ -215,7 +209,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 				customElements.define(clientTag, makeComponent());
 				await sleep();
-				//hydrate wires bindings without overwriting the server text
+				//server and client render the same value here, so hydration compares and writes nothing
 				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 					"loading",
 				);
@@ -233,7 +227,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("comment markers survive serialization → setHTMLUnsafe → hydrate", async () => {
-				//hydrate() walks COMMENT_IDENTIFIER markers — if serialization strips them, every update silently misfires
+				//hydration walks the marker comments: serialization stripping them makes every later update
+				//misfire silently
 				//proof-by-effect: a post-hydrate update must change the DOM
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
@@ -340,7 +335,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				await serverRender(serverTag, ServerComponent);
 				expect(serverPostYieldRan).toBe(false);
 
-				//separate factory + flag so we can prove the client ran its own post-yield body
+				//a separate factory and flag are what prove the client ran its own post-yield body
 				const ClientComponent = component(function* () {
 					yield () => html`<p>shared</p>`;
 					clientPostYieldRan = true;
@@ -362,7 +357,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("nested generator: server stops at INNER's first yield, client hydrates against it", async () => {
-				//client MUST be single-yield: a second yield with a different templateHash would replaceChildren and waste the hydrate
+				//the client has to be single-yield: a second yield with a different template hash replaces
+				//the children and wastes the adoption
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				let innerSecondYielded = false;
@@ -402,7 +398,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("host attribute mismatch: server's first-yield value is overwritten by the client's first-yield value", async () => {
-				//hydrate re-applies ATTR bindings — host attrs are the one category where the client value wins
+				//hydrate re-applies attribute bindings — host attrs are the one category where the client value wins
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 
@@ -449,7 +445,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 			test("update() scheduled from inside the first-yield render fn does not re-invoke it (infinite-loop guard)", async () => {
 				//RENDER_FUNCTION source caches the fn — a broken guard would loop forever
-				//count render-fn calls specifically; yields alone would pass even with a broken guard because the cancel still stops the generator
+				//render-function calls, not yields: a yield count passes even with a broken guard, because
+				//the cancel still stops the generator
 				const serverTag = uniqueTag();
 				let renderFunctionCalls = 0;
 				let secondYieldRan = false;
@@ -472,7 +469,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("client mount without server-side flag runs the generator normally", async () => {
-				//paranoia: if the flag unset in serverRender's finally ever broke, the client would stop at first yield too
+				//a flag left set by serverRender's finally would stop the client at its first yield too
 				const clientTag = uniqueTag();
 				let firstYield = true;
 
@@ -509,7 +506,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const element = hydrateFromHTML(serialized);
 			await sleep();
 
-			// Server-rendered content should be preserved (not replaced by CSR mount)
+			//server-rendered content should be preserved (not replaced by CSR mount)
 			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 				"content",
 			);
@@ -736,14 +733,16 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				"client-value",
 			);
 
-			//no update() follow-up here — both renders carry the same hardcoded expression, so update would see current === previous and skip
+			//no update() follow-up: both renders carry the same hardcoded expression, so it would see
+			//current === previous and skip
 			//"responds to update() after hydration" above covers the actual refresh path
 
 			cleanup(element);
 		});
 
 		test("hydrate refreshes a host attribute when the client renders a different value", async () => {
-			//host attrs aren't serialized into the shadow root; hydrate re-applies all ATTR bindings, so the client value wins
+			//host attributes are not serialized into the shadow root, so hydration re-applies every
+			//attribute binding and the client value wins
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 

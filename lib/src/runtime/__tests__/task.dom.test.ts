@@ -13,18 +13,13 @@ import {
 	Task,
 } from "../task";
 
-/*
-the two classifiers in isolation, with no DOM, no timer and no coroutine. classifyStep(task,
-iteratorResult) -> CoroutineOperation says what a generator did; classifyRenderResult(task,
-produced) -> RenderOperation says what a render function returned. both speak one currency: an
-operation. there is no intermediate outcome object, so a throw is routed the moment it happens
-rather than re-entering a classifier wearing a yield's clothes — stepTaskToNextOperation returns
-the routed operation directly. the classifiers never call a render function or step anything; the
-driver in src/index.ts does that, and tests/integration covers it end-to-end. these pin the
-dispatch, the cleanup capture, and the suspension every guard reads. a task knows nothing about
-the element it renders into, so which task may install a branch and where an error goes are
-driver questions, covered in tests/integration.
-*/
+//the two classifiers in isolation, with no DOM, no timer and no coroutine. classifyStep says what a
+//generator did; classifyRenderResult says what a render function returned. Both speak one currency,
+//an operation, and there is no intermediate outcome object, so a throw is routed the moment it
+//happens rather than re-entering a classifier wearing a yield's clothes. The classifiers never call
+//a render function or step anything: the driver does that, and tests/integration covers it
+//end-to-end. A task knows nothing about the element it renders into, so which task may install a
+//branch and where an error goes are driver questions, covered there too.
 
 const template = (): TemplateValue => html`<p>x</p>`;
 
@@ -293,7 +288,7 @@ describe("the suspension: what a task is parked on", () => {
 		expect(task.suspension?.parkedAt).toBe(PARKED.PENDING_STEP);
 	});
 
-	//identity is the permit: leaving a park and returning to one of the SAME kind must invalidate
+	//identity is the permit: leaving a park and returning to one of the same kind must invalidate
 	//whatever the first park handed out, which a compared value could never express
 	test("re-parking at the same kind still issues a new permit", () => {
 		const task = makeTask();

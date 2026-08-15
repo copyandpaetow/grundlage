@@ -150,7 +150,8 @@ describe("warnOnUnclaimedSsrPayloads flags drift between server and client load(
 });
 
 //load branches on `typeof window === "undefined"` at call time
-//swapping it out lets us drive the server-side collect path against a real (happy-dom) shadow root, so we can assert what flushHostPayload writes
+//swapping it out drives the server-side collect path against a real shadow root, which is what
+//makes flushHostPayload's writes assertable
 const withoutWindow = async <ReturnValue>(
 	body: () => Promise<ReturnValue>,
 ): Promise<ReturnValue> => {

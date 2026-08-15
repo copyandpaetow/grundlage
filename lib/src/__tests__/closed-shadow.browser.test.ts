@@ -2,10 +2,9 @@ import { describe, expect, test, vi } from "vitest";
 import { html, load, component } from "../index";
 import { FORM_EVENTS } from "../forms";
 
-// The closed-mode round-trip needs a real browser: happy-dom has neither attachInternals
-// nor declarative-shadow parsing, so skip there and let the chromium project carry it.
-// These tests also double as the verification that attachInternals().shadowRoot exposes a
-// *declaratively-created* closed root — the platform fact the whole fix rests on.
+//the closed-mode round-trip needs a real browser: happy-dom has neither attachInternals nor
+//declarative-shadow parsing. What it settles along the way is the platform fact the whole path
+//rests on, that attachInternals().shadowRoot reaches a declaratively-created closed root
 const canRun =
 	typeof HTMLElement.prototype.attachInternals === "function" &&
 	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe ===
@@ -17,9 +16,9 @@ const sleep = (duration = 0) =>
 let tagId = 0;
 const uniqueTag = () => `closed-el-${tagId++}-${Date.now()}`;
 
-// A closed-mode component's SSR output is a host carrying a declarative closed shadow root;
-// setHTMLUnsafe is what attaches it. The element is left un-upgraded (tag defined later) so
-// each test can drive hydration explicitly, mirroring "server HTML first, JS defines it".
+//a closed-mode component's SSR output is a host carrying a declarative closed shadow root;
+//setHTMLUnsafe is what attaches it. The element is left un-upgraded (tag defined later) so
+//each test can drive hydration explicitly, mirroring "server HTML first, JS defines it"
 const prerenderClosed = (tag: string, shadowInner: string): HTMLElement => {
 	const holder = document.createElement("div");
 	document.body.appendChild(holder);
@@ -62,10 +61,10 @@ describe("closed shadow root — hydration + load replay", () => {
 	test.skipIf(!canRun)(
 		"prerendered closed component hydrates the server DOM instead of re-rendering it",
 		async () => {
-			// the server node carries a static marker the client template never emits;
-			// it survives iff hydration reused the node rather than rebuilding from scratch.
-			// content is static so adoption needs no internal hydration markers (which real
-			// SSR emits and this hand-rolled markup can't).
+			//the server node carries a static marker the client template never emits;
+			//it survives iff hydration reused the node rather than rebuilding from scratch.
+			//content is static so adoption needs no internal hydration markers (which real
+			//SSR emits and this hand-rolled markup can't)
 			const tag = uniqueTag();
 			const host = prerenderClosed(tag, `<p data-server="1">hi</p>`);
 
@@ -126,8 +125,8 @@ describe("closed shadow root — hydration + load replay", () => {
 	test.skipIf(!canRun)(
 		"closed form component acquires internals exactly once and still fires form callbacks",
 		async () => {
-			// a second attachInternals() would throw during construction; single-call is
-			// proven by successful upgrade + the getter handing back the same memoized object
+			//a second attachInternals() would throw during construction; single-call is
+			//proven by successful upgrade + the getter handing back the same memoized object
 			const tag = uniqueTag();
 			const host = prerenderClosed(tag, `<input />`);
 			const attachSpy = vi.spyOn(HTMLElement.prototype, "attachInternals");

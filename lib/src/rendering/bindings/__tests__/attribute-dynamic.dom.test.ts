@@ -12,7 +12,7 @@ describe("applyDynamicAttribute - event listeners", () => {
 
 		applyDynamicAttribute(element, "onclick", handler);
 
-		// addEventListener path: the attribute itself must NOT be set.
+		//addEventListener path: the attribute itself must not be set
 		expect(element.hasAttribute("onclick")).toBe(false);
 
 		element.click();
@@ -45,8 +45,8 @@ describe("applyDynamicAttribute - event listeners", () => {
 	});
 
 	test("uppercase event keys still resolve via the lowercased lookup", () => {
-		// The fast path lowercases before the `in element` check, so authored
-		// keys like onClick or ONCLICK still bind to the click event.
+		//the fast path lowercases before the `in element` check, so authored
+		//keys like onClick or ONCLICK still bind to the click event
 		const element = document.createElement("button");
 		const events: Array<string> = [];
 		const handler = () => events.push("clicked");
@@ -57,9 +57,9 @@ describe("applyDynamicAttribute - event listeners", () => {
 	});
 
 	test("on-prefixed key that is not a real event property falls through to setAttribute", () => {
-		// "ondata" isn't on HTMLElement.prototype, so the `lowerKey in element`
-		// guard short-circuits the listener path. Such keys (with stringable
-		// values) should land as ordinary attributes.
+		//"ondata" isn't on HTMLElement.prototype, so the `lowerKey in element`
+		//guard short-circuits the listener path. Such keys (with stringable
+		//values) should land as ordinary attributes
 		const element = document.createElement("div");
 		expect("ondata" in element).toBe(false);
 
@@ -68,9 +68,9 @@ describe("applyDynamicAttribute - event listeners", () => {
 	});
 
 	test("on-prefixed key with non-stringable value and no matching event becomes a JS property", () => {
-		// The on* fast path only fires when value or oldValue is a function. A
-		// non-function, non-stringable value with an unknown on* key should land
-		// on the JS property side, not as an attribute.
+		//the on* fast path only fires when value or oldValue is a function. A
+		//non-function, non-stringable value with an unknown on* key should land
+		//on the JS property side, not as an attribute
 		const element = document.createElement("div");
 		const payload = { nested: 1 };
 
@@ -81,11 +81,9 @@ describe("applyDynamicAttribute - event listeners", () => {
 });
 
 describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", () => {
-	// The `on*` fast path keys on `lowerKey in element`, so any event that lives
-	// on HTMLElement.prototype should bind. These tests pin that contract for the
-	// less-common event surfaces we actually rely on (pointer, wheel, transition,
-	// animation, composition) and verify CustomEvent detail flows through the
-	// listener untouched.
+	//the `on*` fast path keys on `lowerKey in element`, so any event living on HTMLElement.prototype
+	//binds. These cover the less-common surfaces the library relies on — pointer, wheel, transition,
+	//animation, composition — and the CustomEvent detail reaching the listener untouched
 
 	test.each([
 		["onpointerdown", "pointerdown"],
@@ -100,10 +98,10 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 		"binds %s via addEventListener and fires on %s",
 		(attributeKey, eventName) => {
 			const element = document.createElement("div");
-			// guard: if a future runtime drops one of these from the prototype the
-			// fast path would silently fall through to setAttribute and the test
-			// would still pass the dispatch check via inline handler, so assert the
-			// lookup so a regression surfaces here, not somewhere downstream.
+			//guard: if a future runtime drops one of these from the prototype the
+			//fast path would silently fall through to setAttribute and the test
+			//would still pass the dispatch check via inline handler, so assert the
+			//lookup so a regression surfaces here, not somewhere downstream
 			expect(attributeKey in element).toBe(true);
 
 			const received: Array<Event> = [];
@@ -119,9 +117,8 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 	);
 
 	test("CustomEvent detail reaches a listener bound to a standard event slot", () => {
-		// We don't unwrap the event; the listener gets whatever dispatchEvent
-		// hands us. This pins that contract so callers can safely route typed
-		// payloads through `oninput`, `onchange`, etc.
+		//the event is not unwrapped: the listener gets whatever dispatchEvent hands over, so callers
+		//can route typed payloads through `oninput`, `onchange` and the rest
 		const element = document.createElement("input");
 		const received: Array<{ detail: unknown; type: string }> = [];
 
@@ -137,9 +134,9 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 	});
 
 	test("bubbling CustomEvent dispatched on a child fires a listener on the parent", () => {
-		// Listener registration must not swallow the bubbling phase; events
-		// dispatched on a descendant should still reach the ancestor that owns
-		// the `on*` binding.
+		//listener registration must not swallow the bubbling phase; events
+		//dispatched on a descendant should still reach the ancestor that owns
+		//the `on*` binding
 		const parent = document.createElement("section");
 		const child = document.createElement("button");
 		parent.appendChild(child);
@@ -152,9 +149,8 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 	});
 
 	test("swapping an exotic listener detaches the old one and attaches the new", () => {
-		// Same swap semantics as onclick, just on a different event surface.
-		// regression guard so the removeEventListener call uses the same
-		// (lowercased) event name as the original addEventListener.
+		//same swap semantics as onclick on a different event surface, so removeEventListener uses the
+		//same lowercased name the original addEventListener did
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 		const firstHandler = () => received.push("first");
@@ -185,9 +181,9 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 	});
 
 	test("listener bound via mixed-case key still fires on the canonical event", () => {
-		// Authoring style varies (onPointerDown, ONWHEEL); the lowercase lookup
-		// must match the prototype property and the underlying event name must
-		// still be the lowercased remainder.
+		//authoring style varies (onPointerDown, ONWHEEL); the lowercase lookup
+		//must match the prototype property and the underlying event name must
+		//still be the lowercased remainder
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
@@ -200,11 +196,11 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 	});
 
 	test("custom event name with no matching prototype property lands as a JS property, not via addEventListener", () => {
-		// `onmycustomevent` isn't on HTMLElement.prototype, so the fast path's
-		// `lowerKey in element` guard is false. A function value should fall
-		// through to property assignment; what the runtime later does with that
-		// property on dispatch is its business, but the binding itself must not
-		// have called addEventListener.
+		//`onmycustomevent` isn't on HTMLElement.prototype, so the fast path's
+		//`lowerKey in element` guard is false. A function value should fall
+		//through to property assignment; what the runtime later does with that
+		//property on dispatch is its business, but the binding itself must not
+		//have called addEventListener
 		const element = document.createElement("div");
 		expect("onmycustomevent" in element).toBe(false);
 
@@ -221,9 +217,9 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 	});
 
 	test("removes the listener via null even when only oldValue is a function", () => {
-		// On the very first call, value is null but oldValue is a function, so
-		// the entry guard in applyDynamicAttribute still has to enter the on* branch
-		// so removeEventListener fires for the orphaned handler.
+		//on the very first call, value is null but oldValue is a function, so
+		//the entry guard in applyDynamicAttribute still has to enter the on* branch
+		//so removeEventListener fires for the orphaned handler
 		const element = document.createElement("div");
 		const received: Array<Event> = [];
 		const handler = (event: Event) => received.push(event);
@@ -268,9 +264,9 @@ describe("applyDynamicAttribute - exotic event names and CustomEvent payloads", 
 
 describe("applyDynamicAttribute - on- explicit listeners", () => {
 	test("binds a custom event with no IDL property, skipping the in-element gate", () => {
-		// the whole point of `on-`: `on-form-reset` has no prototype property, so
-		// the gated `on*` path would fall through. the dash marks it as a listener
-		// unconditionally.
+		//the whole point of `on-`: `on-form-reset` has no prototype property, so
+		//the gated `on*` path would fall through. the dash marks it as a listener
+		//unconditionally
 		const element = document.createElement("div");
 		expect("on-form-reset" in element).toBe(false);
 
@@ -282,7 +278,7 @@ describe("applyDynamicAttribute - on- explicit listeners", () => {
 		);
 
 		expect(addSpy).toHaveBeenCalledWith("form-reset", expect.any(Function));
-		// must not leak as an attribute or a JS property
+		//must not leak as an attribute or a JS property
 		expect(element.hasAttribute("on-form-reset")).toBe(false);
 		expect(
 			(element as unknown as Record<string, unknown>)["on-form-reset"],
@@ -330,9 +326,9 @@ describe("applyDynamicAttribute - on- explicit listeners", () => {
 	});
 
 	test("lowercases the event name, matching the DOM's attribute-name folding", () => {
-		// declarative event names can't preserve case (the DOM lowercases attribute
-		// names), so `on-` follows the same rule: the listener binds to the
-		// lowercased remainder. case-sensitive types need imperative addEventListener.
+		//declarative event names can't preserve case (the DOM lowercases attribute
+		//names), so `on-` follows the same rule: the listener binds to the
+		//lowercased remainder. case-sensitive types need imperative addEventListener
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
@@ -347,8 +343,8 @@ describe("applyDynamicAttribute - on- explicit listeners", () => {
 
 describe("applyDynamicAttribute - dead native handler warning", () => {
 	test("warns when an on<name> function value finds no matching IDL property", () => {
-		// onClik is a typo'd onClick: no `onclik` IDL property, so the function
-		// would land as a dead property that never fires. that must be loud.
+		//onClik is a typo'd onClick: no `onclik` IDL property, so the function
+		//would land as a dead property that never fires. that must be loud
 		const element = document.createElement("button");
 		expect("onclik" in element).toBe(false);
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -371,8 +367,8 @@ describe("applyDynamicAttribute - dead native handler warning", () => {
 	});
 
 	test("does not warn for an on-<name> explicit custom-event listener", () => {
-		// on-<name> is the intended way to bind a no-IDL custom event, so it must
-		// never trip the dead-handler warning.
+		//on-<name> is the intended way to bind a no-IDL custom event, so it must
+		//never trip the dead-handler warning
 		const element = document.createElement("div");
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -393,8 +389,8 @@ describe("applyDynamicAttribute - dead native handler warning", () => {
 	});
 
 	test("does not warn again on teardown when only oldValue is a function", () => {
-		// a dead handler warns once on apply; tearing it down (value null,
-		// oldValue function) must stay silent.
+		//a dead handler warns once on apply; tearing it down (value null,
+		//oldValue function) must stay silent
 		const element = document.createElement("div");
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -433,8 +429,7 @@ describe("applyDynamicAttribute - stringable values", () => {
 	});
 
 	test("coerces boolean true to the literal string 'true'", () => {
-		// Matches the integration test "sets boolean true as empty attribute":
-		// String(true) === "true", and that's what lands on the attribute.
+		//String(true) === "true", and that is what lands on the attribute
 		const element = document.createElement("button");
 		applyDynamicAttribute(element, "disabled", true);
 		expect(element.getAttribute("disabled")).toBe("true");
@@ -448,9 +443,9 @@ describe("applyDynamicAttribute - stringable values", () => {
 	});
 
 	test("transition from non-stringable oldValue to stringable value clears the JS property", () => {
-		// The JS property previously set for a complex
-		// value must be deleted so the attribute side becomes the source of
-		// truth. Without this, the element keeps a stale property reference.
+		//the JS property previously set for a complex
+		//value must be deleted so the attribute side becomes the source of
+		//truth. Without this, the element keeps a stale property reference
 		const element = document.createElement("div");
 		const previous = { nested: 1 };
 
@@ -493,9 +488,8 @@ describe("applyDynamicAttribute - non-stringable values", () => {
 	});
 
 	test("calls update() when the receiver exposes one (custom-element handoff)", () => {
-		// When the target has an update() method, we trigger
-		// it so a custom element can react to the new property. This is the
-		// component-to-component data flow path.
+		//a target with an update() method is triggered so a custom element reacts to the new property,
+		//which is the component-to-component data flow path
 		const element = document.createElement("div") as HTMLDivElement & {
 			update?: () => void;
 		};
@@ -507,9 +501,9 @@ describe("applyDynamicAttribute - non-stringable values", () => {
 	});
 
 	test("does not call update() for stringable values", () => {
-		// The update() trigger lives only on the property-assignment branch.
-		// Plain attribute writes must not fire it; otherwise every attribute
-		// flip on a child component would cause it to re-render twice.
+		//the update() trigger lives only on the property-assignment branch.
+		//plain attribute writes must not fire it; otherwise every attribute
+		//flip on a child component would cause it to re-render twice
 		const element = document.createElement("div") as HTMLDivElement & {
 			update?: () => void;
 		};
@@ -574,7 +568,8 @@ describe("applyDynamicAttribute - stringable to non-stringable transition", () =
 	});
 
 	test("update() still fires on the property-assignment branch after the transition", () => {
-		//the update() trigger should still run for the non-stringable side even when there was a prior stringable value
+		//the update() trigger still runs for the non-stringable side even after a prior stringable
+		//value
 		const element = document.createElement("div") as HTMLDivElement & {
 			update?: () => void;
 		};
