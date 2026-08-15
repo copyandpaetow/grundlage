@@ -170,7 +170,7 @@ describe("update() scheduling contract", () => {
 		element.remove();
 	});
 
-	test("a render-time update() resolves after its ASYNC reflush painted, not before", async () => {
+	test("a render-time update() resolves after its async reflush painted, not before", async () => {
 		//the outer's COMPLETED resolves the pending promise, so it has to defer to a pass queued
 		//during this one. a synchronous reflush hides the difference (its microtask is already
 		//ahead of the resolve in the queue); an async one does not — resolving at COMPLETED would
@@ -200,7 +200,7 @@ describe("update() scheduling contract", () => {
 		element.remove();
 	});
 
-	test("a render-time update() during a REFIRE resolves after its async reflush painted, not before", async () => {
+	test("a render-time update() during a refire resolves after its async reflush painted, not before", async () => {
 		//the twin of the test above, on the other resolve site: a refire has no yield to resume,
 		//so the render lane's PAINT resolves the promise. it has to defer to the pass queued
 		//during it the same way COMPLETED does

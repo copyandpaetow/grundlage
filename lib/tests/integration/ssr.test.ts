@@ -110,7 +110,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(element.shadowRoot!.textContent).toContain("render-fn 1");
 	});
 
-	test("nested generator function: SSR descends into the inner and stops at ITS first yield", async () => {
+	test("nested generator function: SSR descends into the inner and stops at its first yield", async () => {
 		const tag = uniqueTag();
 		let innerYields = 0;
 
@@ -130,7 +130,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(element.shadowRoot!.textContent).not.toContain("inner-second");
 	});
 
-	test("an ASYNC inner still wins the markup over the parent's own later yield", async () => {
+	test("an async inner still wins the markup over the parent's own later yield", async () => {
 		//the second enforcement point of "the first renderable wins": stopping at the first paint is
 		//not enough, the parent must not be resumed past an install whose branch has not painted yet
 		const tag = uniqueTag();
@@ -150,7 +150,7 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(element.shadowRoot!.textContent).not.toContain("parent-took-over");
 	});
 
-	test("async work BEFORE the first yield resolves, then the first yield renders", async () => {
+	test("async work before the first yield resolves, then the first yield renders", async () => {
 		//the first template depends on the await — SSR can't skip it
 		const tag = uniqueTag();
 		let postYieldRan = false;

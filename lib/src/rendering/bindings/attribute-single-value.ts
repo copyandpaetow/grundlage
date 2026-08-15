@@ -87,17 +87,18 @@ export const commitSingleValue = (
 
 	const element = resolveTargetElement(liveBinding);
 	const name = composeParts(nameParts, values);
-	if (name !== liveBinding.lastComposedName) {
-		clearAppliedAttribute(element, liveBinding);
-		liveBinding.lastComposedName = name;
-	}
-
 	const valueChannel = resolveAttributeMode(value);
 	const nextAttributeMode = isDeclaredPropName(element, name)
 		? ATTRIBUTE_MODE.DECLARED_PROP
 		: valueChannel;
-	if (nextAttributeMode !== liveBinding.appliedAttributeMode)
-		clearAppliedAttribute(element, liveBinding);
+
+	const isSameSlot =
+		name === liveBinding.lastComposedName &&
+		nextAttributeMode === liveBinding.appliedAttributeMode;
+	//clears the name it last wrote, so the assignment follows it
+	if (!isSameSlot) clearAppliedAttribute(element, liveBinding);
+	liveBinding.lastComposedName = name;
+
 	switch (nextAttributeMode) {
 		case ATTRIBUTE_MODE.ABSENT:
 			if (value === false && isAwaitingDefinition(element))
@@ -120,32 +121,6 @@ export const commitSingleValue = (
 			break;
 	}
 	liveBinding.appliedAttributeMode = nextAttributeMode;
-};
-
-export const hydrateSingleValue = (
-	liveBinding: SingleValueAttributeLiveBinding,
-	values: Array<unknown>,
-): void => {
-	const { nameParts, valueIndex } = liveBinding.staticBinding;
-	const value = values[valueIndex];
-	const name = composeParts(nameParts, values);
-	const element = resolveTargetElement(liveBinding);
-	const mode = isDeclaredPropName(element, name)
-		? ATTRIBUTE_MODE.DECLARED_PROP
-		: resolveAttributeMode(value);
-	liveBinding.lastComposedName = name;
-	liveBinding.appliedAttributeMode = mode;
-	liveBinding.lastValueHash = singleValueGateHash(
-		liveBinding.staticBinding,
-		values,
-	);
-	if (mode === ATTRIBUTE_MODE.PROPERTY) {
-		(element as unknown as Record<string, unknown>)[name] = value;
-		triggerComponentUpdate(element);
-	}
-	//the value the binding holds, not the spelling the server wrote
-	if (mode === ATTRIBUTE_MODE.DECLARED_PROP)
-		assignDeclaredProp(element, name, value);
 };
 
 //the mode is recomputed rather than carried over: the new element may be defined where the old

@@ -5,11 +5,11 @@ import { hasHashChanged } from "../compose";
 import { ValueOf } from "../../utils/types";
 import { CONTENT_KIND, UNSET_HASH } from "../constants";
 import {
-	assertNestable,
+	resolveNestedTemplate,
 	hydrateInstance,
-	reconcileInstance,
-	releaseContent,
-	releaseInstance,
+	isPatchableInPlace,
+	mountInstance,
+	patchInstance,
 } from "../instance";
 import { forEachNode, warnOnRejectedServerRange } from "../markers";
 import { hydrateListItems, patchListContent } from "./content-list";
@@ -61,7 +61,6 @@ const switchContentKind = (
 		liveBinding.endMarker,
 		(node) => node.remove(),
 	);
-	releaseContent(liveBinding.content);
 	liveBinding.content = createContentState(contentKind);
 };
 
@@ -76,9 +75,12 @@ const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
 	if (!hasHashChanged(textState, hashValue(value))) return;
 	const text = coerceToText(value);
 	const existing = liveBinding.startMarker.nextSibling;
-	if (existing === liveBinding.endMarker)
-		liveBinding.startMarker.after(document.createTextNode(text));
-	else (existing as Text).data = text;
+	if (existing !== liveBinding.endMarker) {
+		const textNode = existing as Text;
+		if (textNode.data !== text) textNode.data = text;
+		return;
+	}
+	if (text !== "") liveBinding.startMarker.after(document.createTextNode(text));
 };
 
 const patchBranch = (
@@ -86,18 +88,20 @@ const patchBranch = (
 	value: TemplateValue,
 	moveState: StyleSheetMoveState,
 ): void => {
-	assertNestable(value);
+	const parsed = resolveNestedTemplate(value);
 	const branch = liveBinding.content as BranchContentState;
-	const mounted = reconcileInstance(branch.instance, value, moveState);
-	if (mounted === null) return;
-	if (branch.instance) releaseInstance(branch.instance);
+	if (isPatchableInPlace(branch.instance, parsed)) {
+		patchInstance(branch.instance, value.values);
+		return;
+	}
+	const { instance, fragment } = mountInstance(value, moveState);
 	forEachNode(
 		liveBinding.startMarker.nextSibling,
 		liveBinding.endMarker,
 		(node) => node.remove(),
 	);
-	liveBinding.startMarker.after(mounted.fragment);
-	branch.instance = mounted.instance;
+	liveBinding.startMarker.after(fragment);
+	branch.instance = instance;
 };
 
 export const commitContent = (
@@ -119,39 +123,29 @@ export const commitContent = (
 	}
 };
 
-//one text write destroys nothing, so a text range is repaired rather than rejected; anything
-//else in the range means the server rendered a different kind here and the range is not ours
-const hydrateText = (
-	liveBinding: ContentLiveBinding,
-	value: unknown,
-): boolean => {
-	const { startMarker, endMarker } = liveBinding;
+//one text write destroys nothing, so an adoptable text range is repaired by patchText rather than
+//rejected; anything else in the range means the server rendered a different kind and it is not ours
+const isAdoptableTextRange = ({
+	startMarker,
+	endMarker,
+}: ContentLiveBinding): boolean => {
 	const serverNode = startMarker.nextSibling;
-	const isEmptyRange = serverNode === endMarker;
-	const holdsOneTextNode =
-		serverNode instanceof Text && serverNode.nextSibling === endMarker;
-	if (!isEmptyRange && !holdsOneTextNode) return false;
-
-	(liveBinding.content as TextContentState).lastValueHash = hashValue(value);
-	const text = coerceToText(value);
-	if (isEmptyRange) {
-		if (text !== "") startMarker.after(document.createTextNode(text));
-		return true;
-	}
-	const serverTextNode = serverNode as Text;
-	if (serverTextNode.data !== text) serverTextNode.data = text;
-	return true;
+	return (
+		serverNode === endMarker ||
+		(serverNode instanceof Text && serverNode.nextSibling === endMarker)
+	);
 };
 
 const hydrateBranch = (
 	liveBinding: ContentLiveBinding,
 	value: TemplateValue,
 	moveState: StyleSheetMoveState,
+	walker: TreeWalker,
 ): boolean => {
-	assertNestable(value);
+	resolveNestedTemplate(value);
 	const instance = hydrateInstance(
+		walker,
 		value,
-		liveBinding.startMarker,
 		liveBinding.endMarker,
 		moveState,
 	);
@@ -164,6 +158,7 @@ export const hydrateContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
 	moveState: StyleSheetMoveState,
+	walker: TreeWalker,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const kind = contentKindOf(value);
@@ -171,13 +166,22 @@ export const hydrateContent = (
 
 	switch (kind) {
 		case CONTENT_KIND.TEXT:
-			if (hydrateText(liveBinding, value)) return;
+			if (isAdoptableTextRange(liveBinding))
+				return patchText(liveBinding, value);
 			break;
 		case CONTENT_KIND.BRANCH:
-			if (hydrateBranch(liveBinding, value as TemplateValue, moveState)) return;
+			if (hydrateBranch(liveBinding, value as TemplateValue, moveState, walker))
+				return;
 			break;
 		case CONTENT_KIND.LIST:
-			if (hydrateListItems(liveBinding, value as Array<unknown>, moveState))
+			if (
+				hydrateListItems(
+					liveBinding,
+					value as Array<unknown>,
+					moveState,
+					walker,
+				)
+			)
 				return;
 	}
 

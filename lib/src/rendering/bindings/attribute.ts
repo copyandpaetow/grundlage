@@ -37,17 +37,3 @@ export const commitAttribute = (
 	if (element.getAttribute(composedName) !== composedValue)
 		element.setAttribute(composedName, composedValue);
 };
-
-export const hydrateAttribute = (
-	liveBinding: AttributeLiveBinding,
-	values: Array<unknown>,
-): void => {
-	liveBinding.lastComposedName = composeParts(
-		liveBinding.staticBinding.nameParts,
-		values,
-	);
-	liveBinding.lastValueHash = attributeGateHash(
-		liveBinding.staticBinding,
-		values,
-	);
-};

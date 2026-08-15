@@ -152,11 +152,17 @@ const resetParser = (
 	parser.rawContentBuffer.length = 0;
 };
 
+const openMarkerData = (bindingType: number, bindingIndex: number) =>
+	`${MARKUP.COMMENT_IDENTIFIER} ${bindingType}-${bindingIndex}`;
+
+const closeMarkerData = (bindingType: number, bindingIndex: number) =>
+	`${MARKUP.COMMENT_IDENTIFIER} /${bindingType}-${bindingIndex}`;
+
 const openComment = (parser: ParserState) =>
-	`${MARKUP.COMMENT_OPEN}${MARKUP.COMMENT_IDENTIFIER} ${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}${MARKUP.COMMENT_CLOSE}`;
+	`${MARKUP.COMMENT_OPEN}${openMarkerData((parser.activeBinding as Binding).type, parser.bindings.length - 1)}${MARKUP.COMMENT_CLOSE}`;
 
 const closeComment = (parser: ParserState) =>
-	`${MARKUP.COMMENT_OPEN}${MARKUP.COMMENT_IDENTIFIER} /${(parser.activeBinding as Binding).type}-${parser.bindings.length - 1}${MARKUP.COMMENT_CLOSE}`;
+	`${MARKUP.COMMENT_OPEN}${closeMarkerData((parser.activeBinding as Binding).type, parser.bindings.length - 1)}${MARKUP.COMMENT_CLOSE}`;
 
 const isSingleHole = (parts: Array<string | number>) =>
 	parts.length === 1 && typeof parts[0] === "number";
@@ -539,7 +545,10 @@ const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
 	};
 };
 
-const toStaticBinding = (binding: Binding): StaticBinding => {
+const toStaticBinding = (
+	binding: Binding,
+	bindingIndex: number,
+): StaticBinding => {
 	switch (binding.type) {
 		case PARSE_BINDING.TAG:
 			return {
@@ -549,7 +558,11 @@ const toStaticBinding = (binding: Binding): StaticBinding => {
 		case PARSE_BINDING.ATTRIBUTE:
 			return toAttributeStaticBinding(binding);
 		case PARSE_BINDING.CONTENT:
-			return { type: BINDING.CONTENT, valueIndex: binding.values[0] as number };
+			return {
+				type: BINDING.CONTENT,
+				valueIndex: binding.values[0] as number,
+				closeMarkerData: closeMarkerData(binding.type, bindingIndex),
+			};
 		case PARSE_BINDING.COMMENT:
 			return { type: BINDING.COMMENT, parts: binding.values.slice() };
 		case PARSE_BINDING.RAW_CONTENT:

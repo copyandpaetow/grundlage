@@ -85,10 +85,13 @@ export const applyDynamicAttribute = (
 			if (value === false && isAwaitingDefinition(element))
 				(element as unknown as Record<string, unknown>)[key] = false;
 			return;
-		case ATTRIBUTE_MODE.ATTRIBUTE:
+		case ATTRIBUTE_MODE.ATTRIBUTE: {
 			clearPropertyChannel(element, key);
-			element.setAttribute(key, String(value));
+			const attributeValue = String(value);
+			if (element.getAttribute(key) !== attributeValue)
+				element.setAttribute(key, attributeValue);
 			return;
+		}
 		case ATTRIBUTE_MODE.PROPERTY:
 			//a stringable → object switch would otherwise leave both channels populated and the
 			//reader takes the stale attribute
@@ -138,15 +141,6 @@ export const applyAttributeMap = (
 	}
 };
 
-const snapshotAttributeMap = (
-	desired: Map<string, unknown>,
-): Map<string, AppliedAttribute> => {
-	const applied = new Map<string, AppliedAttribute>();
-	for (const [name, value] of desired)
-		applied.set(name, { value, hash: hashValue(value) });
-	return applied;
-};
-
 export const commitDynamic = (
 	liveBinding: DynamicAttributeLiveBinding,
 	values: Array<unknown>,
@@ -159,20 +153,6 @@ export const commitDynamic = (
 		liveBinding.appliedAttributes,
 		normalizeToAttributeMap(value),
 	);
-};
-
-export const hydrateDynamic = (
-	liveBinding: DynamicAttributeLiveBinding,
-	values: Array<unknown>,
-): void => {
-	const value = values[liveBinding.staticBinding.valueIndex];
-	liveBinding.lastValueHash = hashValue(value);
-	liveBinding.appliedAttributes = snapshotAttributeMap(
-		normalizeToAttributeMap(value),
-	);
-	//server HTML carries only attributes; handlers, property-mode values and declared props are
-	//attached to the hydrated element here, the same set a tag swap reapplies
-	reapplyOnSwap(liveBinding, resolveTargetElement(liveBinding), values);
 };
 
 export const reapplyOnSwap = (

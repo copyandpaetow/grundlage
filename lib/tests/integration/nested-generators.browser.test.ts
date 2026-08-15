@@ -958,7 +958,7 @@ describe("rapid restart with in-flight inner async work", () => {
 //component relying on it to release resources on disconnect does not. Pinned so a change here is a
 //deliberate one
 describe("cleanup contract for inner async generators on cancel", () => {
-	test("`return cleanupFn` does NOT run when the inner generator is cancelled mid-await", async () => {
+	test("`return cleanupFn` does not run when the inner generator is cancelled mid-await", async () => {
 		const tag = uniqueTag("cleanup-on-cancel");
 		const cleanupSpy = vi.fn();
 		let resolveAwait: (() => void) | null = null;
@@ -993,7 +993,7 @@ describe("cleanup contract for inner async generators on cancel", () => {
 		expect(cleanupSpy).not.toHaveBeenCalled();
 	});
 
-	test("try/finally IS the supported path for cancellation cleanup of post-yield work", async () => {
+	test("try/finally is the supported path for cancellation cleanup of post-yield work", async () => {
 		const tag = uniqueTag("finally-on-cancel");
 		const cleanupSpy = vi.fn();
 		let resolveAwait: (() => void) | null = null;
@@ -1029,7 +1029,7 @@ describe("cleanup contract for inner async generators on cancel", () => {
 		expect(cleanupSpy).toHaveBeenCalledTimes(1);
 	});
 
-	test("`return cleanupFn` from a sync inner generator that completes BEFORE disconnect runs on disconnect", async () => {
+	test("`return cleanupFn` from a sync inner generator that completes before disconnect runs on disconnect", async () => {
 		//counterpart to the cancel-mid-await case: when the inner generator
 		//completes naturally, its cleanup is captured, and disconnect fires it.
 		//confirms the surface is consistent: cleanup-via-return only works on

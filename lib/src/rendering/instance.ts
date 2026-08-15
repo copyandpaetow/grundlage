@@ -7,24 +7,19 @@ import {
 	createLiveBinding,
 	hydrateLiveBinding,
 } from "./bindings/dispatch";
+import { commitContent, hydrateContent } from "./bindings/content";
 import { rebindStyleSheet } from "./bindings/css-apply";
 import {
 	BranchContentState,
 	StyleSheetMoveState,
 	ContentLiveBinding,
-	ContentState,
 	ListContentState,
 	LiveBinding,
 	RawContentLiveBinding,
 } from "./bindings/types";
 import { CONTENT_KIND } from "./constants";
 import { buildFragment } from "./dom";
-import {
-	isOpenMarker,
-	nextListTail,
-	nextOpenMarker,
-	scanToClose,
-} from "./markers";
+import { nextOpenMarker, scanToClose } from "./markers";
 
 export interface Instance {
 	parsed: ParsedTemplate;
@@ -39,15 +34,6 @@ export const patchInstance = (
 	const { liveBindings } = instance;
 	for (let index = 0; index < liveBindings.length; index++)
 		commitLiveBinding(instance, liveBindings[index], values);
-};
-
-export const releaseInstance = (instance: Instance): void => {
-	const { liveBindings } = instance;
-	for (let index = 0; index < liveBindings.length; index++) {
-		const liveBinding = liveBindings[index];
-		if (liveBinding.staticBinding.type === BINDING.CONTENT)
-			releaseContent((liveBinding as ContentLiveBinding).content);
-	}
 };
 
 //a DOM move reparses every <style> in the moved subtree from its stale text; each nested
@@ -79,37 +65,80 @@ export const refreshStyleSheetsAfterMove = (instance: Instance): void => {
 	}
 };
 
-export const releaseContent = (content: ContentState): void => {
-	if (content.kind === CONTENT_KIND.BRANCH) {
-		const { instance } = content as BranchContentState;
-		if (instance) releaseInstance(instance);
-		return;
-	}
-	if (content.kind !== CONTENT_KIND.LIST) return;
-	const { items } = content as ListContentState;
-	for (let index = 0; index < items.length; index++)
-		releaseInstance(items[index].instance);
-};
-
-export const reconcileInstance = (
+export const isPatchableInPlace = (
 	current: Instance | null,
-	value: TemplateValue,
-	moveState: StyleSheetMoveState,
-): { instance: Instance; fragment: DocumentFragment } | null => {
-	const parsed = getParsedTemplate(value.__templateStrings);
-	if (current && current.parsed.templateHash === parsed.templateHash) {
-		patchInstance(current, value.values);
-		return null;
-	}
-	return mountInstance(value, moveState);
-};
+	parsed: ParsedTemplate,
+): current is Instance =>
+	current !== null && current.parsed.templateHash === parsed.templateHash;
 
-export const assertNestable = (value: TemplateValue): void => {
-	if (getParsedTemplate(value.__templateStrings).hostBindingCount > 0)
+export const resolveNestedTemplate = (value: TemplateValue): ParsedTemplate => {
+	const parsed = getParsedTemplate(value.__templateStrings);
+	if (parsed.hostBindingCount > 0)
 		throw new Error(
 			"grundlage: `<template>` with attributes is only valid at the top level of a component's render " +
 				"output — not inside ${...} content, a list item, or any nested template position.",
 		);
+	return parsed;
+};
+
+const createInstance = (
+	parsed: ParsedTemplate,
+	moveState: StyleSheetMoveState,
+): Instance => {
+	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
+	return {
+		parsed,
+		liveBindings: new Array(parsed.bindings.length),
+		moveState,
+	};
+};
+
+//false means a binding found no marker, which only a server range can do: a fresh clone carries
+//every marker the parse counted
+const bindMarkedRange = (
+	walker: TreeWalker,
+	instance: Instance,
+	values: Array<unknown>,
+	rangeEnd: Comment | null,
+	applyToBinding: typeof commitLiveBinding | typeof hydrateLiveBinding,
+	applyContent: typeof hydrateContent,
+): boolean => {
+	const { bindings, hostBindingCount } = instance.parsed;
+	const { liveBindings } = instance;
+
+	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length;) {
+		const openMarker = nextOpenMarker(walker, rangeEnd);
+		if (openMarker === null) return false;
+		const staticBinding = bindings[bindingIndex];
+
+		if (staticBinding.type !== BINDING.CONTENT) {
+			const liveBinding = createLiveBinding(staticBinding, openMarker);
+			applyToBinding(instance, liveBinding, values);
+			liveBindings[bindingIndex++] = liveBinding;
+			continue;
+		}
+
+		const closeMarker = scanToClose(
+			walker,
+			openMarker,
+			staticBinding.closeMarkerData,
+			rangeEnd,
+		);
+		if (closeMarker === null) return false;
+		const liveBinding = createLiveBinding(
+			staticBinding,
+			openMarker,
+			closeMarker,
+		) as ContentLiveBinding;
+		//the scan left the walker on the close marker, so a nested hydration would start past its
+		//own range; this puts it back inside, and the line after the call undoes the descent
+		walker.currentNode = openMarker;
+		applyContent(liveBinding, values, instance.moveState, walker);
+		liveBindings[bindingIndex++] = liveBinding;
+		walker.currentNode = closeMarker;
+	}
+
+	return true;
 };
 
 export const mountInstance = (
@@ -121,107 +150,38 @@ export const mountInstance = (
 	const fragment = parsed.fragmentCloneSource.cloneNode(
 		true,
 	) as DocumentFragment;
+	const instance = createInstance(parsed, moveState);
 
-	const { bindings, hostBindingCount } = parsed;
-	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
-	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
-	const instance: Instance = { parsed, liveBindings, moveState };
-	const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT);
-	let bindingIndex = hostBindingCount;
-
-	let node: Comment | null;
-	while ((node = walker.nextNode() as Comment | null)) {
-		if (!isOpenMarker(node.data)) continue;
-		const staticBinding = bindings[bindingIndex];
-
-		if (staticBinding.type !== BINDING.CONTENT) {
-			const live = createLiveBinding(staticBinding, node);
-			commitLiveBinding(instance, live, value.values);
-			liveBindings[bindingIndex++] = live;
-			continue;
-		}
-
-		const closeMarker = node.nextSibling as Comment;
-		const live = createLiveBinding(staticBinding, node, closeMarker);
-		commitLiveBinding(instance, live, value.values);
-		liveBindings[bindingIndex++] = live;
-		walker.currentNode = closeMarker;
-	}
+	bindMarkedRange(
+		document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT),
+		instance,
+		value.values,
+		null,
+		commitLiveBinding,
+		commitContent,
+	);
 
 	return { instance, fragment };
 };
 
-const hydrateInstanceWithWalker = (
+export const hydrateInstance = (
 	walker: TreeWalker,
 	value: TemplateValue,
 	rangeEnd: Comment | null,
 	moveState: StyleSheetMoveState,
 ): Instance | null => {
-	const parsed = getParsedTemplate(value.__templateStrings);
-	const { bindings, hostBindingCount } = parsed;
-	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
-	const liveBindings: Array<LiveBinding> = new Array(bindings.length);
-	const instance: Instance = { parsed, liveBindings, moveState };
-
-	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length;) {
-		const open = nextOpenMarker(walker, rangeEnd);
-		if (open === null) return null;
-		const staticBinding = bindings[bindingIndex];
-
-		if (staticBinding.type !== BINDING.CONTENT) {
-			const live = createLiveBinding(staticBinding, open);
-			hydrateLiveBinding(instance, live, value.values);
-			liveBindings[bindingIndex++] = live;
-			continue;
-		}
-
-		const closeMarker = scanToClose(walker, open, rangeEnd);
-		if (closeMarker === null) return null;
-		const live = createLiveBinding(staticBinding, open, closeMarker);
-		hydrateLiveBinding(instance, live, value.values);
-		liveBindings[bindingIndex++] = live;
-		walker.currentNode = closeMarker;
-	}
-
-	return instance;
-};
-
-const createCommentWalkerAt = (startNode: Node): TreeWalker => {
-	const walker = document.createTreeWalker(
-		startNode.getRootNode(),
-		NodeFilter.SHOW_COMMENT,
-	);
-	walker.currentNode = startNode;
-	return walker;
-};
-
-export const hydrateInstance = (
-	value: TemplateValue,
-	startNode: Node,
-	rangeEnd: Comment | null,
-	moveState: StyleSheetMoveState,
-): Instance | null =>
-	hydrateInstanceWithWalker(
-		createCommentWalkerAt(startNode),
-		value,
-		rangeEnd,
+	const instance = createInstance(
+		getParsedTemplate(value.__templateStrings),
 		moveState,
 	);
-
-export const hydrateRow = (
-	value: TemplateValue,
-	rowStart: Node,
-	rangeEnd: Comment,
-	moveState: StyleSheetMoveState,
-): { instance: Instance; tailMarker: Comment } | null => {
-	const walker = createCommentWalkerAt(rowStart);
-	const instance = hydrateInstanceWithWalker(
+	return bindMarkedRange(
 		walker,
-		value,
+		instance,
+		value.values,
 		rangeEnd,
-		moveState,
-	);
-	if (instance === null) return null;
-	const tailMarker = nextListTail(walker, rangeEnd);
-	return tailMarker === null ? null : { instance, tailMarker };
+		hydrateLiveBinding,
+		hydrateContent,
+	)
+		? instance
+		: null;
 };

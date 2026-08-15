@@ -1,31 +1,28 @@
-import { MARKUP } from "../parser/chars";
+import { CHAR_CODE, MARKUP } from "../parser/chars";
 
-export const isOpenMarker = (data: string): boolean =>
-	data.startsWith(MARKUP.COMMENT_IDENTIFIER + " ") &&
-	data[MARKUP.COMMENT_IDENTIFIER.length + 1] !== "/";
+const MARKER_PREFIX = MARKUP.COMMENT_IDENTIFIER + " ";
+const CLOSE_SLASH_INDEX = MARKER_PREFIX.length;
 
-export const closeOf = (openData: string): string =>
-	openData.replace(
-		MARKUP.COMMENT_IDENTIFIER + " ",
-		MARKUP.COMMENT_IDENTIFIER + " /",
-	);
+const isOpenMarker = (data: string): boolean =>
+	data.startsWith(MARKER_PREFIX) &&
+	data.charCodeAt(CLOSE_SLASH_INDEX) !== CHAR_CODE.SLASH;
 
 //every walk is bounded by the range it is allowed to consume, so a server range that
 //contradicts the value is rejected instead of adopting a later binding's markers; a null
 //bound is a component root, where the walker's own root is the bound
 export const scanToClose = (
 	walker: TreeWalker,
-	open: Comment,
+	openMarker: Comment,
+	closeMarkerData: string,
 	rangeEnd: Comment | null,
 ): Comment | null => {
-	const openData = open.data;
-	const closeData = closeOf(openData);
+	const openMarkerData = openMarker.data;
 	let depth = 1;
 	let node: Comment | null;
 	while ((node = walker.nextNode() as Comment | null)) {
 		if (node === rangeEnd) return null;
-		if (node.data === openData) depth++;
-		else if (node.data === closeData && --depth === 0) return node;
+		if (node.data === openMarkerData) depth++;
+		else if (node.data === closeMarkerData && --depth === 0) return node;
 	}
 	return null;
 };

@@ -86,6 +86,7 @@ export interface NamedDynamicStaticBinding {
 export interface ContentStaticBinding {
 	type: typeof BINDING.CONTENT;
 	valueIndex: number;
+	closeMarkerData: string;
 }
 
 export interface RawContentStaticBinding {

@@ -10,15 +10,15 @@ import { combinedPartsHash } from "../compose";
 import { NO_KEY } from "../constants";
 import { MARKUP } from "../../parser/chars";
 import {
-	assertNestable,
-	hydrateRow,
+	resolveNestedTemplate,
+	hydrateInstance,
 	Instance,
+	isPatchableInPlace,
 	mountInstance,
-	reconcileInstance,
+	patchInstance,
 	refreshStyleSheetsAfterMove,
-	releaseInstance,
 } from "../instance";
-import { forEachNode } from "../markers";
+import { forEachNode, nextListTail } from "../markers";
 import {
 	StyleSheetMoveState,
 	ContentLiveBinding,
@@ -51,7 +51,21 @@ export const patchListContent = (
 	}
 	if (aggregateHash === list.aggregateHash) return;
 	list.aggregateHash = aggregateHash;
-	reconcileRows(liveBinding, list, itemValues, itemHashes, count, moveState);
+	const resolvedRows = matchRowsToPreviousRows(
+		liveBinding.startMarker,
+		list.items,
+		itemValues,
+		itemHashes,
+		count,
+		moveState,
+	);
+	list.items = placeRows(
+		liveBinding.startMarker,
+		resolvedRows,
+		itemValues,
+		itemHashes,
+		moveState,
+	);
 };
 
 type RowsByHash = Map<number, Array<ListItem>>;
@@ -106,17 +120,17 @@ const removeUnclaimedRows = (groups: RowsByHash): void => {
 			removeRowNodes(group[index]);
 };
 
-const reconcileRows = (
-	liveBinding: ContentLiveBinding,
-	list: ListContentState,
+const matchRowsToPreviousRows = (
+	startMarker: Comment,
+	previousRows: Array<ListItem>,
 	itemValues: Array<unknown>,
 	itemHashes: Array<number>,
 	count: number,
 	moveState: StyleSheetMoveState,
-): void => {
+): Array<ListItem | undefined> => {
 	const previousByContentHash = groupRowsByContentHash(
-		list.items,
-		liveBinding.startMarker,
+		previousRows,
+		startMarker,
 	);
 	const resolvedRows: Array<ListItem | undefined> = new Array(count);
 
@@ -148,24 +162,18 @@ const reconcileRows = (
 
 	removeUnclaimedRows(leftoverByShapeOrKey);
 
-	list.items = placeRows(
-		liveBinding,
-		resolvedRows,
-		itemValues,
-		itemHashes,
-		moveState,
-	);
+	return resolvedRows;
 };
 
 const placeRows = (
-	liveBinding: ContentLiveBinding,
+	startMarker: Comment,
 	resolvedRows: Array<ListItem | undefined>,
 	itemValues: Array<unknown>,
 	itemHashes: Array<number>,
 	moveState: StyleSheetMoveState,
 ): Array<ListItem> => {
 	const finalRows: Array<ListItem> = new Array(resolvedRows.length);
-	let cursor: ChildNode = liveBinding.startMarker;
+	let cursor: ChildNode = startMarker;
 	for (let index = 0; index < resolvedRows.length; index++) {
 		let row = resolvedRows[index];
 		if (row === undefined)
@@ -192,12 +200,11 @@ const mountRowAfter = (
 	moveState: StyleSheetMoveState,
 ): ListItem => {
 	const value = coerceToTemplate(rawValue);
-	assertNestable(value);
+	const parsed = resolveNestedTemplate(value);
 	const { instance, fragment } = mountInstance(value, moveState);
 	const tailMarker = document.createComment(MARKUP.LIST_MARKER_DATA);
 	const startNode = fragment.firstChild ?? tailMarker;
 	after.after(fragment, tailMarker);
-	const parsed = getParsedTemplate(value.__templateStrings);
 	return {
 		tailMarker,
 		instance,
@@ -213,9 +220,13 @@ const patchRowInPlace = (
 	itemHash: number,
 	moveState: StyleSheetMoveState,
 ): void => {
-	assertNestable(value);
-	const mounted = reconcileInstance(row.instance, value, moveState);
-	if (mounted) replaceRowInstance(row, mounted.instance, mounted.fragment);
+	const parsed = resolveNestedTemplate(value);
+	if (isPatchableInPlace(row.instance, parsed))
+		patchInstance(row.instance, value.values);
+	else {
+		const { instance, fragment } = mountInstance(value, moveState);
+		replaceRowInstance(row, instance, fragment);
+	}
 	row.itemHash = itemHash;
 };
 
@@ -224,7 +235,6 @@ const replaceRowInstance = (
 	instance: Instance,
 	fragment: DocumentFragment,
 ): void => {
-	releaseInstance(row.instance);
 	forEachNode(row.startNode, row.tailMarker, (node) => node.remove());
 	row.startNode = fragment.firstChild ?? row.tailMarker;
 	row.tailMarker.before(fragment);
@@ -241,7 +251,6 @@ const moveRowAfter = (after: ChildNode, row: ListItem): void => {
 };
 
 const removeRowNodes = (row: ListItem): void => {
-	releaseInstance(row.instance);
 	forEachNode(row.startNode, row.tailMarker, (node) => node.remove());
 	row.tailMarker.remove();
 };
@@ -250,6 +259,7 @@ export const hydrateListItems = (
 	liveBinding: ContentLiveBinding,
 	itemValues: Array<unknown>,
 	moveState: StyleSheetMoveState,
+	walker: TreeWalker,
 ): boolean => {
 	const list = liveBinding.content as ListContentState;
 	const count = itemValues.length;
@@ -257,33 +267,32 @@ export const hydrateListItems = (
 	if (list.itemHashes.length < count) list.itemHashes = new Array(count);
 	const itemHashes = list.itemHashes;
 	let aggregateHash = LIST_HASH_SEED;
-	let rowStart: Node = liveBinding.startMarker;
 	for (let index = 0; index < count; index++) {
 		const value = coerceToTemplate(itemValues[index]);
-		assertNestable(value);
-		const startNode = rowStart.nextSibling!;
-		const adopted = hydrateRow(
+		const parsed = resolveNestedTemplate(value);
+		const startNode = walker.currentNode.nextSibling!;
+		const instance = hydrateInstance(
+			walker,
 			value,
-			rowStart,
 			liveBinding.endMarker,
 			moveState,
 		);
-		if (adopted === null) return false;
-		const parsed = getParsedTemplate(value.__templateStrings);
+		if (instance === null) return false;
+		const tailMarker = nextListTail(walker, liveBinding.endMarker);
+		if (tailMarker === null) return false;
 		const itemHash = hashValue(itemValues[index]);
 		itemHashes[index] = itemHash;
 		aggregateHash = combineOrderedHash(aggregateHash, itemHash);
 		items[index] = {
-			tailMarker: adopted.tailMarker,
-			instance: adopted.instance,
+			tailMarker,
+			instance,
 			itemHash,
 			keyHash: keyHashOf(value, parsed),
 			startNode,
 		};
-		rowStart = adopted.tailMarker;
 	}
 
-	if (rowStart.nextSibling !== liveBinding.endMarker) return false;
+	if (walker.currentNode.nextSibling !== liveBinding.endMarker) return false;
 	list.items = items;
 	list.aggregateHash = aggregateHash;
 	return true;

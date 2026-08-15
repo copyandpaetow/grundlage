@@ -1,5 +1,4 @@
 import { BINDING } from "../../parser/constants";
-import { TagStaticBinding } from "../../parser/types";
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 import { resolveTargetElement } from "../dom";
 import { reapplyOnSwap } from "./dispatch";
@@ -61,30 +60,15 @@ const swapElement = (
 	focusElement?.focus();
 };
 
-const tagGateHash = (
-	staticBinding: TagStaticBinding,
-	values: Array<unknown>,
-): number => combinedPartsHash(staticBinding.parts, values);
-
 export const commitTag = (
 	liveBinding: TagLiveBinding,
 	values: Array<unknown>,
 	siblings: Array<LiveBinding>,
 ): void => {
 	const { parts } = liveBinding.staticBinding;
-	if (
-		!hasHashChanged(liveBinding, tagGateHash(liveBinding.staticBinding, values))
-	)
-		return;
+	if (!hasHashChanged(liveBinding, combinedPartsHash(parts, values))) return;
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const newTag = composeParts(parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
 	swapElement(element, newTag, siblings, values);
-};
-
-export const hydrateTag = (
-	liveBinding: TagLiveBinding,
-	values: Array<unknown>,
-): void => {
-	liveBinding.lastValueHash = tagGateHash(liveBinding.staticBinding, values);
 };

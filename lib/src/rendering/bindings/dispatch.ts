@@ -2,28 +2,26 @@ import { BINDING } from "../../parser/constants";
 import { StaticBinding } from "../../parser/types";
 import { Instance } from "../instance";
 import { ATTRIBUTE_MODE, UNSET_HASH } from "../constants";
-import { commitAttribute, hydrateAttribute } from "./attribute";
+import { commitAttribute } from "./attribute";
 import {
 	applyDynamicAttribute,
 	commitDynamic,
-	hydrateDynamic,
 	reapplyOnSwap as reapplyDynamicOnSwap,
 } from "./attribute-dynamic";
 import {
 	commitSingleValue,
-	hydrateSingleValue,
 	reapplyOnSwap as reapplySingleValueOnSwap,
 	clearAppliedAttribute,
 } from "./attribute-single-value";
-import { commitComment, hydrateComment } from "./comment";
-import { commitContent, hydrateContent, UNRESOLVED_CONTENT } from "./content";
-import { createStyleSheetState } from "./css-apply";
-import { commitRawContent, hydrateRawContent } from "./content-raw";
+import { commitComment } from "./comment";
+import { commitContent, UNRESOLVED_CONTENT } from "./content";
+import { createStyleSheetState, seedDeclarationValueHashes } from "./css-apply";
+import { commitRawContent } from "./content-raw";
 import {
 	commitNamedDynamic,
 	reapplyOnSwap as reapplyNamedDynamicOnSwap,
 } from "./attribute-named-dynamic";
-import { commitTag, hydrateTag } from "./tag";
+import { commitTag } from "./tag";
 import {
 	AttributeLiveBinding,
 	CommentLiveBinding,
@@ -150,31 +148,17 @@ export const hydrateLiveBinding = (
 	liveBinding: LiveBinding,
 	values: Array<unknown>,
 ): void => {
-	switch (liveBinding.staticBinding.type) {
-		case BINDING.TAG:
-			return hydrateTag(liveBinding as TagLiveBinding, values);
-		case BINDING.ATTRIBUTE:
-			return hydrateAttribute(liveBinding as AttributeLiveBinding, values);
-		case BINDING.SINGLE_VALUE_ATTRIBUTE:
-			return hydrateSingleValue(
-				liveBinding as SingleValueAttributeLiveBinding,
-				values,
-			);
-		case BINDING.DYNAMIC_ATTRIBUTE:
-			return hydrateDynamic(liveBinding as DynamicAttributeLiveBinding, values);
-		case BINDING.NAMED_DYNAMIC:
-			return commitLiveBinding(instance, liveBinding, values);
-		case BINDING.CONTENT:
-			return hydrateContent(
-				liveBinding as ContentLiveBinding,
-				values,
-				instance.moveState,
-			);
-		case BINDING.RAW_CONTENT:
-			return hydrateRawContent(liveBinding as RawContentLiveBinding, values);
-		case BINDING.COMMENT:
-			return hydrateComment(liveBinding as CommentLiveBinding, values);
+	const { type } = liveBinding.staticBinding;
+	//the server sheet text already carries these values, so seeding here is what makes the first
+	//CSSOM bind inside the commit below find every declaration unchanged
+	if (type === BINDING.RAW_CONTENT) {
+		const rawContent = liveBinding as RawContentLiveBinding;
+		if (rawContent.styleSheetState)
+			seedDeclarationValueHashes(rawContent, values);
 	}
+	//every other lane skips an unchanged write and repairs a diverged one, which is what adopting
+	//server output means; commit is the seeding pass, not a second one
+	commitLiveBinding(instance, liveBinding, values);
 };
 
 export const reapplyOnSwap = (

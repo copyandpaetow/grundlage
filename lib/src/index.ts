@@ -6,9 +6,8 @@ import {
 	revertHostBinding,
 } from "./rendering/bindings/dispatch";
 import { StyleSheetMoveState } from "./rendering/bindings/types";
-import { flushHostPayload, warnOnUnclaimedSsrPayloads } from "./load";
 import { getParsedTemplate } from "./parser/html";
-import { ParsedTemplate } from "./parser/types";
+import { flushHostPayload, warnOnUnclaimedSsrPayloads } from "./load";
 import { coerceToTemplate, TemplateValue } from "./template";
 import {
 	cancelTaskAndRunCleanup,
@@ -29,9 +28,10 @@ import { html as htmlValue } from "./template";
 import {
 	hydrateInstance,
 	Instance,
-	reconcileInstance,
+	isPatchableInPlace,
+	mountInstance,
+	patchInstance,
 	refreshStyleSheetsAfterMove,
-	releaseInstance,
 } from "./rendering/instance";
 import { DEFER_HYDRATION_ATTRIBUTE } from "./rendering/constants";
 import { releaseDeferredChildren } from "./rendering/defer-hydration";
@@ -535,64 +535,64 @@ export const component = <DeclaredSchema extends Schema = {}>(
 
 		#paint(value: unknown): void {
 			const templateValue = coerceToTemplate(value);
-			const parsed = getParsedTemplate(templateValue.__templateStrings);
 
 			if (this.#isHydrationPending) {
-				if (!this.#hydrateRoot(templateValue, parsed)) {
+				if (!this.#hydrateRoot(templateValue)) {
 					warnOnRejectedServerRange();
-					this.#paintRoot(templateValue, parsed);
+					this.#paintRoot(templateValue);
 				}
 				this.#isHydrationPending = false;
 				warnOnUnclaimedSsrPayloads(this.#shadowRoot);
 				releaseDeferredChildren(this.#shadowRoot);
 			} else {
-				this.#paintRoot(templateValue, parsed);
+				this.#paintRoot(templateValue);
 			}
 			if (this.#isServerRun) flushHostPayload(this);
 			this.#rerenderIfStyleSheetsDemoted();
 		}
 
-		#paintRoot(value: TemplateValue, parsed: ParsedTemplate): void {
-			const mounted = reconcileInstance(
-				this.#instance,
-				value,
-				this.#styleSheetMoveState,
-			);
-			if (!mounted) return;
-			if (this.#instance) releaseInstance(this.#instance);
+		//the revert reads #instance, which is still the outgoing one here and null on a first paint,
+		//and it can write host attributes — so it belongs inside the flag
+		#writeHostBindings(instance: Instance, values: Array<unknown>): void {
 			this.#isWritingHostBindings = true;
 			try {
 				this.#revertAllHostBindings();
-				for (let index = 0; index < parsed.hostBindingCount; index++) {
-					const live = createLiveBinding(parsed.bindings[index], this);
-					commitLiveBinding(mounted.instance, live, value.values);
-					mounted.instance.liveBindings[index] = live;
-				}
-			} finally {
-				this.#isWritingHostBindings = false;
-			}
-			this.#shadowRoot.replaceChildren(mounted.fragment);
-			this.#instance = mounted.instance;
-		}
-
-		#hydrateRoot(value: TemplateValue, parsed: ParsedTemplate): boolean {
-			const instance = hydrateInstance(
-				value,
-				this.#shadowRoot,
-				null,
-				this.#styleSheetMoveState,
-			);
-			if (instance === null) return false;
-			this.#isWritingHostBindings = true;
-			try {
-				for (let index = 0; index < parsed.hostBindingCount; index++) {
-					const live = createLiveBinding(parsed.bindings[index], this);
-					commitLiveBinding(instance, live, value.values);
+				const { bindings, hostBindingCount } = instance.parsed;
+				for (let index = 0; index < hostBindingCount; index++) {
+					const live = createLiveBinding(bindings[index], this);
+					commitLiveBinding(instance, live, values);
 					instance.liveBindings[index] = live;
 				}
 			} finally {
 				this.#isWritingHostBindings = false;
 			}
+		}
+
+		#paintRoot(value: TemplateValue): void {
+			const current = this.#instance;
+			const parsed = getParsedTemplate(value.__templateStrings);
+			if (isPatchableInPlace(current, parsed)) {
+				patchInstance(current, value.values);
+				return;
+			}
+			const { instance, fragment } = mountInstance(
+				value,
+				this.#styleSheetMoveState,
+			);
+			this.#writeHostBindings(instance, value.values);
+			this.#shadowRoot.replaceChildren(fragment);
+			this.#instance = instance;
+		}
+
+		#hydrateRoot(value: TemplateValue): boolean {
+			const instance = hydrateInstance(
+				document.createTreeWalker(this.#shadowRoot, NodeFilter.SHOW_COMMENT),
+				value,
+				null,
+				this.#styleSheetMoveState,
+			);
+			if (instance === null) return false;
+			this.#writeHostBindings(instance, value.values);
 			this.#instance = instance;
 			return true;
 		}

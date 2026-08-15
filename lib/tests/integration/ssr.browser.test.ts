@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { html, component } from "../../src/index";
 import { ComponentConstructor } from "../../src/types";
 
@@ -356,7 +356,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				cleanup(element);
 			});
 
-			test("nested generator: server stops at INNER's first yield, client hydrates against it", async () => {
+			test("nested generator: server stops at the inner's first yield, client hydrates against it", async () => {
 				//the client has to be single-yield: a second yield with a different template hash replaces
 				//the children and wastes the adoption
 				const serverTag = uniqueTag();
@@ -707,7 +707,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
-		test("hydrate repairs server CONTENT when the client's first render carries a different value", async () => {
+		test("hydrate repairs server content when the client's first render carries a different value", async () => {
 			//two unrelated classes with hardcoded text so server/client disagree; adopting text the
 			//client no longer renders is the silent stale render, so hydrate compares and writes
 			const serverTag = uniqueTag();
@@ -870,6 +870,95 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				customData?: unknown;
 			};
 			expect(target.customData).toEqual(payload);
+
+			cleanup(element);
+		});
+
+		test("a spread rewrites nothing the server already carries", async () => {
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const makeComponent = () =>
+				component(function* () {
+					const attributes = { "data-role": "row", title: "same" };
+					yield () => html`<div ${attributes}>x</div>`;
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+			const element = hydrateFromHTML(clientHTML);
+
+			const rewrittenAttributes: Array<string> = [];
+			const observer = new MutationObserver((records) => {
+				for (const record of records)
+					rewrittenAttributes.push(record.attributeName!);
+			});
+			observer.observe(element.shadowRoot!, {
+				attributes: true,
+				subtree: true,
+			});
+
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+			observer.disconnect();
+
+			expect(rewrittenAttributes).toEqual([]);
+
+			cleanup(element);
+		});
+
+		test("a dynamic style sheet hydrates without touching the CSSOM, then updates through it", async () => {
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const makeComponent = () =>
+				component(function* ({ host }) {
+					let color = "red";
+					(host as HTMLElement & { recolor?: () => void }).recolor = () => {
+						color = "blue";
+						host.update();
+					};
+					yield () =>
+						html`<style>
+								p {
+									color: ${color};
+								}
+							</style>
+							<p>text</p>`;
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			expect(serialized).toContain("color: red");
+
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+			const element = hydrateFromHTML(clientHTML) as HTMLElement & {
+				recolor: () => void;
+			};
+
+			const setProperty = vi.spyOn(
+				CSSStyleDeclaration.prototype,
+				"setProperty",
+			);
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+
+			expect(setProperty).not.toHaveBeenCalled();
+
+			element.recolor();
+			await sleep();
+
+			//the lane still works: seeding the hashes must not read as a demotion to the text lane
+			expect(setProperty).toHaveBeenCalledTimes(1);
+			setProperty.mockRestore();
+			expect(
+				getComputedStyle(element.shadowRoot!.querySelector("p")!).color,
+			).toBe("rgb(0, 0, 255)");
 
 			cleanup(element);
 		});
