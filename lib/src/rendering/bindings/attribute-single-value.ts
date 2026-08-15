@@ -4,6 +4,7 @@ import { SingleValueAttributeStaticBinding } from "../../parser/types";
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 import { ValueOf } from "../../utils/types";
 import { ATTRIBUTE_MODE } from "../constants";
+import { markDeferredHydration } from "../defer-hydration";
 import { triggerComponentUpdate, resolveTargetElement } from "../dom";
 import { SingleValueAttributeLiveBinding } from "./types";
 
@@ -91,9 +92,10 @@ export const commitSingleValue = (
 		liveBinding.lastComposedName = name;
 	}
 
+	const valueChannel = resolveAttributeMode(value);
 	const nextAttributeMode = isDeclaredPropName(element, name)
 		? ATTRIBUTE_MODE.DECLARED_PROP
-		: resolveAttributeMode(value);
+		: valueChannel;
 	if (nextAttributeMode !== liveBinding.appliedAttributeMode)
 		clearAppliedAttribute(element, liveBinding);
 	switch (nextAttributeMode) {
@@ -110,9 +112,11 @@ export const commitSingleValue = (
 		case ATTRIBUTE_MODE.PROPERTY:
 			(element as unknown as Record<string, unknown>)[name] = value;
 			triggerComponentUpdate(element);
+			markDeferredHydration(element, valueChannel);
 			break;
 		case ATTRIBUTE_MODE.DECLARED_PROP:
 			assignDeclaredProp(element, name, value);
+			markDeferredHydration(element, valueChannel);
 			break;
 	}
 	liveBinding.appliedAttributeMode = nextAttributeMode;

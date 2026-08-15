@@ -250,7 +250,7 @@ export const hydrateListItems = (
 	liveBinding: ContentLiveBinding,
 	itemValues: Array<unknown>,
 	moveState: StyleSheetMoveState,
-): void => {
+): boolean => {
 	const list = liveBinding.content as ListContentState;
 	const count = itemValues.length;
 	const items: Array<ListItem> = new Array(count);
@@ -262,20 +262,29 @@ export const hydrateListItems = (
 		const value = coerceToTemplate(itemValues[index]);
 		assertNestable(value);
 		const startNode = rowStart.nextSibling!;
-		const { instance, tailMarker } = hydrateRow(value, rowStart, moveState);
+		const adopted = hydrateRow(
+			value,
+			rowStart,
+			liveBinding.endMarker,
+			moveState,
+		);
+		if (adopted === null) return false;
 		const parsed = getParsedTemplate(value.__templateStrings);
 		const itemHash = hashValue(itemValues[index]);
 		itemHashes[index] = itemHash;
 		aggregateHash = combineOrderedHash(aggregateHash, itemHash);
 		items[index] = {
-			tailMarker,
-			instance,
+			tailMarker: adopted.tailMarker,
+			instance: adopted.instance,
 			itemHash,
 			keyHash: keyHashOf(value, parsed),
 			startNode,
 		};
-		rowStart = tailMarker;
+		rowStart = adopted.tailMarker;
 	}
+
+	if (rowStart.nextSibling !== liveBinding.endMarker) return false;
 	list.items = items;
 	list.aggregateHash = aggregateHash;
+	return true;
 };

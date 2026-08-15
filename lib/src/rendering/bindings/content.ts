@@ -11,7 +11,7 @@ import {
 	releaseContent,
 	releaseInstance,
 } from "../instance";
-import { forEachNode } from "../markers";
+import { forEachNode, warnOnRejectedServerRange } from "../markers";
 import { hydrateListItems, patchListContent } from "./content-list";
 import {
 	BranchContentState,
@@ -119,6 +119,47 @@ export const commitContent = (
 	}
 };
 
+//one text write destroys nothing, so a text range is repaired rather than rejected; anything
+//else in the range means the server rendered a different kind here and the range is not ours
+const hydrateText = (
+	liveBinding: ContentLiveBinding,
+	value: unknown,
+): boolean => {
+	const { startMarker, endMarker } = liveBinding;
+	const serverNode = startMarker.nextSibling;
+	const isEmptyRange = serverNode === endMarker;
+	const holdsOneTextNode =
+		serverNode instanceof Text && serverNode.nextSibling === endMarker;
+	if (!isEmptyRange && !holdsOneTextNode) return false;
+
+	(liveBinding.content as TextContentState).lastValueHash = hashValue(value);
+	const text = coerceToText(value);
+	if (isEmptyRange) {
+		if (text !== "") startMarker.after(document.createTextNode(text));
+		return true;
+	}
+	const serverTextNode = serverNode as Text;
+	if (serverTextNode.data !== text) serverTextNode.data = text;
+	return true;
+};
+
+const hydrateBranch = (
+	liveBinding: ContentLiveBinding,
+	value: TemplateValue,
+	moveState: StyleSheetMoveState,
+): boolean => {
+	assertNestable(value);
+	const instance = hydrateInstance(
+		value,
+		liveBinding.startMarker,
+		liveBinding.endMarker,
+		moveState,
+	);
+	if (instance === null) return false;
+	(liveBinding.content as BranchContentState).instance = instance;
+	return true;
+};
+
 export const hydrateContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
@@ -127,20 +168,20 @@ export const hydrateContent = (
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const kind = contentKindOf(value);
 	liveBinding.content = createContentState(kind);
+
 	switch (kind) {
 		case CONTENT_KIND.TEXT:
-			(liveBinding.content as TextContentState).lastValueHash =
-				hashValue(value);
-			return;
+			if (hydrateText(liveBinding, value)) return;
+			break;
 		case CONTENT_KIND.BRANCH:
-			assertNestable(value as TemplateValue);
-			(liveBinding.content as BranchContentState).instance = hydrateInstance(
-				value as TemplateValue,
-				liveBinding.startMarker,
-				moveState,
-			);
-			return;
+			if (hydrateBranch(liveBinding, value as TemplateValue, moveState)) return;
+			break;
 		case CONTENT_KIND.LIST:
-			return hydrateListItems(liveBinding, value as Array<unknown>, moveState);
+			if (hydrateListItems(liveBinding, value as Array<unknown>, moveState))
+				return;
 	}
+
+	warnOnRejectedServerRange();
+	switchContentKind(liveBinding, CONTENT_KIND.UNRESOLVED);
+	commitContent(liveBinding, values, moveState);
 };

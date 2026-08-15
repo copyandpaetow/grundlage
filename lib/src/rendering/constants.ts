@@ -15,3 +15,5 @@ export const ATTRIBUTE_MODE = {
 } as const;
 
 export const NO_KEY = 0;
+
+export const DEFER_HYDRATION_ATTRIBUTE = "defer-hydration";

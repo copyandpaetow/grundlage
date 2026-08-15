@@ -1,4 +1,5 @@
 import { MARKUP } from "../parser/chars";
+import { DEFER_HYDRATION_ATTRIBUTE } from "../rendering/constants";
 import { isTemplate } from "../template";
 import { Parse, Resolve, Schema } from "../types";
 
@@ -89,6 +90,10 @@ const assertPropNameIsUsable = (propName: string): void => {
 	if (propName === "host")
 		throw new TypeError(
 			`grundlage: "host" is reserved: the props object carries the element under that name.`,
+		);
+	if (propName === DEFER_HYDRATION_ATTRIBUTE)
+		throw new TypeError(
+			`grundlage: "${DEFER_HYDRATION_ATTRIBUTE}" is reserved: it marks a child that must not hydrate before its parent has supplied its values.`,
 		);
 };
 

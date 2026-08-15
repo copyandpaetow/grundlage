@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { BaseComponent } from "../../types";
 import { html, TemplateValue } from "../../template";
 import { hashValue } from "../../utils/hashing";
@@ -217,10 +217,15 @@ describe("raw content with a css plan", () => {
 		const style = shadowRoot.querySelector("style")!;
 		const sheetTextNode = style.firstChild as Text;
 
-		const instance = hydrateInstance(sheet("red"), shadowRoot, moveState());
+		const instance = hydrateInstance(
+			sheet("red"),
+			shadowRoot,
+			null,
+			moveState(),
+		);
 		expect(style.firstChild).toBe(sheetTextNode);
 
-		patchInstance(instance, sheet("blue").values);
+		patchInstance(instance!, sheet("blue").values);
 		expect(style.firstChild).toBe(sheetTextNode);
 		expect(declarationOf(style).getPropertyValue("color")).toBe("blue");
 	});
@@ -315,17 +320,36 @@ describe("raw content with a css plan", () => {
 	});
 });
 
-describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
-	test("does not re-write server-rendered content, and the text node survives", () => {
+describe("hydrateInstance: adopts the server DOM, repairing text that diverged", () => {
+	test("repairs diverged text in place, keeping the server's text node", () => {
 		const { shadowRoot } = mountIntoShadow(html`<p>${"server-text"}</p>`);
 		const paragraph = shadowRoot.querySelector("p")!;
 		const serverTextNode = textNodeOf(paragraph);
 		expect(serverTextNode.data).toBe("server-text");
 
-		hydrateInstance(html`<p>${"client-text"}</p>`, shadowRoot, moveState());
+		hydrateInstance(
+			html`<p>${"client-text"}</p>`,
+			shadowRoot,
+			null,
+			moveState(),
+		);
 
 		expect(textNodeOf(paragraph)).toBe(serverTextNode);
-		expect(serverTextNode.data).toBe("server-text");
+		expect(serverTextNode.data).toBe("client-text");
+	});
+
+	test("leaves matching text alone: no write, same node", () => {
+		const { shadowRoot } = mountIntoShadow(html`<p>${"same-text"}</p>`);
+		const serverTextNode = textNodeOf(shadowRoot.querySelector("p")!);
+		const writes: Array<string> = [];
+		Object.defineProperty(serverTextNode, "data", {
+			get: () => "same-text",
+			set: (next: string) => writes.push(next),
+		});
+
+		hydrateInstance(html`<p>${"same-text"}</p>`, shadowRoot, null, moveState());
+
+		expect(writes).toEqual([]);
 	});
 
 	test("does not overwrite a server-rendered attribute on hydrate", () => {
@@ -339,6 +363,7 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		hydrateInstance(
 			html`<span class="${"client-class"}"></span>`,
 			shadowRoot,
+			null,
 			moveState(),
 		);
 
@@ -350,11 +375,12 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		const instance = hydrateInstance(
 			html`<p>${"client-text"}</p>`,
 			shadowRoot,
+			null,
 			moveState(),
 		);
-		expect(shadowRoot.querySelector("p")?.textContent).toBe("server-text");
+		expect(shadowRoot.querySelector("p")?.textContent).toBe("client-text");
 
-		patchInstance(instance, ["refreshed"]);
+		patchInstance(instance!, ["refreshed"]);
 		expect(shadowRoot.querySelector("p")?.textContent).toBe("refreshed");
 	});
 
@@ -366,10 +392,11 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		const instance = hydrateInstance(
 			html`<span class="${"client-class"}"></span>`,
 			shadowRoot,
+			null,
 			moveState(),
 		);
 
-		patchInstance(instance, ["updated-class"]);
+		patchInstance(instance!, ["updated-class"]);
 		expect(span.getAttribute("class")).toBe("updated-class");
 	});
 
@@ -383,7 +410,7 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		const { shadowRoot } = mountIntoShadow(rows(["a", "b"]));
 
 		expect(() =>
-			hydrateInstance(rows(["a", "b"]), shadowRoot, moveState()),
+			hydrateInstance(rows(["a", "b"]), shadowRoot, null, moveState()),
 		).not.toThrow();
 
 		const items = shadowRoot.querySelectorAll("li");
@@ -409,10 +436,124 @@ describe("hydrateInstance: trusts the server DOM (seed, don't write)", () => {
 		const { shadowRoot } = mountIntoShadow(rows(tree));
 
 		expect(() =>
-			hydrateInstance(rows(tree), shadowRoot, moveState()),
+			hydrateInstance(rows(tree), shadowRoot, null, moveState()),
 		).not.toThrow();
 
 		expect(shadowRoot.querySelectorAll("li").length).toBe(2);
 		expect(shadowRoot.querySelectorAll("span").length).toBe(4);
+	});
+});
+
+describe("hydrateInstance: rejects a server range that contradicts the value", () => {
+	const contentHole = (value: unknown) => html`<div>${value}</div>`;
+	const rows = (labels: Array<string>) =>
+		html`<ul>
+			${labels.map((label) => html`<li>${label}</li>`)}
+		</ul>`;
+	const rowLabels = (shadowRoot: ShadowRoot): Array<string> =>
+		Array.from(shadowRoot.querySelectorAll("li"), (item) => item.textContent!);
+
+	beforeEach(() => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	test("an empty list value discards every row the server wrote", () => {
+		const { shadowRoot } = mountIntoShadow(rows(["a", "b"]));
+
+		hydrateInstance(rows([]), shadowRoot, null, moveState());
+
+		expect(rowLabels(shadowRoot)).toEqual([]);
+		expect(console.warn).toHaveBeenCalled();
+	});
+
+	test("fewer rows than the server wrote re-renders the range", () => {
+		const { shadowRoot } = mountIntoShadow(rows(["a", "b", "c"]));
+
+		hydrateInstance(rows(["a"]), shadowRoot, null, moveState());
+
+		expect(rowLabels(shadowRoot)).toEqual(["a"]);
+	});
+
+	test("more rows than the server wrote re-renders the range", () => {
+		const { shadowRoot } = mountIntoShadow(rows(["a"]));
+
+		hydrateInstance(rows(["a", "b"]), shadowRoot, null, moveState());
+
+		expect(rowLabels(shadowRoot)).toEqual(["a", "b"]);
+	});
+
+	test("a branch needing more markers than the server wrote re-renders the range", () => {
+		const { shadowRoot } = mountIntoShadow(contentHole(html`<p>${"x"}</p>`));
+
+		hydrateInstance(
+			contentHole(
+				html`<p>${"x"}</p>
+					<em>${"y"}</em>`,
+			),
+			shadowRoot,
+			null,
+			moveState(),
+		);
+
+		expect(shadowRoot.querySelector("em")?.textContent).toBe("y");
+	});
+
+	test("a diverging branch never consumes the next binding's markers", () => {
+		const twoHoles = (branch: TemplateValue, tail: string) =>
+			html`<div>${branch}</div>
+				<span>${tail}</span>`;
+		const { shadowRoot } = mountIntoShadow(
+			twoHoles(html`<p>${"server"}</p>`, "tail"),
+		);
+
+		hydrateInstance(
+			twoHoles(
+				html`<p>${"a"}</p>
+					<p>${"b"}</p>`,
+				"tail",
+			),
+			shadowRoot,
+			null,
+			moveState(),
+		);
+
+		expect(shadowRoot.querySelectorAll("div p").length).toBe(2);
+		expect(shadowRoot.querySelector("span")?.textContent).toBe("tail");
+	});
+
+	test("a text value over a server-rendered list discards the rows", () => {
+		const { shadowRoot } = mountIntoShadow(contentHole(["a", "b"]));
+
+		hydrateInstance(contentHole("text"), shadowRoot, null, moveState());
+
+		expect(shadowRoot.querySelector("div")?.textContent).toBe("text");
+	});
+
+	test("a root with more bindings than the server's markup is not adopted", () => {
+		const { shadowRoot } = mountIntoShadow(html`<p>${"a"}</p>`);
+
+		expect(
+			hydrateInstance(
+				html`<p>${"a"}</p>
+					<p>${"b"}</p>`,
+				shadowRoot,
+				null,
+				moveState(),
+			),
+		).toBeNull();
+	});
+
+	test("text fills a server range that holds no text node at all", () => {
+		const { shadowRoot } = mountIntoShadow(contentHole(""));
+		//the SSR shape: an empty text hole writes nothing between its markers
+		shadowRoot.querySelector("div")!.childNodes[1].remove();
+
+		hydrateInstance(contentHole("filled"), shadowRoot, null, moveState());
+
+		expect(shadowRoot.querySelector("div")?.textContent).toBe("filled");
+		expect(console.warn).not.toHaveBeenCalled();
 	});
 });

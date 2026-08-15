@@ -7,6 +7,7 @@ import {
 } from "../../utils/guards";
 import { hasHashChanged } from "../compose";
 import { ATTRIBUTE_MODE } from "../constants";
+import { markDeferredHydration } from "../defer-hydration";
 import { triggerComponentUpdate, resolveTargetElement } from "../dom";
 import {
 	assignDeclaredProp,
@@ -56,11 +57,15 @@ export const applyDynamicAttribute = (
 	value: unknown,
 	oldValue?: unknown,
 ): void => {
+	const valueChannel = resolveAttributeMode(value);
+
 	//ahead of the event check: that one takes any key starting with "on" as a native handler once
 	//`key in element` is true, which a prop's own accessor makes true. A prop named `once` would
 	//add a listener for "ce" instead of being assigned
-	if (isDeclaredPropName(element, key))
-		return assignDeclaredProp(element, key, value);
+	if (isDeclaredPropName(element, key)) {
+		assignDeclaredProp(element, key, value);
+		return markDeferredHydration(element, valueChannel);
+	}
 
 	const listenerName = resolveEventNameFromKey(key, element);
 	if (listenerName !== null) {
@@ -73,7 +78,7 @@ export const applyDynamicAttribute = (
 
 	if (typeof value === "function") warnIfDeadNativeHandler(key, element);
 
-	switch (resolveAttributeMode(value)) {
+	switch (valueChannel) {
 		case ATTRIBUTE_MODE.ABSENT:
 			clearPropertyChannel(element, key);
 			element.removeAttribute(key);
@@ -90,7 +95,7 @@ export const applyDynamicAttribute = (
 			element.removeAttribute(key);
 			(element as unknown as Record<string, unknown>)[key] = value;
 			triggerComponentUpdate(element);
-			return;
+			return markDeferredHydration(element, valueChannel);
 	}
 };
 

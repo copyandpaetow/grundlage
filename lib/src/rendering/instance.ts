@@ -154,8 +154,9 @@ export const mountInstance = (
 const hydrateInstanceWithWalker = (
 	walker: TreeWalker,
 	value: TemplateValue,
+	rangeEnd: Comment | null,
 	moveState: StyleSheetMoveState,
-): Instance => {
+): Instance | null => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	const { bindings, hostBindingCount } = parsed;
 	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
@@ -163,7 +164,8 @@ const hydrateInstanceWithWalker = (
 	const instance: Instance = { parsed, liveBindings, moveState };
 
 	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length;) {
-		const open = nextOpenMarker(walker);
+		const open = nextOpenMarker(walker, rangeEnd);
+		if (open === null) return null;
 		const staticBinding = bindings[bindingIndex];
 
 		if (staticBinding.type !== BINDING.CONTENT) {
@@ -173,7 +175,8 @@ const hydrateInstanceWithWalker = (
 			continue;
 		}
 
-		const closeMarker = scanToClose(walker, open);
+		const closeMarker = scanToClose(walker, open, rangeEnd);
+		if (closeMarker === null) return null;
 		const live = createLiveBinding(staticBinding, open, closeMarker);
 		hydrateLiveBinding(instance, live, value.values);
 		liveBindings[bindingIndex++] = live;
@@ -195,16 +198,30 @@ const createCommentWalkerAt = (startNode: Node): TreeWalker => {
 export const hydrateInstance = (
 	value: TemplateValue,
 	startNode: Node,
+	rangeEnd: Comment | null,
 	moveState: StyleSheetMoveState,
-): Instance =>
-	hydrateInstanceWithWalker(createCommentWalkerAt(startNode), value, moveState);
+): Instance | null =>
+	hydrateInstanceWithWalker(
+		createCommentWalkerAt(startNode),
+		value,
+		rangeEnd,
+		moveState,
+	);
 
 export const hydrateRow = (
 	value: TemplateValue,
 	rowStart: Node,
+	rangeEnd: Comment,
 	moveState: StyleSheetMoveState,
-): { instance: Instance; tailMarker: Comment } => {
+): { instance: Instance; tailMarker: Comment } | null => {
 	const walker = createCommentWalkerAt(rowStart);
-	const instance = hydrateInstanceWithWalker(walker, value, moveState);
-	return { instance, tailMarker: nextListTail(walker) };
+	const instance = hydrateInstanceWithWalker(
+		walker,
+		value,
+		rangeEnd,
+		moveState,
+	);
+	if (instance === null) return null;
+	const tailMarker = nextListTail(walker, rangeEnd);
+	return tailMarker === null ? null : { instance, tailMarker };
 };

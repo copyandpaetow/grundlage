@@ -33,6 +33,9 @@ import {
 	refreshStyleSheetsAfterMove,
 	releaseInstance,
 } from "./rendering/instance";
+import { DEFER_HYDRATION_ATTRIBUTE } from "./rendering/constants";
+import { releaseDeferredChildren } from "./rendering/defer-hydration";
+import { warnOnRejectedServerRange } from "./rendering/markers";
 import {
 	BaseComponent,
 	ComponentConstructor,
@@ -96,7 +99,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 	const props = normalizeSchema(mergedOptions.props ?? {});
 
 	class BaseElement extends ParentClass implements BaseComponent {
-		static observedAttributes = [...props.keys()];
+		static observedAttributes = [...props.keys(), DEFER_HYDRATION_ATTRIBUTE];
 		static declaredPropNames: ReadonlySet<string> = new Set(
 			[...props.values()].map((prop) => prop.propName),
 		);
@@ -184,6 +187,15 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			} catch (error) {
 				return this.#fail(error);
 			}
+			//the server writes the mark while the child sits in the parent's detached fragment, so
+			//it is already present when that fragment is connected and the child paints its own run
+			const waitsForTheParentThatOwesItAValue =
+				!this.#isServerRun && this.hasAttribute(DEFER_HYDRATION_ATTRIBUTE);
+			if (waitsForTheParentThatOwesItAValue) return;
+			this.#mountComponentGenerator();
+		}
+
+		#mountComponentGenerator(): void {
 			this.#outerTask = createRenderTask(
 				componentGenerator(
 					this.#props as unknown as ComponentProps<DeclaredSchema>,
@@ -207,6 +219,14 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		) {
 			if (this.#isReflecting) return;
 			if (oldValue === newValue) return;
+			if (attributeName === DEFER_HYDRATION_ATTRIBUTE) {
+				//upgrade replays a present attribute as null → "" and must not mount; the parent's
+				//release removes it as "" → null and must
+				const parentHasSuppliedItsValues =
+					newValue === null && this.#outerTask === null && this.isConnected;
+				if (parentHasSuppliedItsValues) this.#mountComponentGenerator();
+				return;
+			}
 			const prop = props.get(attributeName);
 			if (prop === undefined) return;
 			if (writeProp(this.#props, prop, newValue)) this.update();
@@ -518,9 +538,13 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			const parsed = getParsedTemplate(templateValue.__templateStrings);
 
 			if (this.#isHydrationPending) {
-				this.#hydrateRoot(templateValue, parsed);
+				if (!this.#hydrateRoot(templateValue, parsed)) {
+					warnOnRejectedServerRange();
+					this.#paintRoot(templateValue, parsed);
+				}
 				this.#isHydrationPending = false;
 				warnOnUnclaimedSsrPayloads(this.#shadowRoot);
+				releaseDeferredChildren(this.#shadowRoot);
 			} else {
 				this.#paintRoot(templateValue, parsed);
 			}
@@ -551,12 +575,14 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			this.#instance = mounted.instance;
 		}
 
-		#hydrateRoot(value: TemplateValue, parsed: ParsedTemplate): void {
+		#hydrateRoot(value: TemplateValue, parsed: ParsedTemplate): boolean {
 			const instance = hydrateInstance(
 				value,
 				this.#shadowRoot,
+				null,
 				this.#styleSheetMoveState,
 			);
+			if (instance === null) return false;
 			this.#isWritingHostBindings = true;
 			try {
 				for (let index = 0; index < parsed.hostBindingCount; index++) {
@@ -568,6 +594,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				this.#isWritingHostBindings = false;
 			}
 			this.#instance = instance;
+			return true;
 		}
 
 		#revertAllHostBindings(): void {

@@ -710,9 +710,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
-		test("hydrate leaves server CONTENT in place even when client's first render carries a different value", async () => {
-			//hydrate re-applies ATTR bindings only — CONTENT is left alone so we don't overwrite the server text
-			//two unrelated classes with hardcoded text so server/client disagree; the DOM must match the server
+		test("hydrate repairs server CONTENT when the client's first render carries a different value", async () => {
+			//two unrelated classes with hardcoded text so server/client disagree; adopting text the
+			//client no longer renders is the silent stale render, so hydrate compares and writes
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
@@ -733,7 +733,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			await sleep();
 
 			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-				"server-value",
+				"client-value",
 			);
 
 			//no update() follow-up here — both renders carry the same hardcoded expression, so update would see current === previous and skip
