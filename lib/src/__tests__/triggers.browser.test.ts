@@ -309,4 +309,29 @@ describe("a server run", () => {
 			ssrGlobal.__grundlage_ssr__ = false;
 		}
 	});
+
+	test("settles an update awaited during its one paint", async () => {
+		const tag = uniqueTag();
+		let hasSettled = false;
+		const ssrGlobal = globalThis as { __grundlage_ssr__?: boolean };
+		ssrGlobal.__grundlage_ssr__ = true;
+		try {
+			customElements.define(
+				tag,
+				component(function* ({ host }) {
+					yield () => {
+						host.update().then(() => (hasSettled = true));
+						return html`<p>painted</p>`;
+					};
+				}),
+			);
+			const element = mount(tag);
+			//the teardown that ends the server run settles it, so one microtask is enough
+			await Promise.resolve();
+			expect(hasSettled).toBe(true);
+			element.remove();
+		} finally {
+			ssrGlobal.__grundlage_ssr__ = false;
+		}
+	});
 });

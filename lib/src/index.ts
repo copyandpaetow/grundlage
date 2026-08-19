@@ -1,5 +1,6 @@
 import { getFormAssociatedBaseClass } from "./forms";
 import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
+import { isDeclaredPropName } from "./rendering/bindings/attribute-single-value";
 import {
 	commitLiveBinding,
 	createLiveBinding,
@@ -10,20 +11,15 @@ import { getParsedTemplate } from "./parser/html";
 import { flushHostPayload, warnOnUnclaimedSsrPayloads } from "./load";
 import { coerceToTemplate, TemplateValue } from "./template";
 import {
-	cancelTaskAndRunCleanup,
-	classifyRenderResultAsOperation,
-	createRenderTask,
-	DriverStep,
-	endTaskWithError,
-	isParkedAtARenderableYield,
-	isStillParkedAt,
-	MODE,
-	OPERATION,
-	RELEASE_CONTROL,
-	RenderOperation,
-	stepTaskToNextOperation,
-	Task,
-} from "./runtime/task";
+	canRerender,
+	cancelRenderRun,
+	createRenderRun,
+	endRunWithFatalError,
+	hasStarted,
+	mountComponentGenerator,
+	RenderRun,
+	scheduleUpdate,
+} from "./runtime/driver";
 import { html as htmlValue } from "./template";
 import {
 	hydrateInstance,
@@ -42,7 +38,6 @@ import {
 	ComponentGenerator,
 	ComponentOptions,
 	ComponentProps,
-	RenderFunction,
 	Schema,
 	Template,
 } from "./types";
@@ -70,6 +65,8 @@ export {
 	type Template,
 } from "./types";
 export { load, type LoadOptions } from "./load";
+
+const alreadySettled = Promise.resolve();
 
 const defaultOptions = {
 	clonable: true,
@@ -111,20 +108,17 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			needsStyleSheetRefreshOnMove: false,
 			needsRerenderAfterMove: false,
 		};
-		#outerTask: Task | null = null;
-		#innerTask: Task | null = null;
-		#currentRenderable:
-			| RenderFunction<DeclaredSchema>
-			| ComponentGenerator<DeclaredSchema>
-			| null = null;
-		#currentRenderCallId = 0;
-		#isScheduled = false;
-		#pendingUpdate: PromiseWithResolvers<void> | null = null;
-		#isServerRun = false;
 		#internals: ElementInternals | null = null;
 		#isWritingHostBindings = false;
 		#props: PropValues = createComponentProps(props, this);
 		#isReflecting = false;
+		#renderRun: RenderRun = createRenderRun({
+			host: this,
+			componentProps: this.#props as unknown as ComponentProps,
+			componentGenerator: componentGenerator as ComponentGenerator,
+			paint: (value) => this.#paint(value),
+			displayFatalError: (error) => this.#displayFatalError(error),
+		});
 
 		get internals(): ElementInternals | null {
 			return (this.#internals ??= this.attachInternals?.() ?? null);
@@ -173,7 +167,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		}
 
 		connectedCallback() {
-			if (this.#outerTask) {
+			if (hasStarted(this.#renderRun)) {
 				const instance = this.#instance;
 				if (instance) {
 					refreshStyleSheetsAfterMove(instance);
@@ -181,35 +175,24 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				}
 				return;
 			}
-			this.#isServerRun = isServer();
 			try {
 				recoverPreUpgradeAssignments(this, props);
 			} catch (error) {
-				return this.#fail(error);
+				return endRunWithFatalError(this.#renderRun, error);
 			}
 			//the server writes the mark while the child sits in the parent's detached fragment, so
 			//it is already present when that fragment is connected and the child paints its own run
 			const waitsForTheParentThatOwesItAValue =
-				!this.#isServerRun && this.hasAttribute(DEFER_HYDRATION_ATTRIBUTE);
+				!isServer() && this.hasAttribute(DEFER_HYDRATION_ATTRIBUTE);
 			if (waitsForTheParentThatOwesItAValue) return;
-			this.#mountComponentGenerator();
-		}
-
-		#mountComponentGenerator(): void {
-			this.#outerTask = createRenderTask(
-				componentGenerator(
-					this.#props as unknown as ComponentProps<DeclaredSchema>,
-				),
-			);
-			this.#startRun(this.#outerTask);
+			mountComponentGenerator(this.#renderRun);
 		}
 
 		async disconnectedCallback() {
 			await Promise.resolve();
 			if (this.isConnected) return;
-			if (this.#outerTask === null) return;
-			this.#cancelBothTasks();
-			this.#resolvePendingUpdatePromise();
+			if (!hasStarted(this.#renderRun)) return;
+			cancelRenderRun(this.#renderRun);
 		}
 
 		attributeChangedCallback(
@@ -223,8 +206,9 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				//upgrade replays a present attribute as null → "" and must not mount; the parent's
 				//release removes it as "" → null and must
 				const parentHasSuppliedItsValues =
-					newValue === null && this.#outerTask === null && this.isConnected;
-				if (parentHasSuppliedItsValues) this.#mountComponentGenerator();
+					newValue === null && !hasStarted(this.#renderRun) && this.isConnected;
+				if (parentHasSuppliedItsValues)
+					mountComponentGenerator(this.#renderRun);
 				return;
 			}
 			const prop = props.get(attributeName);
@@ -234,303 +218,22 @@ export const component = <DeclaredSchema extends Schema = {}>(
 
 		setProp(name: string, value: unknown, oldValue?: unknown) {
 			applyDynamicAttribute(this, name, value, oldValue);
-			this.update();
+			const nothingElseWillScheduleThisWrite = !isDeclaredPropName(this, name);
+			if (nothingElseWillScheduleThisWrite) this.update();
 		}
 
 		update(): Promise<void> {
 			//four paths reach here from inside a host-binding write; this is the one funnel
-			if (this.#isWritingHostBindings) return Promise.resolve();
-			if (this.#outerTask === null || this.#currentRenderable === null)
-				return Promise.resolve();
-			return this.#scheduleNextUpdate();
+			if (this.#isWritingHostBindings) return alreadySettled;
+			if (!canRerender(this.#renderRun)) return alreadySettled;
+			return scheduleUpdate(this.#renderRun);
 		}
 
-		#scheduleNextUpdate(): Promise<void> {
-			this.#pendingUpdate ??= Promise.withResolvers<void>();
-			if (!this.#isScheduled) {
-				this.#isScheduled = true;
-				queueMicrotask(() => {
-					this.#isScheduled = false;
-					this.#rerunCurrentRenderable();
-				});
-			}
-			return this.#pendingUpdate.promise;
-		}
-
-		#rerunCurrentRenderable(): void {
-			const outerTask = this.#outerTask;
-			const renderable = this.#currentRenderable;
-			if (outerTask === null || renderable === null)
-				return this.#resolvePendingUpdatePromise();
-			if (isGeneratorFunction(renderable)) {
-				this.#startRun(
-					this.#installInnerTask(
-						renderable as ComponentGenerator<DeclaredSchema>,
-					),
-				);
-				return;
-			}
-			void this.#runTaskUntilItParksOrEnds(
-				outerTask,
-				this.#callRenderFunction(
-					outerTask,
-					renderable as RenderFunction<DeclaredSchema>,
-				),
-			);
-		}
-
-		#resolvePendingUpdatePromise(): void {
-			const updatePromise = this.#pendingUpdate;
-			if (updatePromise === null) return;
-			this.#pendingUpdate = null;
-			updatePromise.resolve();
-		}
-
-		#installInnerTask(source: ComponentGenerator<DeclaredSchema>): Task {
-			this.#cancelInnerTask();
-			const innerTask = createRenderTask(
-				source(this.#props as unknown as ComponentProps<DeclaredSchema>),
-			);
-			this.#innerTask = innerTask;
-			return innerTask;
-		}
-
-		#cancelInnerTask(): void {
-			const innerTask = this.#innerTask;
-			if (innerTask === null) return;
-			this.#innerTask = null;
-			this.#currentRenderCallId++;
-			cancelTaskAndRunCleanup(innerTask);
-		}
-
-		#cancelBothTasks(): void {
-			const innerTask = this.#innerTask;
-			const outerTask = this.#outerTask;
-			this.#innerTask = this.#outerTask = null;
-			this.#currentRenderable = null;
-			this.#currentRenderCallId++;
-			cancelTaskAndRunCleanup(innerTask);
-			cancelTaskAndRunCleanup(outerTask);
-		}
-
-		#fail(error: unknown): void {
-			this.#cancelBothTasks();
-			this.#revertAllHostBindings();
+		#displayFatalError(error: unknown): void {
 			console.warn(error);
 			this.#shadowRoot.textContent = `${error}`;
+			this.#revertAllHostBindings();
 			this.#instance = null;
-			this.#resolvePendingUpdatePromise();
-		}
-
-		#startRun(task: Task): void {
-			void this.#runTaskUntilItParksOrEnds(
-				task,
-				stepTaskToNextOperation(task, MODE.SEND, undefined),
-			);
-		}
-
-		async #runTaskUntilItParksOrEnds(
-			startTask: Task,
-			startStep: DriverStep,
-		): Promise<void> {
-			let task = startTask;
-			let next = startStep;
-
-			while (true) {
-				switch (next.kind) {
-					//the next step is not known yet — awaiting it is the only place this loop waits
-					case OPERATION.DEFERRED:
-						next = await next.payload;
-						break;
-
-					//stop: the task is waiting on something else now, or a newer render replaced this one
-					case RELEASE_CONTROL.kind:
-						return;
-
-					//the generator yielded a template, so the component renders it itself and any
-					//nested generator loses the markup
-					case OPERATION.PAINT: {
-						if (task === this.#outerTask) {
-							this.#cancelInnerTask();
-							this.#currentRenderable = null;
-						}
-						try {
-							this.#paint(next.payload);
-						} catch (error) {
-							next = endTaskWithError(task, error);
-							break;
-						}
-						if (this.#isServerRun) return this.#cancelBothTasks();
-						next = stepTaskToNextOperation(task, MODE.SEND, this);
-						break;
-					}
-
-					//the generator yielded a render function: calling it produces the next step which can be a
-					//template to paint, a nested generator, a promise to wait on, or an error
-					case OPERATION.CALL_RENDER_FUNCTION:
-						if (task === this.#outerTask)
-							this.#currentRenderable = next.payload;
-						next = this.#callRenderFunction(task, next.payload);
-						break;
-
-					//the generator yielded or returned another generator: it runs until it parks, and
-					//only then does the component's own generator continue past the yield that
-					//installed it
-					case OPERATION.INSTALL_FROM_YIELD:
-					case OPERATION.INSTALL_FROM_RENDER_RESULT: {
-						const theInstallerIsTheComponentGenerator =
-							task === this.#outerTask;
-						if (!theInstallerIsTheComponentGenerator) {
-							next = endTaskWithError(
-								task,
-								new Error(
-									"grundlage: an inner generator may not install another one — one level of nesting only",
-								),
-							);
-							break;
-						}
-
-						if (next.kind === OPERATION.INSTALL_FROM_YIELD)
-							this.#currentRenderable = next.payload;
-
-						const theComponentGeneratorMayResumeOnceTheNestedOneParks =
-							!this.#isServerRun && isParkedAtARenderableYield(task);
-						const componentGeneratorResumePermit =
-							theComponentGeneratorMayResumeOnceTheNestedOneParks
-								? task.suspension
-								: null;
-
-						this.#startRun(this.#installInnerTask(next.payload));
-						if (!isStillParkedAt(task, componentGeneratorResumePermit)) return;
-						next = stepTaskToNextOperation(task, MODE.SEND, this);
-						break;
-					}
-
-					//a promise the generator yielded resolved, so its value goes back into the generator
-					case OPERATION.RESUME:
-						next = stepTaskToNextOperation(task, MODE.SEND, next.payload);
-						break;
-
-					//that promise rejected instead: the error is thrown at the yield, where the
-					//generator's own try/catch can take it
-					case OPERATION.RESUME_WITH_ERROR:
-						next = stepTaskToNextOperation(task, MODE.THROW, next.payload);
-						break;
-
-					//the generator returned; unless another run is already queued, this settles the
-					//promise update() handed out
-					case OPERATION.COMPLETED:
-						if (this.#isServerRun) return this.#cancelBothTasks();
-						if (!this.#isScheduled) this.#resolvePendingUpdatePromise();
-						return;
-
-					//every error ends up here: a nested generator's is thrown into the component's
-					//generator, the component's own goes to #fail
-					case OPERATION.ROUTE_ERROR: {
-						const error = next.payload;
-						const outerTask = this.#outerTask;
-						if (task === outerTask || outerTask === null)
-							return this.#fail(error);
-						this.#cancelInnerTask();
-						if (!isParkedAtARenderableYield(outerTask))
-							return this.#fail(error);
-
-						this.#currentRenderable = null;
-						task = outerTask;
-						next = stepTaskToNextOperation(outerTask, MODE.THROW, error);
-						break;
-					}
-
-					default:
-						return next satisfies never;
-				}
-			}
-		}
-
-		#callRenderFunction(
-			task: Task,
-			renderFunction: RenderFunction<DeclaredSchema>,
-		): DriverStep {
-			const renderCallId = ++this.#currentRenderCallId;
-			let produced: unknown;
-			try {
-				produced = renderFunction(
-					this.#props as unknown as ComponentProps<DeclaredSchema>,
-				);
-			} catch (error) {
-				return endTaskWithError(task, error);
-			}
-			return this.#dispatchRenderOperation(
-				task,
-				classifyRenderResultAsOperation(task, produced),
-				renderCallId,
-			);
-		}
-
-		//nothing here ever steps the generator in THROW mode: a render function's failure has no yield
-		//to surface at, so it stays fatal instead of becoming catchable inside the generator
-		#dispatchRenderOperation(
-			task: Task,
-			operation: RenderOperation,
-			renderCallId: number,
-		): DriverStep {
-			switch (operation.kind) {
-				case OPERATION.PAINT:
-					if (task === this.#outerTask) this.#cancelInnerTask();
-					try {
-						this.#paint(operation.payload);
-					} catch (error) {
-						return endTaskWithError(task, error);
-					}
-					if (this.#isServerRun) {
-						this.#cancelBothTasks();
-						return RELEASE_CONTROL;
-					}
-					if (!isParkedAtARenderableYield(task)) {
-						if (!this.#isScheduled) this.#resolvePendingUpdatePromise();
-						return RELEASE_CONTROL;
-					}
-					return stepTaskToNextOperation(task, MODE.SEND, this);
-
-				case OPERATION.AWAIT_RENDER_RESULT:
-					return {
-						kind: OPERATION.DEFERRED,
-						payload: this.#settleRenderResult(
-							task,
-							operation.payload,
-							renderCallId,
-						),
-					};
-
-				case OPERATION.INSTALL_FROM_RENDER_RESULT:
-				case OPERATION.ROUTE_ERROR:
-					return operation;
-
-				default:
-					return operation satisfies never;
-			}
-		}
-
-		async #settleRenderResult(
-			task: Task,
-			promise: Promise<unknown>,
-			renderCallId: number,
-		): Promise<DriverStep> {
-			let value: unknown;
-			try {
-				value = await promise;
-			} catch (error) {
-				return this.#currentRenderCallId === renderCallId
-					? endTaskWithError(task, error)
-					: RELEASE_CONTROL;
-			}
-			if (this.#currentRenderCallId !== renderCallId) return RELEASE_CONTROL;
-
-			return this.#dispatchRenderOperation(
-				task,
-				classifyRenderResultAsOperation(task, value),
-				renderCallId,
-			);
 		}
 
 		#paint(value: unknown): void {
@@ -547,7 +250,9 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			} else {
 				this.#paintRoot(templateValue);
 			}
-			if (this.#isServerRun) flushHostPayload(this);
+			//the run's latched value, not a fresh isServer(): the global is mutable and the paint
+			//must agree with the driver that scheduled it
+			if (this.#renderRun.isServerRun) flushHostPayload(this);
 			this.#rerenderIfStyleSheetsDemoted();
 		}
 

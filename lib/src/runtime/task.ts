@@ -4,32 +4,27 @@ import { isGeneratorFunction } from "../utils/guards";
 import { isTemplate } from "../template";
 
 export const OPERATION = {
-	PAINT: 0,
-	INSTALL_FROM_YIELD: 1,
-	INSTALL_FROM_RENDER_RESULT: 2,
-	RESUME: 3,
-	RESUME_WITH_ERROR: 4,
-	CALL_RENDER_FUNCTION: 5,
-	AWAIT_RENDER_RESULT: 6,
-	COMPLETED: 7,
-	ROUTE_ERROR: 8,
-	RELEASE_CONTROL: 9,
-	DEFERRED: 10,
+	PAINT_FROM_YIELD: 0,
+	PAINT_FROM_RENDER_RESULT: 1,
+	INSTALL_FROM_YIELD: 2,
+	INSTALL_FROM_RENDER_RESULT: 3,
+	RESUME: 4,
+	RESUME_WITH_ERROR: 5,
+	CALL_RENDER_FUNCTION: 6,
+	AWAIT_RENDER_RESULT: 7,
+	COMPLETED: 8,
+	ROUTE_ERROR: 9,
+	RELEASE_CONTROL: 10,
+	DEFERRED: 11,
 } as const;
 
 export const MODE = { SEND: 0, THROW: 1 } as const;
-
-export const PARKED = {
-	YIELDED_PROMISE: 0,
-	YIELDED_RENDERABLE: 1,
-	PENDING_STEP: 2,
-} as const;
 
 type OperationKind = ValueOf<typeof OPERATION>;
 
 //identity is the resume permit: a continuation may only step the task still parked on its own
 export interface Suspension {
-	parkedAt: ValueOf<typeof PARKED>;
+	isAtARenderableYield: boolean;
 }
 
 export interface Task {
@@ -47,20 +42,27 @@ export const createRenderTask = (
 });
 
 export const isParkedAtARenderableYield = (task: Task): boolean =>
-	task.suspension?.parkedAt === PARKED.YIELDED_RENDERABLE;
+	task.suspension?.isAtARenderableYield === true;
 
 export const isStillParkedAt = (
 	task: Task,
 	suspension: Suspension | null,
 ): boolean => suspension !== null && task.suspension === suspension;
 
-type PaintOperation = { kind: typeof OPERATION.PAINT; payload: ContentValue };
+export type PaintFromYieldOperation = {
+	kind: typeof OPERATION.PAINT_FROM_YIELD;
+	payload: ContentValue;
+};
+export type PaintFromRenderResultOperation = {
+	kind: typeof OPERATION.PAINT_FROM_RENDER_RESULT;
+	payload: ContentValue;
+};
 
-type InstallFromYieldOperation = {
+export type InstallFromYieldOperation = {
 	kind: typeof OPERATION.INSTALL_FROM_YIELD;
 	payload: ComponentGenerator;
 };
-type InstallFromRenderResultOperation = {
+export type InstallFromRenderResultOperation = {
 	kind: typeof OPERATION.INSTALL_FROM_RENDER_RESULT;
 	payload: ComponentGenerator;
 };
@@ -76,7 +78,7 @@ type DeferredOperation = {
 };
 
 export type CoroutineOperation =
-	| PaintOperation
+	| PaintFromYieldOperation
 	| InstallFromYieldOperation
 	| { kind: typeof OPERATION.RESUME; payload: unknown }
 	| { kind: typeof OPERATION.RESUME_WITH_ERROR; payload: unknown }
@@ -86,12 +88,10 @@ export type CoroutineOperation =
 	| RouteErrorOperation;
 
 export type RenderOperation =
-	| PaintOperation
+	| PaintFromRenderResultOperation
 	| InstallFromRenderResultOperation
 	| { kind: typeof OPERATION.AWAIT_RENDER_RESULT; payload: Promise<unknown> }
 	| RouteErrorOperation;
-
-type Operation = CoroutineOperation | RenderOperation;
 
 //this run is over: the task parked, failed or completed, or the continuation that produced this
 //found its permit revoked while it was pending
@@ -102,14 +102,14 @@ export const RELEASE_CONTROL = {
 
 export type DriverStep =
 	| CoroutineOperation
+	| PaintFromRenderResultOperation
 	| InstallFromRenderResultOperation
 	| typeof RELEASE_CONTROL;
 
-const createOperation = <Kind extends OperationKind>(
+const createOperation = <Kind extends OperationKind, Payload>(
 	kind: Kind,
-	payload: Extract<Operation, { kind: Kind }>["payload"],
-): Extract<Operation, { kind: Kind }> =>
-	({ kind, payload }) as Extract<Operation, { kind: Kind }>;
+	payload: Payload,
+): { kind: Kind; payload: Payload } => ({ kind, payload });
 
 const canBeCommittedAsContent = (value: unknown): boolean =>
 	value === null ||
@@ -139,11 +139,16 @@ export const classifyRenderResultAsOperation = (
 			produced as ComponentGenerator,
 		);
 	if (canBeCommittedAsContent(produced)) {
+		//the two shapes below cannot render at all and end the run; an empty render is legal, so this
+		//one warns and paints nothing
 		if (produced === undefined)
 			console.warn(
 				"grundlage: the render function returned undefined, so nothing was rendered. A block body needs an explicit return.",
 			);
-		return createOperation(OPERATION.PAINT, produced as ContentValue);
+		return createOperation(
+			OPERATION.PAINT_FROM_RENDER_RESULT,
+			produced as ContentValue,
+		);
 	}
 	if (typeof produced === "function")
 		return endTaskWithError(
@@ -181,29 +186,32 @@ const classifyYieldedValueAsOperation = (
 	task: Task,
 	value: unknown,
 ): CoroutineOperation => {
-	if (isTemplate(value)) return createOperation(OPERATION.PAINT, value);
+	if (isTemplate(value))
+		return createOperation(OPERATION.PAINT_FROM_YIELD, value);
 	if (isGeneratorFunction(value)) {
-		task.suspension = { parkedAt: PARKED.YIELDED_RENDERABLE };
+		task.suspension = { isAtARenderableYield: true };
 		return createOperation(
 			OPERATION.INSTALL_FROM_YIELD,
 			value as ComponentGenerator,
 		);
 	}
 	if (typeof value === "function") {
-		task.suspension = { parkedAt: PARKED.YIELDED_RENDERABLE };
+		task.suspension = { isAtARenderableYield: true };
 		return createOperation(
 			OPERATION.CALL_RENDER_FUNCTION,
 			value as RenderFunction,
 		);
 	}
 	if (value instanceof Promise) {
-		const suspension: Suspension = { parkedAt: PARKED.YIELDED_PROMISE };
+		const suspension: Suspension = { isAtARenderableYield: false };
 		task.suspension = suspension;
 		return createOperation(
 			OPERATION.DEFERRED,
 			settleYieldedPromise(task, value, suspension),
 		);
 	}
+	//yield position is control flow, so anything that is neither a promise nor a renderable is echoed
+	//back to the generator; content shapes like arrays are the return position's job
 	return createOperation(OPERATION.RESUME, value);
 };
 
@@ -228,9 +236,14 @@ export const cancelTaskAndRunCleanup = (task: Task | null): void => {
 	}
 	if (ending instanceof Promise) ending.catch(console.warn);
 	const cleanup = task.cleanup;
-	if (cleanup) {
-		task.cleanup = null;
+	if (cleanup === null) return;
+	task.cleanup = null;
+	try {
 		cleanup();
+	} catch (error) {
+		//a torn-down generator has no yield left to surface at, and the caller still has a sibling
+		//cleanup to run and a paint to make after this, so the console is the whole channel
+		console.warn("grundlage: a cleanup function threw during teardown.", error);
 	}
 };
 
@@ -270,7 +283,7 @@ export const stepTaskToNextOperation = (
 	}
 	if (!(stepped instanceof Promise))
 		return classifySettledStepAsOperation(task, stepped);
-	const suspension: Suspension = { parkedAt: PARKED.PENDING_STEP };
+	const suspension: Suspension = { isAtARenderableYield: false };
 	task.suspension = suspension;
 	return createOperation(
 		OPERATION.DEFERRED,

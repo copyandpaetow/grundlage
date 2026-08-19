@@ -246,6 +246,51 @@ describe("the refire enters the task loop", () => {
 		expect(cleanupCalls).toBe(1);
 	});
 
+	//the two ways a throwing cleanup was observable before it was guarded: the paint it precedes
+	//never happened, and the sibling cleanup queued behind it never ran
+	test("a branch cleanup that throws does not eat the paint that tore it down", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const element = mount(
+			component(function* () {
+				yield function* () {
+					yield () => html`<p>branch</p>`;
+					return () => {
+						throw new Error("branch-cleanup-threw");
+					};
+				};
+				yield () => html`<p>component</p>`;
+			}),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("component");
+		expect(warn).toHaveBeenCalledOnce();
+		element.remove();
+	});
+
+	test("a branch cleanup that throws does not skip the component's own cleanup", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		let cleanupCalls = 0;
+		const element = mount(
+			component(function* () {
+				yield function* () {
+					yield () => html`<p>branch</p>`;
+					return () => {
+						throw new Error("branch-cleanup-threw");
+					};
+				};
+				return () => {
+					cleanupCalls++;
+				};
+			}),
+		);
+		await sleep();
+
+		element.remove();
+		await sleep();
+		expect(cleanupCalls).toBe(1);
+	});
+
 	test("a re-installed branch does not step the completed outer past its cleanup", async () => {
 		//an install steps the outer to hand its yield the host, but a refire installs from a
 		//position the outer has already left — stepping a returned generator there would replace

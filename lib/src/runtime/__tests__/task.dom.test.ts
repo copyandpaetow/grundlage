@@ -1,14 +1,14 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { html, TemplateValue } from "../../template";
 import {
 	classifyRenderResultAsOperation as classifyRenderResult,
+	cancelTaskAndRunCleanup,
 	classifySettledStepAsOperation as classifyStep,
 	DriverStep,
 	endTaskWithError,
 	isParkedAtARenderableYield,
 	MODE,
 	OPERATION,
-	PARKED,
 	stepTaskToNextOperation,
 	Task,
 } from "../task";
@@ -21,6 +21,10 @@ import {
 //end-to-end. A task knows nothing about the element it renders into, so which task may install a
 //branch and where an error goes are driver questions, covered there too.
 
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
 const template = (): TemplateValue => html`<p>x</p>`;
 
 const makeTask = (overrides: Partial<Task> = {}): Task => ({
@@ -31,7 +35,7 @@ const makeTask = (overrides: Partial<Task> = {}): Task => ({
 });
 
 const parkedAtARenderable = (): Partial<Task> => ({
-	suspension: { parkedAt: PARKED.YIELDED_RENDERABLE },
+	suspension: { isAtARenderableYield: true },
 });
 
 const yielded = (value: unknown): IteratorResult<unknown> => ({
@@ -51,7 +55,7 @@ describe("classifyStep: what the generator yielded", () => {
 	test("a template paints", () => {
 		const value = template();
 		const operation = classifyStep(makeTask(), yielded(value));
-		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(operation.kind).toBe(OPERATION.PAINT_FROM_YIELD);
 		expect(operation.payload).toBe(value);
 	});
 
@@ -83,7 +87,7 @@ describe("classifyStep: what the generator yielded", () => {
 		const operation = classifyStep(task, yielded(Promise.resolve("x")));
 		expect(operation.kind).toBe(OPERATION.DEFERRED);
 		//a paint must not step it from here; only the promise settling may
-		expect(task.suspension?.parkedAt).toBe(PARKED.YIELDED_PROMISE);
+		expect(task.suspension).not.toBe(null);
 		expect(isParkedAtARenderableYield(task)).toBe(false);
 
 		const settled = await (operation.payload as Promise<DriverStep>);
@@ -115,26 +119,33 @@ describe("classifyStep: what the generator yielded", () => {
 		expect(operation.kind).toBe(OPERATION.RESUME);
 		expect(operation.payload).toBe(42);
 	});
+
+	test("a yielded array is echoed back, not painted", () => {
+		const rows = [template(), template()];
+		const operation = classifyStep(makeTask(), yielded(rows));
+		expect(operation.kind).toBe(OPERATION.RESUME);
+		expect(operation.payload).toBe(rows);
+	});
 });
 
 describe("classifyRenderResult: the render function's return is content", () => {
 	test("a string paints as-is — the driver coerces, the classifier does not", () => {
 		const operation = classifyRenderResult(makeTask(), "hello");
-		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(operation.kind).toBe(OPERATION.PAINT_FROM_RENDER_RESULT);
 		expect(operation.payload).toBe("hello");
 	});
 
 	test("an array paints as-is", () => {
 		const rows = [template(), template()];
 		const operation = classifyRenderResult(makeTask(), rows);
-		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(operation.kind).toBe(OPERATION.PAINT_FROM_RENDER_RESULT);
 		expect(operation.payload).toBe(rows);
 	});
 
 	test("undefined paints nothing and warns once about the missing return", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const operation = classifyRenderResult(makeTask(), undefined);
-		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(operation.kind).toBe(OPERATION.PAINT_FROM_RENDER_RESULT);
 		expect(warn).toHaveBeenCalledTimes(1);
 		expect(warn.mock.calls[0][0]).toContain("undefined");
 		warn.mockRestore();
@@ -178,7 +189,7 @@ describe("classifyRenderResult: the render function's return is content", () => 
 	test("a resolved result on a finished task paints and leaves it finished", () => {
 		const task = makeTask();
 		const operation = classifyRenderResult(task, "late");
-		expect(operation.kind).toBe(OPERATION.PAINT);
+		expect(operation.kind).toBe(OPERATION.PAINT_FROM_RENDER_RESULT);
 		expect(task.suspension).toBe(null);
 	});
 });
@@ -208,6 +219,21 @@ describe("completion and cleanup", () => {
 		const task = makeTask();
 		classifyStep(task, returned(undefined));
 		expect(task.cleanup).toBe(null);
+	});
+
+	//the cancel has a sibling task to tear down and a paint to make after this, so a user cleanup
+	//that throws is warned about rather than propagated
+	test("a cleanup that throws does not escape the cancel", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const task = makeTask({
+			cleanup: () => {
+				throw new Error("cleanup-threw");
+			},
+		});
+
+		expect(() => cancelTaskAndRunCleanup(task)).not.toThrow();
+		expect(task.cleanup).toBe(null);
+		expect(warn).toHaveBeenCalledOnce();
 	});
 });
 
@@ -255,7 +281,7 @@ describe("the suspension: what a task is parked on", () => {
 	] as const)("%s parks the task at a renderable yield", (_label, make) => {
 		const task = makeTask();
 		classifyStep(task, yielded(make()));
-		expect(task.suspension?.parkedAt).toBe(PARKED.YIELDED_RENDERABLE);
+		expect(isParkedAtARenderableYield(task)).toBe(true);
 	});
 
 	test.each([
@@ -285,12 +311,13 @@ describe("the suspension: what a task is parked on", () => {
 		});
 		const stepped = stepTaskToNextOperation(task, MODE.SEND, undefined);
 		expect(stepped.kind).toBe(OPERATION.DEFERRED);
-		expect(task.suspension?.parkedAt).toBe(PARKED.PENDING_STEP);
+		expect(task.suspension).not.toBe(null);
+		expect(isParkedAtARenderableYield(task)).toBe(false);
 	});
 
-	//identity is the permit: leaving a park and returning to one of the same kind must invalidate
+	//identity is the permit: leaving a park and returning to an equivalent one must invalidate
 	//whatever the first park handed out, which a compared value could never express
-	test("re-parking at the same kind still issues a new permit", () => {
+	test("re-parking at another renderable yield still issues a new permit", () => {
 		const task = makeTask();
 		classifyStep(
 			task,
@@ -302,7 +329,7 @@ describe("the suspension: what a task is parked on", () => {
 			task,
 			yielded(() => template()),
 		);
-		expect(task.suspension?.parkedAt).toBe(PARKED.YIELDED_RENDERABLE);
+		expect(isParkedAtARenderableYield(task)).toBe(true);
 		expect(task.suspension).not.toBe(firstPark);
 	});
 });
