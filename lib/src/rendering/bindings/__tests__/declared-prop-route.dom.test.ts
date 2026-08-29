@@ -1,16 +1,13 @@
 import { describe, expect, test, vi } from "vitest";
 import { component } from "../../../index";
+import { reapplyOnSwap as reapplySingleValueOnSwap } from "../attribute-single-value";
+import { reapplyOnSwap as reapplyDynamicOnSwap } from "../attribute-dynamic";
 import {
+	applyAttributeValue,
 	assignDeclaredProp,
 	isAwaitingDefinition,
 	isDeclaredPropName,
-	reapplyOnSwap as reapplySingleValueOnSwap,
-} from "../attribute-single-value";
-import {
-	applyDynamicAttribute,
-	reapplyOnSwap as reapplyDynamicOnSwap,
-} from "../attribute-dynamic";
-import { reapplyOnSwap as reapplyNamedDynamicOnSwap } from "../attribute-named-dynamic";
+} from "../attribute-write";
 
 const record = (element: Element): Record<string, unknown> =>
 	element as unknown as Record<string, unknown>;
@@ -66,7 +63,7 @@ describe("assignDeclaredProp before the element upgrades", () => {
 	});
 });
 
-//reflection spells a value out rather than preserving it, so all three variants reassign a declared
+//reflection spells a value out rather than preserving it, so both variants reassign a declared
 //prop instead of leaving it to the attribute copy, and hydrateDynamic reuses the spread variant
 describe("a swap or hydration carries a declared prop holding a stringable value", () => {
 	const asVariant = (incoming: unknown) =>
@@ -78,8 +75,8 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 			function* () {
 				yield () => null;
 			},
-			//`once` rather than a plainer name: the parser routes every single-hole attribute whose
-			//name starts with "on" through the named-dynamic binding
+			//`once` guards the event sniff: a declared name starting with "on" must not be read
+			//as a listener
 			{ props: { variant: asVariant, once: asVariant } },
 		),
 	);
@@ -87,23 +84,10 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 	test("single value binding", () => {
 		const element = document.createElement("swap-carried-el");
 		reapplySingleValueOnSwap(
-			{
-				lastComposedName: "variant",
-				staticBinding: { valueIndex: 0 },
-			} as never,
+			{ lastComposedName: "variant", lastValue: "solid" } as never,
 			element,
-			["solid"],
 		);
 		expect(record(element).variant).toBe("solid");
-	});
-
-	test("named dynamic binding", () => {
-		const element = document.createElement("swap-carried-el");
-		reapplyNamedDynamicOnSwap(
-			{ lastValue: "solid", staticBinding: { name: "once" } } as never,
-			element,
-		);
-		expect(record(element).once).toBe("solid");
 	});
 
 	test("spread binding", () => {
@@ -113,7 +97,6 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 				appliedAttributes: new Map([["variant", { value: "solid", hash: 0 }]]),
 			} as never,
 			element,
-			[],
 		);
 		expect(record(element).variant).toBe("solid");
 	});
@@ -123,7 +106,7 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 		const element = document.createElement("swap-carried-el");
 		const addEventListener = vi.spyOn(element, "addEventListener");
 
-		applyDynamicAttribute(element, "once", "outline");
+		applyAttributeValue(element, "once", "outline");
 
 		expect(record(element).once).toBe("outline");
 		expect(addEventListener).not.toHaveBeenCalled();
@@ -136,7 +119,6 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 				appliedAttributes: new Map([["title", { value: "hi", hash: 0 }]]),
 			} as never,
 			element,
-			[],
 		);
 		expect(element.hasAttribute("title")).toBe(false);
 	});

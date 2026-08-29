@@ -1,6 +1,9 @@
 import { getFormAssociatedBaseClass } from "./forms";
-import { applyDynamicAttribute } from "./rendering/bindings/attribute-dynamic";
-import { isDeclaredPropName } from "./rendering/bindings/attribute-single-value";
+import {
+	applyAttributeValue,
+	isDeclaredPropName,
+} from "./rendering/bindings/attribute-write";
+
 import {
 	commitLiveBinding,
 	createLiveBinding,
@@ -217,7 +220,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		}
 
 		setProp(name: string, value: unknown, oldValue?: unknown) {
-			applyDynamicAttribute(this, name, value, oldValue);
+			applyAttributeValue(this, name, value, oldValue);
 			const nothingElseWillScheduleThisWrite = !isDeclaredPropName(this, name);
 			if (nothingElseWillScheduleThisWrite) this.update();
 		}

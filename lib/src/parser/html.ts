@@ -509,20 +509,7 @@ const endAttribute = (parser: ParserState, buffer: Array<Part>) => {
 	parser.state = STATE.ELEMENT;
 };
 
-//without knowing the type of the expression slot we can detect if it is an event listener or something that just starts with "on" => "once", "online" etc/
-const isHandlerName = (binding: AttributeBinding): boolean =>
-	typeof binding.keys[0] === "string" &&
-	binding.keys[0].startsWith(MARKUP.EVENT_PREFIX) &&
-	isSingleHole(binding.values);
-
 const toAttributeStaticBinding = (binding: AttributeBinding): StaticBinding => {
-	if (isHandlerName(binding)) {
-		return {
-			type: BINDING.NAMED_DYNAMIC,
-			name: binding.keys[0] as string,
-			valueIndex: binding.values[0] as number,
-		};
-	}
 	if (binding.isExpandable) {
 		return {
 			type: BINDING.DYNAMIC_ATTRIBUTE,

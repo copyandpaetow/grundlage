@@ -1,7 +1,6 @@
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
 import { combineOrderedHash } from "../../utils/hashing";
 import { AttributeStaticBinding } from "../../parser/types";
-import { resolveTargetElement } from "../dom";
 import { AttributeLiveBinding } from "./types";
 
 const attributeGateHash = (
@@ -25,7 +24,7 @@ export const commitAttribute = (
 		)
 	)
 		return;
-	const element = resolveTargetElement(liveBinding);
+	const element = liveBinding.anchor;
 	const composedName = composeParts(nameParts, values);
 
 	if (composedName !== liveBinding.lastComposedName) {

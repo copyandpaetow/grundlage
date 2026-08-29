@@ -74,9 +74,9 @@ A silent stale render is the worst possible failure — invisible, no error.
   `teardownX` / `clearX`; the verb fits the noun, never inlined. _Exception:_ a single bare
   platform call, commented as intentionally inline.
 - **Errors propagate through one channel** (a task ends with `ROUTE_ERROR`, which the driver
-  throws into the outer generator or, for the outer itself, sends to `#fail`). `try/catch` only at the
-  boundaries that feed it; a deliberate swallow is `catch { /* why */ }`. `#fail` is the one
-  shared fatal display.
+  throws into the outer generator or, for the outer itself, sends to `#displayFatalError`).
+  `try/catch` only at the boundaries that feed it; a deliberate swallow is `catch { /* why */ }`.
+  `#displayFatalError` is the one shared fatal display.
 - **A field means the same thing across every variant of a union.** If `values[0]` is the
   expression slot, it is that in every variant — never `keys[0]` in one.
 - **Discriminate by brand, not paradigm.** Our types: a single `isX(value)` guard, no

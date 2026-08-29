@@ -1,46 +1,36 @@
 import { BINDING } from "../../parser/constants";
 import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
-import { resolveTargetElement } from "../dom";
 import { reapplyOnSwap } from "./dispatch";
 import {
+	AttributeLiveBinding,
 	DynamicAttributeLiveBinding,
 	LiveBinding,
-	NamedDynamicLiveBinding,
 	SingleValueAttributeLiveBinding,
 	TagLiveBinding,
 } from "./types";
 
-const shouldReapplyOnSwap = (
-	liveBinding: LiveBinding,
-): liveBinding is
+type AnyAttributeLiveBinding =
+	| AttributeLiveBinding
 	| SingleValueAttributeLiveBinding
-	| DynamicAttributeLiveBinding
-	| NamedDynamicLiveBinding =>
+	| DynamicAttributeLiveBinding;
+
+const isAttributeLane = (
+	liveBinding: LiveBinding,
+): liveBinding is AnyAttributeLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.ATTRIBUTE ||
 	liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE ||
-	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE ||
-	liveBinding.staticBinding.type === BINDING.NAMED_DYNAMIC;
+	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
+
+const isCarriedByMarkupAlone = (
+	liveBinding: AnyAttributeLiveBinding,
+): liveBinding is AttributeLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.ATTRIBUTE;
 
 const swapElement = (
 	element: Element,
 	newTag: string,
 	siblings: Array<LiveBinding>,
-	values: Array<unknown>,
 ): void => {
-	const carried: Array<
-		| SingleValueAttributeLiveBinding
-		| DynamicAttributeLiveBinding
-		| NamedDynamicLiveBinding
-	> = [];
-	for (let index = 0; index < siblings.length; index++) {
-		const sibling = siblings[index];
-		if (
-			sibling !== undefined &&
-			shouldReapplyOnSwap(sibling) &&
-			resolveTargetElement(sibling) === element
-		)
-			carried.push(sibling);
-	}
-
 	const focusRoot = element.getRootNode() as ShadowRoot | Document;
 	const focusedNode = focusRoot.activeElement as HTMLElement | null;
 	const focusElement =
@@ -53,8 +43,17 @@ const swapElement = (
 	}
 	while (element.firstChild) newElement.appendChild(element.firstChild);
 
-	for (let index = 0; index < carried.length; index++)
-		reapplyOnSwap(carried[index], newElement, values);
+	for (let index = 0; index < siblings.length; index++) {
+		const sibling = siblings[index];
+		if (
+			sibling === undefined ||
+			!isAttributeLane(sibling) ||
+			sibling.anchor !== element
+		)
+			continue;
+		sibling.anchor = newElement;
+		if (!isCarriedByMarkupAlone(sibling)) reapplyOnSwap(sibling, newElement);
+	}
 
 	element.replaceWith(newElement);
 	focusElement?.focus();
@@ -70,5 +69,5 @@ export const commitTag = (
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const newTag = composeParts(parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
-	swapElement(element, newTag, siblings, values);
+	swapElement(element, newTag, siblings);
 };

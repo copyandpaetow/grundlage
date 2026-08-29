@@ -972,7 +972,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("dynamic event-name attribute binds the handler as an IDL property", async () => {
+	test("dynamic event-name attribute binds the handler as a listener", async () => {
 		const tag = uniqueTag();
 		const events: string[] = [];
 		let eventName = "onclick";
@@ -987,10 +987,9 @@ describe("attribute updates", () => {
 		await sleep();
 
 		const btn = element.shadowRoot?.querySelector("button")!;
-		//a fully-dynamic attribute name with a function value lowers to a
-		//single-value attribute; a function is assigned as an IDL property (not
-		//via addEventListener), so the native onclick fires
-		expect((btn as unknown as { onclick: unknown }).onclick).toBe(handler);
+		//a composed name resolves the same way a literal one does, so the handler
+		//is a listener rather than an IDL property
+		expect((btn as unknown as { onclick: unknown }).onclick).toBe(null);
 		btn.click();
 		expect(events).toEqual(["click"]);
 
@@ -999,12 +998,10 @@ describe("attribute updates", () => {
 		await element.update();
 		await sleep();
 
-		//the new name binds the new handler as its own property
-		expect((btn as unknown as { ondblclick: unknown }).ondblclick).toBe(
-			handler,
-		);
+		//renaming releases the old listener and binds the new one
+		btn.click();
 		btn.dispatchEvent(new MouseEvent("dblclick"));
-		expect(events).toContain("dblclick");
+		expect(events).toEqual(["click", "dblclick"]);
 
 		cleanup(element);
 	});
@@ -1154,4 +1151,64 @@ describe("attribute updates", () => {
 
 		cleanup(element);
 	});
+
+	test("a hole inside a native event name binds the event it composes to", async () => {
+		const tag = uniqueTag();
+		const events: string[] = [];
+		let eventName = "click";
+		const handler = () => events.push(eventName);
+
+		const MyElement = component(function* () {
+			yield () => html`<button on${eventName}=${handler}>btn</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const btn = element.shadowRoot?.querySelector("button")!;
+		expect(btn.hasAttribute("onclick")).toBe(false);
+		btn.click();
+		expect(events).toEqual(["click"]);
+
+		eventName = "dblclick";
+		await element.update();
+		await sleep();
+
+		btn.click();
+		btn.dispatchEvent(new MouseEvent("dblclick"));
+		expect(events).toEqual(["click", "dblclick"]);
+
+		cleanup(element);
+	});
+
+	test("a hole inside a custom event name binds the hyphenated event verbatim", async () => {
+		const tag = uniqueTag();
+		const received: string[] = [];
+		let eventSuffix = "first";
+		const handler = (event: Event) => received.push(event.type);
+
+		const MyElement = component(function* () {
+			yield () => html`<span on-${eventSuffix}=${handler}>x</span>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const span = element.shadowRoot?.querySelector("span")!;
+		span.dispatchEvent(new CustomEvent("first"));
+		expect(received).toEqual(["first"]);
+
+		eventSuffix = "second";
+		await element.update();
+		await sleep();
+
+		span.dispatchEvent(new CustomEvent("first"));
+		span.dispatchEvent(new CustomEvent("second"));
+		expect(received).toEqual(["first", "second"]);
+
+		cleanup(element);
+	});
+
 });

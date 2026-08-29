@@ -1,6 +1,7 @@
 {
 	"name": "grundlage-repo",
 	"private": true,
+	"type": "module",
 	"scripts": {
 		"dev": "npm run dev -w website",
 		"build": "npm run build -w grundlage",

@@ -77,12 +77,6 @@ export interface DynamicAttributeStaticBinding {
 	valueIndex: number;
 }
 
-export interface NamedDynamicStaticBinding {
-	type: typeof BINDING.NAMED_DYNAMIC;
-	name: string;
-	valueIndex: number;
-}
-
 export interface ContentStaticBinding {
 	type: typeof BINDING.CONTENT;
 	valueIndex: number;
@@ -105,7 +99,6 @@ export type StaticBinding =
 	| AttributeStaticBinding
 	| SingleValueAttributeStaticBinding
 	| DynamicAttributeStaticBinding
-	| NamedDynamicStaticBinding
 	| ContentStaticBinding
 	| RawContentStaticBinding
 	| CommentStaticBinding;

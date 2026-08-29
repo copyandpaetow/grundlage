@@ -304,7 +304,8 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   DECLARES is a prop first and is never matched as an event, so `once: String` is settable,
   while `on-*` is refused at define time because markup has already claimed it. Custom events
   need the `on-` prefix (`on-swatch-select=${handler}`) and keep their hyphenated name
-  verbatim. A quoted string (`onclick="…"`) is never a binding.
+  verbatim. The name may itself hold a hole (`on${eventName}=${handler}`), which is resolved
+  from what it composes to on every render. A quoted string (`onclick="…"`) is never a binding.
 - Components render into SHADOW DOM by default. Light-DOM selectors won't reach inside.
 - Don't write literal `<!--^.^ …-->` or `<!--*.*-->` comments in template HTML: those
   prefixes are the internal markers and a collision silently misaligns hydration.

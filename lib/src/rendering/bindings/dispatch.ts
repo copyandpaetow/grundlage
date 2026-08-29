@@ -1,26 +1,21 @@
 import { BINDING } from "../../parser/constants";
 import { StaticBinding } from "../../parser/types";
 import { Instance } from "../instance";
-import { ATTRIBUTE_MODE, UNSET_HASH } from "../constants";
+import { UNSET_HASH } from "../constants";
 import { commitAttribute } from "./attribute";
 import {
-	applyDynamicAttribute,
 	commitDynamic,
 	reapplyOnSwap as reapplyDynamicOnSwap,
 } from "./attribute-dynamic";
 import {
 	commitSingleValue,
 	reapplyOnSwap as reapplySingleValueOnSwap,
-	clearAppliedAttribute,
 } from "./attribute-single-value";
+import { applyAttributeValue } from "./attribute-write";
 import { commitComment } from "./comment";
 import { commitContent, UNRESOLVED_CONTENT } from "./content";
 import { createStyleSheetState, seedDeclarationValueHashes } from "./css-apply";
 import { commitRawContent } from "./content-raw";
-import {
-	commitNamedDynamic,
-	reapplyOnSwap as reapplyNamedDynamicOnSwap,
-} from "./attribute-named-dynamic";
 import { commitTag } from "./tag";
 import {
 	AttributeLiveBinding,
@@ -28,11 +23,13 @@ import {
 	ContentLiveBinding,
 	DynamicAttributeLiveBinding,
 	LiveBinding,
-	NamedDynamicLiveBinding,
 	RawContentLiveBinding,
 	SingleValueAttributeLiveBinding,
 	TagLiveBinding,
 } from "./types";
+
+const resolveAnchorElement = (anchor: Comment | Element): Element =>
+	anchor instanceof Comment ? anchor.nextElementSibling! : anchor;
 
 export const createLiveBinding = (
 	staticBinding: StaticBinding,
@@ -49,31 +46,24 @@ export const createLiveBinding = (
 		case BINDING.ATTRIBUTE:
 			return {
 				staticBinding,
-				anchor: anchor!,
+				anchor: resolveAnchorElement(anchor!),
 				lastValueHash: UNSET_HASH,
 				lastComposedName: "",
 			};
 		case BINDING.SINGLE_VALUE_ATTRIBUTE:
 			return {
 				staticBinding,
-				anchor: anchor!,
+				anchor: resolveAnchorElement(anchor!),
 				lastValueHash: UNSET_HASH,
 				lastComposedName: "",
-				appliedAttributeMode: ATTRIBUTE_MODE.ABSENT,
+				lastValue: undefined,
 			};
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return {
 				staticBinding,
-				anchor: anchor!,
+				anchor: resolveAnchorElement(anchor!),
 				appliedAttributes: new Map(),
 				lastValueHash: UNSET_HASH,
-			};
-		case BINDING.NAMED_DYNAMIC:
-			return {
-				staticBinding,
-				anchor: anchor!,
-				lastValueHash: UNSET_HASH,
-				lastValue: undefined,
 			};
 		case BINDING.CONTENT:
 			return {
@@ -128,8 +118,6 @@ export const commitLiveBinding = (
 			);
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return commitDynamic(liveBinding as DynamicAttributeLiveBinding, values);
-		case BINDING.NAMED_DYNAMIC:
-			return commitNamedDynamic(liveBinding as NamedDynamicLiveBinding, values);
 		case BINDING.CONTENT:
 			return commitContent(
 				liveBinding as ContentLiveBinding,
@@ -156,72 +144,46 @@ export const hydrateLiveBinding = (
 		if (rawContent.styleSheetState)
 			seedDeclarationValueHashes(rawContent, values);
 	}
-	//every other lane skips an unchanged write and repairs a diverged one, which is what adopting
-	//server output means; commit is the seeding pass, not a second one
 	commitLiveBinding(instance, liveBinding, values);
 };
 
 export const reapplyOnSwap = (
-	liveBinding:
-		| SingleValueAttributeLiveBinding
-		| DynamicAttributeLiveBinding
-		| NamedDynamicLiveBinding,
+	liveBinding: SingleValueAttributeLiveBinding | DynamicAttributeLiveBinding,
 	element: Element,
-	values: Array<unknown>,
-): void => {
-	switch (liveBinding.staticBinding.type) {
-		case BINDING.SINGLE_VALUE_ATTRIBUTE:
-			return reapplySingleValueOnSwap(
+): void =>
+	liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE
+		? reapplySingleValueOnSwap(
 				liveBinding as SingleValueAttributeLiveBinding,
 				element,
-				values,
-			);
-		case BINDING.DYNAMIC_ATTRIBUTE:
-			return reapplyDynamicOnSwap(
+			)
+		: reapplyDynamicOnSwap(
 				liveBinding as DynamicAttributeLiveBinding,
 				element,
-				values,
 			);
-		default:
-			return reapplyNamedDynamicOnSwap(
-				liveBinding as NamedDynamicLiveBinding,
-				element,
-			);
-	}
-};
 
 export const revertHostBinding = (liveBinding: LiveBinding): void => {
 	switch (liveBinding.staticBinding.type) {
 		case BINDING.ATTRIBUTE: {
 			const attribute = liveBinding as AttributeLiveBinding;
-			const { anchor } = attribute;
-			if (anchor instanceof Element && attribute.lastComposedName !== "")
-				anchor.removeAttribute(attribute.lastComposedName);
+			if (attribute.lastComposedName !== "")
+				attribute.anchor.removeAttribute(attribute.lastComposedName);
 			return;
 		}
 		case BINDING.SINGLE_VALUE_ATTRIBUTE: {
 			const single = liveBinding as SingleValueAttributeLiveBinding;
-			if (single.anchor instanceof Element)
-				clearAppliedAttribute(single.anchor, single);
+			if (single.lastComposedName !== "")
+				applyAttributeValue(
+					single.anchor,
+					single.lastComposedName,
+					null,
+					single.lastValue,
+				);
 			return;
 		}
 		case BINDING.DYNAMIC_ATTRIBUTE: {
 			const dynamic = liveBinding as DynamicAttributeLiveBinding;
-			const { anchor } = dynamic;
-			if (!(anchor instanceof Element)) return;
 			for (const [name, entry] of dynamic.appliedAttributes)
-				applyDynamicAttribute(anchor, name, null, entry.value);
-			return;
-		}
-		case BINDING.NAMED_DYNAMIC: {
-			const named = liveBinding as NamedDynamicLiveBinding;
-			if (named.anchor instanceof Element)
-				applyDynamicAttribute(
-					named.anchor,
-					named.staticBinding.name,
-					null,
-					named.lastValue,
-				);
+				applyAttributeValue(dynamic.anchor, name, null, entry.value);
 			return;
 		}
 	}

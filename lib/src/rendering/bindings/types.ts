@@ -3,14 +3,12 @@ import {
 	CommentStaticBinding,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
-	NamedDynamicStaticBinding,
 	RawContentStaticBinding,
 	SingleValueAttributeStaticBinding,
 	TagStaticBinding,
 } from "../../parser/types";
-import { ATTRIBUTE_MODE, CONTENT_KIND } from "../constants";
+import { CONTENT_KIND } from "../constants";
 import { Instance } from "../instance";
-import { ValueOf } from "../../utils/types";
 
 export interface StyleSheetMoveState {
 	needsStyleSheetRefreshOnMove: boolean;
@@ -23,21 +21,19 @@ export interface TagLiveBinding {
 	lastValueHash: number;
 }
 
-//anchor is the host element for a host binding, else the marker comment before the target
-//element; resolveTargetElement discriminates by node type. One field makes "exactly one" unbreakable.
 export interface AttributeLiveBinding {
 	staticBinding: AttributeStaticBinding;
-	anchor: Comment | Element;
+	anchor: Element;
 	lastValueHash: number;
 	lastComposedName: string;
 }
 
 export interface SingleValueAttributeLiveBinding {
 	staticBinding: SingleValueAttributeStaticBinding;
-	anchor: Comment | Element;
+	anchor: Element;
 	lastValueHash: number;
 	lastComposedName: string;
-	appliedAttributeMode: ValueOf<typeof ATTRIBUTE_MODE>;
+	lastValue: unknown;
 }
 
 export interface AppliedAttribute {
@@ -47,16 +43,9 @@ export interface AppliedAttribute {
 
 export interface DynamicAttributeLiveBinding {
 	staticBinding: DynamicAttributeStaticBinding;
-	anchor: Comment | Element;
+	anchor: Element;
 	appliedAttributes: Map<string, AppliedAttribute>;
 	lastValueHash: number;
-}
-
-export interface NamedDynamicLiveBinding {
-	staticBinding: NamedDynamicStaticBinding;
-	anchor: Comment | Element;
-	lastValueHash: number;
-	lastValue: unknown;
 }
 
 export interface ContentLiveBinding {
@@ -118,7 +107,6 @@ export type LiveBinding =
 	| AttributeLiveBinding
 	| SingleValueAttributeLiveBinding
 	| DynamicAttributeLiveBinding
-	| NamedDynamicLiveBinding
 	| ContentLiveBinding
 	| RawContentLiveBinding
 	| CommentLiveBinding;

@@ -243,6 +243,45 @@ describe("tag updates", () => {
 		cleanup(element);
 	});
 
+	test("a multi-part attribute keeps writing to the new element after a tag swap", async () => {
+		//the multi-part lane is the one the swap does not rewrite, because copying the attributes
+		//across already carries its whole value. It still has to be re-pointed, or every later
+		//render writes into the element the swap detached
+		const tag = uniqueTag();
+		let tagName = "div";
+		let modifier = "small";
+
+		const MyElement = component(function* () {
+			yield () => html`
+                <${tagName} class="box ${modifier}">content</${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe(
+			"box small",
+		);
+
+		tagName = "section";
+		modifier = "large";
+		await element.update();
+		await sleep();
+
+		const section = element.shadowRoot?.querySelector("section")!;
+		expect(section.getAttribute("class")).toBe("box large");
+
+		modifier = "wide";
+		await element.update();
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("section")).toBe(section);
+		expect(section.getAttribute("class")).toBe("box wide");
+
+		cleanup(element);
+	});
+
 	test("tag swap with concurrent content change updates the inner text on the new element", async () => {
 		//the content binding sits inside the dynamic tag, and a rewrap keeps the marker comments inside
 		//it, so the content update still finds its anchor on the new element's child list

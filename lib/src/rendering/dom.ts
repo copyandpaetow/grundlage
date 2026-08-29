@@ -13,13 +13,6 @@ export const buildFragment = (result: string): DocumentFragment => {
 	return fragment;
 };
 
-export const resolveTargetElement = (liveBinding: {
-	anchor: Comment | Element;
-}): Element =>
-	liveBinding.anchor instanceof Comment
-		? liveBinding.anchor.nextElementSibling!
-		: liveBinding.anchor;
-
 //duck-typed user surface: any custom element exposing update() opts into a property-set re-render
 export const triggerComponentUpdate = (element: Element): void => {
 	if ("update" in element) (element as BaseComponent).update();
