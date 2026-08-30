@@ -109,7 +109,6 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		#isHydrationPending: boolean;
 		#styleSheetMoveState: StyleSheetMoveState = {
 			needsStyleSheetRefreshOnMove: false,
-			needsRerenderAfterMove: false,
 		};
 		#internals: ElementInternals | null = null;
 		#isWritingHostBindings = false;
@@ -171,11 +170,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 
 		connectedCallback() {
 			if (hasStarted(this.#renderRun)) {
-				const instance = this.#instance;
-				if (instance) {
-					refreshStyleSheetsAfterMove(instance);
-					this.#rerenderIfStyleSheetsDemoted();
-				}
+				if (this.#instance) refreshStyleSheetsAfterMove(this.#instance);
 				return;
 			}
 			try {
@@ -256,7 +251,6 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			//the run's latched value, not a fresh isServer(): the global is mutable and the paint
 			//must agree with the driver that scheduled it
 			if (this.#renderRun.isServerRun) flushHostPayload(this);
-			this.#rerenderIfStyleSheetsDemoted();
 		}
 
 		//the revert reads #instance, which is still the outgoing one here and null on a first paint,
@@ -311,14 +305,6 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			const liveBindings = instance.liveBindings;
 			for (let index = 0; index < instance.parsed.hostBindingCount; index++)
 				revertHostBinding(liveBindings[index]);
-		}
-
-		//a deep stylesheet demote during the move walk has no host in scope, so it flags the
-		//move state instead of re-rendering; the two element-level walk sites drain it here
-		#rerenderIfStyleSheetsDemoted(): void {
-			if (!this.#styleSheetMoveState.needsRerenderAfterMove) return;
-			this.#styleSheetMoveState.needsRerenderAfterMove = false;
-			this.update();
 		}
 	}
 

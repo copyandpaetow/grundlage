@@ -13,13 +13,14 @@ import {
 } from "../instance";
 import { StyleSheetMoveState } from "../bindings/types";
 
-//a div stands in for the component element; the css fast path never touches the host
+//a div stands in for the component element; only a demoted stylesheet calls back into it
 const createHost = () =>
-	document.createElement("div") as unknown as BaseComponent;
+	Object.assign(document.createElement("div"), {
+		update: vi.fn(),
+	}) as unknown as BaseComponent;
 
 const moveState = (): StyleSheetMoveState => ({
 	needsStyleSheetRefreshOnMove: false,
-	needsRerenderAfterMove: false,
 });
 
 //the host must be connected: a detached <style> has no sheet, so the CSSOM lane never engages
@@ -294,13 +295,13 @@ describe("raw content with a css plan", () => {
 		expect(declarationOf(style).getPropertyValue("color")).toBe("green");
 	});
 
-	test("a moved style whose reparse breaks the plan structure demotes and flags a re-render", () => {
-		const { shadowRoot, instance } = mountIntoShadow(sheet("red"));
+	test("a moved style whose reparse breaks the plan structure demotes and re-renders", () => {
+		const { host, shadowRoot, instance } = mountIntoShadow(sheet("red"));
 		patchInstance(instance, sheet("blue").values); //resolve the CSSOM sheet
 		const style = shadowRoot.querySelector("style")!;
 
 		//a reparse yielding a different rule count than the compiled plan recorded makes the
-		//after-move rebind bail; the leaf has no host, so it flags the shared move state instead
+		//after-move rebind bail; it reaches the host through the style element's root node
 		style.textContent = "p { color: red; } a { color: blue; }";
 		const wrapper = document.createElement("div");
 		shadowRoot.appendChild(wrapper);
@@ -308,9 +309,9 @@ describe("raw content with a css plan", () => {
 			...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper),
 		);
 
-		expect(instance.moveState.needsRerenderAfterMove).toBe(false);
+		expect(host.update).not.toHaveBeenCalled();
 		refreshStyleSheetsAfterMove(instance);
-		expect(instance.moveState.needsRerenderAfterMove).toBe(true);
+		expect(host.update).toHaveBeenCalledOnce();
 
 		//the demote is real: the next patch recomposes the whole sheet on the text lane
 		patchInstance(instance, sheet("green").values);

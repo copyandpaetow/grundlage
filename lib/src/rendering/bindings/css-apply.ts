@@ -1,11 +1,8 @@
 import { CompiledStyleSheet } from "../../parser/types";
+import { BaseComponent } from "../../types";
 import { combinedPartsHash, composeParts } from "../compose";
 import { UNSET_HASH } from "../constants";
-import {
-	RawContentLiveBinding,
-	StyleSheetMoveState,
-	StyleSheetState,
-} from "./types";
+import { RawContentLiveBinding, StyleSheetState } from "./types";
 
 export const createStyleSheetState = (
 	compiled: CompiledStyleSheet,
@@ -130,10 +127,7 @@ export const seedDeclarationValueHashes = (
 
 //copies each hole's serialized value/priority off the orphaned pre-move sheet — no render
 //values are on hand at move time to recompose from
-export const rebindStyleSheet = (
-	liveBinding: RawContentLiveBinding,
-	moveState: StyleSheetMoveState,
-): void => {
+export const rebindStyleSheet = (liveBinding: RawContentLiveBinding): void => {
 	const state = liveBinding.styleSheetState;
 	if (state === null || state.sheet === null) return;
 	const liveSheet = state.styleElement.sheet;
@@ -142,10 +136,13 @@ export const rebindStyleSheet = (
 	const ruleDeclarations =
 		liveSheet === null ? null : resolveRuleDeclarations(compiled, liveSheet);
 	if (ruleDeclarations === null) {
-		//no values to rebuild with — demote and let the element re-render onto the text lane
+		//no values to rebuild with — demote and re-render onto the text lane. a style element's
+		//root node is the component's own shadow root in every mode, closed included
 		liveBinding.styleSheetState = null;
 		liveBinding.lastValueHash = UNSET_HASH;
-		moveState.needsRerenderAfterMove = true;
+		const host = (state.styleElement.getRootNode() as ShadowRoot)
+			.host as BaseComponent;
+		host.update();
 		return;
 	}
 	const { dynamicDeclarations } = compiled;

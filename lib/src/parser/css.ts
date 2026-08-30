@@ -179,14 +179,19 @@ interface CssParserState {
 	ruleCountChecks: Array<RuleCountCheck>;
 }
 
-const createSheetRootFrame = (): RuleFrame => ({
-	kind: RULE_KIND.GROUPING,
-	rulePath: [],
+const createRuleFrame = (
+	kind: RuleKindValue,
+	rulePath: Array<number>,
+	isInsideStyleRule: boolean,
+	isInsideDescriptor: boolean,
+): RuleFrame => ({
+	kind,
+	rulePath,
 	childRuleCount: 0,
-	declarationsCreateRuns: false,
+	declarationsCreateRuns: kind === RULE_KIND.GROUPING && isInsideStyleRule,
 	openRunIndex: NO_OPEN_RUN,
-	isInsideStyleRule: false,
-	isInsideDescriptor: false,
+	isInsideStyleRule,
+	isInsideDescriptor,
 	isOnDynamicPath: false,
 	declaredProperties: null,
 });
@@ -204,7 +209,7 @@ const createCssParser = (): CssParserState => ({
 	valueHasHole: false,
 	valueTopLevelBangCount: 0,
 	valueBuffer: [],
-	ruleStack: [createSheetRootFrame()],
+	ruleStack: [createRuleFrame(RULE_KIND.GROUPING, [], false, false)],
 	dynamicDeclarations: [],
 	ruleCountChecks: [],
 });
@@ -234,28 +239,6 @@ const captureStaticValueText = (
 
 const activeFrame = (parser: CssParserState): RuleFrame =>
 	parser.ruleStack[parser.ruleStack.length - 1];
-
-const createRuleFrame = (
-	parser: CssParserState,
-	parent: RuleFrame,
-	ruleIndex: number,
-): RuleFrame => {
-	const kind = parser.pendingRuleKind;
-	const isInsideStyleRule =
-		parent.kind === RULE_KIND.STYLE || parent.isInsideStyleRule;
-	return {
-		kind,
-		rulePath: parent.rulePath.concat(ruleIndex),
-		childRuleCount: 0,
-		declarationsCreateRuns: kind === RULE_KIND.GROUPING && isInsideStyleRule,
-		openRunIndex: NO_OPEN_RUN,
-		isInsideStyleRule,
-		isInsideDescriptor:
-			kind === RULE_KIND.DESCRIPTOR || parent.isInsideDescriptor,
-		isOnDynamicPath: false,
-		declaredProperties: null,
-	};
-};
 
 //setProperty replaces a rule's whole entry for a property, so a duplicate of a holed
 //property inside one rule would let an update defeat the cascade order the author wrote
@@ -330,20 +313,19 @@ const finishDeclarationValue = (parser: CssParserState): boolean => {
 		resetDeclaration(parser);
 		return true;
 	}
-	const isDeclarationHolder =
-		frame.kind === RULE_KIND.STYLE || frame.declarationsCreateRuns;
-	if (!isDeclarationHolder) {
-		if (parser.valueHasHole) return false;
-		resetDeclaration(parser);
-		return true;
-	}
 	if (frame.declarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN)
 		frame.openRunIndex = frame.childRuleCount++;
-	const propertyName = normalizePropertyName(
-		parser.propertyNamePart,
-		parser.propertyNameStart,
-		parser.propertyNameEnd,
-	);
+	const isDeclarationHolder =
+		frame.kind === RULE_KIND.STYLE || frame.declarationsCreateRuns;
+	const propertyName = isDeclarationHolder
+		? normalizePropertyName(
+				parser.propertyNamePart,
+				parser.propertyNameStart,
+				parser.propertyNameEnd,
+			)
+		: null;
+	//nothing here a setProperty could ever address; a hole that lands on it cannot compile,
+	//and without one there is nothing to keep
 	if (propertyName === null) {
 		if (parser.valueHasHole) return false;
 		resetDeclaration(parser);
@@ -431,7 +413,15 @@ export const compileStyleSheet = (
 					if (parser.state === CSS_STATE.VALUE) return null;
 					const parent = activeFrame(parser);
 					const ruleIndex = registerChildRule(parent);
-					parser.ruleStack.push(createRuleFrame(parser, parent, ruleIndex));
+					const kind = parser.pendingRuleKind;
+					parser.ruleStack.push(
+						createRuleFrame(
+							kind,
+							parent.rulePath.concat(ruleIndex),
+							parent.kind === RULE_KIND.STYLE || parent.isInsideStyleRule,
+							kind === RULE_KIND.DESCRIPTOR || parent.isInsideDescriptor,
+						),
+					);
 					parser.pendingRuleKind = RULE_KIND.STYLE;
 					parser.state = CSS_STATE.PROPERTY;
 					parser.propertyStartIndex = parser.charIndex + 1;

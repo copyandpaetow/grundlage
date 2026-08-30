@@ -33,7 +33,7 @@ export const combinedPartsHash = (
 	return hash;
 };
 
-export const hasHashChanged = (
+export const claimHashChange = (
 	gate: { lastValueHash: number },
 	hash: number,
 ): boolean => {

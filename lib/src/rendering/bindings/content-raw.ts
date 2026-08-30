@@ -1,4 +1,4 @@
-import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
 import {
 	commitStyleSheetDirect,
 	seedDeclarationValueHashes,
@@ -9,12 +9,14 @@ export const commitRawContent = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	const committedToLiveSheet =
-		liveBinding.styleSheetState && commitStyleSheetDirect(liveBinding, values);
-	if (committedToLiveSheet) return;
+	if (
+		liveBinding.styleSheetState !== null &&
+		commitStyleSheetDirect(liveBinding, values)
+	)
+		return;
 
 	const { parts } = liveBinding.staticBinding;
-	if (!hasHashChanged(liveBinding, combinedPartsHash(parts, values))) return;
+	if (!claimHashChange(liveBinding, combinedPartsHash(parts, values))) return;
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const composed = composeParts(parts, values);
 	if (element instanceof HTMLTemplateElement) {

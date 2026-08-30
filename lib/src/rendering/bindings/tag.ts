@@ -1,5 +1,5 @@
 import { BINDING } from "../../parser/constants";
-import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
 import { reapplyOnSwap } from "./dispatch";
 import {
 	AttributeLiveBinding,
@@ -65,7 +65,7 @@ export const commitTag = (
 	siblings: Array<LiveBinding>,
 ): void => {
 	const { parts } = liveBinding.staticBinding;
-	if (!hasHashChanged(liveBinding, combinedPartsHash(parts, values))) return;
+	if (!claimHashChange(liveBinding, combinedPartsHash(parts, values))) return;
 	const element = liveBinding.markerComment.nextElementSibling!;
 	const newTag = composeParts(parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;

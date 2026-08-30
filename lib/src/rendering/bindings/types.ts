@@ -12,7 +12,6 @@ import { Instance } from "../instance";
 
 export interface StyleSheetMoveState {
 	needsStyleSheetRefreshOnMove: boolean;
-	needsRerenderAfterMove: boolean;
 }
 
 export interface TagLiveBinding {

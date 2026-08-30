@@ -1,4 +1,4 @@
-import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
 import { CommentLiveBinding } from "./types";
 
 export const commitComment = (
@@ -6,7 +6,7 @@ export const commitComment = (
 	values: Array<unknown>,
 ): void => {
 	const { parts } = liveBinding.staticBinding;
-	if (!hasHashChanged(liveBinding, combinedPartsHash(parts, values))) return;
+	if (!claimHashChange(liveBinding, combinedPartsHash(parts, values))) return;
 	const composed = composeParts(parts, values);
 	const payload = liveBinding.markerComment.nextSibling as Comment;
 	if (payload.data !== composed) payload.data = composed;

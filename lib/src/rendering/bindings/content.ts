@@ -1,7 +1,7 @@
 import { isTemplate, TemplateValue } from "../../template";
 import { assertPrimitiveString } from "../../utils/guards";
 import { hashValue } from "../../utils/hashing";
-import { hasHashChanged } from "../compose";
+import { claimHashChange } from "../compose";
 import { ValueOf } from "../../utils/types";
 import { CONTENT_KIND, UNSET_HASH } from "../constants";
 import {
@@ -72,7 +72,7 @@ const coerceToText = (value: unknown): string => {
 
 const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
 	const textState = liveBinding.content as TextContentState;
-	if (!hasHashChanged(textState, hashValue(value))) return;
+	if (!claimHashChange(textState, hashValue(value))) return;
 	const text = coerceToText(value);
 	const existing = liveBinding.startMarker.nextSibling;
 	if (existing !== liveBinding.endMarker) {

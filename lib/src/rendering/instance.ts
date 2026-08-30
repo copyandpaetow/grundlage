@@ -45,10 +45,7 @@ export const refreshStyleSheetsAfterMove = (instance: Instance): void => {
 	for (let index = 0; index < liveBindings.length; index++) {
 		const liveBinding = liveBindings[index];
 		if (liveBinding.staticBinding.type === BINDING.RAW_CONTENT) {
-			rebindStyleSheet(
-				liveBinding as RawContentLiveBinding,
-				instance.moveState,
-			);
+			rebindStyleSheet(liveBinding as RawContentLiveBinding);
 			continue;
 		}
 		if (liveBinding.staticBinding.type !== BINDING.CONTENT) continue;

@@ -4,7 +4,7 @@ import {
 	isStringable,
 } from "../../utils/guards";
 import { hashValue } from "../../utils/hashing";
-import { hasHashChanged } from "../compose";
+import { claimHashChange } from "../compose";
 import { applyAttributeValue, isDeclaredPropName } from "./attribute-write";
 import { AppliedAttribute, DynamicAttributeLiveBinding } from "./types";
 
@@ -52,7 +52,7 @@ export const commitDynamic = (
 	values: Array<unknown>,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
-	if (!hasHashChanged(liveBinding, hashValue(value))) return;
+	if (!claimHashChange(liveBinding, hashValue(value))) return;
 	const element = liveBinding.anchor;
 	applyAttributeMap(
 		element,

@@ -1,19 +1,26 @@
 import { getParsedTemplate } from "../parser/html";
 import { isTemplate, TemplateValue } from "../template";
 
+//a multiplier smaller than the values it mixes lets two digits trade places: with 31,
+//`31*65 + 97` and `31*66 + 66` are the same number, so "Aa" and "BB" hash alike and the
+//gate reports unchanged for a value that changed
+const HASH_MULTIPLIER = 0x9e3779b1 | 0;
+
 export const combineOrderedHash = (
 	accumulator: number,
 	valueHash: number,
-): number => (Math.imul(accumulator, 31) + valueHash) | 0;
+): number => (Math.imul(accumulator, HASH_MULTIPLIER) + valueHash) | 0;
 
 export const PARTS_HASH_SEED = 0x811c9dc5 | 0;
 export const LIST_HASH_SEED = 0x27d4eb2f | 0;
 
-//h*31^4 folded into one multiply so four characters cost one link of the dependency
+//h*m^4 folded into one multiply so four characters cost one link of the dependency
 //chain instead of four; the result is bit-identical to the character-at-a-time form
-const THIRTY_ONE_SQUARED = 961;
-const THIRTY_ONE_CUBED = 29791;
-const THIRTY_ONE_FOURTH = 923521;
+const HASH_MULTIPLIER_SQUARED = Math.imul(HASH_MULTIPLIER, HASH_MULTIPLIER) | 0;
+const HASH_MULTIPLIER_CUBED =
+	Math.imul(HASH_MULTIPLIER_SQUARED, HASH_MULTIPLIER) | 0;
+const HASH_MULTIPLIER_FOURTH =
+	Math.imul(HASH_MULTIPLIER_CUBED, HASH_MULTIPLIER) | 0;
 
 export const stringHash = (str: string): number => {
 	const length = str.length;
@@ -21,10 +28,10 @@ export const stringHash = (str: string): number => {
 	let index = 0;
 	for (const blockEnd = length - 3; index < blockEnd; index += 4) {
 		hash =
-			(Math.imul(hash, THIRTY_ONE_FOURTH) +
-				Math.imul(str.charCodeAt(index), THIRTY_ONE_CUBED) +
-				Math.imul(str.charCodeAt(index + 1), THIRTY_ONE_SQUARED) +
-				Math.imul(str.charCodeAt(index + 2), 31) +
+			(Math.imul(hash, HASH_MULTIPLIER_FOURTH) +
+				Math.imul(str.charCodeAt(index), HASH_MULTIPLIER_CUBED) +
+				Math.imul(str.charCodeAt(index + 1), HASH_MULTIPLIER_SQUARED) +
+				Math.imul(str.charCodeAt(index + 2), HASH_MULTIPLIER) +
 				str.charCodeAt(index + 3)) |
 			0;
 	}
@@ -82,7 +89,7 @@ const referenceId = (value: Object): number => {
 	let id = references.get(value);
 	if (id === undefined) {
 		counter++;
-		id = Math.imul(counter, 0x9e3779b1) | 0;
+		id = Math.imul(counter, HASH_MULTIPLIER) | 0;
 		references.set(value, id);
 	}
 	return combineOrderedHash(TAG.REFERENCE, id);
@@ -98,14 +105,6 @@ const hashTemplateValue = (value: TemplateValue): number => {
 		getParsedTemplate(value.__templateStrings).templateHash,
 		hash,
 	);
-};
-
-const hashChild = (child: unknown, depth: number): number => {
-	const type = typeof child;
-	if (type === "string")
-		return combineOrderedHash(TAG.STRING, stringHash(child as string));
-	if (type === "number") return hashNumber(child as number);
-	return hashValue(child, depth);
 };
 
 export const hashValue = (value: unknown, depth: number = 0): number => {
@@ -127,7 +126,7 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 	if (Array.isArray(value)) {
 		let hash = combineOrderedHash(TAG.ARRAY, value.length);
 		for (let index = 0; index < value.length; index++) {
-			hash = combineOrderedHash(hash, hashChild(value[index], childDepth));
+			hash = combineOrderedHash(hash, hashValue(value[index], childDepth));
 		}
 		return hash;
 	}
@@ -139,7 +138,7 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 		for (const name in value) {
 			hash = combineOrderedHash(
 				combineOrderedHash(hash, hashKey(name)),
-				hashChild(value[name as keyof typeof value], childDepth),
+				hashValue(value[name as keyof typeof value], childDepth),
 			);
 		}
 		return hash;
@@ -150,8 +149,8 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 		let hash = combineOrderedHash(TAG.MAP, map.size);
 		for (const key of map.keys()) {
 			hash = combineOrderedHash(
-				combineOrderedHash(hash, hashChild(key, childDepth)),
-				hashChild(map.get(key), childDepth),
+				combineOrderedHash(hash, hashValue(key, childDepth)),
+				hashValue(map.get(key), childDepth),
 			);
 		}
 		return hash;
@@ -161,7 +160,7 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 		const set = value as Set<unknown>;
 		let hash = combineOrderedHash(TAG.SET, set.size);
 		for (const member of set) {
-			hash = combineOrderedHash(hash, hashChild(member, childDepth));
+			hash = combineOrderedHash(hash, hashValue(member, childDepth));
 		}
 		return hash;
 	}

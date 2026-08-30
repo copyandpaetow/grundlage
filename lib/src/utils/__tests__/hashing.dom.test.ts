@@ -195,3 +195,29 @@ describe("hashValue - prototype-less objects", () => {
 		expect(hashValue(first)).not.toBe(hashValue(second));
 	});
 });
+
+describe("hashValue - digits that could trade places", () => {
+	//a multiplier at or below the character range lets one character absorb another's carry;
+	//these six were live collisions under `h * 31 + c`
+	test("two-character strings that collide under a small multiplier stay apart", () => {
+		expect(hashValue("Aa")).not.toBe(hashValue("BB"));
+		expect(hashValue("aaa")).not.toBe(hashValue("abB"));
+	});
+
+	test("the same trade inside a container stays apart", () => {
+		expect(hashValue([0, 31])).not.toBe(hashValue([1, 0]));
+		expect(hashValue({ name: "Aa" })).not.toBe(hashValue({ name: "BB" }));
+		expect(hashValue(new Set(["Aa"]))).not.toBe(hashValue(new Set(["BB"])));
+	});
+
+	test("every three-character string over the common alphabet hashes uniquely", () => {
+		const alphabet =
+			"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
+		const seen = new Set<number>();
+		for (const first of alphabet)
+			for (const second of alphabet)
+				for (const third of alphabet)
+					seen.add(stringHash(first + second + third));
+		expect(seen.size).toBe(alphabet.length ** 3);
+	});
+});

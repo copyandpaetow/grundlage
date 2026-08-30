@@ -1,4 +1,4 @@
-import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
 import { combineOrderedHash } from "../../utils/hashing";
 import { AttributeStaticBinding } from "../../parser/types";
 import { AttributeLiveBinding } from "./types";
@@ -18,7 +18,7 @@ export const commitAttribute = (
 ): void => {
 	const { nameParts, valueParts } = liveBinding.staticBinding;
 	if (
-		!hasHashChanged(
+		!claimHashChange(
 			liveBinding,
 			attributeGateHash(liveBinding.staticBinding, values),
 		)

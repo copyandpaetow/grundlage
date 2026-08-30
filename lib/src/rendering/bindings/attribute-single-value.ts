@@ -1,7 +1,7 @@
 import { SingleValueAttributeStaticBinding } from "../../parser/types";
 import { isStringable } from "../../utils/guards";
 import { combineOrderedHash, hashValue } from "../../utils/hashing";
-import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
+import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
 import { applyAttributeValue, isDeclaredPropName } from "./attribute-write";
 import { SingleValueAttributeLiveBinding } from "./types";
 
@@ -19,7 +19,7 @@ export const commitSingleValue = (
 	values: Array<unknown>,
 ): void => {
 	if (
-		!hasHashChanged(
+		!claimHashChange(
 			liveBinding,
 			singleValueGateHash(liveBinding.staticBinding, values),
 		)
