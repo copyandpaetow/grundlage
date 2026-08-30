@@ -94,7 +94,7 @@ const patchBranch = (
 		patchInstance(branch.instance, value.values);
 		return;
 	}
-	const { instance, fragment } = mountInstance(value, moveState);
+	const { instance, fragment } = mountInstance(value, parsed, moveState);
 	forEachNode(
 		liveBinding.startMarker.nextSibling,
 		liveBinding.endMarker,
@@ -142,10 +142,10 @@ const hydrateBranch = (
 	moveState: StyleSheetMoveState,
 	walker: TreeWalker,
 ): boolean => {
-	resolveNestedTemplate(value);
 	const instance = hydrateInstance(
 		walker,
 		value,
+		resolveNestedTemplate(value),
 		liveBinding.endMarker,
 		moveState,
 	);

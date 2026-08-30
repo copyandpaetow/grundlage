@@ -23,12 +23,22 @@ const moveState = (): StyleSheetMoveState => ({
 	needsStyleSheetRefreshOnMove: false,
 });
 
+const mountTemplateValue = (
+	value: TemplateValue,
+	moveStateValue: StyleSheetMoveState,
+) =>
+	mountInstance(
+		value,
+		getParsedTemplate(value.__templateStrings),
+		moveStateValue,
+	);
+
 //the host must be connected: a detached <style> has no sheet, so the CSSOM lane never engages
 const mountIntoShadow = (value: TemplateValue) => {
 	const host = createHost();
 	document.body.appendChild(host as unknown as Element);
 	const shadowRoot = host.attachShadow({ mode: "open" });
-	const { instance, fragment } = mountInstance(value, moveState());
+	const { instance, fragment } = mountTemplateValue(value, moveState());
 	shadowRoot.appendChild(fragment);
 	return { host, shadowRoot, instance };
 };
@@ -42,6 +52,7 @@ const hydrateShadowRoot = (
 	hydrateInstance(
 		document.createTreeWalker(shadowRoot, NodeFilter.SHOW_COMMENT),
 		value,
+		getParsedTemplate(value.__templateStrings),
 		rangeEnd,
 		moveState,
 	);
@@ -86,15 +97,15 @@ describe("resolveNestedTemplate: host binding requirement", () => {
 
 	test("mounting a parent whose content is a nested root template throws", () => {
 		const inner = html`<template class="leak"><p>x</p></template>`;
-		expect(() => mountInstance(html`<div>${inner}</div>`, moveState())).toThrow(
-			/top level of a component's render output/,
-		);
+		expect(() =>
+			mountTemplateValue(html`<div>${inner}</div>`, moveState()),
+		).toThrow(/top level of a component's render output/);
 	});
 
 	test("mounting a list whose item is a root template throws", () => {
 		const items = [html`<template class="leak"><p>x</p></template>`];
 		expect(() =>
-			mountInstance(
+			mountTemplateValue(
 				html`<ul>
 					${items}
 				</ul>`,
@@ -106,7 +117,7 @@ describe("resolveNestedTemplate: host binding requirement", () => {
 
 describe("mountInstance: fragment + live-binding wiring", () => {
 	test("produces a DocumentFragment with the parsed shape", () => {
-		const { fragment } = mountInstance(
+		const { fragment } = mountTemplateValue(
 			html`<section><p>${"hi"}</p></section>`,
 			moveState(),
 		);
@@ -116,7 +127,7 @@ describe("mountInstance: fragment + live-binding wiring", () => {
 
 	test("builds one live binding per static binding", () => {
 		const value = html`<p class="${"c"}">${"text"}</p>`;
-		const { instance } = mountInstance(value, moveState());
+		const { instance } = mountTemplateValue(value, moveState());
 		expect(instance.liveBindings.length).toBe(
 			getParsedTemplate(value.__templateStrings).bindings.length,
 		);
@@ -126,7 +137,7 @@ describe("mountInstance: fragment + live-binding wiring", () => {
 describe("isPatchableInPlace: patch vs rebuild", () => {
 	test("patches in place when the template hash matches", () => {
 		const paragraph = (value: string) => html`<p class="${value}">x</p>`;
-		const { instance } = mountInstance(paragraph("a"), moveState());
+		const { instance } = mountTemplateValue(paragraph("a"), moveState());
 		const next = paragraph("b");
 		expect(
 			isPatchableInPlace(instance, getParsedTemplate(next.__templateStrings)),
@@ -134,7 +145,7 @@ describe("isPatchableInPlace: patch vs rebuild", () => {
 	});
 
 	test("rebuilds when the structure differs", () => {
-		const { instance } = mountInstance(html`<p>${"a"}</p>`, moveState());
+		const { instance } = mountTemplateValue(html`<p>${"a"}</p>`, moveState());
 		const next = html`<span>${"a"}</span>`;
 		expect(
 			isPatchableInPlace(instance, getParsedTemplate(next.__templateStrings)),
@@ -152,7 +163,7 @@ describe("isPatchableInPlace: patch vs rebuild", () => {
 describe("patchInstance: change detection", () => {
 	test("a changed attribute value is written to the DOM", () => {
 		const paragraph = (value: string) => html`<p class="${value}">${"hi"}</p>`;
-		const { instance, fragment } = mountInstance(
+		const { instance, fragment } = mountTemplateValue(
 			paragraph("before"),
 			moveState(),
 		);
@@ -165,7 +176,7 @@ describe("patchInstance: change detection", () => {
 
 	test("a changed text expression updates the text node in place", () => {
 		const paragraph = (value: string) => html`<p>${value}</p>`;
-		const { instance, fragment } = mountInstance(
+		const { instance, fragment } = mountTemplateValue(
 			paragraph("first"),
 			moveState(),
 		);
@@ -192,7 +203,7 @@ describe("raw content with a css plan", () => {
 		(style.sheet!.cssRules[0] as CSSStyleRule).style;
 
 	test("mount composes the literal sheet into the detached fragment", () => {
-		const { fragment } = mountInstance(sheet("red"), moveState());
+		const { fragment } = mountTemplateValue(sheet("red"), moveState());
 		const styles = fragment.querySelectorAll("style");
 
 		expect(styles).toHaveLength(1);
@@ -229,7 +240,10 @@ describe("raw content with a css plan", () => {
 	});
 
 	test("a patch while detached rewrites the composed text", () => {
-		const { instance, fragment } = mountInstance(sheet("red"), moveState());
+		const { instance, fragment } = mountTemplateValue(
+			sheet("red"),
+			moveState(),
+		);
 		const style = fragment.querySelector("style")!;
 
 		patchInstance(instance, sheet("blue").values);
@@ -260,9 +274,9 @@ describe("raw content with a css plan", () => {
 		document.body.appendChild(host as unknown as Element);
 		const shadowRoot = host.attachShadow({ mode: "open" });
 		const state = moveState();
-		const first = mountInstance(sheet("red"), state);
+		const first = mountTemplateValue(sheet("red"), state);
 		shadowRoot.appendChild(first.fragment);
-		const second = mountInstance(sheet("blue"), state);
+		const second = mountTemplateValue(sheet("blue"), state);
 		shadowRoot.appendChild(second.fragment);
 		const styles = shadowRoot.querySelectorAll("style");
 
@@ -320,7 +334,7 @@ describe("raw content with a css plan", () => {
 
 	test("switching a branch away removes the style element with the branch", () => {
 		const wrap = (inner: unknown) => html`<div>${inner}</div>`;
-		const { instance, fragment } = mountInstance(
+		const { instance, fragment } = mountTemplateValue(
 			wrap(sheet("red")),
 			moveState(),
 		);
@@ -333,7 +347,7 @@ describe("raw content with a css plan", () => {
 
 	test("removing a list row removes its style element", () => {
 		const wrap = (items: Array<unknown>) => html`<div>${items}</div>`;
-		const { instance, fragment } = mountInstance(
+		const { instance, fragment } = mountTemplateValue(
 			wrap([sheet("red")]),
 			moveState(),
 		);

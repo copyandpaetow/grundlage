@@ -140,9 +140,9 @@ const bindMarkedRange = (
 
 export const mountInstance = (
 	value: TemplateValue,
+	parsed: ParsedTemplate,
 	moveState: StyleSheetMoveState,
 ): { instance: Instance; fragment: DocumentFragment } => {
-	const parsed = getParsedTemplate(value.__templateStrings);
 	parsed.fragmentCloneSource ??= buildFragment(parsed.htmlWithMarkers);
 	const fragment = parsed.fragmentCloneSource.cloneNode(
 		true,
@@ -164,13 +164,11 @@ export const mountInstance = (
 export const hydrateInstance = (
 	walker: TreeWalker,
 	value: TemplateValue,
+	parsed: ParsedTemplate,
 	rangeEnd: Comment | null,
 	moveState: StyleSheetMoveState,
 ): Instance | null => {
-	const instance = createInstance(
-		getParsedTemplate(value.__templateStrings),
-		moveState,
-	);
+	const instance = createInstance(parsed, moveState);
 	return bindMarkedRange(
 		walker,
 		instance,

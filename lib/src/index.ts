@@ -279,6 +279,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			}
 			const { instance, fragment } = mountInstance(
 				value,
+				parsed,
 				this.#styleSheetMoveState,
 			);
 			this.#writeHostBindings(instance, value.values);
@@ -290,6 +291,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			const instance = hydrateInstance(
 				document.createTreeWalker(this.#shadowRoot, NodeFilter.SHOW_COMMENT),
 				value,
+				getParsedTemplate(value.__templateStrings),
 				null,
 				this.#styleSheetMoveState,
 			);

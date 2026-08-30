@@ -1,5 +1,4 @@
 import { ParsedTemplate } from "../../parser/types";
-import { getParsedTemplate } from "../../parser/html";
 import { coerceToTemplate, TemplateValue } from "../../template";
 import {
 	combineOrderedHash,
@@ -146,7 +145,7 @@ const matchRowsToPreviousRows = (
 	for (let index = 0; index < count; index++) {
 		if (resolvedRows[index] !== undefined) continue;
 		const value = coerceToTemplate(itemValues[index]);
-		const parsed = getParsedTemplate(value.__templateStrings);
+		const parsed = resolveNestedTemplate(value);
 		const matchHash = shapeOrKeyHash(
 			parsed.templateHash,
 			keyHashOf(value, parsed),
@@ -156,7 +155,7 @@ const matchRowsToPreviousRows = (
 			matchHash,
 		);
 		if (reusableRow === undefined) continue;
-		patchRowInPlace(reusableRow, value, itemHashes[index], moveState);
+		patchRowInPlace(reusableRow, value, parsed, itemHashes[index], moveState);
 		resolvedRows[index] = reusableRow;
 	}
 
@@ -201,7 +200,7 @@ const mountRowAfter = (
 ): ListItem => {
 	const value = coerceToTemplate(rawValue);
 	const parsed = resolveNestedTemplate(value);
-	const { instance, fragment } = mountInstance(value, moveState);
+	const { instance, fragment } = mountInstance(value, parsed, moveState);
 	const tailMarker = document.createComment(MARKUP.LIST_MARKER_DATA);
 	const startNode = fragment.firstChild ?? tailMarker;
 	after.after(fragment, tailMarker);
@@ -217,14 +216,14 @@ const mountRowAfter = (
 const patchRowInPlace = (
 	row: ListItem,
 	value: TemplateValue,
+	parsed: ParsedTemplate,
 	itemHash: number,
 	moveState: StyleSheetMoveState,
 ): void => {
-	const parsed = resolveNestedTemplate(value);
 	if (isPatchableInPlace(row.instance, parsed))
 		patchInstance(row.instance, value.values);
 	else {
-		const { instance, fragment } = mountInstance(value, moveState);
+		const { instance, fragment } = mountInstance(value, parsed, moveState);
 		replaceRowInstance(row, instance, fragment);
 	}
 	row.itemHash = itemHash;
@@ -274,6 +273,7 @@ export const hydrateListItems = (
 		const instance = hydrateInstance(
 			walker,
 			value,
+			parsed,
 			liveBinding.endMarker,
 			moveState,
 		);
