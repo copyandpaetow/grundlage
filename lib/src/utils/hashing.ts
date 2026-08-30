@@ -9,9 +9,26 @@ export const combineOrderedHash = (
 export const PARTS_HASH_SEED = 0x811c9dc5 | 0;
 export const LIST_HASH_SEED = 0x27d4eb2f | 0;
 
+//h*31^4 folded into one multiply so four characters cost one link of the dependency
+//chain instead of four; the result is bit-identical to the character-at-a-time form
+const THIRTY_ONE_SQUARED = 961;
+const THIRTY_ONE_CUBED = 29791;
+const THIRTY_ONE_FOURTH = 923521;
+
 export const stringHash = (str: string): number => {
+	const length = str.length;
 	let hash = 0;
-	for (let index = 0; index < str.length; index++) {
+	let index = 0;
+	for (const blockEnd = length - 3; index < blockEnd; index += 4) {
+		hash =
+			(Math.imul(hash, THIRTY_ONE_FOURTH) +
+				Math.imul(str.charCodeAt(index), THIRTY_ONE_CUBED) +
+				Math.imul(str.charCodeAt(index + 1), THIRTY_ONE_SQUARED) +
+				Math.imul(str.charCodeAt(index + 2), 31) +
+				str.charCodeAt(index + 3)) |
+			0;
+	}
+	for (; index < length; index++) {
 		hash = combineOrderedHash(hash, str.charCodeAt(index));
 	}
 	return hash;

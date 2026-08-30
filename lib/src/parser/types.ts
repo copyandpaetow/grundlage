@@ -1,40 +1,4 @@
-import { BINDING, PARSE_BINDING } from "./constants";
-
-export interface AttributeBinding {
-	type: typeof PARSE_BINDING.ATTRIBUTE;
-	isExpandable: boolean;
-	values: Array<Part>;
-	keys: Array<Part>;
-}
-
-export interface ContentBinding {
-	type: typeof PARSE_BINDING.CONTENT;
-	values: Array<Part>;
-}
-
-export interface CommentBinding {
-	type: typeof PARSE_BINDING.COMMENT;
-	values: Array<Part>;
-}
-
-export interface RawContentBinding {
-	type: typeof PARSE_BINDING.RAW_CONTENT;
-	values: Array<Part>;
-	tag: string;
-	compiledStyleSheet: CompiledStyleSheet | null;
-}
-
-export interface TagBinding {
-	type: typeof PARSE_BINDING.TAG;
-	values: Array<Part>;
-}
-
-export type Binding =
-	| TagBinding
-	| AttributeBinding
-	| ContentBinding
-	| CommentBinding
-	| RawContentBinding;
+import { BINDING } from "./constants";
 
 export type Part = string | number;
 
