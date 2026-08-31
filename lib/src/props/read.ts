@@ -10,14 +10,12 @@ export const props = <DeclaredSchema extends Schema>(
 	const record = element as unknown as Record<string, unknown>;
 	const values: PropValues = {};
 
-	for (const prop of normalized.values())
-		values[prop.propName] = prop.resolve(undefined);
-
 	for (const [attributeName, prop] of normalized) {
 		const incoming = Object.hasOwn(record, prop.propName)
 			? record[prop.propName]
 			: element.getAttribute(attributeName);
-		writeProp(values, prop, incoming);
+		if (!writeProp(values, prop, incoming))
+			values[prop.propName] ??= prop.resolve(undefined);
 	}
 
 	return values as DeclaredProps<DeclaredSchema>;

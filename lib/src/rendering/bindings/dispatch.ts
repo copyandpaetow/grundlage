@@ -34,13 +34,13 @@ const resolveAnchorElement = (anchor: Comment | Element): Element =>
 export const createLiveBinding = (
 	staticBinding: StaticBinding,
 	anchor: Comment | Element | null,
-	endMarker: Comment | null = null,
+	closeMarker: Comment | null = null,
 ): LiveBinding => {
 	switch (staticBinding.type) {
 		case BINDING.TAG:
 			return {
 				staticBinding,
-				markerComment: anchor as Comment,
+				openMarker: anchor as Comment,
 				lastValueHash: UNSET_HASH,
 			};
 		case BINDING.ATTRIBUTE:
@@ -68,22 +68,22 @@ export const createLiveBinding = (
 		case BINDING.CONTENT:
 			return {
 				staticBinding,
-				startMarker: anchor as Comment,
-				endMarker: endMarker!,
+				openMarker: anchor as Comment,
+				closeMarker: closeMarker!,
 				content: UNRESOLVED_CONTENT,
 			};
 		case BINDING.RAW_CONTENT: {
-			const markerComment = anchor as Comment;
+			const openMarker = anchor as Comment;
 			const styleSheetState =
 				staticBinding.compiledStyleSheet === null
 					? null
 					: createStyleSheetState(
 							staticBinding.compiledStyleSheet,
-							markerComment.nextElementSibling as HTMLStyleElement,
+							openMarker.nextElementSibling as HTMLStyleElement,
 						);
 			return {
 				staticBinding,
-				markerComment,
+				openMarker,
 				lastValueHash: UNSET_HASH,
 				styleSheetState,
 			};
@@ -91,7 +91,7 @@ export const createLiveBinding = (
 		case BINDING.COMMENT:
 			return {
 				staticBinding,
-				markerComment: anchor as Comment,
+				openMarker: anchor as Comment,
 				lastValueHash: UNSET_HASH,
 			};
 	}
@@ -156,12 +156,14 @@ export const reapplyOnSwap = (
 				liveBinding as SingleValueAttributeLiveBinding,
 				element,
 			)
-		: reapplyDynamicOnSwap(
-				liveBinding as DynamicAttributeLiveBinding,
-				element,
-			);
+		: reapplyDynamicOnSwap(liveBinding as DynamicAttributeLiveBinding, element);
 
-export const revertHostBinding = (liveBinding: LiveBinding): void => {
+export type HostLiveBinding =
+	| AttributeLiveBinding
+	| SingleValueAttributeLiveBinding
+	| DynamicAttributeLiveBinding;
+
+export const revertHostBinding = (liveBinding: HostLiveBinding): void => {
 	switch (liveBinding.staticBinding.type) {
 		case BINDING.ATTRIBUTE: {
 			const attribute = liveBinding as AttributeLiveBinding;
@@ -186,5 +188,8 @@ export const revertHostBinding = (liveBinding: LiveBinding): void => {
 				applyAttributeValue(dynamic.anchor, name, null, entry.value);
 			return;
 		}
+
+		default:
+			liveBinding.staticBinding satisfies never;
 	}
 };

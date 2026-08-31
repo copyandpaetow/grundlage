@@ -66,7 +66,7 @@ export const commitTag = (
 ): void => {
 	const { parts } = liveBinding.staticBinding;
 	if (!claimHashChange(liveBinding, combinedPartsHash(parts, values))) return;
-	const element = liveBinding.markerComment.nextElementSibling!;
+	const element = liveBinding.openMarker.nextElementSibling!;
 	const newTag = composeParts(parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
 	swapElement(element, newTag, siblings);

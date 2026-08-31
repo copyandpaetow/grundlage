@@ -1,5 +1,5 @@
 import { hashValue } from "../utils/hashing";
-import { BINDING, PARSE_BINDING } from "./constants";
+import { BINDING, OPEN_CONSTRUCT } from "./constants";
 import { ParsedTemplate, Part, StaticBinding } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
 import { compileStyleSheet } from "./css";
@@ -14,7 +14,7 @@ const TEXTAREA_TAG = "textarea";
 const STYLE_TAG = "style";
 const COMMENT_OPEN_LENGTH = MARKUP.COMMENT_OPEN.length;
 const END_TAG_OPEN_LENGTH = MARKUP.END_TAG_OPEN.length;
-const NO_ACTIVE_BINDING = -1;
+const NO_OPEN_CONSTRUCT = -1;
 const parsesContentAsRaw = (parser: ParserState, tag: string) => {
 	if (tag === TEMPLATE_TAG) {
 		return parser.forceNoRootTemplate || !parser.isRootTemplate;
@@ -50,16 +50,16 @@ type HoleCapturingParts = [
 	attributeValue: Array<Part>,
 ];
 
-const BINDING_KIND_FOR_STATE: Record<
+const OPEN_CONSTRUCT_FOR_STATE: Record<
 	BindingStartingState,
-	ValueOf<typeof PARSE_BINDING>
+	ValueOf<typeof OPEN_CONSTRUCT>
 > = [
-	PARSE_BINDING.COMMENT,
-	PARSE_BINDING.RAW_CONTENT,
-	PARSE_BINDING.TAG,
-	PARSE_BINDING.ATTRIBUTE,
-	PARSE_BINDING.ATTRIBUTE,
-	PARSE_BINDING.CONTENT,
+	OPEN_CONSTRUCT.COMMENT,
+	OPEN_CONSTRUCT.RAW_CONTENT,
+	OPEN_CONSTRUCT.TAG,
+	OPEN_CONSTRUCT.ATTRIBUTE,
+	OPEN_CONSTRUCT.ATTRIBUTE,
+	OPEN_CONSTRUCT.CONTENT,
 ];
 
 const PARSE_MODE = { OPTIMISTIC_ROOT: 0, NO_ROOT_TEMPLATE: 1 } as const;
@@ -69,7 +69,7 @@ interface ParserState {
 	state: StateValue;
 	bindings: Array<StaticBinding>;
 	startedBindingCount: number;
-	activeBindingType: number;
+	openConstructKind: number;
 	templates: TemplateStringsArray;
 	templateHash: number;
 	index: number;
@@ -103,7 +103,7 @@ const createParser = (
 	state: STATE.TEXT,
 	bindings: [],
 	startedBindingCount: 0,
-	activeBindingType: NO_ACTIVE_BINDING,
+	openConstructKind: NO_OPEN_CONSTRUCT,
 	templates: strings,
 	templateHash: hashValue(strings),
 	index: 0,
@@ -134,15 +134,15 @@ const asComment = (markerData: string) =>
 	`${MARKUP.COMMENT_OPEN}${markerData}${MARKUP.COMMENT_CLOSE}`;
 
 const openMarkerData = (parser: ParserState) =>
-	`${MARKUP.COMMENT_IDENTIFIER} ${parser.activeBindingType}-${parser.startedBindingCount - 1}`;
+	`${MARKUP.COMMENT_IDENTIFIER} ${parser.openConstructKind}-${parser.startedBindingCount - 1}`;
 
 const closeMarkerData = (parser: ParserState) =>
-	`${MARKUP.COMMENT_IDENTIFIER} /${parser.activeBindingType}-${parser.startedBindingCount - 1}`;
+	`${MARKUP.COMMENT_IDENTIFIER} /${parser.openConstructKind}-${parser.startedBindingCount - 1}`;
 
 const openComment = (parser: ParserState) => asComment(openMarkerData(parser));
 
-const hasActiveBinding = (parser: ParserState) =>
-	parser.activeBindingType !== NO_ACTIVE_BINDING;
+const hasOpenConstruct = (parser: ParserState) =>
+	parser.openConstructKind !== NO_OPEN_CONSTRUCT;
 
 const takeParts = (parser: ParserState, state: HoleCapturingState) => {
 	const taken = parser.parts[state];
@@ -162,7 +162,7 @@ const updateBinding = (parser: ParserState) => {
 			valueIndex: parser.index,
 			closeMarkerData: closeMarker,
 		});
-		parser.activeBindingType = NO_ACTIVE_BINDING;
+		parser.openConstructKind = NO_OPEN_CONSTRUCT;
 		if (parser.openTagIsDynamic.length === 0) {
 			parser.hasSeenTopLevelSibling = true;
 		}
@@ -179,19 +179,19 @@ const updateBinding = (parser: ParserState) => {
 	parts.push(parser.index);
 };
 
-const emptyBinding = (bindingType: number): StaticBinding => {
-	switch (bindingType) {
-		case PARSE_BINDING.COMMENT:
+const emptyBinding = (openConstructKind: number): StaticBinding => {
+	switch (openConstructKind) {
+		case OPEN_CONSTRUCT.COMMENT:
 			return { type: BINDING.COMMENT, parts: [] };
-		case PARSE_BINDING.RAW_CONTENT:
+		case OPEN_CONSTRUCT.RAW_CONTENT:
 			return { type: BINDING.RAW_CONTENT, parts: [], compiledStyleSheet: null };
-		case PARSE_BINDING.TAG:
+		case OPEN_CONSTRUCT.TAG:
 			return { type: BINDING.TAG, parts: [] };
-		case PARSE_BINDING.ATTRIBUTE:
+		case OPEN_CONSTRUCT.ATTRIBUTE:
 			return { type: BINDING.ATTRIBUTE, nameParts: [], valueParts: [""] };
 		default:
 			throw new Error(
-				`grundlage: emptyBinding called for a type that cannot be left open: ${bindingType}`,
+				`grundlage: emptyBinding called for a construct that cannot be left open: ${openConstructKind}`,
 			);
 	}
 };
@@ -229,7 +229,7 @@ const captureKeyBinding = (parser: ParserState) => {
 };
 
 const completeComment = (parser: ParserState) => {
-	if (hasActiveBinding(parser)) {
+	if (hasOpenConstruct(parser)) {
 		if (parser.keyValueParts === null) {
 			captureKeyBinding(parser);
 		} else {
@@ -244,11 +244,11 @@ const completeComment = (parser: ParserState) => {
 			drainPartsAsMarkup(parser.parts[STATE.COMMENT]),
 		);
 	}
-	parser.activeBindingType = NO_ACTIVE_BINDING;
+	parser.openConstructKind = NO_OPEN_CONSTRUCT;
 };
 
 const completeRawContent = (parser: ParserState) => {
-	if (hasActiveBinding(parser)) {
+	if (hasOpenConstruct(parser)) {
 		parser.resultMarkup += openComment(parser);
 		const parts = takeParts(parser, STATE.RAW_CONTENT);
 		//the sheet text is composed with literal values at first commit, while the clone is
@@ -264,7 +264,7 @@ const completeRawContent = (parser: ParserState) => {
 	} else {
 		parser.contentMarkup += drainPartsAsMarkup(parser.parts[STATE.RAW_CONTENT]);
 	}
-	parser.activeBindingType = NO_ACTIVE_BINDING;
+	parser.openConstructKind = NO_OPEN_CONSTRUCT;
 };
 
 const completeTag = (parser: ParserState) => {
@@ -275,7 +275,7 @@ const completeTag = (parser: ParserState) => {
 		parser.hasSeenTopLevelSibling = true;
 	}
 
-	if (hasActiveBinding(parser)) {
+	if (hasOpenConstruct(parser)) {
 		parser.currentTagName = PLACEHOLDER_TAG;
 		parser.elementMarkup += PLACEHOLDER_TAG;
 		parser.resultMarkup += openComment(parser);
@@ -285,7 +285,7 @@ const completeTag = (parser: ParserState) => {
 		});
 		parser.openTagIsDynamic.push(true);
 		parser.isRootTemplate = false;
-		parser.activeBindingType = NO_ACTIVE_BINDING;
+		parser.openConstructKind = NO_OPEN_CONSTRUCT;
 		return;
 	}
 
@@ -306,7 +306,7 @@ const completeTag = (parser: ParserState) => {
 		parser.elementMarkup += drainPartsAsMarkup(tagNameParts);
 	}
 	parser.openTagIsDynamic.push(false);
-	parser.activeBindingType = NO_ACTIVE_BINDING;
+	parser.openConstructKind = NO_OPEN_CONSTRUCT;
 };
 
 const completeEndTag = (parser: ParserState) => {
@@ -318,10 +318,10 @@ const completeEndTag = (parser: ParserState) => {
 	) {
 		parser.rootTemplateClosed = true;
 		parser.endTagMarkup = "";
-		parser.activeBindingType = NO_ACTIVE_BINDING;
+		parser.openConstructKind = NO_OPEN_CONSTRUCT;
 		return;
 	}
-	if (hasActiveBinding(parser)) {
+	if (hasOpenConstruct(parser)) {
 		if (!openerIsDynamic) {
 			throw new Error(
 				"grundlage: Asymmetric tag: dynamic </${...}> close cannot pair with a static open tag — make the open dynamic too.",
@@ -336,7 +336,7 @@ const completeEndTag = (parser: ParserState) => {
 	parser.resultMarkup +=
 		MARKUP.END_TAG_OPEN + parser.endTagMarkup + MARKUP.TAG_CLOSE;
 	parser.endTagMarkup = "";
-	parser.activeBindingType = NO_ACTIVE_BINDING;
+	parser.openConstructKind = NO_OPEN_CONSTRUCT;
 };
 
 const rangeHasNonWhitespace = (
@@ -395,7 +395,7 @@ const drainAttributeBinding = (parser: ParserState): StaticBinding => {
 };
 
 const completeAttribute = (parser: ParserState) => {
-	if (hasActiveBinding(parser)) {
+	if (hasOpenConstruct(parser)) {
 		parser.bindings.push(drainAttributeBinding(parser));
 
 		if (parser.isRootTemplate) {
@@ -423,7 +423,7 @@ const completeAttribute = (parser: ParserState) => {
 			}
 		}
 	}
-	parser.activeBindingType = NO_ACTIVE_BINDING;
+	parser.openConstructKind = NO_OPEN_CONSTRUCT;
 	parser.attributeQuoteCode = 0;
 };
 
@@ -738,7 +738,7 @@ const parse = (
 		}
 
 		if (parser.state === STATE.END_TAG) {
-			if (!hasActiveBinding(parser)) {
+			if (!hasOpenConstruct(parser)) {
 				const openerIsDynamic =
 					parser.openTagIsDynamic[parser.openTagIsDynamic.length - 1];
 				if (!openerIsDynamic) {
@@ -746,9 +746,9 @@ const parse = (
 						"grundlage: Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
 					);
 				}
-				parser.activeBindingType = PARSE_BINDING.TAG;
+				parser.openConstructKind = OPEN_CONSTRUCT.TAG;
 			}
-		} else if (!hasActiveBinding(parser)) {
+		} else if (!hasOpenConstruct(parser)) {
 			//a tag that opens on whitespace parks the scanner between the tag name and the
 			//first attribute, where a hole belongs to neither and has nothing to accumulate into
 			if (parser.state === STATE.ELEMENT) {
@@ -757,8 +757,8 @@ const parse = (
 				);
 			}
 			parser.startedBindingCount++;
-			parser.activeBindingType =
-				BINDING_KIND_FOR_STATE[parser.state as BindingStartingState];
+			parser.openConstructKind =
+				OPEN_CONSTRUCT_FOR_STATE[parser.state as BindingStartingState];
 		}
 
 		updateBinding(parser);
@@ -777,7 +777,7 @@ const parse = (
 
 	//a started binding that never reached its completion is still owed a slot
 	if (parser.bindings.length < parser.startedBindingCount) {
-		parser.bindings.push(emptyBinding(parser.activeBindingType));
+		parser.bindings.push(emptyBinding(parser.openConstructKind));
 	}
 
 	if (parser.hasRootTemplate && parser.hasSeenTopLevelSibling) {

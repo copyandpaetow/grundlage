@@ -31,7 +31,7 @@ describe("css demotion to the full-text lane", () => {
 		};
 		const liveBinding: RawContentLiveBinding = {
 			staticBinding,
-			markerComment: marker,
+			openMarker: marker,
 			lastValueHash: UNSET_HASH,
 			styleSheetState: createStyleSheetState(compiledStyleSheet, style),
 		};

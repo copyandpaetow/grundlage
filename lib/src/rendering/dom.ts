@@ -1,16 +1,9 @@
 import { BaseComponent } from "../types";
 
-//lazy platform singleton: one detached <template> reused to parse every fragment
-let parserHost: HTMLTemplateElement | null = null;
-
-export const buildFragment = (result: string): DocumentFragment => {
-	parserHost ??= document.createElement("template");
-	parserHost.innerHTML = result;
-	const fragment = document.createDocumentFragment();
-	while (parserHost.content.firstChild) {
-		fragment.appendChild(parserHost.content.firstChild);
-	}
-	return fragment;
+export const buildFragment = (markup: string): DocumentFragment => {
+	const parserHost = document.createElement("template");
+	parserHost.innerHTML = markup;
+	return parserHost.content;
 };
 
 //duck-typed user surface: any custom element exposing update() opts into a property-set re-render

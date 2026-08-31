@@ -147,20 +147,13 @@ const rerunCurrentRenderable = (run: RenderRun): void => {
 	if (componentGeneratorTask === null || renderable === null)
 		return resolvePendingUpdatePromise(run);
 	if (isGeneratorFunction(renderable)) {
-		startRun(
-			run,
-			replaceNestedGeneratorTask(run, renderable as ComponentGenerator),
-		);
+		startRun(run, replaceNestedGeneratorTask(run, renderable));
 		return;
 	}
 	void runTaskUntilItParksOrEnds(
 		run,
 		componentGeneratorTask,
-		callRenderFunction(
-			run,
-			componentGeneratorTask,
-			renderable as RenderFunction,
-		),
+		callRenderFunction(run, componentGeneratorTask, renderable),
 	);
 };
 
@@ -260,7 +253,7 @@ const runTaskUntilItParksOrEnds = async (
 				break;
 
 			//stop: the task is waiting on something else now, or a newer render replaced this one
-			case RELEASE_CONTROL.kind:
+			case OPERATION.RELEASE_CONTROL:
 				return;
 
 			case OPERATION.PAINT_FROM_YIELD:

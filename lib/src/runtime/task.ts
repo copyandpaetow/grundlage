@@ -111,7 +111,7 @@ const createOperation = <Kind extends OperationKind, Payload>(
 	payload: Payload,
 ): { kind: Kind; payload: Payload } => ({ kind, payload });
 
-const canBeCommittedAsContent = (value: unknown): boolean =>
+const canBeCommittedAsContent = (value: unknown): value is ContentValue =>
 	value === null ||
 	(typeof value !== "object" &&
 		typeof value !== "function" &&
@@ -134,10 +134,7 @@ export const classifyRenderResultAsOperation = (
 	if (produced instanceof Promise)
 		return createOperation(OPERATION.AWAIT_RENDER_RESULT, produced);
 	if (isGeneratorFunction(produced))
-		return createOperation(
-			OPERATION.INSTALL_FROM_RENDER_RESULT,
-			produced as ComponentGenerator,
-		);
+		return createOperation(OPERATION.INSTALL_FROM_RENDER_RESULT, produced);
 	if (canBeCommittedAsContent(produced)) {
 		//the two shapes below cannot render at all and end the run; an empty render is legal, so this
 		//one warns and paints nothing
@@ -145,10 +142,7 @@ export const classifyRenderResultAsOperation = (
 			console.warn(
 				"grundlage: the render function returned undefined, so nothing was rendered. A block body needs an explicit return.",
 			);
-		return createOperation(
-			OPERATION.PAINT_FROM_RENDER_RESULT,
-			produced as ContentValue,
-		);
+		return createOperation(OPERATION.PAINT_FROM_RENDER_RESULT, produced);
 	}
 	if (typeof produced === "function")
 		return endTaskWithError(
@@ -190,10 +184,7 @@ const classifyYieldedValueAsOperation = (
 		return createOperation(OPERATION.PAINT_FROM_YIELD, value);
 	if (isGeneratorFunction(value)) {
 		task.suspension = { isAtARenderableYield: true };
-		return createOperation(
-			OPERATION.INSTALL_FROM_YIELD,
-			value as ComponentGenerator,
-		);
+		return createOperation(OPERATION.INSTALL_FROM_YIELD, value);
 	}
 	if (typeof value === "function") {
 		task.suspension = { isAtARenderableYield: true };

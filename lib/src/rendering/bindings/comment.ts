@@ -8,6 +8,6 @@ export const commitComment = (
 	const { parts } = liveBinding.staticBinding;
 	if (!claimHashChange(liveBinding, combinedPartsHash(parts, values))) return;
 	const composed = composeParts(parts, values);
-	const payload = liveBinding.markerComment.nextSibling as Comment;
+	const payload = liveBinding.openMarker.nextSibling as Comment;
 	if (payload.data !== composed) payload.data = composed;
 };

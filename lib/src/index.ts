@@ -7,6 +7,7 @@ import {
 import {
 	commitLiveBinding,
 	createLiveBinding,
+	HostLiveBinding,
 	revertHostBinding,
 } from "./rendering/bindings/dispatch";
 import { StyleSheetMoveState } from "./rendering/bindings/types";
@@ -145,16 +146,10 @@ export const component = <DeclaredSchema extends Schema = {}>(
 
 		#reflect(attributeName: string, prop: Prop): void {
 			const spelling = attributeSpellingOf(prop, this.#props[prop.propName]);
-			if (spelling === null) {
-				if (!this.hasAttribute(attributeName)) return;
-				this.#isReflecting = true;
-				this.removeAttribute(attributeName);
-				this.#isReflecting = false;
-				return;
-			}
 			if (this.getAttribute(attributeName) === spelling) return;
 			this.#isReflecting = true;
-			this.setAttribute(attributeName, spelling);
+			if (spelling === null) this.removeAttribute(attributeName);
+			else this.setAttribute(attributeName, spelling);
 			this.#isReflecting = false;
 		}
 
@@ -238,12 +233,16 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			const templateValue = coerceToTemplate(value);
 
 			if (this.#isHydrationPending) {
+				//cleared before the attempt, not after: a throw an outer generator catches paints again, and
+				//a second pass through here would hydrate the recovery content against the server's tree
+				this.#isHydrationPending = false;
+				//before the attempt: a rejected range rebuilds the whole root, and that rebuild removes
+				//the very payload scripts this reads
+				warnOnUnclaimedSsrPayloads(this.#shadowRoot);
 				if (!this.#hydrateRoot(templateValue)) {
 					warnOnRejectedServerRange();
 					this.#paintRoot(templateValue);
 				}
-				this.#isHydrationPending = false;
-				warnOnUnclaimedSsrPayloads(this.#shadowRoot);
 				releaseDeferredChildren(this.#shadowRoot);
 			} else {
 				this.#paintRoot(templateValue);
@@ -306,7 +305,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			if (!instance) return;
 			const liveBindings = instance.liveBindings;
 			for (let index = 0; index < instance.parsed.hostBindingCount; index++)
-				revertHostBinding(liveBindings[index]);
+				revertHostBinding(liveBindings[index] as HostLiveBinding);
 		}
 	}
 

@@ -14,12 +14,25 @@ export const resolveAttributeMode = (
 	return ATTRIBUTE_MODE.PROPERTY;
 };
 
+const NO_DECLARED_PROP_NAMES: ReadonlySet<string> = new Set();
+
+//customElements.define throws on redefinition, so a definition that exists is permanent and so is
+//the answer it gives. An element with no definition yet is never cached: define() can still happen
+const declaredPropNamesByLocalName = new Map<string, ReadonlySet<string>>();
+
 export const isDeclaredPropName = (element: Element, name: string): boolean => {
-	if (!element.localName.includes("-")) return false;
-	const definition = customElements.get(element.localName) as
+	const localName = element.localName;
+	if (!localName.includes("-")) return false;
+	const cached = declaredPropNamesByLocalName.get(localName);
+	if (cached !== undefined) return cached.has(name);
+	const definition = customElements.get(localName) as
 		| (CustomElementConstructor & { declaredPropNames?: ReadonlySet<string> })
 		| undefined;
-	return definition?.declaredPropNames?.has(name) ?? false;
+	if (definition === undefined) return false;
+	const declaredPropNames =
+		definition.declaredPropNames ?? NO_DECLARED_PROP_NAMES;
+	declaredPropNamesByLocalName.set(localName, declaredPropNames);
+	return declaredPropNames.has(name);
 };
 
 export const isAwaitingDefinition = (element: Element): boolean =>

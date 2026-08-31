@@ -41,6 +41,28 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		expect(host.shadowRoot!.querySelector("script[data-ssr]")).toBeNull();
 	});
 
+	test("a script the component rendered itself is not a payload", async () => {
+		const host = createHostWithShadow();
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const wrapper = document.createElement("div");
+		const rendered = document.createElement("script");
+		rendered.setAttribute("type", "application/json");
+		rendered.setAttribute("data-ssr", "");
+		rendered.textContent = JSON.stringify("the component's own data");
+		wrapper.appendChild(rendered);
+		host.shadowRoot!.append(wrapper);
+
+		const fetcher = vi.fn(() => Promise.resolve("fetched"));
+		const value = await load(host, fetcher);
+		warnOnUnclaimedSsrPayloads(host.shadowRoot!);
+
+		expect(value).toBe("fetched");
+		expect(fetcher).toHaveBeenCalledTimes(1);
+		expect(wrapper.querySelector("script[data-ssr]")).toBe(rendered);
+		expect(warnSpy).not.toHaveBeenCalled();
+		warnSpy.mockRestore();
+	});
+
 	test("falls back to the fetcher when no replay script is left", async () => {
 		const host = createHostWithShadow();
 		const fetcher = vi.fn(() => Promise.resolve("fetched"));

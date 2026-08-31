@@ -24,14 +24,20 @@ const UNKEYED_SELECTOR = `script[${SSR_ATTRIBUTE}]:not([${KEY_ATTRIBUTE}])`;
 const ANY_SSR_SELECTOR = `script[${SSR_ATTRIBUTE}]`;
 const ANGLE_BRACKET = /</g;
 
+//depth one, walked rather than selected because a ShadowRoot is never a :scope match: every payload
+//is a direct child, and a <script data-ssr> the component rendered itself must not be claimed as one
 const findReplayScript = (
 	shadowRoot: ShadowRoot,
 	key: string | undefined,
 ): Element | null => {
-	if (key === undefined) return shadowRoot.querySelector(UNKEYED_SELECTOR);
-	return shadowRoot.querySelector(
-		`script[${SSR_ATTRIBUTE}][${KEY_ATTRIBUTE}="${CSS.escape(key)}"]`,
-	);
+	const selector =
+		key === undefined
+			? UNKEYED_SELECTOR
+			: `script[${SSR_ATTRIBUTE}][${KEY_ATTRIBUTE}="${CSS.escape(key)}"]`;
+	const children = shadowRoot.children;
+	for (let index = 0; index < children.length; index++)
+		if (children[index].matches(selector)) return children[index];
+	return null;
 };
 
 const collectOnServer = async <Value>(
@@ -78,10 +84,13 @@ export const load = <Value>(
 };
 
 export const warnOnUnclaimedSsrPayloads = (shadowRoot: ShadowRoot): void => {
-	const leftover = shadowRoot.querySelectorAll(ANY_SSR_SELECTOR);
-	if (leftover.length === 0) return;
+	const children = shadowRoot.children;
+	let leftover = 0;
+	for (let index = 0; index < children.length; index++)
+		if (children[index].matches(ANY_SSR_SELECTOR)) leftover++;
+	if (leftover === 0) return;
 	console.warn(
-		`grundlage: ${leftover.length} SSR load() payload(s) went unclaimed during hydration. ` +
+		`grundlage: ${leftover} SSR load() payload(s) went unclaimed during hydration. ` +
 			"A conditional or reordered load() call can hand the wrong data to the wrong load() " +
 			"— pass a stable key to the affected load() calls to opt out of positional replay.",
 	);

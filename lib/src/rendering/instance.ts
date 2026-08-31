@@ -98,7 +98,7 @@ const bindMarkedRange = (
 	values: Array<unknown>,
 	rangeEnd: Comment | null,
 	applyToBinding: typeof commitLiveBinding | typeof hydrateLiveBinding,
-	applyContent: typeof hydrateContent,
+	applyContent: typeof commitContent | typeof hydrateContent,
 ): boolean => {
 	const { bindings, hostBindingCount } = instance.parsed;
 	const { liveBindings } = instance;

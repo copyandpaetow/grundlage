@@ -1,4 +1,4 @@
-export const PARSE_BINDING = {
+export const OPEN_CONSTRUCT = {
 	TAG: 0,
 	ATTRIBUTE: 1,
 	CONTENT: 2,

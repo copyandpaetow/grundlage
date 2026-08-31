@@ -1,3 +1,5 @@
+import { ComponentGenerator } from "../types";
+
 export const isStringable = (value: unknown) =>
 	typeof value === "string" ||
 	typeof value === "number" ||
@@ -26,7 +28,11 @@ const asyncGeneratorFunctionPrototype = Object.getPrototypeOf(
 	async function* () {},
 );
 
-export const isGeneratorFunction = (value: unknown): boolean => {
+//a generator function's props signature is unknowable at runtime, so the narrowing is wider than the
+//check: any generator function reads as a ComponentGenerator
+export const isGeneratorFunction = (
+	value: unknown,
+): value is ComponentGenerator => {
 	if (typeof value !== "function") return false;
 	const prototype = Object.getPrototypeOf(value);
 	return (

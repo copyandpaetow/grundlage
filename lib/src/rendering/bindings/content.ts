@@ -26,15 +26,18 @@ export const UNRESOLVED_CONTENT: UnresolvedContentState = Object.freeze({
 	kind: CONTENT_KIND.UNRESOLVED,
 });
 
-const contentKindOf = (value: unknown): ValueOf<typeof CONTENT_KIND> => {
+type ResolvedContentKind = Exclude<
+	ValueOf<typeof CONTENT_KIND>,
+	typeof CONTENT_KIND.UNRESOLVED
+>;
+
+const contentKindOf = (value: unknown): ResolvedContentKind => {
 	if (isTemplate(value)) return CONTENT_KIND.BRANCH;
 	if (Array.isArray(value)) return CONTENT_KIND.LIST;
 	return CONTENT_KIND.TEXT;
 };
 
-const createContentState = (
-	contentKind: ValueOf<typeof CONTENT_KIND>,
-): ContentState => {
+const createContentState = (contentKind: ResolvedContentKind): ContentState => {
 	switch (contentKind) {
 		case CONTENT_KIND.TEXT:
 			return { kind: CONTENT_KIND.TEXT, lastValueHash: UNSET_HASH };
@@ -47,18 +50,16 @@ const createContentState = (
 				aggregateHash: UNSET_HASH,
 				itemHashes: [],
 			};
-		default:
-			return UNRESOLVED_CONTENT;
 	}
 };
 
 const switchContentKind = (
 	liveBinding: ContentLiveBinding,
-	contentKind: ValueOf<typeof CONTENT_KIND>,
+	contentKind: ResolvedContentKind,
 ): void => {
 	forEachNode(
-		liveBinding.startMarker.nextSibling,
-		liveBinding.endMarker,
+		liveBinding.openMarker.nextSibling,
+		liveBinding.closeMarker,
 		(node) => node.remove(),
 	);
 	liveBinding.content = createContentState(contentKind);
@@ -74,13 +75,13 @@ const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
 	const textState = liveBinding.content as TextContentState;
 	if (!claimHashChange(textState, hashValue(value))) return;
 	const text = coerceToText(value);
-	const existing = liveBinding.startMarker.nextSibling;
-	if (existing !== liveBinding.endMarker) {
+	const existing = liveBinding.openMarker.nextSibling;
+	if (existing !== liveBinding.closeMarker) {
 		const textNode = existing as Text;
 		if (textNode.data !== text) textNode.data = text;
 		return;
 	}
-	if (text !== "") liveBinding.startMarker.after(document.createTextNode(text));
+	if (text !== "") liveBinding.openMarker.after(document.createTextNode(text));
 };
 
 const patchBranch = (
@@ -96,11 +97,11 @@ const patchBranch = (
 	}
 	const { instance, fragment } = mountInstance(value, parsed, moveState);
 	forEachNode(
-		liveBinding.startMarker.nextSibling,
-		liveBinding.endMarker,
+		liveBinding.openMarker.nextSibling,
+		liveBinding.closeMarker,
 		(node) => node.remove(),
 	);
-	liveBinding.startMarker.after(fragment);
+	liveBinding.openMarker.after(fragment);
 	branch.instance = instance;
 };
 
@@ -126,13 +127,13 @@ export const commitContent = (
 //one text write destroys nothing, so an adoptable text range is repaired by patchText rather than
 //rejected; anything else in the range means the server rendered a different kind and it is not ours
 const isAdoptableTextRange = ({
-	startMarker,
-	endMarker,
+	openMarker,
+	closeMarker,
 }: ContentLiveBinding): boolean => {
-	const serverNode = startMarker.nextSibling;
+	const serverNode = openMarker.nextSibling;
 	return (
-		serverNode === endMarker ||
-		(serverNode instanceof Text && serverNode.nextSibling === endMarker)
+		serverNode === closeMarker ||
+		(serverNode instanceof Text && serverNode.nextSibling === closeMarker)
 	);
 };
 
@@ -146,7 +147,7 @@ const hydrateBranch = (
 		walker,
 		value,
 		resolveNestedTemplate(value),
-		liveBinding.endMarker,
+		liveBinding.closeMarker,
 		moveState,
 	);
 	if (instance === null) return false;
@@ -186,6 +187,6 @@ export const hydrateContent = (
 	}
 
 	warnOnRejectedServerRange();
-	switchContentKind(liveBinding, CONTENT_KIND.UNRESOLVED);
+	switchContentKind(liveBinding, kind);
 	commitContent(liveBinding, values, moveState);
 };

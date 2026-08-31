@@ -97,7 +97,12 @@ const assertPropNameIsUsable = (propName: string): void => {
 		);
 };
 
+const normalizedSchemasBySchema = new WeakMap<Schema, NormalizedSchema>();
+
 export const normalizeSchema = (schema: Schema): NormalizedSchema => {
+	const alreadyNormalized = normalizedSchemasBySchema.get(schema);
+	if (alreadyNormalized !== undefined) return alreadyNormalized;
+
 	const props: NormalizedSchema = new Map();
 
 	for (const propName in schema) {
@@ -138,6 +143,7 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 		});
 	}
 
+	normalizedSchemasBySchema.set(schema, props);
 	return props;
 };
 

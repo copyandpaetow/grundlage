@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, component } from "../../src/index";
+import { html, component, load } from "../../src/index";
 import { ComponentConstructor } from "../../src/types";
 
 const sleep = (duration = 0) =>
@@ -393,6 +393,162 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 					"inner-first",
 				);
+
+				cleanup(element);
+			});
+
+			test("an inner generator's throw the outer catches paints the recovery content", async () => {
+				const serverTag = uniqueTag();
+				const clientTag = uniqueTag();
+
+				const ServerComponent = component(function* () {
+					yield function* inner() {
+						yield () => html`<p>server-content</p>`;
+					};
+				});
+
+				const serialized = await serverRender(serverTag, ServerComponent);
+				expect(serialized).toContain("server-content");
+
+				const ClientComponent = component(function* () {
+					try {
+						yield function* inner() {
+							//an object in a content hole throws, and an inner generator's throw reaches the
+							//outer's yield rather than the fatal display
+							yield () => html`<p>${new Date() as unknown as string}</p>`;
+						};
+					} catch {
+						yield () => html`<p>recovered</p>`;
+					}
+				});
+
+				const clientHTML = serialized.replace(
+					new RegExp(serverTag, "g"),
+					clientTag,
+				);
+				const element = hydrateFromHTML(clientHTML);
+				customElements.define(clientTag, ClientComponent);
+				await sleep();
+
+				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+					"recovered",
+				);
+
+				cleanup(element);
+			});
+
+			//the three content kinds the server range can be rejected for; each one lands on the
+			//rebuild in hydrateContent, which had no coverage at all
+			const hydrateContentMismatch = async (
+				serverBody: () => unknown,
+				clientBody: () => unknown,
+			) => {
+				const serverTag = uniqueTag();
+				const clientTag = uniqueTag();
+				const serialized = await serverRender(
+					serverTag,
+					component(function* () {
+						yield () => html`<div>${serverBody()}</div>`;
+					}),
+				);
+				const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+				const element = hydrateFromHTML(
+					serialized.replace(new RegExp(serverTag, "g"), clientTag),
+				);
+				customElements.define(
+					clientTag,
+					component(function* () {
+						yield () => html`<div>${clientBody()}</div>`;
+					}),
+				);
+				await sleep();
+				const warned = warnSpy.mock.calls.some((call) =>
+					String(call[0]).includes("hydration mismatch"),
+				);
+				warnSpy.mockRestore();
+				return { element, warned };
+			};
+
+			test("content mismatch: a server text range rejected by a client list rebuilds as a list", async () => {
+				const { element, warned } = await hydrateContentMismatch(
+					() => "server text",
+					() => ["one", "two", "three"].map((item) => html`<p>${item}</p>`),
+				);
+
+				expect(warned).toBe(true);
+				expect(
+					Array.from(element.shadowRoot!.querySelectorAll("p")).map(
+						(paragraph) => paragraph.textContent,
+					),
+				).toEqual(["one", "two", "three"]);
+				expect(element.shadowRoot!.textContent).not.toContain("server text");
+
+				cleanup(element);
+			});
+
+			test("content mismatch: a server list range rejected by a client text rebuilds as text", async () => {
+				const { element, warned } = await hydrateContentMismatch(
+					() => ["one", "two"].map((item) => html`<p>${item}</p>`),
+					() => "client text",
+				);
+
+				expect(warned).toBe(true);
+				expect(element.shadowRoot!.querySelector("p")).toBe(null);
+				expect(element.shadowRoot!.textContent).toContain("client text");
+
+				cleanup(element);
+			});
+
+			test("content mismatch: a server text range rejected by a client branch rebuilds as a branch", async () => {
+				const { element, warned } = await hydrateContentMismatch(
+					() => "server text",
+					() => html`<section>${"branch"}</section>`,
+				);
+
+				expect(warned).toBe(true);
+				expect(element.shadowRoot!.querySelector("section")?.textContent).toBe(
+					"branch",
+				);
+				expect(element.shadowRoot!.textContent).not.toContain("server text");
+
+				cleanup(element);
+			});
+
+			test("a root-rejected range still reports the payloads it left unclaimed", async () => {
+				const serverTag = uniqueTag();
+				const clientTag = uniqueTag();
+				const serialized = await serverRender(
+					serverTag,
+					component(function* ({ host }) {
+						yield load(host, async () => "server payload");
+						yield () => html`<div>${"server"}</div>`;
+					}),
+				);
+				expect(serialized).toContain("data-ssr");
+
+				const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+				const element = hydrateFromHTML(
+					serialized.replace(new RegExp(serverTag, "g"), clientTag),
+				);
+				//one binding more than the server wrote markers for, so the walk fails at the root
+				customElements.define(
+					clientTag,
+					component(function* () {
+						yield () =>
+							html`<div>${"a"}</div>
+								<span>${"b"}</span>`;
+					}),
+				);
+				await sleep();
+				const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
+				warnSpy.mockRestore();
+
+				expect(
+					warnings.some((text) => text.includes("hydration mismatch")),
+				).toBe(true);
+				expect(
+					warnings.some((text) => text.includes("1 SSR load() payload(s)")),
+				).toBe(true);
 
 				cleanup(element);
 			});

@@ -17,7 +17,7 @@ export const commitRawContent = (
 
 	const { parts } = liveBinding.staticBinding;
 	if (!claimHashChange(liveBinding, combinedPartsHash(parts, values))) return;
-	const element = liveBinding.markerComment.nextElementSibling!;
+	const element = liveBinding.openMarker.nextElementSibling!;
 	const composed = composeParts(parts, values);
 	if (element instanceof HTMLTemplateElement) {
 		if (element.innerHTML !== composed) element.innerHTML = composed;

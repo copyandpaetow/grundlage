@@ -51,7 +51,7 @@ export const patchListContent = (
 	if (aggregateHash === list.aggregateHash) return;
 	list.aggregateHash = aggregateHash;
 	const resolvedRows = matchRowsToPreviousRows(
-		liveBinding.startMarker,
+		liveBinding.openMarker,
 		list.items,
 		itemValues,
 		itemHashes,
@@ -59,7 +59,7 @@ export const patchListContent = (
 		moveState,
 	);
 	list.items = placeRows(
-		liveBinding.startMarker,
+		liveBinding.openMarker,
 		resolvedRows,
 		itemValues,
 		itemHashes,
@@ -79,17 +79,25 @@ const addRowToGroup = (
 	else group.push(row);
 };
 
-const groupRowsByContentHash = (
+const refreshRowStartNodes = (
 	rows: Array<ListItem>,
-	startMarker: Comment,
-): RowsByHash => {
-	const groups: RowsByHash = new Map();
-	let boundary: ChildNode = startMarker;
+	openMarker: Comment,
+): void => {
+	let boundary: ChildNode = openMarker;
 	for (let index = 0; index < rows.length; index++) {
-		addRowToGroup(groups, rows[index].itemHash, rows[index]);
 		rows[index].startNode = boundary.nextSibling!;
 		boundary = rows[index].tailMarker;
 	}
+};
+
+const groupRowsByContentHash = (
+	rows: Array<ListItem>,
+	start: number,
+	end: number,
+): RowsByHash => {
+	const groups: RowsByHash = new Map();
+	for (let index = start; index < end; index++)
+		addRowToGroup(groups, rows[index].itemHash, rows[index]);
 	return groups;
 };
 
@@ -120,20 +128,49 @@ const removeUnclaimedRows = (groups: RowsByHash): void => {
 };
 
 const matchRowsToPreviousRows = (
-	startMarker: Comment,
+	openMarker: Comment,
 	previousRows: Array<ListItem>,
 	itemValues: Array<unknown>,
 	itemHashes: Array<number>,
 	count: number,
 	moveState: StyleSheetMoveState,
 ): Array<ListItem | undefined> => {
-	const previousByContentHash = groupRowsByContentHash(
-		previousRows,
-		startMarker,
-	);
+	refreshRowStartNodes(previousRows, openMarker);
 	const resolvedRows: Array<ListItem | undefined> = new Array(count);
 
-	for (let index = 0; index < count; index++)
+	//a row whose content still hashes the same at its own index keeps that index: claiming is
+	//leftmost-first, so without this the changed index takes the furthest matching row and drags
+	//its focus, scroll and input state across the list
+	let firstUnsettledIndex = 0;
+	let endOfUnsettledIndexes = count;
+	let endOfUnsettledPreviousRows = previousRows.length;
+	while (
+		firstUnsettledIndex < endOfUnsettledIndexes &&
+		firstUnsettledIndex < endOfUnsettledPreviousRows &&
+		previousRows[firstUnsettledIndex].itemHash ===
+			itemHashes[firstUnsettledIndex]
+	) {
+		resolvedRows[firstUnsettledIndex] = previousRows[firstUnsettledIndex];
+		firstUnsettledIndex++;
+	}
+	while (
+		endOfUnsettledIndexes > firstUnsettledIndex &&
+		endOfUnsettledPreviousRows > firstUnsettledIndex &&
+		previousRows[endOfUnsettledPreviousRows - 1].itemHash ===
+			itemHashes[endOfUnsettledIndexes - 1]
+	) {
+		endOfUnsettledIndexes--;
+		endOfUnsettledPreviousRows--;
+		resolvedRows[endOfUnsettledIndexes] =
+			previousRows[endOfUnsettledPreviousRows];
+	}
+
+	const previousByContentHash = groupRowsByContentHash(
+		previousRows,
+		firstUnsettledIndex,
+		endOfUnsettledPreviousRows,
+	);
+	for (let index = firstUnsettledIndex; index < endOfUnsettledIndexes; index++)
 		resolvedRows[index] = claimLeftmostUnclaimedRow(
 			previousByContentHash,
 			itemHashes[index],
@@ -142,7 +179,11 @@ const matchRowsToPreviousRows = (
 	const leftoverByShapeOrKey = groupUnclaimedByShapeOrKey(
 		previousByContentHash,
 	);
-	for (let index = 0; index < count; index++) {
+	for (
+		let index = firstUnsettledIndex;
+		index < endOfUnsettledIndexes;
+		index++
+	) {
 		if (resolvedRows[index] !== undefined) continue;
 		const value = coerceToTemplate(itemValues[index]);
 		const parsed = resolveNestedTemplate(value);
@@ -165,14 +206,13 @@ const matchRowsToPreviousRows = (
 };
 
 const placeRows = (
-	startMarker: Comment,
+	openMarker: Comment,
 	resolvedRows: Array<ListItem | undefined>,
 	itemValues: Array<unknown>,
 	itemHashes: Array<number>,
 	moveState: StyleSheetMoveState,
 ): Array<ListItem> => {
-	const finalRows: Array<ListItem> = new Array(resolvedRows.length);
-	let cursor: ChildNode = startMarker;
+	let cursor: ChildNode = openMarker;
 	for (let index = 0; index < resolvedRows.length; index++) {
 		let row = resolvedRows[index];
 		if (row === undefined)
@@ -187,9 +227,9 @@ const placeRows = (
 			refreshStyleSheetsAfterMove(row.instance);
 		}
 		cursor = row.tailMarker;
-		finalRows[index] = row;
+		resolvedRows[index] = row;
 	}
-	return finalRows;
+	return resolvedRows as Array<ListItem>;
 };
 
 const mountRowAfter = (
@@ -274,11 +314,11 @@ export const hydrateListItems = (
 			walker,
 			value,
 			parsed,
-			liveBinding.endMarker,
+			liveBinding.closeMarker,
 			moveState,
 		);
 		if (instance === null) return false;
-		const tailMarker = nextListTail(walker, liveBinding.endMarker);
+		const tailMarker = nextListTail(walker, liveBinding.closeMarker);
 		if (tailMarker === null) return false;
 		const itemHash = hashValue(itemValues[index]);
 		itemHashes[index] = itemHash;
@@ -292,7 +332,7 @@ export const hydrateListItems = (
 		};
 	}
 
-	if (walker.currentNode.nextSibling !== liveBinding.endMarker) return false;
+	if (walker.currentNode.nextSibling !== liveBinding.closeMarker) return false;
 	list.items = items;
 	list.aggregateHash = aggregateHash;
 	return true;

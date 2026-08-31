@@ -16,7 +16,7 @@ export interface StyleSheetMoveState {
 
 export interface TagLiveBinding {
 	staticBinding: TagStaticBinding;
-	markerComment: Comment;
+	openMarker: Comment;
 	lastValueHash: number;
 }
 
@@ -49,8 +49,8 @@ export interface DynamicAttributeLiveBinding {
 
 export interface ContentLiveBinding {
 	staticBinding: ContentStaticBinding;
-	startMarker: Comment;
-	endMarker: Comment;
+	openMarker: Comment;
+	closeMarker: Comment;
 	content: ContentState;
 }
 
@@ -90,14 +90,14 @@ export interface StyleSheetState {
 
 export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;
-	markerComment: Comment;
+	openMarker: Comment;
 	lastValueHash: number;
 	styleSheetState: StyleSheetState | null;
 }
 
 export interface CommentLiveBinding {
 	staticBinding: CommentStaticBinding;
-	markerComment: Comment;
+	openMarker: Comment;
 	lastValueHash: number;
 }
 
