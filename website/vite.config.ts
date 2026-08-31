@@ -28,6 +28,8 @@ export default defineConfig({
 				krausest: resolve(__dirname, "pages/krausest/index.html"),
 				ssrVsCsr: resolve(__dirname, "pages/ssr-vs-csr/index.html"),
 				cubes: resolve(__dirname, "pages/cubes/index.html"),
+				parserBench: resolve(__dirname, "pages/parser-bench/index.html"),
+				renderBench: resolve(__dirname, "pages/render-bench/index.html"),
 			},
 		},
 	},

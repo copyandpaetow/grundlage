@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - Parser bench</title>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
+		<main>
+			<h1>parser bench</h1>
+			<p>
+				Calls <code>getParsedTemplate</code> directly — no mount, no render. A
+				parse is a rounding error inside a mount and would not be visible
+				through the render path; end-to-end cost belongs to
+				<code>perf</code>.
+			</p>
+			<p>
+				This page measures <strong>per-character work only</strong>. Compile
+				plus cold-tier execution is roughly 95% of what the parser costs on
+				first load, it scales with the parser's own shipped bytes rather than
+				with its input, and it is not measurable in an already-warm page. Read
+				that half from the gzip size of the built parser instead. A "cold"
+				number printed here would be a false write.
+			</p>
+			<p>
+				Every shape holds one axis still and moves another.
+				<em>hole density</em> fixes characters and varies holes, twice: once
+				with the holes adjacent inside one element, once with an element per
+				hole. The first slope is the cost of a hole, the second adds the cost
+				of the element that carries it, and the intercept is the scanner with
+				no holes at all. <em>part length</em> fixes holes and varies characters
+				— flat ns/char means slicing is linear and cheap.
+				<em>template count</em> splits the same 48k characters across 1 to 256
+				templates, separating per-template fixed cost from per-character cost.
+				<em>hole kind</em> gives every binding lane equal holes and characters,
+				including the <code>&lt;style&gt;</code> path and the comment lane the
+				site itself never exercises. <em>control</em> is the 33 templates
+				recorded off this site: a win on synthetic shapes that loses here is
+				tuning for a phantom.
+			</p>
+			<p>
+				Each pass parses fresh <code>TemplateStringsArray</code> wrappers so the
+				parse cache always misses. Repeats per pass are chosen so a pass clears
+				the 100µs clock granularity, results are best-of-N, and the numbers are
+				normalized — absolute pass time is an artifact of the repeat count.
+			</p>
+			<p>
+				Two conditions mark a row <strong>VOID</strong> instead of reporting a
+				number, because each one means the timing is not evidence:
+				<em>cache hit</em>, the parse never happened; <em>unstable timing</em>,
+				the median pass is more than twice the best, so one pass measured
+				something the others did not and best-of-N no longer holds. A void row
+				is also dropped from the ns/hole fits — a fit is where one bad row
+				disappears into a headline number.
+			</p>
+			<p>
+				A retained-heap reading of zero or less is impossible and is dropped to
+				<code>—</code> on its own, without voiding the row: it costs the B/tmpl
+				column, not the timing. A whole column of <code>—</code> means Chrome is
+				running without <code>--enable-precise-memory-info</code>.
+			</p>
+			<p>
+				An A/A run of the equivalent playwright rig against identical code
+				resolved work to about 8% and retained heap to about 23%. The delta
+				column dims anything inside that floor: it is noise, not a result. A
+				refactor wins when gzip bytes drop, the recorded control does not
+				regress, and ns/char stays inside the floor. Run Chrome with
+				<code>--js-flags=--expose-gc --enable-precise-memory-info</code> for
+				trustworthy heap numbers.
+			</p>
+			<parser-bench passes="40"></parser-bench>
+		</main>
+	</body>
+</html>

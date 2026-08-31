@@ -3,22 +3,20 @@ import {
 	clearBaseline,
 	formatDelta,
 	loadBaseline,
+	measureOperation,
 	measureWindow,
+	type OperationResult,
 	saveBaseline,
 	type WindowResult,
 } from "../measure";
 
-const BASELINE_STORAGE_KEY = "grundlage:animation-list:baseline";
+const BASELINE_STORAGE_KEY = "grundlage:animation-list:baseline:v2";
+const DRIVEN_SAMPLE_COUNT = 40;
 
-// fps reads better when higher; frame time and writes/frame read better when
-// lower. Both use the same 2% band — window mode is wall-clock noisy, so frame
-// count (and the writes/frame ratio over it) drifts run to run.
-const classWhenHigherIsBetter = (current: number, previous: number): string =>
-	current > previous * 1.02
-		? "improve"
-		: current < previous * 0.98
-			? "regress"
-			: "";
+interface Measurement {
+	observed: WindowResult;
+	driven: OperationResult;
+}
 
 const classWhenLowerIsBetter = (current: number, previous: number): string =>
 	current < previous * 0.98
@@ -33,11 +31,14 @@ const classWhenLowerIsBetter = (current: number, previous: number): string =>
     fresh values — it exercises enemy #2 (per-frame allocation) and surfaces
     any false rebuilds.
 
-    The animation owns its rAF loop; the shared measureWindow harness only
-    OBSERVES it for a wall-clock window and reports fps, frame time, DOM writes
-    per frame, and heap delta — the executable form of lib/CONVENTIONS.md's
-    "Measuring" contract. Set `bars` to push bar count up and find where
-    allocation / DOM-write volume starts dropping frames under CPU throttle.
+    Two passes, because they answer different questions. measureWindow OBSERVES
+    the component's own rAF loop for a wall-clock window: fps and frame time say
+    whether 60 held, and both are quantised to the refresh interval, so they are
+    reported plainly and never carry a delta. measureOperation then DRIVES the
+    same list with forced updates and reports min applied ms — small enough to
+    resolve a change to the list diff, and the number the baseline compares. Set
+    `bars` to push bar count up and find where allocation / DOM-write volume
+    starts dropping frames.
 */
 
 customElements.define(
@@ -48,10 +49,10 @@ customElements.define(
 
 		let time = 0;
 		let isMeasuring = false;
-		let result: WindowResult | null = null;
+		let result: Measurement | null = null;
 		let animating = false;
 		let durationMs = Number(element.getAttribute("duration") ?? 3000);
-		let baseline = loadBaseline<WindowResult>(BASELINE_STORAGE_KEY);
+		let baseline = loadBaseline<Measurement>(BASELINE_STORAGE_KEY);
 
 		// The animation only runs while a measurement is in flight — clicking
 		// measure starts it, the window ends it. Idle, the list sits on its last
@@ -76,8 +77,22 @@ customElements.define(
 			animating = true;
 			element.update();
 			requestAnimationFrame(tick);
-			result = await measureWindow(barsRoot(), durationMs);
+			const observed = await measureWindow(barsRoot(), durationMs);
 			animating = false;
+			//the observed numbers are wall-clock and frame-quantised, so they say whether 60 held and
+			//nothing finer; the driven pass is the one a delta can be taken against
+			const driven = await measureOperation(
+				barsRoot(),
+				{
+					label: "frame",
+					apply: () => {
+						time += 1 / 60;
+						return element.update();
+					},
+				},
+				{ samples: DRIVEN_SAMPLE_COUNT },
+			);
+			result = { observed, driven };
 			isMeasuring = false;
 			element.update();
 		};
@@ -230,70 +245,74 @@ customElements.define(
 						result
 							? (() => {
 									const base = baseline?.value;
+									const { observed, driven } = result;
 									return html`
 										<div class="grid">
-											${metricRow(
-												"fps",
-												formatNumber(result.framesPerSecond),
-												base
-													? formatDelta(
-															result.framesPerSecond,
-															base.framesPerSecond,
-														)
-													: "",
-												base
-													? classWhenHigherIsBetter(
-															result.framesPerSecond,
-															base.framesPerSecond,
-														)
-													: "",
-											)}
+											${metricRow("fps", formatNumber(observed.framesPerSecond), "", "")}
 											${metricRow(
 												"median frame",
-												`${formatNumber(result.medianFrameMs, 3)} ms`,
-												base
-													? formatDelta(
-															result.medianFrameMs,
-															base.medianFrameMs,
-														)
-													: "",
-												base
-													? classWhenLowerIsBetter(
-															result.medianFrameMs,
-															base.medianFrameMs,
-														)
-													: "",
+												`${formatNumber(observed.medianFrameMs, 3)} ms`,
+												"",
+												"",
 											)}
-											${metricRow("frames", String(result.frames), "", "")}
+											${metricRow("frames", String(observed.frames), "", "")}
 											${metricRow(
-												"DOM writes / frame",
-												formatNumber(result.mutationsPerFrame),
-												base
-													? formatDelta(
-															result.mutationsPerFrame,
-															base.mutationsPerFrame,
-														)
-													: "",
-												base
-													? classWhenLowerIsBetter(
-															result.mutationsPerFrame,
-															base.mutationsPerFrame,
-														)
-													: "",
-											)}
-											${metricRow(
-												"DOM writes total",
-												String(result.mutations),
+												"observed writes / frame",
+												formatNumber(observed.mutationsPerFrame),
 												"",
 												"",
 											)}
 											${metricRow(
 												"heap delta",
-												result.heapDeltaMb !== null
-													? `${formatNumber(result.heapDeltaMb)} MB`
+												observed.heapDeltaMb !== null
+													? `${formatNumber(observed.heapDeltaMb)} MB`
 													: "n/a",
 												"",
 												"",
+											)}
+											${metricRow(
+												"min update",
+												`${formatNumber(driven.minAppliedMs, 3)} ms`,
+												base
+													? formatDelta(
+															driven.minAppliedMs,
+															base.driven.minAppliedMs,
+														)
+													: "",
+												base
+													? classWhenLowerIsBetter(
+															driven.minAppliedMs,
+															base.driven.minAppliedMs,
+														)
+													: "",
+											)}
+											${metricRow(
+												"median update",
+												`${formatNumber(driven.medianAppliedMs, 3)} ms`,
+												"",
+												"",
+											)}
+											${metricRow(
+												"frames to paint",
+												String(driven.medianPaintedFrames),
+												"",
+												"",
+											)}
+											${metricRow(
+												"writes / update",
+												String(driven.medianMutations),
+												base
+													? formatDelta(
+															driven.medianMutations,
+															base.driven.medianMutations,
+														)
+													: "",
+												base
+													? classWhenLowerIsBetter(
+															driven.medianMutations,
+															base.driven.medianMutations,
+														)
+													: "",
 											)}
 										</div>
 									`;

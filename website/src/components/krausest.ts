@@ -88,7 +88,7 @@ const NOUNS = [
 const pickRandom = <T>(items: ReadonlyArray<T>): T =>
 	items[Math.floor(Math.random() * items.length)];
 
-const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline";
+const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline:v2";
 
 customElements.define(
 	"krausest-bench",
@@ -245,7 +245,7 @@ customElements.define(
 				const before = rows.length;
 				op.apply();
 				itemCounts.set(op.label, Math.max(before, rows.length));
-				element.update();
+				return element.update();
 			},
 		});
 
@@ -457,20 +457,21 @@ customElements.define(
 							<div class="results">
 								<div class="label head">operation</div>
 								<div class="head">items</div>
-								<div class="head">median (ms)</div>
-								<div class="head">min</div>
-								<div class="head">max</div>
+								<div class="head">min applied (ms)</div>
+								<div class="head">median applied</div>
+								<div class="head">frames to paint</div>
 								<div class="head">DOM writes</div>
 								<div class="head">vs baseline</div>
 								${Array.from(measurements.values()).map((measurement) => {
 									const previous = baselineFor(measurement.label);
-									// ms uses a 2% noise band; DOM writes are deterministic, so
+									// the delta rides on min applied ms — the one timing here that resolves
+									// a change smaller than a frame. DOM writes are deterministic, so
 									// compare them exactly — any drift is a real false-write signal.
 									const msClass = !previous
 										? ""
-										: measurement.medianMs > previous.medianMs * 1.02
+										: measurement.minAppliedMs > previous.minAppliedMs * 1.02
 											? "regress"
-											: measurement.medianMs < previous.medianMs * 0.98
+											: measurement.minAppliedMs < previous.minAppliedMs * 0.98
 												? "improve"
 												: "";
 									const writesClass = !previous
@@ -483,9 +484,9 @@ customElements.define(
 									return html`
 										<div class="label">${measurement.label}</div>
 										<div>${itemCounts.get(measurement.label) ?? "—"}</div>
-										<div>${formatMs(measurement.medianMs)}</div>
-										<div>${formatMs(measurement.minMs)}</div>
-										<div>${formatMs(measurement.maxMs)}</div>
+										<div>${formatMs(measurement.minAppliedMs)}</div>
+										<div>${formatMs(measurement.medianAppliedMs)}</div>
+										<div>${measurement.medianPaintedFrames}</div>
 										<div>${measurement.medianMutations}</div>
 										<div class="delta">
 											${
@@ -493,8 +494,8 @@ customElements.define(
 													? html`
 															<span class="${msClass}"
 																>${formatDelta(
-																	measurement.medianMs,
-																	previous.medianMs,
+																	measurement.minAppliedMs,
+																	previous.minAppliedMs,
 																)}
 																ms</span
 															>
