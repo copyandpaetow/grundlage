@@ -5,6 +5,7 @@ import {
 	BaseComponent,
 	ComponentGenerator,
 	ComponentProps,
+	YieldableValue,
 } from "../../src/types";
 
 const sleep = (duration = 0) =>
@@ -690,7 +691,7 @@ describe("shared generator functions", () => {
 		const withLifecycleLog = (
 			name: string,
 			//the sync half of ComponentGenerator, for the same reason as above
-			inner: (componentProps: ComponentProps) => Generator,
+			inner: (componentProps: ComponentProps) => Generator<YieldableValue>,
 		): ComponentGenerator =>
 			function* (componentProps) {
 				calls.push(`${name}:setup`);
@@ -750,7 +751,9 @@ describe("shared generator functions", () => {
 	});
 
 	test("async sub-generator delegated with yield* sequences async work", async () => {
-		const loadInTwoStages: (element: BaseComponent) => AsyncGenerator =
+		const loadInTwoStages: (
+			element: BaseComponent,
+		) => AsyncGenerator<YieldableValue> =
 			async function* () {
 				yield html`<p>stage-1</p>`;
 				await new Promise((resolve) => setTimeout(resolve, 10));

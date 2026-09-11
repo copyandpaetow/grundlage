@@ -83,8 +83,18 @@ export type RenderFunction<DeclaredSchema extends Schema = Schema> = (
 	| ComponentGenerator<DeclaredSchema>
 	| Promise<ContentValue | ComponentGenerator<DeclaredSchema>>;
 
+export type YieldableValue<DeclaredSchema extends Schema = Schema> =
+	| ContentValue
+	| object
+	| void
+	| ((componentProps: ComponentProps<DeclaredSchema>) => unknown);
+
+export type Cleanup = () => void;
+
 export type ComponentGenerator<DeclaredSchema extends Schema = Schema> = (
 	componentProps: ComponentProps<DeclaredSchema>,
-) => Generator | AsyncGenerator;
+) =>
+	| Generator<YieldableValue<DeclaredSchema>, Cleanup | void, any>
+	| AsyncGenerator<YieldableValue<DeclaredSchema>, Cleanup | void, any>;
 
 export type ComponentConstructor = new () => BaseComponent;

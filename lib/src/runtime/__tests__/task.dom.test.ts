@@ -215,10 +215,22 @@ describe("completion and cleanup", () => {
 		expect(task.suspension).toBe(null);
 	});
 
-	test("a non-function return captures no cleanup", () => {
+	test("an implicit return captures no cleanup and warns about nothing", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const task = makeTask();
 		classifyStep(task, returned(undefined));
 		expect(task.cleanup).toBe(null);
+		expect(warn).not.toHaveBeenCalled();
+	});
+
+	//the return slot is the only place the teardown announces itself, and a dropped value leaves no
+	//other trace for anyone not running the types
+	test("a return that is neither a function nor undefined warns", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const task = makeTask();
+		classifyStep(task, returned(42));
+		expect(task.cleanup).toBe(null);
+		expect(warn).toHaveBeenCalledOnce();
 	});
 
 	//the cancel has a sibling task to tear down and a paint to make after this, so a user cleanup

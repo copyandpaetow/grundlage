@@ -2,7 +2,7 @@
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test } from "vitest";
-import { component, html } from "../../src/index";
+import { component, html, type YieldableValue } from "../../src/index";
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -40,7 +40,7 @@ const childTagRenderingItsQuote = (): string => {
 };
 
 const renderOnServer = async (
-	body: () => Generator<unknown, void, unknown>,
+	body: () => Generator<YieldableValue, void, unknown>,
 ): Promise<ShadowRoot> => {
 	const tag = uniqueTag("parent");
 	customElements.define(tag, component(body));

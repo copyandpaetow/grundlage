@@ -15,9 +15,9 @@ npm install grundlage
 #### example
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { start: [Number, 0] };
+const props = { start: [Number, 0] } satisfies Schema;
 
 customElements.define(
 	"count-seconds",
@@ -135,6 +135,8 @@ customElements.define(
 
 - runs on the disconnectedCallback of the custom element (see the counter example in the [intro](#example))
 - disconnect is confirmed a microtask later, so moving an element inside the DOM keeps the component alive
+- the return position holds it and nothing else: returning any other value warns and drops it. In
+  TypeScript that position is `Cleanup | void`, so the wrong return is a compile error instead
 
 ### errors
 
@@ -143,9 +145,9 @@ customElements.define(
 - an error from a nested generator is thrown into the main body at its `yield` first, so a try/catch there handles it
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { src: String };
+const props = { src: String } satisfies Schema;
 
 customElements.define(
 	"data-view",
@@ -182,9 +184,9 @@ Inputs are declared in `component(gen, { props })` and arrive on the generator's
   - attributes (names, values, parts of those)
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { label: String, href: String, size: [String, "md"] };
+const props = { label: String, href: String, size: [String, "md"] } satisfies Schema;
 
 customElements.define(
 	"ui-badge",
@@ -232,11 +234,11 @@ customElements.define(
 - the tag name and raw text slots (style / script / textarea) are their own binding forms:
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
 const SECTION_CSS = "h2, h3 { margin-block: 0 }";
 
-const props = { level: [Number, 2] };
+const props = { level: [Number, 2] } satisfies Schema;
 
 customElements.define(
 	"section-block",
@@ -263,12 +265,12 @@ customElements.define(
 A template is a plain value. It can be passed around, returned from a helper, or dropped into another template.
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
 const statusBadge = (status) =>
 	html`<em class="badge badge--${status}">${status}</em>`;
 
-const props = { reference: String, status: String };
+const props = { reference: String, status: String } satisfies Schema;
 
 customElements.define(
 	"order-row",
@@ -337,13 +339,16 @@ shares setup and first render, and it takes arguments:
 
 ```typescript
 // user-card.ts, a self-contained component: its own loading → loaded lifecycle
-import { html } from "grundlage";
+import { html, type BaseComponent } from "grundlage";
 
-// a mixin declares nothing, it takes whatever the caller hands it
-export async function* userCard({ userId }) {
+// a mixin declares the shape it reads, never a schema: schemas belong to elements, and this one is
+// handed whichever element mounted it
+type UserCardInput = { host: BaseComponent; readonly userId: string | undefined };
+
+export async function* userCard(input: UserCardInput) {
 	yield () => html`<p aria-busy="true">loading…</p>`; // first paint
 
-	const user = await fetchUser(userId);
+	const user = await fetchUser(input.userId);
 
 	yield () => html`
 		<article>
@@ -355,11 +360,11 @@ export async function* userCard({ userId }) {
 ```
 
 ```typescript
-import { component } from "grundlage";
+import { component, type Schema } from "grundlage";
 import { userCard } from "./user-card.js";
 
-const userCardProps = { userId: String };
-const userPanelProps = { activeUserId: String };
+const userCardProps = { userId: String } satisfies Schema;
+const userPanelProps = { activeUserId: String } satisfies Schema;
 
 // as its own element. The registration site decides the attribute names
 customElements.define(
@@ -374,8 +379,10 @@ customElements.define(
 		async function* (componentProps) {
 			// becomes this body's loading → loaded run, under the parent's own prop name
 			yield* userCard({
-				...componentProps,
-				userId: componentProps.activeUserId,
+				host: componentProps.host,
+				get userId() {
+					return componentProps.activeUserId;
+				},
 			});
 		},
 		{ props: userPanelProps },
@@ -385,6 +392,22 @@ customElements.define(
 
 The two `yield`s inside `userCard` are self-driven. The async generator walks loading → loaded on
 its own, no `host.update()` involved.
+
+Registering the mixin directly hands it the props object itself, so `input.userId` stays live the way
+it does anywhere else. Renaming a prop across the boundary is where that breaks: the object literal at
+the `yield*` is built once, so a plain `userId: componentProps.activeUserId` freezes the value at
+delegation. The getter above is what keeps the rename live, and it is worth reaching for whenever the
+mixin paints the renamed prop rather than only seeding from it.
+
+Borrowing `ComponentProps<typeof userCardProps>` for the parameter looks tighter and does not compile:
+that type carries `host: BaseComponent & DeclaredProps<S>`, which claims the host has a `userId`
+accessor. `user-panel` has an `activeUserId` one instead. Declaring the shape is not a shortcut around
+the schema, it is the honest description of what a mixin gets.
+
+A mixin that annotates its own return type spells it `AsyncGenerator<YieldableValue>` (or
+`Generator<YieldableValue>`), not bare `AsyncGenerator`: `yield*` hands the inner yield type straight
+to the outer generator, and a bare one erases it to `unknown`. Inference gets this right on its own,
+as above.
 
 The same generator could also be dropped in with no arguments at all: `yield userCard` is a generator function,
 so it installs as a nested lifecycle and reads the parent's own `userid` attribute. The difference here is the
@@ -402,9 +425,9 @@ children become the shadow DOM, and its attributes are applied to the custom ele
 - a `<template>` carrying attributes in a nested position (content hole, list row) throws
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { variant: [String, "default"] };
+const props = { variant: [String, "default"] } satisfies Schema;
 
 customElements.define(
 	"pinnable-card",
@@ -550,9 +573,9 @@ customElements.define(
 - an error is just another branch, renders a fallback instead of throwing
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { items: [(incoming) => incoming, []] };
+const props = { items: [(incoming: unknown) => incoming, []] } satisfies Schema;
 
 customElements.define(
 	"accordion-list",
@@ -596,9 +619,9 @@ templates the old subtree is torn down and the new one mounted, which resets foc
 state inside it.
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { readonly: [Boolean, false] };
+const props = { readonly: [Boolean, false] } satisfies Schema;
 
 customElements.define(
 	"text-block",
@@ -629,9 +652,9 @@ Errors work the same way. The failure is held in state and rendered as a branch.
 component cannot recover from, because it replaces the whole shadow tree with [`#fail`](#errors):
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { src: [String, ""] };
+const props = { src: [String, ""] } satisfies Schema;
 
 customElements.define(
 	"safe-image",
@@ -738,9 +761,9 @@ The key is the **first dynamic comment** in the row template, wherever it sits. 
 content around can be anything: `<!--${player.id}-->`, `<!-- id: ${player.id} -->` and `<!-- key: ${player.id} -->`.
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { tags: [(incoming) => incoming, []] }; // [{ id, label }, …]
+const props = { tags: [(incoming: unknown) => incoming, []] } satisfies Schema; // [{ id, label }, …]
 
 customElements.define(
 	"tag-line",
@@ -760,9 +783,9 @@ The generator itself can be async, so `await` works inside the main function bod
 and returns its resolved value.
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { symbol: String };
+const props = { symbol: String } satisfies Schema;
 
 customElements.define(
 	"latest-price",
@@ -783,6 +806,30 @@ The server serializes the first yield (the loading view) and the client resumes 
 `await` runs on the client. This loads once and cannot retry. For a fetch that should run again, the
 data is better kept in a variable and re-rendered with `update()`.
 
+#### async generator or yielded promise
+
+Both spellings wait. They cost different things, and neither cost is obvious from the call site.
+
+An **async generator** pays one tick up front. Its first `next()` returns a promise, so even the
+placeholder above is a microtask away and the shadow root is empty until that promise settles. The
+frame boundary absorbs it: nothing paints in between, so there is no flash to see. What it buys is
+`await`, which keeps its type.
+
+A **yielded promise** in a sync generator paints its placeholder in the same task and waits after
+that. What it costs is the type: `const price = yield fetchPrice(symbol)` is `any`. A `yield`
+resumes with a settled promise, an echoed value or nothing, and one generator has one resume type
+for all of its yields, so there is nothing narrower to give it. Annotate the receiving variable when
+the value matters.
+
+```typescript
+const price: Price = yield fetchPrice(symbol); // sync generator, paints first, types by hand
+const price = await fetchPrice(symbol); //         async generator, types itself, one empty tick
+```
+
+So: a page root is an async generator. Nothing is waiting on its first tick and the types are worth
+having. A nested component is a sync generator that yields its promises, because that is where the
+empty tick is not free.
+
 ### form components
 
 - opting in with `{formAssociated: true}` ([see options](#options)) → swaps the base class so the element participates
@@ -793,9 +840,9 @@ data is better kept in a variable and re-rendered with `update()`.
 - react to them declaratively with `on-form-*` on the host `<template>`, or imperatively with `host.addEventListener`
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { name: String, value: [String, ""] };
+const props = { name: String, value: [String, ""] } satisfies Schema;
 
 customElements.define(
 	"text-field",
@@ -856,9 +903,9 @@ customElements.define(
 - each instance owns a private sheet; `getHTML` serializes the last text write, not later `setProperty` updates
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { accent: [String, "rebeccapurple"] };
+const props = { accent: [String, "rebeccapurple"] } satisfies Schema;
 
 customElements.define(
 	"progress-bar",
@@ -890,9 +937,9 @@ browser reparses it. A whole-sheet hole and any **structural** hole (selector, p
 prelude) end up here:
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { theme: [String, "light"] };
+const props = { theme: [String, "light"] } satisfies Schema;
 
 customElements.define(
 	"themed-panel",
@@ -915,9 +962,9 @@ customElements.define(
 - never hang methods/state off `host` at runtime ([see antipatterns](#antipatterns))
 
 ```typescript
-import { component } from "grundlage";
+import { component, type Schema } from "grundlage";
 
-const props = { tokens: [asTokenList, []] };
+const props = { tokens: [asTokenList, []] } satisfies Schema;
 
 class TokenField extends component(
 	function* () {
@@ -952,9 +999,9 @@ customElements.define("token-field", TokenField);
 Any other `ShadowRootInit` field works too, e.g. `slotAssignment: "manual"`.
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const props = { label: String };
+const props = { label: String } satisfies Schema;
 
 customElements.define(
 	"secure-badge",
@@ -1019,15 +1066,15 @@ cell.setProp("quote", null); // absence → back to the fallback
 ```
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
-const asQuote = (incoming) =>
+const asQuote = (incoming: unknown) =>
 	typeof incoming === "object" && incoming !== null ? incoming : undefined;
 
 const props = {
 	currency: [String, "USD"],
 	quote: [asQuote, { bid: 0, ask: 0 }],
-};
+} satisfies Schema;
 
 customElements.define(
 	"price-cell",
@@ -1057,7 +1104,13 @@ generator all receive the same object.
 
 The schema is a plain object. Hoisting it above `customElements.define` puts the element's inputs in
 one place, and gives you something to export when two elements share a shape. Every example below is
-written that way.
+written that way, and every one of them ends in `satisfies Schema`.
+
+That is not decoration. Written inline, `component(gen, { props: { count: [Number, 0] } })` gets its
+contextual type from the parameter and checks out. Hoisted, `[Number, 0]` has nothing to be contextual
+against and widens to `(NumberConstructor | number)[]`, which is not an entry. `satisfies Schema`
+supplies the missing context and keeps the literal type the prop inference needs, so hoist and
+`satisfies` travel together.
 
 An entry is a **function** taking whatever arrived and returning the value, or `undefined` to refuse
 it. `String`, `Number`, `BigInt` and `Boolean` are shorthands for the four shipped functions, and
@@ -1077,23 +1130,27 @@ That is the whole schema. There is no required shape, no optional shape and no t
 its function, and the function is the only place a value is parsed or validated:
 
 ```typescript
-const asTagList = (incoming) =>
+const asTagList = (incoming: unknown) =>
 	typeof incoming === "string" ? incoming.split(" ") : incoming;
 ```
+
+The `unknown` there is not optional either. Inside a schema, `(incoming) => …` is an implicit `any`:
+an entry may be a function or one of four constructors, all five are callable, so there is no single
+signature to hand the parameter.
 
 A **string** means the value came from markup and needs parsing; anything else came from JS and is
 already itself. One function serves both channels, so `<x-el items="a b">` and `el.items = ["a","b"]`
 land on the same value.
 
 ```typescript
-import { component, html } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
 const props = {
 	label: [String, "untitled"],
 	count: [Number, 0],
 	disabled: Boolean,
 	items: [asTagList, []],
-};
+} satisfies Schema;
 
 customElements.define(
 	"labeled-count",
@@ -1191,7 +1248,7 @@ once per element.
 
 ```typescript
 {
-	selection: (incoming) => incoming ?? new SelectionRange(0, 0);
+	selection: (incoming: unknown) => incoming ?? new SelectionRange(0, 0);
 }
 ```
 
@@ -1212,9 +1269,9 @@ property under the prop name wins over the attribute (case intact); with neither
 answers absence.
 
 ```typescript
-import { props as readProps } from "grundlage";
+import { props as readProps, type Schema } from "grundlage";
 
-const figureProps = { label: [String, ""] };
+const figureProps = { label: [String, ""] } satisfies Schema;
 
 const { label } = readProps(document.querySelector("figure"), figureProps);
 ```

@@ -22,6 +22,7 @@ render function closes over it; the generator body itself does not re-run.
 import { component, html } from "grundlage";
 
 // the schema is a plain object; hoisting it keeps the element's inputs readable at a glance
+// (in TypeScript this needs `satisfies Schema`, see Rules)
 const props = { start: [Number, 0], label: [String, "count"] };
 
 customElements.define(
@@ -280,7 +281,8 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
 - A returned function is the cleanup: it runs on disconnect, before an inner generator is
   re-run, and when the component body paints content over a running inner generator.
   `disconnectedCallback` waits a microtask and re-checks `isConnected`, so moving an element
-  inside the DOM does NOT tear the component down.
+  inside the DOM does NOT tear the component down. The return position holds the cleanup and
+  nothing else: a return that is neither a function nor `undefined` is dropped with a warning.
 - An uncaught error replaces the whole shadow tree with the error text and warns on the
   console. An error from an inner generator is thrown INTO the outer generator at its
   `yield`, so a `try/catch` there handles it; otherwise it reaches that root handler.
@@ -346,6 +348,24 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   `componentProps.host.count = 5` is the spelling that does all three, and it is the same one
   an outside caller uses (`element.count = 5`).
 - `load` replays SSR data on hydration; don't add a fetch-once cache around it.
+- Waiting comes in two spellings with opposite costs. An `async function*` pays one tick: its
+  first `next()` returns a promise, so the shadow root is empty until that settles (the frame
+  boundary absorbs it, nothing flashes), and in exchange `await` keeps its type. A `yield` of
+  a promise from a sync `function*` paints its placeholder in the same task, but evaluates to
+  `any`: one generator has one resume type for all of its yields. Page roots are async
+  generators; nested components are sync generators that yield their promises, because that is
+  where the empty tick is not free.
+- TypeScript only: a schema hoisted out of the `component(…)` call needs `satisfies Schema`.
+  Inline, `{ count: [Number, 0] }` is contextually typed; hoisted, `[Number, 0]` widens to
+  `(NumberConstructor | number)[]` and stops being a valid entry. A function entry also needs
+  its parameter annotated, `[(incoming: unknown) => …, fallback]`, because an entry may be a
+  function or one of four constructors and all five are callable. A `yield*` helper typed by
+  hand annotates as `Generator<YieldableValue>`, not bare `Generator`, and takes the SHAPE it
+  reads (`{ host: BaseComponent; readonly userId: string | undefined }`), never
+  `ComponentProps<typeof someSchema>`: that type claims the host carries those accessors, and a
+  delegating parent's host carries its own instead. The generator's return position is
+  `Cleanup | void` (`Cleanup` is exported), so a wrong return is a compile error, not a
+  silent drop.
 - Form components: `component(gen, { formAssociated: true })` re-dispatches the four form
   callbacks as host events `form-associated` `{form}`, `form-disabled` `{disabled}`,
   `form-reset` (no detail) and `form-state-restore` `{state, mode}`, bindable declaratively

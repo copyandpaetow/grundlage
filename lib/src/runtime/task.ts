@@ -1,5 +1,10 @@
 import { ValueOf } from "../utils/types";
-import { ComponentGenerator, ContentValue, RenderFunction } from "../types";
+import {
+	Cleanup,
+	ComponentGenerator,
+	ContentValue,
+	RenderFunction,
+} from "../types";
 import { isGeneratorFunction } from "../utils/guards";
 import { isTemplate } from "../template";
 
@@ -30,7 +35,7 @@ export interface Suspension {
 export interface Task {
 	generator: Generator | AsyncGenerator;
 	suspension: Suspension | null;
-	cleanup: VoidFunction | null;
+	cleanup: Cleanup | null;
 }
 
 export const createRenderTask = (
@@ -211,8 +216,14 @@ export const classifySettledStepAsOperation = (
 	result: IteratorResult<unknown>,
 ): CoroutineOperation => {
 	if (!result.done) return classifyYieldedValueAsOperation(task, result.value);
-	task.cleanup =
-		typeof result.value === "function" ? (result.value as VoidFunction) : null;
+	const returned = result.value;
+	//nothing downstream reads a non-function return, so without this the drop is invisible to
+	//anyone not running the types
+	if (returned !== undefined && typeof returned !== "function")
+		console.warn(
+			"grundlage: the generator returned a value that is not a function, so it was dropped. The return position is the cleanup function.",
+		);
+	task.cleanup = typeof returned === "function" ? (returned as Cleanup) : null;
 	return createOperation(OPERATION.COMPLETED, null);
 };
 

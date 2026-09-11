@@ -62,11 +62,13 @@ import { isGeneratorFunction, isServer } from "./utils/guards";
 export { props } from "./props/read";
 export {
 	type BaseComponent,
+	type Cleanup,
 	type ComponentOptions,
 	type ComponentProps,
 	type Resolve,
 	type Schema,
 	type Template,
+	type YieldableValue,
 } from "./types";
 export { load, type LoadOptions } from "./load";
 
