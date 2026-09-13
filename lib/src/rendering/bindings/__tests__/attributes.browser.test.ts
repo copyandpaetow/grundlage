@@ -400,11 +400,17 @@ describe("attribute updates", () => {
 		const events: string[] = [];
 
 		const MyElement = component(function* () {
+			//the button mounts under the real pointer, so chromium dispatches a trusted mouseenter of
+			//its own before this test dispatches anything
+			const onClick = (event: Event) => {
+				if (!event.isTrusted) events.push("click");
+			};
+			const onMouseEnter = (event: Event) => {
+				if (!event.isTrusted) events.push("enter");
+			};
+
 			yield () =>
-				html`<button
-					onclick="${() => events.push("click")}"
-					onmouseenter="${() => events.push("enter")}"
-				>
+				html`<button onclick="${onClick}" onmouseenter="${onMouseEnter}">
 					btn
 				</button>`;
 		});

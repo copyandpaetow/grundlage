@@ -97,4 +97,5 @@ export type ComponentGenerator<DeclaredSchema extends Schema = Schema> = (
 	| Generator<YieldableValue<DeclaredSchema>, Cleanup | void, any>
 	| AsyncGenerator<YieldableValue<DeclaredSchema>, Cleanup | void, any>;
 
-export type ComponentConstructor = new () => BaseComponent;
+export type ComponentConstructor<DeclaredSchema extends Schema = Schema> =
+	new () => BaseComponent & DeclaredProps<DeclaredSchema>;

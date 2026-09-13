@@ -65,6 +65,7 @@ export {
 	type Cleanup,
 	type ComponentOptions,
 	type ComponentProps,
+	type DeclaredProps,
 	type Resolve,
 	type Schema,
 	type Template,
@@ -89,7 +90,7 @@ export const html = htmlValue as unknown as (
 export const component = <DeclaredSchema extends Schema = {}>(
 	componentGenerator: ComponentGenerator<DeclaredSchema>,
 	options: ComponentOptions<DeclaredSchema> = defaultOptions,
-): ComponentConstructor => {
+): ComponentConstructor<DeclaredSchema> => {
 	if (!isGeneratorFunction(componentGenerator))
 		throw new TypeError(
 			"grundlage: component(fn) expects a generator function.",
@@ -311,5 +312,5 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		}
 	}
 
-	return BaseElement;
+	return BaseElement as ComponentConstructor<DeclaredSchema>;
 };
