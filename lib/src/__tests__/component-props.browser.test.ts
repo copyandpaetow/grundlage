@@ -147,6 +147,39 @@ describe("the object a component receives", () => {
 	});
 });
 
+describe("reflection", () => {
+	test("a value with no attribute spelling takes the stale attribute off", async () => {
+		const tag = uniqueTag();
+		customElements.define(
+			tag,
+			component(
+				function* () {
+					yield () => html`<p>x</p>`;
+				},
+				{ props: { open: Boolean, label: String } },
+			),
+		);
+		const element = document.createElement(tag) as BaseComponent & {
+			open: boolean;
+			label: string | null;
+		};
+		element.setAttribute("open", "");
+		element.setAttribute("label", "stale");
+		document.body.appendChild(element);
+		await sleep();
+
+		element.open = false;
+		expect(element.open).toBe(false);
+		expect(element.hasAttribute("open")).toBe(false);
+
+		element.label = null;
+		expect(element.label).toBe(undefined);
+		expect(element.hasAttribute("label")).toBe(false);
+
+		element.remove();
+	});
+});
+
 describe("one calling convention", () => {
 	test("an inner generator receives the same object", async () => {
 		const tag = uniqueTag();

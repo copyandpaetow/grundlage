@@ -3,7 +3,7 @@ import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
 import { BINDING } from "../constants";
 import {
-	SingleValueAttributeStaticBinding,
+	AttributeStaticBinding,
 	StaticBinding,
 	TagStaticBinding,
 } from "../types";
@@ -79,8 +79,8 @@ describe("html parser — tag bindings", () => {
 		const tagBinding = parsed.bindings[0] as TagStaticBinding;
 		expect(tagBinding.type).toBe(BINDING.TAG);
 
-		const attrBinding = parsed.bindings[1] as SingleValueAttributeStaticBinding;
-		expect(attrBinding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const attrBinding = parsed.bindings[1] as AttributeStaticBinding;
+		expect(attrBinding.type).toBe(BINDING.ATTRIBUTE);
 		expect(attrBinding.nameParts).toEqual(["class"]);
 	});
 
@@ -93,8 +93,8 @@ describe("html parser — tag bindings", () => {
 
 		const tagBinding = parsed.bindings[0] as TagStaticBinding;
 		expect(tagBinding.type).toBe(BINDING.TAG);
-		expect(parsed.bindings[1].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
-		expect(parsed.bindings[2].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[1].type).toBe(BINDING.ATTRIBUTE);
+		expect(parsed.bindings[2].type).toBe(BINDING.ATTRIBUTE);
 	});
 
 	test("dynamic tag with boolean (spread) attribute", () => {
@@ -210,8 +210,8 @@ describe("html parser — tag bindings", () => {
 		const span = fragment.querySelector("span")!;
 		expect(div.contains(span)).toBe(false);
 
-		const attrBinding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		expect(attrBinding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const attrBinding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(attrBinding.type).toBe(BINDING.ATTRIBUTE);
 		expect(attrBinding.nameParts).toEqual(["class"]);
 	});
 

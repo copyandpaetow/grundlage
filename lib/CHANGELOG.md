@@ -25,11 +25,26 @@
 
 ### Added
 
+- **`grundlage-error` event.** A fatal error empties the component and dispatches a cancelable
+  `ComponentErrorEvent` carrying `error` and `tagName`. `preventDefault()` skips the console line
+  and the error text, so an app can render its own fallback.
+- **Development build.** Warnings ship only in `dist/development/`, selected by the `development`
+  export condition. The default build strips them (1,061 bytes minified).
+
+### Changed
+
+- **A fatal error logs `console.error` naming the tag,** not `console.warn`.
+- **A throwing cleanup or a rejected async `return()` goes to `reportError`,** so `window.onerror`
+  trackers see it. Without `reportError` (Node) it falls back to `console.error`.
+
 - **A return that is neither a function nor `undefined` warns.** The runtime drops it — the return
   position is the cleanup function — and the drop used to be silent for anyone not running the types.
 
 ### Fixed
 
+- **Hashing an object no longer keeps its property names forever.** A module-level cache retained
+  every distinct key ever hashed, so an object keyed by ids grew memory once per row for the life
+  of the page.
 - **A hole inside an event name is no longer dropped.** `on${eventName}=${handler}` and
   `on-${suffix}=${handler}` bound an attribute literally named `on` and discarded the hole. Both
   now compose the name and bind the event it spells, native and custom alike.

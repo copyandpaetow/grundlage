@@ -87,6 +87,47 @@ describe("template switching", () => {
 		cleanup(element);
 	});
 
+	test("swaps one mounted nested branch for another, leaving its siblings alone", async () => {
+		const tag = uniqueTag();
+		let isOpen = true;
+
+		const MyElement = component(function* () {
+			yield () =>
+				html`<div>
+					<em>before</em>
+					${isOpen ? html`<p>open</p>` : html`<span>closed</span>`}
+					<em>after</em>
+				</div>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const shadow = element.shadowRoot!;
+		const [before, after] = Array.from(shadow.querySelectorAll("em"));
+		expect(shadow.querySelector("p")?.textContent).toBe("open");
+
+		isOpen = false;
+		await element.update();
+		await sleep();
+
+		expect(shadow.querySelector("p")).toBeNull();
+		expect(shadow.querySelectorAll("span").length).toBe(1);
+		expect(shadow.querySelector("span")?.textContent).toBe("closed");
+		expect(Array.from(shadow.querySelectorAll("em"))).toEqual([before, after]);
+
+		isOpen = true;
+		await element.update();
+		await sleep();
+
+		expect(shadow.querySelector("span")).toBeNull();
+		expect(shadow.querySelectorAll("p").length).toBe(1);
+		expect(shadow.querySelector("p")?.textContent).toBe("open");
+
+		cleanup(element);
+	});
+
 	test("same template structure with different expressions updates in-place", async () => {
 		const tag = uniqueTag();
 		let text = "initial";

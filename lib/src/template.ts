@@ -8,6 +8,8 @@ export const html = (
 	...values: Array<unknown>
 ): TemplateValue => ({ __templateStrings: templateStrings, values });
 
+//user surface: the value comes from the app's own `html` call, so the brand is the field rather than
+//an internal marker
 export const isTemplate = (value: unknown): value is TemplateValue =>
 	typeof value === "object" && value !== null && "__templateStrings" in value;
 

@@ -1,4 +1,5 @@
 import { BaseComponent } from "../types";
+import { warnDuringDevelopment } from "../utils/diagnostics";
 import { NormalizedSchema, Prop } from "./schema";
 
 export type PropValues = Record<string, unknown>;
@@ -25,8 +26,8 @@ export const writeProp = (
 	const next = prop.resolve(isAbsent ? undefined : incoming);
 
 	if (next === undefined && !isAbsent) {
-		console.warn(
-			`grundlage: prop "${prop.propName}" refused a ${typeof incoming}: its function returned undefined, so the previous value stays.`,
+		warnDuringDevelopment(
+			`prop "${prop.propName}" refused a ${typeof incoming}: its function returned undefined, so the previous value stays.`,
 		);
 		return false;
 	}

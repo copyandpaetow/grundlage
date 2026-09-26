@@ -55,24 +55,22 @@ const assertFallbackIsUsable = (
 	parse: Resolve<unknown>,
 	fallback: unknown,
 ): void => {
+	let copy = fallback;
 	if (isCopiedPerElement(fallback)) {
-		//structuredClone strips a class prototype and returns a plain object
-		let copy: unknown;
 		try {
 			copy = structuredClone(fallback);
 		} catch {
-			copy = undefined;
-		}
-		if (
-			copy === undefined ||
-			Object.getPrototypeOf(copy) !== Object.getPrototypeOf(fallback)
-		)
 			throw new TypeError(
-				`grundlage: the fallback for prop "${propName}" cannot be copied for each element.`,
+				`grundlage: the fallback for prop "${propName}" cannot be copied for each element: structuredClone refuses a value holding a function.`,
+			);
+		}
+		if (Object.getPrototypeOf(copy) !== Object.getPrototypeOf(fallback))
+			throw new TypeError(
+				`grundlage: the fallback for prop "${propName}" cannot be copied for each element: structuredClone returns a plain object, so a class instance loses its prototype.`,
 			);
 	}
 
-	if (parse(copyOf(fallback)) === undefined)
+	if (parse(copy) === undefined)
 		throw new TypeError(
 			`grundlage: the fallback for prop "${propName}" is not a value the prop accepts: its function refused it.`,
 		);
@@ -109,10 +107,9 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 		assertPropNameIsUsable(propName);
 
 		const definition = schema[propName];
-		const declared = (
-			Array.isArray(definition) ? definition[0] : definition
-		) as Parse;
-		const fallback = Array.isArray(definition) ? definition[1] : undefined;
+		const [declared, fallback] = (
+			Array.isArray(definition) ? definition : [definition, undefined]
+		) as [Parse, unknown];
 		const parse =
 			SHIPPED_RESOLVERS.get(declared) ?? (declared as Resolve<unknown>);
 
@@ -139,6 +136,9 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 		props.set(attributeName, {
 			propName,
 			resolve,
+			//[Boolean, true] is the one shape where removing the attribute would read back as the
+			//opposite, so reflection writes "false" instead; only the shipped token's absence rule is
+			//documented, so a user-supplied boolean function is left out of it
 			absenceReadsTrue: parse === resolveBoolean && resolve(undefined) === true,
 		});
 	}

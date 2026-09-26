@@ -17,4 +17,5 @@ Object.assign(globalThis, {
 	NodeFilter: happyWindow.NodeFilter,
 	MutationObserver: happyWindow.MutationObserver,
 	CSSStyleSheet: happyWindow.CSSStyleSheet,
+	Event: happyWindow.Event,
 });

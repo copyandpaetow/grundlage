@@ -1,14 +1,20 @@
+import { BINDING } from "../../parser/constants";
 import {
 	AttributeStaticBinding,
 	CommentStaticBinding,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
+	ParsedTemplate,
 	RawContentStaticBinding,
-	SingleValueAttributeStaticBinding,
 	TagStaticBinding,
 } from "../../parser/types";
 import { CONTENT_KIND } from "../constants";
-import { Instance } from "../instance";
+
+export interface Instance {
+	parsed: ParsedTemplate;
+	liveBindings: Array<LiveBinding>;
+	moveState: StyleSheetMoveState;
+}
 
 export interface StyleSheetMoveState {
 	needsStyleSheetRefreshOnMove: boolean;
@@ -25,19 +31,13 @@ export interface AttributeLiveBinding {
 	anchor: Element;
 	lastValueHash: number;
 	lastComposedName: string;
-}
-
-export interface SingleValueAttributeLiveBinding {
-	staticBinding: SingleValueAttributeStaticBinding;
-	anchor: Element;
-	lastValueHash: number;
-	lastComposedName: string;
 	lastValue: unknown;
 }
 
 export interface AppliedAttribute {
 	value: unknown;
 	hash: number;
+	lastSeenInCommit: number;
 }
 
 export interface DynamicAttributeLiveBinding {
@@ -45,6 +45,8 @@ export interface DynamicAttributeLiveBinding {
 	anchor: Element;
 	appliedAttributes: Map<string, AppliedAttribute>;
 	lastValueHash: number;
+	//a name not stamped with the current number was dropped by the value and comes off the element
+	commitNumber: number;
 }
 
 export interface ContentLiveBinding {
@@ -77,8 +79,18 @@ export interface BranchContentState {
 export interface ListContentState {
 	kind: typeof CONTENT_KIND.LIST;
 	items: Array<ListItem>;
-	aggregateHash: number;
+	lastValueHash: number;
+	//scratch kept across patches instead of allocated per patch: each patch fills what it reads, and
+	//the arrays only grow, so a length is a capacity, never a row count
 	itemHashes: Array<number>;
+	nextRowWithSameHash: Int32Array;
+	subsequenceStarts: Int32Array;
+	nextInSubsequence: Int32Array;
+	hashAtTableIndex: Int32Array;
+	chainHeadAtTableIndex: Int32Array;
+	tableIndexShift: number;
+	//alternates with items: placeRows returns the array it was given
+	spareRows: Array<ListItem | undefined>;
 }
 
 export interface StyleSheetState {
@@ -104,16 +116,41 @@ export interface CommentLiveBinding {
 export type LiveBinding =
 	| TagLiveBinding
 	| AttributeLiveBinding
-	| SingleValueAttributeLiveBinding
 	| DynamicAttributeLiveBinding
 	| ContentLiveBinding
 	| RawContentLiveBinding
 	| CommentLiveBinding;
 
+export type AttributeLaneLiveBinding =
+	AttributeLiveBinding | DynamicAttributeLiveBinding;
+
+//a switch on `staticBinding.type` narrows the static binding and leaves the live binding as the
+//whole union, so the kind test lives here once per kind instead of as a cast at every call site
+export const isAttributeBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is AttributeLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.ATTRIBUTE;
+
+export const isDynamicAttributeBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is DynamicAttributeLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
+
+export const isContentBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is ContentLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.CONTENT;
+
+export const isRawContentBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is RawContentLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.RAW_CONTENT;
+
 export interface ListItem {
 	tailMarker: Comment;
 	instance: Instance;
 	itemHash: number;
-	keyHash: number;
+	shapeOrKeyHash: number;
 	startNode: ChildNode;
+	placedAtIndex: number;
 }

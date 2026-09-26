@@ -1,4 +1,4 @@
-import { hashValue } from "../utils/hashing";
+import { stringListHash } from "../utils/hashing";
 import { BINDING, OPEN_CONSTRUCT } from "./constants";
 import { ParsedTemplate, Part, StaticBinding } from "./types";
 import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
@@ -15,6 +15,8 @@ const STYLE_TAG = "style";
 const COMMENT_OPEN_LENGTH = MARKUP.COMMENT_OPEN.length;
 const END_TAG_OPEN_LENGTH = MARKUP.END_TAG_OPEN.length;
 const NO_OPEN_CONSTRUCT = -1;
+type OpenConstructKind =
+	ValueOf<typeof OPEN_CONSTRUCT> | typeof NO_OPEN_CONSTRUCT;
 const parsesContentAsRaw = (parser: ParserState, tag: string) => {
 	if (tag === TEMPLATE_TAG) {
 		return parser.forceNoRootTemplate || !parser.isRootTemplate;
@@ -69,7 +71,7 @@ interface ParserState {
 	state: StateValue;
 	bindings: Array<StaticBinding>;
 	startedBindingCount: number;
-	openConstructKind: number;
+	openConstructKind: OpenConstructKind;
 	templates: TemplateStringsArray;
 	templateHash: number;
 	index: number;
@@ -105,7 +107,7 @@ const createParser = (
 	startedBindingCount: 0,
 	openConstructKind: NO_OPEN_CONSTRUCT,
 	templates: strings,
-	templateHash: hashValue(strings),
+	templateHash: stringListHash(strings),
 	index: 0,
 	activeTemplate: strings[0],
 	charIndex: 0,
@@ -179,7 +181,7 @@ const updateBinding = (parser: ParserState) => {
 	parts.push(parser.index);
 };
 
-const emptyBinding = (openConstructKind: number): StaticBinding => {
+const emptyBinding = (openConstructKind: OpenConstructKind): StaticBinding => {
 	switch (openConstructKind) {
 		case OPEN_CONSTRUCT.COMMENT:
 			return { type: BINDING.COMMENT, parts: [] };
@@ -380,13 +382,6 @@ const drainAttributeBinding = (parser: ParserState): StaticBinding => {
 			valueIndex: nameParts[0] as number,
 		};
 	}
-	if (valueParts.length === 1 && typeof valueParts[0] === "number") {
-		return {
-			type: BINDING.SINGLE_VALUE_ATTRIBUTE,
-			nameParts,
-			valueIndex: valueParts[0],
-		};
-	}
 	return {
 		type: BINDING.ATTRIBUTE,
 		nameParts,
@@ -476,6 +471,238 @@ const endAttribute = (parser: ParserState, parts: Array<Part>) => {
 	parser.state = STATE.ELEMENT;
 };
 
+const scanText = (parser: ParserState) => {
+	const tagStart = parser.activeTemplate.indexOf(
+		MARKUP.TAG_OPEN,
+		parser.charIndex,
+	);
+	if (tagStart === -1) {
+		parser.charIndex = parser.activeTemplate.length;
+		return;
+	}
+	parser.charIndex = tagStart;
+	markTopLevelTextSibling(parser, parser.splitIndex, parser.charIndex);
+	parser.splitIndex = parser.charIndex + 1;
+
+	const nextCode = parser.activeTemplate.charCodeAt(parser.charIndex + 1);
+
+	if (nextCode === CHAR_CODE.BANG) {
+		parser.state = STATE.COMMENT;
+		parser.splitIndex = parser.charIndex + COMMENT_OPEN_LENGTH;
+		//resume on the "--" so an empty <!----> still matches its "-->"
+		parser.charIndex += 2;
+		return;
+	}
+
+	if (nextCode === CHAR_CODE.SLASH) {
+		parser.state = STATE.END_TAG;
+		parser.splitIndex = parser.charIndex + END_TAG_OPEN_LENGTH;
+		parser.charIndex++;
+		return;
+	}
+
+	flushElement(parser);
+	parser.state = STATE.ELEMENT;
+	parser.charIndex--;
+};
+
+const scanComment = (parser: ParserState) => {
+	//searching two back from the resume point is what lets the abrupt
+	//"<!-->" close on the dashes of its own opener
+	const commentClose = parser.activeTemplate.indexOf(
+		MARKUP.COMMENT_CLOSE,
+		parser.charIndex - 2,
+	);
+	if (commentClose === -1) {
+		parser.charIndex = parser.activeTemplate.length;
+		return;
+	}
+
+	parser.charIndex = commentClose + 2;
+	capture(parser, parser.parts[STATE.COMMENT], parser.splitIndex, commentClose);
+	parser.splitIndex = parser.charIndex + 1;
+	completeComment(parser);
+	parser.state = STATE.TEXT;
+};
+
+const scanRawContent = (parser: ParserState) => {
+	const closeTagStart = parser.activeTemplate.indexOf(
+		MARKUP.END_TAG_OPEN,
+		parser.charIndex,
+	);
+	if (closeTagStart === -1) {
+		parser.charIndex = parser.activeTemplate.length;
+		return;
+	}
+
+	parser.charIndex = closeTagStart;
+	const closesCurrentElement = parser.activeTemplate.startsWith(
+		parser.currentTagName,
+		parser.charIndex + END_TAG_OPEN_LENGTH,
+	);
+	if (!closesCurrentElement) return;
+	capture(
+		parser,
+		parser.parts[STATE.RAW_CONTENT],
+		parser.splitIndex,
+		parser.charIndex,
+	);
+	parser.splitIndex =
+		parser.charIndex + END_TAG_OPEN_LENGTH + parser.currentTagName.length;
+	parser.charIndex += 1;
+	completeRawContent(parser);
+	parser.state = STATE.END_TAG;
+	parser.endTagMarkup += parser.currentTagName;
+};
+
+const scanTagName = (parser: ParserState, code: number) => {
+	if (code !== CHAR_CODE.GREATER_THAN && !isWhitespaceCode(code)) return;
+
+	const isSelfClosing =
+		code === CHAR_CODE.GREATER_THAN &&
+		parser.activeTemplate.charCodeAt(parser.charIndex - 1) === CHAR_CODE.SLASH;
+	const tagEnd = isSelfClosing ? parser.charIndex - 1 : parser.charIndex;
+	capture(parser, parser.parts[STATE.TAG], parser.splitIndex, tagEnd);
+	parser.splitIndex = parser.charIndex;
+	completeTag(parser);
+
+	if (code !== CHAR_CODE.GREATER_THAN) {
+		parser.state = STATE.ELEMENT;
+		parser.charIndex--;
+		return;
+	}
+
+	closeOpenTag(parser);
+};
+
+const scanBetweenAttributes = (parser: ParserState, code: number) => {
+	if (code === CHAR_CODE.LESS_THAN) {
+		parser.state = STATE.TAG;
+		return;
+	}
+
+	if (code === CHAR_CODE.GREATER_THAN) {
+		closeOpenTag(parser);
+		return;
+	}
+
+	parser.state = STATE.ATTRIBUTE_KEY;
+	if (!isWhitespaceCode(code)) {
+		parser.splitIndex = parser.charIndex;
+		parser.charIndex--;
+		return;
+	}
+
+	//an indented tag separates its attributes with a whole run of whitespace,
+	//and every character of it would otherwise open and close an empty attribute
+	const templateLength = parser.activeTemplate.length;
+	let attributeStart = parser.charIndex + 1;
+	while (
+		attributeStart < templateLength &&
+		isWhitespaceCode(parser.activeTemplate.charCodeAt(attributeStart))
+	) {
+		attributeStart++;
+	}
+	parser.splitIndex = attributeStart;
+	parser.charIndex = attributeStart - 1;
+};
+
+const scanAttributeKey = (parser: ParserState, code: number) => {
+	if (code === CHAR_CODE.EQUALS) {
+		capture(
+			parser,
+			parser.parts[STATE.ATTRIBUTE_KEY],
+			parser.splitIndex,
+			parser.charIndex,
+		);
+		parser.splitIndex = parser.charIndex + 1;
+		parser.state = STATE.ATTRIBUTE_VALUE;
+	} else if (isWhitespaceCode(code)) {
+		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
+		parser.splitIndex = parser.charIndex;
+		parser.charIndex--;
+	} else if (
+		code === CHAR_CODE.SLASH &&
+		parser.activeTemplate.charCodeAt(parser.charIndex + 1) ===
+			CHAR_CODE.GREATER_THAN
+	) {
+		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
+	} else if (code === CHAR_CODE.GREATER_THAN) {
+		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
+		parser.charIndex--;
+	}
+};
+
+const scanAttributeValue = (parser: ParserState, code: number) => {
+	if (!parser.attributeQuoteCode && isQuoteCode(code)) {
+		parser.attributeQuoteCode = code;
+		parser.splitIndex = parser.charIndex + 1;
+		//nothing between the quotes can end the value, so the scan is a search
+		const closingQuote = parser.activeTemplate.indexOf(
+			String.fromCharCode(code),
+			parser.splitIndex,
+		);
+		if (closingQuote === -1) {
+			parser.charIndex = parser.activeTemplate.length;
+			return;
+		}
+		parser.charIndex = closingQuote;
+		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
+		parser.splitIndex = parser.charIndex + 1;
+	} else if (parser.attributeQuoteCode && code === parser.attributeQuoteCode) {
+		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
+		parser.splitIndex = parser.charIndex + 1;
+	} else if (!parser.attributeQuoteCode && isWhitespaceCode(code)) {
+		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
+		parser.splitIndex = parser.charIndex;
+		parser.charIndex--;
+	} else if (!parser.attributeQuoteCode && code === CHAR_CODE.GREATER_THAN) {
+		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
+		parser.charIndex--;
+	}
+};
+
+const scanEndTag = (parser: ParserState, code: number) => {
+	if (code !== CHAR_CODE.GREATER_THAN) return;
+	parser.endTagMarkup += sliceActiveTemplate(
+		parser,
+		parser.splitIndex,
+		parser.charIndex,
+	);
+	parser.splitIndex = parser.charIndex + 1;
+	flushElement(parser);
+	completeEndTag(parser);
+	parser.state = STATE.TEXT;
+};
+
+const startBindingAtHole = (parser: ParserState) => {
+	if (parser.state === STATE.END_TAG) {
+		if (!hasOpenConstruct(parser)) {
+			const openerIsDynamic =
+				parser.openTagIsDynamic[parser.openTagIsDynamic.length - 1];
+			if (!openerIsDynamic) {
+				throw new Error(
+					"grundlage: Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
+				);
+			}
+			parser.openConstructKind = OPEN_CONSTRUCT.TAG;
+		}
+	} else if (!hasOpenConstruct(parser)) {
+		//a tag that opens on whitespace parks the scanner between the tag name and the
+		//first attribute, where a hole belongs to neither and has nothing to accumulate into
+		if (parser.state === STATE.ELEMENT) {
+			throw new Error(
+				"grundlage: a hole cannot sit between a tag name and its attributes",
+			);
+		}
+		parser.startedBindingCount++;
+		parser.openConstructKind =
+			OPEN_CONSTRUCT_FOR_STATE[parser.state as BindingStartingState];
+	}
+
+	updateBinding(parser);
+};
+
 const parse = (
 	strings: TemplateStringsArray,
 	mode: ParseMode = PARSE_MODE.OPTIMISTIC_ROOT,
@@ -499,237 +726,32 @@ const parse = (
 			const code = parser.activeTemplate.charCodeAt(parser.charIndex);
 
 			switch (parser.state) {
-				case STATE.TEXT: {
-					const tagStart = parser.activeTemplate.indexOf(
-						MARKUP.TAG_OPEN,
-						parser.charIndex,
-					);
-					if (tagStart === -1) {
-						parser.charIndex = templateLength;
-						continue;
-					}
-					parser.charIndex = tagStart;
-					markTopLevelTextSibling(parser, parser.splitIndex, parser.charIndex);
-					parser.splitIndex = parser.charIndex + 1;
-
-					const nextCode = parser.activeTemplate.charCodeAt(
-						parser.charIndex + 1,
-					);
-
-					if (nextCode === CHAR_CODE.BANG) {
-						parser.state = STATE.COMMENT;
-						parser.splitIndex = parser.charIndex + COMMENT_OPEN_LENGTH;
-						// resume on the "--" so an empty <!----> still matches its "-->"
-						parser.charIndex += 2;
-						continue;
-					}
-
-					if (nextCode === CHAR_CODE.SLASH) {
-						parser.state = STATE.END_TAG;
-						parser.splitIndex = parser.charIndex + END_TAG_OPEN_LENGTH;
-						parser.charIndex++;
-						continue;
-					}
-
-					flushElement(parser);
-					parser.state = STATE.ELEMENT;
-					parser.charIndex--;
-					continue;
-				}
-
-				case STATE.COMMENT: {
-					// searching two back from the resume point is what lets the abrupt
-					// "<!-->" close on the dashes of its own opener
-					const commentClose = parser.activeTemplate.indexOf(
-						MARKUP.COMMENT_CLOSE,
-						parser.charIndex - 2,
-					);
-					if (commentClose === -1) {
-						parser.charIndex = templateLength;
-						continue;
-					}
-
-					parser.charIndex = commentClose + 2;
-					capture(
-						parser,
-						parser.parts[STATE.COMMENT],
-						parser.splitIndex,
-						commentClose,
-					);
-					parser.splitIndex = parser.charIndex + 1;
-					completeComment(parser);
-					parser.state = STATE.TEXT;
-
-					continue;
-				}
-
-				case STATE.RAW_CONTENT: {
-					const closeTagStart = parser.activeTemplate.indexOf(
-						MARKUP.END_TAG_OPEN,
-						parser.charIndex,
-					);
-					if (closeTagStart === -1) {
-						parser.charIndex = templateLength;
-						continue;
-					}
-
-					parser.charIndex = closeTagStart;
-					const closesCurrentElement = parser.activeTemplate.startsWith(
-						parser.currentTagName,
-						parser.charIndex + END_TAG_OPEN_LENGTH,
-					);
-					if (closesCurrentElement) {
-						capture(
-							parser,
-							parser.parts[STATE.RAW_CONTENT],
-							parser.splitIndex,
-							parser.charIndex,
-						);
-						parser.splitIndex =
-							parser.charIndex +
-							END_TAG_OPEN_LENGTH +
-							parser.currentTagName.length;
-						parser.charIndex += 1;
-						completeRawContent(parser);
-						parser.state = STATE.END_TAG;
-						parser.endTagMarkup += parser.currentTagName;
-					}
-					continue;
-				}
-
-				case STATE.TAG: {
-					if (code !== CHAR_CODE.GREATER_THAN && !isWhitespaceCode(code)) {
-						continue;
-					}
-
-					const isSelfClosing =
-						code === CHAR_CODE.GREATER_THAN &&
-						parser.activeTemplate.charCodeAt(parser.charIndex - 1) ===
-							CHAR_CODE.SLASH;
-					const tagEnd = isSelfClosing
-						? parser.charIndex - 1
-						: parser.charIndex;
-					capture(parser, parser.parts[STATE.TAG], parser.splitIndex, tagEnd);
-					parser.splitIndex = parser.charIndex;
-					completeTag(parser);
-
-					if (code !== CHAR_CODE.GREATER_THAN) {
-						parser.state = STATE.ELEMENT;
-						parser.charIndex--;
-						continue;
-					}
-
-					closeOpenTag(parser);
-					continue;
-				}
-
-				case STATE.ELEMENT: {
-					if (code === CHAR_CODE.LESS_THAN) {
-						parser.state = STATE.TAG;
-						continue;
-					}
-
-					if (code === CHAR_CODE.GREATER_THAN) {
-						closeOpenTag(parser);
-						continue;
-					}
-
-					parser.state = STATE.ATTRIBUTE_KEY;
-					if (!isWhitespaceCode(code)) {
-						parser.splitIndex = parser.charIndex;
-						parser.charIndex--;
-						continue;
-					}
-
-					//an indented tag separates its attributes with a whole run of whitespace,
-					//and every character of it would otherwise open and close an empty attribute
-					let attributeStart = parser.charIndex + 1;
-					while (
-						attributeStart < templateLength &&
-						isWhitespaceCode(parser.activeTemplate.charCodeAt(attributeStart))
-					) {
-						attributeStart++;
-					}
-					parser.splitIndex = attributeStart;
-					parser.charIndex = attributeStart - 1;
-
-					continue;
-				}
-
+				case STATE.TEXT:
+					scanText(parser);
+					break;
+				case STATE.COMMENT:
+					scanComment(parser);
+					break;
+				case STATE.RAW_CONTENT:
+					scanRawContent(parser);
+					break;
+				case STATE.TAG:
+					scanTagName(parser, code);
+					break;
+				case STATE.ELEMENT:
+					scanBetweenAttributes(parser, code);
+					break;
 				case STATE.ATTRIBUTE_KEY:
-					if (code === CHAR_CODE.EQUALS) {
-						capture(
-							parser,
-							parser.parts[STATE.ATTRIBUTE_KEY],
-							parser.splitIndex,
-							parser.charIndex,
-						);
-						parser.splitIndex = parser.charIndex + 1;
-						parser.state = STATE.ATTRIBUTE_VALUE;
-					} else if (isWhitespaceCode(code)) {
-						endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
-						parser.splitIndex = parser.charIndex;
-						parser.charIndex--;
-					} else if (
-						code === CHAR_CODE.SLASH &&
-						parser.activeTemplate.charCodeAt(parser.charIndex + 1) ===
-							CHAR_CODE.GREATER_THAN
-					) {
-						endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
-					} else if (code === CHAR_CODE.GREATER_THAN) {
-						endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
-						parser.charIndex--;
-					}
-					continue;
-
+					scanAttributeKey(parser, code);
+					break;
 				case STATE.ATTRIBUTE_VALUE:
-					if (!parser.attributeQuoteCode && isQuoteCode(code)) {
-						parser.attributeQuoteCode = code;
-						parser.splitIndex = parser.charIndex + 1;
-						//nothing between the quotes can end the value, so the scan is a search
-						const closingQuote = parser.activeTemplate.indexOf(
-							String.fromCharCode(code),
-							parser.splitIndex,
-						);
-						if (closingQuote === -1) {
-							parser.charIndex = templateLength;
-							continue;
-						}
-						parser.charIndex = closingQuote;
-						endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-						parser.splitIndex = parser.charIndex + 1;
-					} else if (
-						parser.attributeQuoteCode &&
-						code === parser.attributeQuoteCode
-					) {
-						endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-						parser.splitIndex = parser.charIndex + 1;
-					} else if (!parser.attributeQuoteCode && isWhitespaceCode(code)) {
-						endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-						parser.splitIndex = parser.charIndex;
-						parser.charIndex--;
-					} else if (
-						!parser.attributeQuoteCode &&
-						code === CHAR_CODE.GREATER_THAN
-					) {
-						endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-						parser.charIndex--;
-					}
-					continue;
-
+					scanAttributeValue(parser, code);
+					break;
 				case STATE.END_TAG:
-					if (code === CHAR_CODE.GREATER_THAN) {
-						parser.endTagMarkup += sliceActiveTemplate(
-							parser,
-							parser.splitIndex,
-							parser.charIndex,
-						);
-						parser.splitIndex = parser.charIndex + 1;
-						flushElement(parser);
-						completeEndTag(parser);
-						parser.state = STATE.TEXT;
-					}
-					continue;
+					scanEndTag(parser, code);
+					break;
+				default:
+					return parser.state satisfies never;
 			}
 		}
 
@@ -737,31 +759,7 @@ const parse = (
 			break;
 		}
 
-		if (parser.state === STATE.END_TAG) {
-			if (!hasOpenConstruct(parser)) {
-				const openerIsDynamic =
-					parser.openTagIsDynamic[parser.openTagIsDynamic.length - 1];
-				if (!openerIsDynamic) {
-					throw new Error(
-						"grundlage: Asymmetric tag: dynamic </${...}> close has no matching dynamic open tag — pair `<${tag}>` with `</${tag}>`.",
-					);
-				}
-				parser.openConstructKind = OPEN_CONSTRUCT.TAG;
-			}
-		} else if (!hasOpenConstruct(parser)) {
-			//a tag that opens on whitespace parks the scanner between the tag name and the
-			//first attribute, where a hole belongs to neither and has nothing to accumulate into
-			if (parser.state === STATE.ELEMENT) {
-				throw new Error(
-					"grundlage: a hole cannot sit between a tag name and its attributes",
-				);
-			}
-			parser.startedBindingCount++;
-			parser.openConstructKind =
-				OPEN_CONSTRUCT_FOR_STATE[parser.state as BindingStartingState];
-		}
-
-		updateBinding(parser);
+		startBindingAtHole(parser);
 	}
 	if (
 		parser.state === STATE.TEXT &&

@@ -114,6 +114,19 @@ describe("classifyStep: what the generator yielded", () => {
 		expect(settled.payload).toBe(failure);
 	});
 
+	test("a rejected yielded promise whose permit is revoked releases control too", async () => {
+		const task = makeTask();
+		const operation = classifyStep(
+			task,
+			yielded(Promise.reject(new Error("nope"))),
+		);
+		//the host was removed while the promise was in flight, so there is no yield left to throw at
+		task.suspension = null;
+
+		const settled = await (operation.payload as Promise<DriverStep>);
+		expect(settled.kind).toBe(OPERATION.RELEASE_CONTROL);
+	});
+
 	test("a plain value resumes the coroutine", () => {
 		const operation = classifyStep(makeTask(), yielded(42));
 		expect(operation.kind).toBe(OPERATION.RESUME);
@@ -175,15 +188,14 @@ describe("classifyRenderResult: the render function's return is content", () => 
 		expect(operation.payload).toBe(body);
 	});
 
-	test("a promise awaits the render result without ending the task", () => {
+	//the driver awaits a promised result before it asks, so every result reaching here is settled and
+	//the park that started the render is still the permit the resume will be checked against
+	test("a result the task can act on leaves the park alone", () => {
 		const task = makeTask(parkedAtARenderable());
-		const parkBeforeTheAwait = task.suspension;
-		const promise = Promise.resolve("later");
-		const operation = classifyRenderResult(task, promise);
-		expect(operation.kind).toBe(OPERATION.AWAIT_RENDER_RESULT);
-		expect(operation.payload).toBe(promise);
-		//the same permit, so the settlement may still resume the yield that started the render
-		expect(task.suspension).toBe(parkBeforeTheAwait);
+		const parkBeforeTheRender = task.suspension;
+		classifyRenderResult(task, template());
+		classifyRenderResult(task, function* () {});
+		expect(task.suspension).toBe(parkBeforeTheRender);
 	});
 
 	test("a resolved result on a finished task paints and leaves it finished", () => {
@@ -234,9 +246,9 @@ describe("completion and cleanup", () => {
 	});
 
 	//the cancel has a sibling task to tear down and a paint to make after this, so a user cleanup
-	//that throws is warned about rather than propagated
+	//that throws is reported rather than propagated
 	test("a cleanup that throws does not escape the cancel", () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const task = makeTask({
 			cleanup: () => {
 				throw new Error("cleanup-threw");
@@ -245,7 +257,7 @@ describe("completion and cleanup", () => {
 
 		expect(() => cancelTaskAndRunCleanup(task)).not.toThrow();
 		expect(task.cleanup).toBe(null);
-		expect(warn).toHaveBeenCalledOnce();
+		expect(consoleError).toHaveBeenCalledOnce();
 	});
 });
 
@@ -288,8 +300,9 @@ describe("the suspension: what a task is parked on", () => {
 	//every late-arriving continuation guards on this one field, so which yields park the task and
 	//what clears it is the whole contract
 	test.each([
-		["a generator function", () => function* () {}],
-		["a render function", () => () => template()],
+		["a template", (): unknown => template()],
+		["a generator function", (): unknown => function* () {}],
+		["a render function", (): unknown => () => template()],
 	] as const)("%s parks the task at a renderable yield", (_label, make) => {
 		const task = makeTask();
 		classifyStep(task, yielded(make()));
@@ -297,7 +310,6 @@ describe("the suspension: what a task is parked on", () => {
 	});
 
 	test.each([
-		["a template", (): unknown => template()],
 		["a promise", (): unknown => Promise.resolve("x")],
 		["a plain value", (): unknown => 42],
 	] as const)("%s parks the task at nothing renderable", (_label, make) => {

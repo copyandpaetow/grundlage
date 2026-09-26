@@ -86,6 +86,37 @@ describe("props the attribute cannot carry", () => {
 		element.remove();
 	});
 
+	test("a refused value arriving as an attribute leaves the previous one standing", async () => {
+		const tag = uniqueTag();
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		customElements.define(
+			tag,
+			component(
+				function* () {
+					yield () => html`<p>x</p>`;
+				},
+				{ props: { count: [Number, 0] } },
+			),
+		);
+		const element = document.createElement(tag) as BaseComponent;
+		element.setAttribute("count", "7");
+		document.body.appendChild(element);
+		await sleep();
+		expect(readProp(element, "count")).toBe(7);
+
+		element.setAttribute("count", "abc");
+		await sleep();
+
+		expect(readProp(element, "count")).toBe(7);
+		//markup is left as written: only a property assignment reflects
+		expect(element.getAttribute("count")).toBe("abc");
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining('prop "count" refused a string'),
+		);
+		warn.mockRestore();
+		element.remove();
+	});
+
 	test("assigning undefined is absence, which writes the fallback again", async () => {
 		const tag = uniqueTag();
 		customElements.define(
@@ -319,6 +350,86 @@ describe("mount", () => {
 			element.remove();
 		},
 	);
+
+	test.skipIf(!isRealBrowser)(
+		"a prop function that throws on a pre-upgrade value ends the run visibly",
+		async () => {
+			const tag = uniqueTag();
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const element = document.createElement(tag) as BaseComponent;
+			writeProp(element, "tags", "boom");
+			document.body.appendChild(element);
+
+			customElements.define(
+				tag,
+				component(
+					function* () {
+						yield () => html`<p>painted</p>`;
+					},
+					{
+						props: {
+							tags: (incoming: unknown) => {
+								if (incoming === "boom")
+									throw new Error("grundlage-test: the prop threw");
+								return incoming;
+							},
+						},
+					},
+				),
+			);
+			await sleep();
+
+			expect(element.shadowRoot?.textContent).toContain(
+				"grundlage-test: the prop threw",
+			);
+			expect(element.shadowRoot?.textContent).not.toContain("painted");
+			warn.mockRestore();
+			element.remove();
+		},
+	);
+
+	test("a subclass may observe an attribute the schema does not declare", async () => {
+		const tag = uniqueTag();
+		let renderCount = 0;
+		const Base = component(
+			function* () {
+				yield () => {
+					renderCount++;
+					return html`<p>x</p>`;
+				};
+			},
+			{ props: { label: [String, "anon"] } },
+		);
+		class Extended extends Base {
+			static observedAttributes = [
+				...(Base as unknown as { observedAttributes: Array<string> })
+					.observedAttributes,
+				"data-extra",
+			];
+		}
+		customElements.define(tag, Extended);
+		const element = mount(tag);
+		await sleep();
+		expect(renderCount).toBe(1);
+
+		//without the prop lookup's own guard the callback resolves undefined, which throws out of
+		//setAttribute rather than failing an assertion
+		const uncaught: Array<unknown> = [];
+		const recordUncaught = (event: ErrorEvent) => uncaught.push(event.error);
+		window.addEventListener("error", recordUncaught);
+		element.setAttribute("data-extra", "1");
+		await sleep();
+		window.removeEventListener("error", recordUncaught);
+
+		expect(uncaught).toEqual([]);
+		expect(renderCount).toBe(1);
+		expect(element.getAttribute("data-extra")).toBe("1");
+
+		element.setAttribute("label", "ada");
+		await sleep();
+		expect(renderCount).toBe(2);
+		element.remove();
+	});
 });
 
 describe.skipIf(!isRealBrowser)(

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { hashValue, stringHash } from "../hashing";
+import { hashValue } from "../../rendering/value-hashing";
+import { stringHash } from "../hashing";
 
 describe("stringHash", () => {
 	test("empty string hashes to 0", () => {
@@ -219,5 +220,38 @@ describe("hashValue - digits that could trade places", () => {
 				for (const third of alphabet)
 					seen.add(stringHash(first + second + third));
 		expect(seen.size).toBe(alphabet.length ** 3);
+	});
+});
+
+describe("hashValue - depth", () => {
+	const nest = (levels: number, leaf: unknown): unknown => {
+		let value: unknown = leaf;
+		for (let index = 0; index < levels; index++) value = { inner: value };
+		return value;
+	};
+
+	test("a cycle truncates instead of overflowing the stack", () => {
+		const cyclic: Record<string, unknown> = { name: "root" };
+		cyclic.self = cyclic;
+
+		expect(() => hashValue(cyclic)).not.toThrow();
+		expect(hashValue(cyclic)).toBe(hashValue(cyclic));
+	});
+
+	test("two cycles that differ above the limit still hash apart", () => {
+		const first: Record<string, unknown> = { name: "a" };
+		first.self = first;
+		const second: Record<string, unknown> = { name: "b" };
+		second.self = second;
+
+		expect(hashValue(first)).not.toBe(hashValue(second));
+	});
+
+	test("a change at the documented depth of 64 is still seen", () => {
+		expect(hashValue(nest(64, "a"))).not.toBe(hashValue(nest(64, "b")));
+	});
+
+	test("a change past it reads as unchanged, which is what the limit costs", () => {
+		expect(hashValue(nest(65, "a"))).toBe(hashValue(nest(65, "b")));
 	});
 });

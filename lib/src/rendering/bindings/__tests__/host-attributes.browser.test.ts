@@ -956,6 +956,35 @@ describe("root-template host attribute writes do not feed back into the componen
 
 		cleanup(element);
 	});
+
+	test("a host binding feeding its own declared prop settles on a patch too", async () => {
+		const tag = uniqueTag();
+		let renderCount = 0;
+		const MyElement = component(
+			function* () {
+				yield ({ label }) => {
+					renderCount++;
+					return html`<template label="${label}!"><p>${label}</p></template>`;
+				};
+			},
+			{ props: { label: [String, ""] } },
+		);
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep(50);
+		expect(renderCount).toBe(1);
+		expect(element.label).toBe("!");
+
+		//the same template, so the patch path writes the host bindings rather than the mount path
+		await element.update();
+		await sleep(50);
+
+		expect(renderCount).toBe(2);
+		expect(element.label).toBe("!!");
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("!");
+
+		cleanup(element);
+	});
 });
 
 describe("root-template host attributes are rejected when nested inside content", () => {
@@ -1019,7 +1048,7 @@ describe("root-template host attributes are rejected when nested inside content"
 		//failing wipes the shadow root to error text; it must also revert host bindings, or
 		//the listener applied from the root <template> lingers as a dead closure on the host
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let shouldThrow = false;
 		let clicks = 0;
 		const handler = () => {
@@ -1048,7 +1077,7 @@ describe("root-template host attributes are rejected when nested inside content"
 		element.dispatchEvent(new Event("click"));
 		expect(clicks).toBe(0);
 
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, props, component, type Template } from "../../src/index";
-import { hashValue } from "../../src/utils/hashing";
+import { hashValue } from "../../src/rendering/value-hashing";
 import {
 	BaseComponent,
 	ComponentGenerator,
@@ -1253,7 +1253,7 @@ describe("framework-parity patterns", () => {
 	);
 
 	test("error thrown in nested child does not break the parent", async () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const childTag = uniqueTag("err-child");
 		let shouldChildThrow = true;
@@ -1305,6 +1305,6 @@ describe("framework-parity patterns", () => {
 		expect(child.shadowRoot?.textContent).toContain("child-boom");
 
 		element.remove();
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 	});
 });

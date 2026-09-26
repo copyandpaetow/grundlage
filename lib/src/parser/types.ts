@@ -30,12 +30,6 @@ export interface AttributeStaticBinding {
 	valueParts: Array<Part>;
 }
 
-export interface SingleValueAttributeStaticBinding {
-	type: typeof BINDING.SINGLE_VALUE_ATTRIBUTE;
-	nameParts: Array<Part>;
-	valueIndex: number;
-}
-
 export interface DynamicAttributeStaticBinding {
 	type: typeof BINDING.DYNAMIC_ATTRIBUTE;
 	valueIndex: number;
@@ -61,7 +55,6 @@ export interface CommentStaticBinding {
 export type StaticBinding =
 	| TagStaticBinding
 	| AttributeStaticBinding
-	| SingleValueAttributeStaticBinding
 	| DynamicAttributeStaticBinding
 	| ContentStaticBinding
 	| RawContentStaticBinding

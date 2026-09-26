@@ -99,7 +99,7 @@ describe("outer yields a generator function (nested generator)", () => {
 	});
 
 	test("inner generator yielding a generator function throws and surfaces the error", async () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("inner-yields-gen");
 
 		customElements.define(
@@ -117,7 +117,7 @@ describe("outer yields a generator function (nested generator)", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("grundlage");
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		element.remove();
 	});
 });
@@ -209,7 +209,7 @@ describe("disconnect cleanup with nested generators", () => {
 
 describe("inner generator error contracts", () => {
 	test("outer try/catch around the inner can recover by yielding new content", async () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("recover");
 
 		customElements.define(
@@ -234,13 +234,13 @@ describe("inner generator error contracts", () => {
 			"recovered",
 		);
 		//recovery path is silent — no console.warn
-		expect(warnSpy).not.toHaveBeenCalled();
-		warnSpy.mockRestore();
+		expect(consoleError).not.toHaveBeenCalled();
+		consoleError.mockRestore();
 		element.remove();
 	});
 
 	test("outer catches and returns a cleanup: prior view persists, cleanup deferred to disconnect", async () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("catch-return");
 		const events: string[] = [];
 
@@ -272,18 +272,18 @@ describe("inner generator error contracts", () => {
 		//cleanup is captured but not run while still mounted
 		expect(events).toEqual([]);
 		//recovery path is silent — no terminal warning
-		expect(warnSpy).not.toHaveBeenCalled();
+		expect(consoleError).not.toHaveBeenCalled();
 
 		element.remove();
 		await sleep();
 		//cleanup runs once, at disconnect
 		expect(events).toEqual(["outer-cleanup-after-catch"]);
 
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 	});
 
-	test("uncaught inner error becomes a terminal: warning + error text in shadow", async () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+	test("uncaught inner error becomes a terminal: console error + error text in shadow", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("terminal");
 
 		customElements.define(
@@ -301,17 +301,17 @@ describe("inner generator error contracts", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("uncaught-inner");
-		const sawWarning = warnSpy.mock.calls.some((call) =>
-			String(call[0]).includes("uncaught-inner"),
+		const loggedTheError = consoleError.mock.calls.some((call) =>
+			call.some((argument) => String(argument).includes("uncaught-inner")),
 		);
-		expect(sawWarning).toBe(true);
+		expect(loggedTheError).toBe(true);
 
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		element.remove();
 	});
 
 	test("after a terminal error, update() is a no-op", async () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("terminal-noop");
 		let shouldThrow = true;
 
@@ -335,7 +335,7 @@ describe("inner generator error contracts", () => {
 		//outer was nulled; no recovery on subsequent update
 		expect(element.shadowRoot?.textContent).toContain("terminal-boom");
 
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		element.remove();
 	});
 });

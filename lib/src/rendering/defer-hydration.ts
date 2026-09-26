@@ -2,9 +2,8 @@ import { isServer } from "../utils/guards";
 import { ValueOf } from "../utils/types";
 import { ATTRIBUTE_MODE, DEFER_HYDRATION_ATTRIBUTE } from "./constants";
 
-//a property-channel value has no attribute spelling, so it reaches the child only when the
-//parent's binding assigns it; the server marks that child so it does not hydrate against markup
-//it was rendered with values it no longer has
+//a property-channel value reaches the child only through the parent's binding, so the server
+//marks that child to keep it from hydrating against markup rendered with values it no longer has
 export const markDeferredHydration = (
 	element: Element,
 	valueChannel: ValueOf<typeof ATTRIBUTE_MODE>,

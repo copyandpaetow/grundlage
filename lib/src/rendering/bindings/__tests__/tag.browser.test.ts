@@ -260,9 +260,9 @@ describe("tag updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe(
-			"box small",
-		);
+		expect(
+			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
+		).toBe("box small");
 
 		tagName = "section";
 		modifier = "large";
@@ -278,6 +278,41 @@ describe("tag updates", () => {
 
 		expect(element.shadowRoot?.querySelector("section")).toBe(section);
 		expect(section.getAttribute("class")).toBe("box wide");
+
+		cleanup(element);
+	});
+
+	test("a spread's property value is written again after a tag swap", async () => {
+		//copying the attributes across carries the stringable half of a spread, and nothing else:
+		//a property was never an attribute, so the swap has to write it onto the new element
+		const tag = uniqueTag();
+		let tagName = "div";
+		const payload = [{ id: 1 }];
+		const attributes = { title: "kept", payload };
+
+		const MyElement = component(function* () {
+			yield () => html`
+                <${tagName} ${attributes}>content</${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("kept");
+		expect((div as unknown as Record<string, unknown>).payload).toBe(payload);
+
+		tagName = "section";
+		await element.update();
+		await sleep();
+
+		const section = element.shadowRoot?.querySelector("section")!;
+		expect(section.getAttribute("title")).toBe("kept");
+		expect(section.hasAttribute("payload")).toBe(false);
+		expect((section as unknown as Record<string, unknown>).payload).toBe(
+			payload,
+		);
 
 		cleanup(element);
 	});

@@ -13,7 +13,7 @@
 		"test:dom": "vitest --project unit --project dom --project browser-as-dom --project prerender-plugin",
 		"test:cubes": "vitest  --project cubes",
 		"test:browser": "vitest --project browser",
-		"test:ci": "vitest run",
+		"test:ci": "npm run typecheck -w grundlage && vitest run",
 		"test:coverage": "vitest run --coverage",
 		"format:check": "prettier --check .",
 		"format:fix": "prettier --write .",

@@ -1,4 +1,5 @@
 import { CHAR_CODE, MARKUP } from "../parser/chars";
+import { warnDuringDevelopment } from "../utils/diagnostics";
 
 const MARKER_PREFIX = MARKUP.COMMENT_IDENTIFIER + " ";
 const CLOSE_SLASH_INDEX = MARKER_PREFIX.length;
@@ -7,9 +8,12 @@ const isOpenMarker = (data: string): boolean =>
 	data.startsWith(MARKER_PREFIX) &&
 	data.charCodeAt(CLOSE_SLASH_INDEX) !== CHAR_CODE.SLASH;
 
-//every walk is bounded by the range it is allowed to consume, so a server range that
-//contradicts the value is rejected instead of adopting a later binding's markers; a null
-//bound is a component root, where the walker's own root is the bound
+//a binding's open marker sits directly before the element it binds
+export const elementAfterMarker = (openMarker: Comment): Element =>
+	openMarker.nextElementSibling!;
+
+//every walk stops at the range it may consume, so a contradicting server range is rejected rather
+//than adopting a later binding's markers. A null bound means the walker's own root bounds it
 export const scanToClose = (
 	walker: TreeWalker,
 	openMarker: Comment,
@@ -52,19 +56,18 @@ export const nextListTail = (
 };
 
 export const warnOnRejectedServerRange = (): void =>
-	console.warn(
-		"grundlage: hydration mismatch: the server's markup does not match this render. ",
+	warnDuringDevelopment(
+		"hydration mismatch: the server's markup does not match this render. ",
 	);
 
-export const forEachNode = (
+export const clearRange = (
 	first: ChildNode | null,
 	end: ChildNode | null,
-	visit: (node: ChildNode) => void,
 ): void => {
 	let current = first;
 	while (current && current !== end) {
 		const next = current.nextSibling;
-		visit(current);
+		current.remove();
 		current = next;
 	}
 };

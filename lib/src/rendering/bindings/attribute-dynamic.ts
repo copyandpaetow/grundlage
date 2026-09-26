@@ -1,49 +1,44 @@
-import {
-	assertPrimitiveString,
-	isPlainObject,
-	isStringable,
-} from "../../utils/guards";
-import { hashValue } from "../../utils/hashing";
+import { assertPrimitiveString, isPlainObject } from "../../utils/guards";
+import { hashValue } from "../value-hashing";
 import { claimHashChange } from "../compose";
-import { applyAttributeValue, isDeclaredPropName } from "./attribute-write";
-import { AppliedAttribute, DynamicAttributeLiveBinding } from "./types";
+import { applyAttributeValue } from "./attribute-write";
+import { DynamicAttributeLiveBinding } from "./types";
 
-export const normalizeToAttributeMap = (
-	value: unknown,
-): Map<string, unknown> => {
-	const map = new Map<string, unknown>();
-	if (Array.isArray(value)) {
-		for (let index = 0; index < value.length; index++)
-			map.set(assertPrimitiveString(value[index]), "");
-	} else if (isPlainObject(value)) {
-		for (const name in value) map.set(name, value[name]);
-	} else if (value) {
-		map.set(assertPrimitiveString(value), "");
+const applyDesiredAttribute = (
+	liveBinding: DynamicAttributeLiveBinding,
+	name: string,
+	desiredValue: unknown,
+): void => {
+	const { anchor: element, appliedAttributes, commitNumber } = liveBinding;
+	const hash = hashValue(desiredValue);
+	const previous = appliedAttributes.get(name);
+	if (previous === undefined) {
+		applyAttributeValue(element, name, desiredValue);
+		appliedAttributes.set(name, {
+			value: desiredValue,
+			hash,
+			lastSeenInCommit: commitNumber,
+		});
+		return;
 	}
-	return map;
+	previous.lastSeenInCommit = commitNumber;
+	if (previous.hash === hash) return;
+	applyAttributeValue(element, name, desiredValue, previous.value);
+	previous.value = desiredValue;
+	previous.hash = hash;
 };
 
-export const applyAttributeMap = (
-	element: Element,
-	applied: Map<string, AppliedAttribute>,
-	desired: Map<string, unknown>,
+//keys and a lookup rather than destructured entries: each entry is an array the engine does not
+//optimize away, 10 of them per commit on a five-name spread
+const removeAttributesNotSeenInThisCommit = (
+	liveBinding: DynamicAttributeLiveBinding,
 ): void => {
-	for (const [name, prev] of applied)
-		if (!desired.has(name)) {
-			applyAttributeValue(element, name, null, prev.value);
-			applied.delete(name);
-		}
-	for (const [name, newValue] of desired) {
-		const hash = hashValue(newValue);
-		const prev = applied.get(name);
-		if (prev === undefined) {
-			applyAttributeValue(element, name, newValue);
-			applied.set(name, { value: newValue, hash });
-		} else if (prev.hash !== hash) {
-			applyAttributeValue(element, name, newValue, prev.value);
-			prev.value = newValue;
-			prev.hash = hash;
-		}
+	const { anchor: element, appliedAttributes, commitNumber } = liveBinding;
+	for (const name of appliedAttributes.keys()) {
+		const previous = appliedAttributes.get(name)!;
+		if (previous.lastSeenInCommit === commitNumber) continue;
+		applyAttributeValue(element, name, null, previous.value);
+		appliedAttributes.delete(name);
 	}
 };
 
@@ -53,23 +48,18 @@ export const commitDynamic = (
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	if (!claimHashChange(liveBinding, hashValue(value))) return;
-	const element = liveBinding.anchor;
-	applyAttributeMap(
-		element,
-		liveBinding.appliedAttributes,
-		normalizeToAttributeMap(value),
-	);
-};
-
-export const reapplyOnSwap = (
-	liveBinding: DynamicAttributeLiveBinding,
-	element: Element,
-): void => {
-	for (const [name, entry] of liveBinding.appliedAttributes) {
-		//a declared prop is reassigned even when stringable: reflection spells a value out, it does
-		//not preserve it
-		const isCarriedByMarkup =
-			isStringable(entry.value) && !isDeclaredPropName(element, name);
-		if (!isCarriedByMarkup) applyAttributeValue(element, name, entry.value);
-	}
+	liveBinding.commitNumber++;
+	if (Array.isArray(value))
+		for (let index = 0; index < value.length; index++)
+			applyDesiredAttribute(
+				liveBinding,
+				assertPrimitiveString(value[index]),
+				"",
+			);
+	else if (isPlainObject(value))
+		for (const name in value)
+			applyDesiredAttribute(liveBinding, name, value[name]);
+	else if (value)
+		applyDesiredAttribute(liveBinding, assertPrimitiveString(value), "");
+	removeAttributesNotSeenInThisCommit(liveBinding);
 };

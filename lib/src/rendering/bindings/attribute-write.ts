@@ -1,11 +1,12 @@
 import { MARKUP } from "../../parser/chars";
+import { warnDuringDevelopment } from "../../utils/diagnostics";
 import { isStringable } from "../../utils/guards";
 import { ValueOf } from "../../utils/types";
 import { ATTRIBUTE_MODE } from "../constants";
 import { markDeferredHydration } from "../defer-hydration";
 import { triggerComponentUpdate } from "../dom";
 
-export const resolveAttributeMode = (
+const resolveAttributeMode = (
 	value: unknown,
 ): ValueOf<typeof ATTRIBUTE_MODE> => {
 	if (value === null || value === undefined || value === false)
@@ -47,30 +48,23 @@ export const assignDeclaredProp = (
 	(element as unknown as Record<string, unknown>)[propName] = value;
 };
 
+//the one place that knows a key parsed as a native handler and found no property to bind it to, so
+//the warning belongs here rather than at the call site that would have to ask all of it again
 const resolveEventNameFromKey = (
 	key: string,
 	element: Element,
+	value: unknown,
 ): string | null => {
 	if (!key.startsWith(MARKUP.EVENT_PREFIX)) return null;
 	if (key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX))
 		return key.slice(MARKUP.CUSTOM_EVENT_PREFIX.length).toLowerCase();
 	const lowerKey = key.toLowerCase();
-	return lowerKey in element
-		? lowerKey.slice(MARKUP.EVENT_PREFIX.length)
-		: null;
-};
-
-const warnIfDeadNativeHandler = (key: string, element: Element): void => {
-	if (
-		!key.startsWith(MARKUP.EVENT_PREFIX) ||
-		key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX)
-	)
-		return;
-	const lowerKey = key.toLowerCase();
-	if (lowerKey in element) return;
-	console.warn(
-		`grundlage: "${key}" looks like an event handler but "${lowerKey}" is not a property of <${element.localName}> — the function was assigned as a dead property and will never fire. Check the spelling, or use "on-${key.slice(2).toLowerCase()}" to bind it as a custom event.`,
-	);
+	if (lowerKey in element) return lowerKey.slice(MARKUP.EVENT_PREFIX.length);
+	if (typeof value === "function")
+		warnDuringDevelopment(
+			`"${key}" looks like an event handler but "${lowerKey}" is not a property of <${element.localName}> — the function was assigned as a dead property and will never fire. Check the spelling, or use "on-${key.slice(2).toLowerCase()}" to bind it as a custom event.`,
+		);
+	return null;
 };
 
 const clearPropertyChannel = (element: Element, key: string): void => {
@@ -95,7 +89,7 @@ export const applyAttributeValue = (
 		return markDeferredHydration(element, valueChannel);
 	}
 
-	const listenerName = resolveEventNameFromKey(key, element);
+	const listenerName = resolveEventNameFromKey(key, element, value);
 	if (listenerName !== null) {
 		if (typeof oldValue === "function")
 			element.removeEventListener(listenerName, oldValue as EventListener);
@@ -104,12 +98,12 @@ export const applyAttributeValue = (
 		return;
 	}
 
-	if (typeof value === "function") warnIfDeadNativeHandler(key, element);
-
 	switch (valueChannel) {
 		case ATTRIBUTE_MODE.ABSENT:
 			clearPropertyChannel(element, key);
 			element.removeAttribute(key);
+			//until the element is defined, a missing attribute reads as absence, which `[Boolean, true]`
+			//resolves to true; the own property carries the false across the upgrade
 			if (value === false && isAwaitingDefinition(element))
 				(element as unknown as Record<string, unknown>)[key] = false;
 			return;
@@ -125,5 +119,19 @@ export const applyAttributeValue = (
 			(element as unknown as Record<string, unknown>)[key] = value;
 			triggerComponentUpdate(element);
 			return markDeferredHydration(element, valueChannel);
+		default:
+			return valueChannel satisfies never;
 	}
+};
+
+//a tag swap's clone keeps every attribute, so only what never was one is written again: a
+//property, a listener, or a declared prop, which reflection spells out rather than preserves
+export const reapplyValueOnSwap = (
+	element: Element,
+	key: string,
+	value: unknown,
+): void => {
+	const isCarriedByTheClonedMarkup =
+		isStringable(value) && !isDeclaredPropName(element, key);
+	if (!isCarriedByTheClonedMarkup) applyAttributeValue(element, key, value);
 };

@@ -267,7 +267,7 @@ describe("error handling", () => {
 	//unlike a resolved one it is not neutralized by the cancelled generator's return()
 	test("an async step rejecting after disconnect paints nothing and stays silent", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		customElements.define(
 			tag,
@@ -285,13 +285,13 @@ describe("error handling", () => {
 		await sleep(80);
 
 		expect(element.shadowRoot?.innerHTML).toBe("<p>first</p>");
-		expect(warnSpy).not.toHaveBeenCalled();
-		warnSpy.mockRestore();
+		expect(consoleError).not.toHaveBeenCalled();
+		consoleError.mockRestore();
 	});
 
 	test("sync generator: render function error is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield () => {
@@ -304,13 +304,13 @@ describe("error handling", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("sync render error");
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 
 	test("async generator: render function error is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(async function* () {
 			yield () => {
@@ -323,13 +323,13 @@ describe("error handling", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("async render error");
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 
 	test("sync generator: error in second yield is shown after first renders", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield () => html`<p>works</p>`;
@@ -343,13 +343,13 @@ describe("error handling", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("second yield error");
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 
 	test("async generator: error in second yield is shown after first renders", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(async function* () {
 			yield () => html`<p>works</p>`;
@@ -363,13 +363,13 @@ describe("error handling", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("second yield error");
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 
 	test("error in update() is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let shouldThrow = false;
 
 		const MyElement = component(function* () {
@@ -390,13 +390,13 @@ describe("error handling", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("update error");
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 
 	test("rejected yielded promise is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield Promise.reject(new Error("promise rejection"));
@@ -407,7 +407,7 @@ describe("error handling", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("promise rejection");
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 
@@ -439,7 +439,7 @@ describe("error handling", () => {
 
 	test("error stops further updates", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield () => {
@@ -458,7 +458,7 @@ describe("error handling", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("fatal");
-		warnSpy.mockRestore();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 
@@ -505,9 +505,9 @@ describe("error handling", () => {
 		cleanup(element);
 	});
 
-	test("a rejected render promise is fatal and warns once", async () => {
+	test("a rejected render promise is fatal and logs one console error", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield async () => {
@@ -521,8 +521,8 @@ describe("error handling", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("render-rejected");
-		expect(warnSpy).toHaveBeenCalledTimes(1);
-		warnSpy.mockRestore();
+		expect(consoleError).toHaveBeenCalledTimes(1);
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 
@@ -631,7 +631,7 @@ describe("a superseded render promise", () => {
 
 	test("does not fail the component when it rejects after a newer call", async () => {
 		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let calls = 0;
 
 		const MyElement = component(function* () {
@@ -658,8 +658,8 @@ describe("a superseded render promise", () => {
 		expect(element.shadowRoot?.textContent).not.toContain(
 			"superseded-rejection",
 		);
-		expect(warnSpy).not.toHaveBeenCalled();
-		warnSpy.mockRestore();
+		expect(consoleError).not.toHaveBeenCalled();
+		consoleError.mockRestore();
 		cleanup(element);
 	});
 

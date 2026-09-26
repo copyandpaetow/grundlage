@@ -73,6 +73,34 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
+	test("a nullish hole in a multi-part attribute writes nothing, not its spelling", async () => {
+		const tag = uniqueTag();
+		let second: string | null | undefined = null;
+
+		const MyElement = component(function* () {
+			yield () => html` <div class="a ${second}"></div>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const div = element.shadowRoot?.querySelector("div");
+		expect(div?.getAttribute("class")).toBe("a ");
+
+		second = "b";
+		await element.update();
+		await sleep();
+		expect(div?.getAttribute("class")).toBe("a b");
+
+		second = undefined;
+		await element.update();
+		await sleep();
+		expect(div?.getAttribute("class")).toBe("a ");
+
+		cleanup(element);
+	});
+
 	test("toggles a boolean attribute", async () => {
 		const tag = uniqueTag();
 		let disabled = true;
@@ -138,6 +166,27 @@ describe("attribute updates", () => {
 
 		element.shadowRoot!.querySelector("button")!.click();
 		expect(clicks).toEqual(["hit"]);
+
+		cleanup(element);
+	});
+
+	test("a composed event attribute is written as inline handler text", async () => {
+		const tag = uniqueTag();
+		let argument = 1;
+
+		const MyElement = component(function* () {
+			yield () => html`<button onclick="report(${argument})">click</button>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+		const button = element.shadowRoot!.querySelector("button")!;
+		expect(button.getAttribute("onclick")).toBe("report(1)");
+
+		argument = 2;
+		await element.update();
+		await sleep();
+		expect(button.getAttribute("onclick")).toBe("report(2)");
 
 		cleanup(element);
 	});
@@ -1012,6 +1061,33 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
+	test("a renamed event binding leaves another binding's listener on the new name alone", async () => {
+		const tag = uniqueTag();
+		const events: string[] = [];
+		const shared = () => events.push("shared");
+		let eventName = "ondblclick";
+		let handler: () => number = shared;
+
+		const MyElement = component(function* () {
+			yield () =>
+				html`<button onclick=${shared} ${eventName}=${handler}>btn</button>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		eventName = "onclick";
+		handler = () => events.push("renamed");
+		await element.update();
+		await sleep();
+		events.length = 0;
+
+		element.shadowRoot!.querySelector("button")!.click();
+		expect(events).toEqual(["shared", "renamed"]);
+
+		cleanup(element);
+	});
+
 	test("handles partially dynamic key with boolean removal", async () => {
 		const tag = uniqueTag();
 		let suffix = "hidden";
@@ -1216,5 +1292,4 @@ describe("attribute updates", () => {
 
 		cleanup(element);
 	});
-
 });

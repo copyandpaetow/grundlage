@@ -189,10 +189,16 @@ describe("fallbacks", () => {
 		expect(seed({ footer: [takeAsIs, template] }).footer).toBe(template);
 	});
 
-	test("a fallback that cannot be copied is refused at definition time", () => {
+	test("a class instance is refused at definition time: the copy loses its prototype", () => {
 		expect(() =>
 			normalizeSchema({ quote: [asQuote, new Quote("hi")] }),
-		).toThrow(/cannot be copied for each element/);
+		).toThrow(/cannot be copied for each element.*loses its prototype/);
+	});
+
+	test("a fallback holding a function is refused at definition time: the copy throws", () => {
+		expect(() =>
+			normalizeSchema({ handlers: [takeAsIs, { onDone: () => {} }] }),
+		).toThrow(/cannot be copied for each element.*holding a function/);
 	});
 
 	test("a Date survives the copy, so it is a fallback like any other", () => {

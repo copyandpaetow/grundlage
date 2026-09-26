@@ -1,30 +1,19 @@
-import { BINDING } from "../../parser/constants";
 import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
-import { reapplyOnSwap } from "./dispatch";
+import { elementAfterMarker } from "../markers";
+import { isSingleHoleValue } from "./attribute";
+import { reapplyValueOnSwap } from "./attribute-write";
 import {
-	AttributeLiveBinding,
-	DynamicAttributeLiveBinding,
+	AttributeLaneLiveBinding,
+	isAttributeBinding,
+	isDynamicAttributeBinding,
 	LiveBinding,
-	SingleValueAttributeLiveBinding,
 	TagLiveBinding,
 } from "./types";
 
-type AnyAttributeLiveBinding =
-	| AttributeLiveBinding
-	| SingleValueAttributeLiveBinding
-	| DynamicAttributeLiveBinding;
-
 const isAttributeLane = (
 	liveBinding: LiveBinding,
-): liveBinding is AnyAttributeLiveBinding =>
-	liveBinding.staticBinding.type === BINDING.ATTRIBUTE ||
-	liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE ||
-	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
-
-const isCarriedByMarkupAlone = (
-	liveBinding: AnyAttributeLiveBinding,
-): liveBinding is AttributeLiveBinding =>
-	liveBinding.staticBinding.type === BINDING.ATTRIBUTE;
+): liveBinding is AttributeLaneLiveBinding =>
+	isAttributeBinding(liveBinding) || isDynamicAttributeBinding(liveBinding);
 
 const swapElement = (
 	element: Element,
@@ -52,7 +41,19 @@ const swapElement = (
 		)
 			continue;
 		sibling.anchor = newElement;
-		if (!isCarriedByMarkupAlone(sibling)) reapplyOnSwap(sibling, newElement);
+		//a composed value is a string, so the attribute copy above already carries it
+		if (
+			isAttributeBinding(sibling) &&
+			isSingleHoleValue(sibling.staticBinding.valueParts)
+		)
+			reapplyValueOnSwap(
+				newElement,
+				sibling.lastComposedName,
+				sibling.lastValue,
+			);
+		else if (isDynamicAttributeBinding(sibling))
+			for (const [name, entry] of sibling.appliedAttributes)
+				reapplyValueOnSwap(newElement, name, entry.value);
 	}
 
 	element.replaceWith(newElement);
@@ -66,7 +67,7 @@ export const commitTag = (
 ): void => {
 	const { parts } = liveBinding.staticBinding;
 	if (!claimHashChange(liveBinding, combinedPartsHash(parts, values))) return;
-	const element = liveBinding.openMarker.nextElementSibling!;
+	const element = elementAfterMarker(liveBinding.openMarker);
 	const newTag = composeParts(parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
 	swapElement(element, newTag, siblings);

@@ -12,6 +12,8 @@ export interface BaseComponent extends HTMLElement {
 	internals?: ElementInternals | null;
 }
 
+//undefined is the refusal: the previous value stays and the element keeps rendering it. Boolean
+//never refuses, which is why an absent boolean is a value and not a gap
 export type Resolve<Value> = (incoming: unknown) => Value | undefined;
 
 export type ShippedToken =

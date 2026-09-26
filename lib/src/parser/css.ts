@@ -27,9 +27,8 @@ const RULE_KIND = {
 const NO_OPEN_RUN = -1;
 const COMMENT_CLOSE = "*/";
 
-//grouping at-rules keep the fast path: they nest style rules whose declarations land on an
-//addressable CSSOM block, so a hole inside stays updatable — unlike descriptor at-rules
-//(@font-face, @property, …), which the default arm of readAtRuleKind drops to the fallback
+//grouping at-rules nest style rules on an addressable CSSOM block, so a hole inside stays
+//updatable; descriptor at-rules (@font-face, @property) fall back in readAtRuleKind's default arm
 const FAST_PATH_GROUPING_AT_RULE_NAMES = new Set([
 	"media",
 	"supports",

@@ -1,6 +1,6 @@
 import { isTemplate, TemplateValue } from "../../template";
 import { assertPrimitiveString } from "../../utils/guards";
-import { hashValue } from "../../utils/hashing";
+import { hashValue } from "../value-hashing";
 import { claimHashChange } from "../compose";
 import { ValueOf } from "../../utils/types";
 import { CONTENT_KIND, UNSET_HASH } from "../constants";
@@ -11,8 +11,12 @@ import {
 	mountInstance,
 	patchInstance,
 } from "../instance";
-import { forEachNode, warnOnRejectedServerRange } from "../markers";
-import { hydrateListItems, patchListContent } from "./content-list";
+import { clearRange, warnOnRejectedServerRange } from "../markers";
+import {
+	EMPTY_LIST_SCRATCH,
+	hydrateListItems,
+	patchListContent,
+} from "./content-list";
 import {
 	BranchContentState,
 	ContentLiveBinding,
@@ -31,13 +35,17 @@ type ResolvedContentKind = Exclude<
 	typeof CONTENT_KIND.UNRESOLVED
 >;
 
+type ResolvedContentState = Exclude<ContentState, UnresolvedContentState>;
+
 const contentKindOf = (value: unknown): ResolvedContentKind => {
 	if (isTemplate(value)) return CONTENT_KIND.BRANCH;
 	if (Array.isArray(value)) return CONTENT_KIND.LIST;
 	return CONTENT_KIND.TEXT;
 };
 
-const createContentState = (contentKind: ResolvedContentKind): ContentState => {
+const createContentState = (
+	contentKind: ResolvedContentKind,
+): ResolvedContentState => {
 	switch (contentKind) {
 		case CONTENT_KIND.TEXT:
 			return { kind: CONTENT_KIND.TEXT, lastValueHash: UNSET_HASH };
@@ -47,22 +55,19 @@ const createContentState = (contentKind: ResolvedContentKind): ContentState => {
 			return {
 				kind: CONTENT_KIND.LIST,
 				items: [],
-				aggregateHash: UNSET_HASH,
+				lastValueHash: UNSET_HASH,
 				itemHashes: [],
+				nextRowWithSameHash: EMPTY_LIST_SCRATCH,
+				subsequenceStarts: EMPTY_LIST_SCRATCH,
+				nextInSubsequence: EMPTY_LIST_SCRATCH,
+				hashAtTableIndex: EMPTY_LIST_SCRATCH,
+				chainHeadAtTableIndex: EMPTY_LIST_SCRATCH,
+				tableIndexShift: 0,
+				spareRows: [],
 			};
+		default:
+			return contentKind satisfies never;
 	}
-};
-
-const switchContentKind = (
-	liveBinding: ContentLiveBinding,
-	contentKind: ResolvedContentKind,
-): void => {
-	forEachNode(
-		liveBinding.openMarker.nextSibling,
-		liveBinding.closeMarker,
-		(node) => node.remove(),
-	);
-	liveBinding.content = createContentState(contentKind);
 };
 
 const coerceToText = (value: unknown): string => {
@@ -71,8 +76,11 @@ const coerceToText = (value: unknown): string => {
 	return isAbsentContent ? "" : assertPrimitiveString(value);
 };
 
-const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
-	const textState = liveBinding.content as TextContentState;
+const patchText = (
+	liveBinding: ContentLiveBinding,
+	textState: TextContentState,
+	value: unknown,
+): void => {
 	if (!claimHashChange(textState, hashValue(value))) return;
 	const text = coerceToText(value);
 	const existing = liveBinding.openMarker.nextSibling;
@@ -86,21 +94,17 @@ const patchText = (liveBinding: ContentLiveBinding, value: unknown): void => {
 
 const patchBranch = (
 	liveBinding: ContentLiveBinding,
+	branch: BranchContentState,
 	value: TemplateValue,
 	moveState: StyleSheetMoveState,
 ): void => {
 	const parsed = resolveNestedTemplate(value);
-	const branch = liveBinding.content as BranchContentState;
 	if (isPatchableInPlace(branch.instance, parsed)) {
 		patchInstance(branch.instance, value.values);
 		return;
 	}
 	const { instance, fragment } = mountInstance(value, parsed, moveState);
-	forEachNode(
-		liveBinding.openMarker.nextSibling,
-		liveBinding.closeMarker,
-		(node) => node.remove(),
-	);
+	clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
 	liveBinding.openMarker.after(fragment);
 	branch.instance = instance;
 };
@@ -112,15 +116,25 @@ export const commitContent = (
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const contentKind = contentKindOf(value);
-	if (contentKind !== liveBinding.content.kind)
-		switchContentKind(liveBinding, contentKind);
-	switch (liveBinding.content.kind) {
+	let content = liveBinding.content;
+	if (content.kind !== contentKind) {
+		clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
+		content = createContentState(contentKind);
+		liveBinding.content = content;
+	}
+	switch (content.kind) {
 		case CONTENT_KIND.TEXT:
-			return patchText(liveBinding, value);
-		case CONTENT_KIND.BRANCH:
-			return patchBranch(liveBinding, value as TemplateValue, moveState);
-		case CONTENT_KIND.LIST:
-			return patchListContent(liveBinding, value as Array<unknown>, moveState);
+			return patchText(liveBinding, content, value);
+		case CONTENT_KIND.BRANCH: {
+			const template = value as TemplateValue;
+			return patchBranch(liveBinding, content, template, moveState);
+		}
+		case CONTENT_KIND.LIST: {
+			const rows = value as Array<unknown>;
+			return patchListContent(liveBinding, content, rows, moveState);
+		}
+		default:
+			return content satisfies never;
 	}
 };
 
@@ -139,6 +153,7 @@ const isAdoptableTextRange = ({
 
 const hydrateBranch = (
 	liveBinding: ContentLiveBinding,
+	branch: BranchContentState,
 	value: TemplateValue,
 	moveState: StyleSheetMoveState,
 	walker: TreeWalker,
@@ -151,7 +166,7 @@ const hydrateBranch = (
 		moveState,
 	);
 	if (instance === null) return false;
-	(liveBinding.content as BranchContentState).instance = instance;
+	branch.instance = instance;
 	return true;
 };
 
@@ -163,30 +178,32 @@ export const hydrateContent = (
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const kind = contentKindOf(value);
-	liveBinding.content = createContentState(kind);
+	const content = createContentState(kind);
+	liveBinding.content = content;
 
-	switch (kind) {
+	switch (content.kind) {
 		case CONTENT_KIND.TEXT:
 			if (isAdoptableTextRange(liveBinding))
-				return patchText(liveBinding, value);
+				return patchText(liveBinding, content, value);
 			break;
-		case CONTENT_KIND.BRANCH:
-			if (hydrateBranch(liveBinding, value as TemplateValue, moveState, walker))
+		case CONTENT_KIND.BRANCH: {
+			const template = value as TemplateValue;
+			if (hydrateBranch(liveBinding, content, template, moveState, walker))
 				return;
 			break;
-		case CONTENT_KIND.LIST:
-			if (
-				hydrateListItems(
-					liveBinding,
-					value as Array<unknown>,
-					moveState,
-					walker,
-				)
-			)
+		}
+		case CONTENT_KIND.LIST: {
+			const rows = value as Array<unknown>;
+			if (hydrateListItems(liveBinding, content, rows, moveState, walker))
 				return;
+			break;
+		}
+		default:
+			return content satisfies never;
 	}
 
 	warnOnRejectedServerRange();
-	switchContentKind(liveBinding, kind);
+	clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
+	liveBinding.content = createContentState(kind);
 	commitContent(liveBinding, values, moveState);
 };

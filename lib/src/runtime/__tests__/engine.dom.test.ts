@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { html, component } from "../../index";
+import { html, component, ComponentErrorEvent } from "../../index";
 
 //engine-level invariants that are narrower than the integration oracles but are not pure-step
-//properties: the terminal warns exactly once along the linear recover-then-fail path, and a
+//properties: the terminal logs exactly once along the linear recover-then-fail path, and a
 //torn-down generation neither paints nor resolves a late update() past disconnect. Driven through
 //the public component() surface.
 
@@ -24,8 +24,8 @@ afterEach(() => {
 });
 
 describe("engine terminal", () => {
-	test("an uncaught error warns exactly once", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+	test("an uncaught error logs exactly one console error", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield function* () {
@@ -38,12 +38,12 @@ describe("engine terminal", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("once");
-		expect(warn).toHaveBeenCalledTimes(1);
+		expect(consoleError).toHaveBeenCalledTimes(1);
 		element.remove();
 	});
 
 	test("a fatal error displays in closed shadow mode (host.shadowRoot is null)", async () => {
-		vi.spyOn(console, "warn").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		const attachShadow = HTMLElement.prototype.attachShadow;
 		let closedRoot: ShadowRoot | undefined;
 		vi.spyOn(HTMLElement.prototype, "attachShadow").mockImplementation(
@@ -72,7 +72,7 @@ describe("engine terminal", () => {
 	});
 
 	test("update() after a terminal error is a no-op (the renderer was cleared)", async () => {
-		vi.spyOn(console, "warn").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		let shouldThrow = true;
 		const element = mount(
 			component(function* () {
@@ -92,7 +92,7 @@ describe("engine terminal", () => {
 	});
 
 	test("reconnect after a fatal error remounts instead of patching the detached error text", async () => {
-		vi.spyOn(console, "warn").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		let boom = false;
 		const element = mount(
 			component(function* () {
@@ -122,7 +122,7 @@ describe("engine terminal", () => {
 	test("an outer parked on a yielded promise cannot catch its inner's failure", async () => {
 		//the yield a throw would land at is owned by the pending promise: catching there would let
 		//that promise step the generator a second time, from a position it had already left
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let rejectInnerRender: (error: Error) => void = () => {};
 		const innerRender = new Promise((_resolve, reject) => {
 			rejectInnerRender = reject;
@@ -154,11 +154,82 @@ describe("engine terminal", () => {
 
 		expect(caughtAtTheGate).toBe(0);
 		expect(element.shadowRoot?.textContent).toContain("inner-render-rejected");
-		expect(warn).toHaveBeenCalledTimes(1);
+		expect(consoleError).toHaveBeenCalledTimes(1);
 
 		resolveGate("late");
 		await sleep();
 		expect(resumedPastTheGate).toBe(0); //nor does the gate resume the torn-down outer
+		element.remove();
+	});
+});
+
+describe("the component error event", () => {
+	test("reaches the document naming the failing tag, with the thrown error", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const thrown = new Error("reported");
+		const received: Array<ComponentErrorEvent> = [];
+		const recordEvent = (event: ComponentErrorEvent) => received.push(event);
+		document.addEventListener(ComponentErrorEvent.eventName, recordEvent);
+		const element = mount(
+			component(function* () {
+				yield () => {
+					throw thrown;
+				};
+			}),
+		);
+		await sleep();
+		document.removeEventListener(ComponentErrorEvent.eventName, recordEvent);
+
+		expect(received).toHaveLength(1);
+		expect(received[0].error).toBe(thrown);
+		expect(received[0].tagName).toBe(element.localName);
+		element.remove();
+	});
+
+	test("the listener sees an already emptied shadow root", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let shouldThrow = false;
+		const element = mount(
+			component(function* () {
+				yield () => {
+					if (shouldThrow) throw new Error("late");
+					return html`<p>alive</p>`;
+				};
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		let childCountDuringTheListener = -1;
+		element.addEventListener(ComponentErrorEvent.eventName, () => {
+			childCountDuringTheListener = element.shadowRoot?.childNodes.length ?? -1;
+		});
+
+		shouldThrow = true;
+		await element.update();
+
+		expect(childCountDuringTheListener).toBe(0);
+		element.remove();
+	});
+
+	test("preventDefault skips the console error and the error text", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const tag = uniqueTag();
+		customElements.define(
+			tag,
+			component(function* () {
+				yield () => {
+					throw new Error("handled");
+				};
+			}),
+		);
+		const element = document.createElement(tag);
+		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
+			event.preventDefault(),
+		);
+		document.body.appendChild(element);
+		await sleep();
+
+		expect(consoleError).not.toHaveBeenCalled();
+		expect(element.shadowRoot?.childNodes.length).toBe(0);
 		element.remove();
 	});
 });
@@ -249,7 +320,7 @@ describe("the refire enters the task loop", () => {
 	//the two ways a throwing cleanup was observable before it was guarded: the paint it precedes
 	//never happened, and the sibling cleanup queued behind it never ran
 	test("a branch cleanup that throws does not eat the paint that tore it down", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield function* () {
@@ -264,7 +335,7 @@ describe("the refire enters the task loop", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("component");
-		expect(warn).toHaveBeenCalledOnce();
+		expect(consoleError).toHaveBeenCalledOnce();
 		element.remove();
 	});
 
@@ -376,6 +447,62 @@ describe("the refire enters the task loop", () => {
 		element.remove();
 	});
 
+	test("a refire that installs a generator past a suspended outer does not step it either", async () => {
+		//the install half of the shape above: the refired render function returns a body rather than
+		//content, and the outer is parked on its own promise rather than on the yield that produced it
+		let resolveGate: (value: string) => void = () => {};
+		const gate = new Promise<string>((resolve) => {
+			resolveGate = resolve;
+		});
+		let innerRuns = 0;
+		let resumedWith: unknown = null;
+		const body = function* () {
+			innerRuns++;
+			yield () => html`<p>body ${innerRuns}</p>`;
+		};
+		const element = mount(
+			component(function* () {
+				yield () => body;
+				resumedWith = yield gate;
+			}),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		expect(innerRuns).toBe(1);
+		expect(resumedWith).toBe(null);
+
+		await element.update();
+		expect(innerRuns).toBe(2);
+		expect(element.shadowRoot?.textContent).toContain("body 2");
+		expect(resumedWith).toBe(null); //the install must not hand the outer its host
+
+		resolveGate("go");
+		await sleep();
+		expect(resumedWith).toBe("go");
+		element.remove();
+	});
+
+	test("an update queued before the body paints its own template still settles", async () => {
+		//the queue drains a microtask after the enqueue, so everything below lands first: the run is
+		//still running when the pass reaches it, with nothing left to re-fire
+		let updateSettled = false;
+		let renders = 0;
+		const element = mount(
+			component(function* ({ host }) {
+				yield () => html`<p>render ${++renders}</p>`;
+				void host.update().then(() => {
+					updateSettled = true;
+				});
+				yield html`<p>final</p>`;
+			}),
+		);
+		await sleep();
+
+		expect(renders).toBe(1); //a plain yielded template leaves nothing the update could re-fire
+		expect(element.shadowRoot?.textContent).toContain("final");
+		expect(updateSettled).toBe(true);
+		element.remove();
+	});
+
 	test("a render function yielded after an inner generator wins the refire", async () => {
 		//the two refire routes have separate fields now; the last yield decides which one answers
 		let innerRuns = 0;
@@ -423,8 +550,8 @@ describe("the refire enters the task loop", () => {
 		element.remove();
 	});
 
-	test("a paint throw during an update warns exactly once and is fatal", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+	test("a paint throw during an update logs exactly one console error and is fatal", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let bad = false;
 		const element = mount(
 			component(function* () {
@@ -436,7 +563,7 @@ describe("the refire enters the task loop", () => {
 
 		bad = true;
 		await element.update(); //must not be swallowed by the DONE outer falling through to NOOP
-		expect(warn).toHaveBeenCalledTimes(1);
+		expect(consoleError).toHaveBeenCalledTimes(1);
 		element.remove();
 	});
 });

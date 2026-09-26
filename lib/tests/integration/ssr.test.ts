@@ -279,10 +279,10 @@ describe("SSR: server stops at first renderable yield", () => {
 
 	test("rejecting Promise before the first renderable yield surfaces the error and stops the generator", async () => {
 		//the error routes to the shared fatal display, which writes into the shadow root
-		//the fatal display logs, so the warning is silenced here
+		//the fatal display logs, so the console error is silenced here
 		const tag = uniqueTag();
 		let postYieldRan = false;
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const Component = component(function* () {
 			yield Promise.reject(new Error("boom"));
@@ -296,8 +296,8 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		expect(element.shadowRoot!.textContent).toContain("boom");
 		expect(postYieldRan).toBe(false);
-		expect(warnSpy).toHaveBeenCalled();
-		warnSpy.mockRestore();
+		expect(consoleError).toHaveBeenCalled();
+		consoleError.mockRestore();
 	});
 
 	test("user finally block runs on server (cancelGenerator calls .return())", async () => {
@@ -495,7 +495,7 @@ describe("SSR: server stops at first renderable yield", () => {
 describe("SSR: an attribute write after the server paint schedules nothing", () => {
 	test("attributeChangedCallback fires on the server and reaches no render", async () => {
 		//isServer() is `typeof window === "undefined"`, so there is a real DOM here and aCC does
-		//fire — what makes dropping the old `!isServerRun` observer guard safe is that
+		//fire — what makes dropping the old `!wasMountedOnTheServer` observer guard safe is that
 		//#cancelBothTasks() runs immediately after the server's first paint
 		const tag = uniqueTag();
 		let renderCount = 0;

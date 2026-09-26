@@ -1,12 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
 import { component } from "../../../index";
-import { reapplyOnSwap as reapplySingleValueOnSwap } from "../attribute-single-value";
-import { reapplyOnSwap as reapplyDynamicOnSwap } from "../attribute-dynamic";
 import {
 	applyAttributeValue,
 	assignDeclaredProp,
 	isAwaitingDefinition,
 	isDeclaredPropName,
+	reapplyValueOnSwap,
 } from "../attribute-write";
 
 const record = (element: Element): Record<string, unknown> =>
@@ -81,23 +80,9 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 		),
 	);
 
-	test("single value binding", () => {
+	test("a declared prop is written again, because reflection spelled it out", () => {
 		const element = document.createElement("swap-carried-el");
-		reapplySingleValueOnSwap(
-			{ lastComposedName: "variant", lastValue: "solid" } as never,
-			element,
-		);
-		expect(record(element).variant).toBe("solid");
-	});
-
-	test("spread binding", () => {
-		const element = document.createElement("swap-carried-el");
-		reapplyDynamicOnSwap(
-			{
-				appliedAttributes: new Map([["variant", { value: "solid", hash: 0 }]]),
-			} as never,
-			element,
-		);
+		reapplyValueOnSwap(element, "variant", "solid");
 		expect(record(element).variant).toBe("solid");
 	});
 
@@ -114,12 +99,7 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 
 	test("an undeclared stringable is still left to the attribute copy", () => {
 		const element = document.createElement("swap-carried-el");
-		reapplyDynamicOnSwap(
-			{
-				appliedAttributes: new Map([["title", { value: "hi", hash: 0 }]]),
-			} as never,
-			element,
-		);
+		reapplyValueOnSwap(element, "title", "hi");
 		expect(element.hasAttribute("title")).toBe(false);
 	});
 });

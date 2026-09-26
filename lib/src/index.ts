@@ -7,33 +7,37 @@ import {
 import {
 	commitLiveBinding,
 	createLiveBinding,
-	HostLiveBinding,
 	revertHostBinding,
 } from "./rendering/bindings/dispatch";
-import { StyleSheetMoveState } from "./rendering/bindings/types";
+import {
+	AttributeLaneLiveBinding,
+	Instance,
+	StyleSheetMoveState,
+} from "./rendering/bindings/types";
 import { getParsedTemplate } from "./parser/html";
 import { flushHostPayload, warnOnUnclaimedSsrPayloads } from "./load";
 import { coerceToTemplate, TemplateValue } from "./template";
 import {
-	canRerender,
-	cancelRenderRun,
+	alreadySettled,
 	createRenderRun,
 	endRunWithFatalError,
-	hasStarted,
-	mountComponentGenerator,
+	RENDER_REQUEST,
 	RenderRun,
-	scheduleUpdate,
+	requestRender,
 } from "./runtime/driver";
+import { forgetWhereThisRunSits } from "./runtime/render-order";
+import { ComponentErrorEvent } from "./runtime/component-error-event";
 import { html as htmlValue } from "./template";
 import {
+	commitHostBindings,
 	hydrateInstance,
-	Instance,
 	isPatchableInPlace,
 	mountInstance,
 	patchInstance,
 	refreshStyleSheetsAfterMove,
 } from "./rendering/instance";
 import { DEFER_HYDRATION_ATTRIBUTE } from "./rendering/constants";
+import { resolveShadowRoot } from "./rendering/dom";
 import { releaseDeferredChildren } from "./rendering/defer-hydration";
 import { warnOnRejectedServerRange } from "./rendering/markers";
 import {
@@ -57,7 +61,7 @@ import {
 	recoverPreUpgradeAssignments,
 	writeProp,
 } from "./props/values";
-import { isGeneratorFunction, isServer } from "./utils/guards";
+import { isGeneratorFunction } from "./utils/guards";
 
 export { props } from "./props/read";
 export {
@@ -72,8 +76,7 @@ export {
 	type YieldableValue,
 } from "./types";
 export { load, type LoadOptions } from "./load";
-
-const alreadySettled = Promise.resolve();
+export { ComponentErrorEvent } from "./runtime/component-error-event";
 
 const defaultOptions = {
 	clonable: true,
@@ -150,6 +153,8 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		#reflect(attributeName: string, prop: Prop): void {
 			const spelling = attributeSpellingOf(prop, this.#props[prop.propName]);
 			if (this.getAttribute(attributeName) === spelling) return;
+			//a settled value with no spelling removes the attribute, and attributeChangedCallback would
+			//read that removal back as an absence and resolve it to the fallback
 			this.#isReflecting = true;
 			if (spelling === null) this.removeAttribute(attributeName);
 			else this.setAttribute(attributeName, spelling);
@@ -158,37 +163,32 @@ export const component = <DeclaredSchema extends Schema = {}>(
 
 		constructor() {
 			super();
+			//only a closed root is worth reaching through internals, and reading them attaches them
 			const existingRoot =
-				this.shadowRoot ??
-				(mergedOptions.mode === "closed" ? this.internals?.shadowRoot : null) ??
-				null;
+				mergedOptions.mode === "closed"
+					? resolveShadowRoot(this)
+					: this.shadowRoot;
 			this.#isHydrationPending = existingRoot !== null;
 			this.#shadowRoot = existingRoot ?? this.attachShadow(mergedOptions);
 		}
 
 		connectedCallback() {
-			if (hasStarted(this.#renderRun)) {
-				if (this.#instance) refreshStyleSheetsAfterMove(this.#instance);
-				return;
-			}
+			if (this.#instance) refreshStyleSheetsAfterMove(this.#instance);
+			//an insertion is the only notice of a move, and a move can put a different component above
+			//this one
+			forgetWhereThisRunSits(this.#renderRun);
 			try {
 				recoverPreUpgradeAssignments(this, props);
 			} catch (error) {
 				return endRunWithFatalError(this.#renderRun, error);
 			}
-			//the server writes the mark while the child sits in the parent's detached fragment, so
-			//it is already present when that fragment is connected and the child paints its own run
-			const waitsForTheParentThatOwesItAValue =
-				!isServer() && this.hasAttribute(DEFER_HYDRATION_ATTRIBUTE);
-			if (waitsForTheParentThatOwesItAValue) return;
-			mountComponentGenerator(this.#renderRun);
+			requestRender(this.#renderRun, RENDER_REQUEST.START);
 		}
 
 		async disconnectedCallback() {
 			await Promise.resolve();
 			if (this.isConnected) return;
-			if (!hasStarted(this.#renderRun)) return;
-			cancelRenderRun(this.#renderRun);
+			requestRender(this.#renderRun, RENDER_REQUEST.STOP);
 		}
 
 		attributeChangedCallback(
@@ -199,12 +199,11 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			if (this.#isReflecting) return;
 			if (oldValue === newValue) return;
 			if (attributeName === DEFER_HYDRATION_ATTRIBUTE) {
-				//upgrade replays a present attribute as null → "" and must not mount; the parent's
-				//release removes it as "" → null and must
-				const parentHasSuppliedItsValues =
-					newValue === null && !hasStarted(this.#renderRun) && this.isConnected;
+				//upgrade replays a present attribute as null → "", which is the mark arriving; only its
+				//removal is the parent releasing this child
+				const parentHasSuppliedItsValues = newValue === null;
 				if (parentHasSuppliedItsValues)
-					mountComponentGenerator(this.#renderRun);
+					requestRender(this.#renderRun, RENDER_REQUEST.START);
 				return;
 			}
 			const prop = props.get(attributeName);
@@ -221,15 +220,19 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		update(): Promise<void> {
 			//four paths reach here from inside a host-binding write; this is the one funnel
 			if (this.#isWritingHostBindings) return alreadySettled;
-			if (!canRerender(this.#renderRun)) return alreadySettled;
-			return scheduleUpdate(this.#renderRun);
+			return requestRender(this.#renderRun, RENDER_REQUEST.RERENDER);
 		}
 
 		#displayFatalError(error: unknown): void {
-			console.warn(error);
-			this.#shadowRoot.textContent = `${error}`;
 			this.#revertAllHostBindings();
 			this.#instance = null;
+			this.#shadowRoot.replaceChildren();
+			const isHandledByTheApp = !this.dispatchEvent(
+				new ComponentErrorEvent(error, this.localName),
+			);
+			if (isHandledByTheApp) return;
+			console.error(`grundlage: <${this.localName}> stopped rendering.`, error);
+			this.#shadowRoot.textContent = `${error}`;
 		}
 
 		#paint(value: unknown): void {
@@ -250,9 +253,9 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			} else {
 				this.#paintRoot(templateValue);
 			}
-			//the run's latched value, not a fresh isServer(): the global is mutable and the paint
-			//must agree with the driver that scheduled it
-			if (this.#renderRun.isServerRun) flushHostPayload(this);
+			//latched rather than a fresh isServer(): the global is mutable and the paint must agree
+			//with the driver that scheduled it
+			if (this.#renderRun.wasMountedOnTheServer) flushHostPayload(this);
 		}
 
 		//the revert reads #instance, which is still the outgoing one here and null on a first paint,
@@ -272,10 +275,23 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			}
 		}
 
+		//a host binding is output on every render and not only the first, so the flag covers the
+		//patch as well. Only the host bindings: a child mounted or written further down is free to
+		//ask this component to render again, which is what the flag would swallow
+		#patchHostBindings(instance: Instance, values: Array<unknown>): void {
+			this.#isWritingHostBindings = true;
+			try {
+				commitHostBindings(instance, values);
+			} finally {
+				this.#isWritingHostBindings = false;
+			}
+		}
+
 		#paintRoot(value: TemplateValue): void {
 			const current = this.#instance;
 			const parsed = getParsedTemplate(value.__templateStrings);
 			if (isPatchableInPlace(current, parsed)) {
+				this.#patchHostBindings(current, value.values);
 				patchInstance(current, value.values);
 				return;
 			}
@@ -308,7 +324,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			if (!instance) return;
 			const liveBindings = instance.liveBindings;
 			for (let index = 0; index < instance.parsed.hostBindingCount; index++)
-				revertHostBinding(liveBindings[index] as HostLiveBinding);
+				revertHostBinding(liveBindings[index] as AttributeLaneLiveBinding);
 		}
 	}
 

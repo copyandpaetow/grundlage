@@ -16,9 +16,8 @@ export const createStyleSheetState = (
 	sheet: null,
 });
 
-//grouping/keyframes rules expose children as cssRules, leaf rules expose none; duck-read
-//because the rule classes (CSSNestedDeclarations, CSSScopeRule, …) lack stable
-//cross-browser constructors — this is a platform surface, not one of our brands
+//grouping and keyframes rules expose children as cssRules, leaf rules none. Duck-read: the rule
+//classes lack stable cross-browser constructors, so this is platform surface, not our brand
 const childRulesOf = (rule: CSSRule | null): CSSRuleList | undefined =>
 	(rule as CSSGroupingRule | null)?.cssRules;
 

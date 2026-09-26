@@ -1,7 +1,8 @@
-//type-level fixture. It is never executed — `tsc --noEmit` is the assertion, and every
-//negative case is pinned with @ts-expect-error, which fails the build if the error goes away
+//type-level fixture. It is never executed — `tsc --noEmit` is the assertion. A negative case is
+//pinned with @ts-expect-error, which fails the build if the error goes away, unless it has to
+//survive an API that has not landed yet: those read assignability as a value instead
 import { component, html } from "../index";
-import { Template } from "../types";
+import { ComponentOptions, Template } from "../types";
 
 type IsAny<Type> = 0 extends 1 & Type ? true : false;
 
@@ -135,4 +136,32 @@ export const fallbackIsNotTypeChecked = component(
 		yield () => html`<p>x</p>`;
 	},
 	{ props: { label: [String, []], variant: [asVariant, "nope"] } },
+);
+
+//light mode's type-level half, R1. The union PLAN §1 specifies rejects `delegatesFocus` by
+//excess-property checking, which fires on an object literal and is invisible to a conditional
+//type, so the shadow-only options are pinned as calls and only the mode itself is read as a value
+type LightModeShips = "light" extends ComponentOptions["mode"] ? true : false;
+
+export const lightIsAMode: Exact<
+	{ mode: "light" } extends ComponentOptions ? true : false,
+	LightModeShips
+> = true;
+
+//satisfied today because `mode` is still `ShadowRootMode`, and after the split because the light
+//branch has no such key. An implementation that only widened `mode` leaves the directive unused,
+//which is itself an error — so the one shape this must never accept cannot slip through
+export const focusIsShadowOnly = component(
+	function* () {
+		yield () => html`<p>x</p>`;
+	},
+	//@ts-expect-error delegatesFocus is shadow-only
+	{ mode: "light", delegatesFocus: true },
+);
+
+export const shadowStillTakesFocus = component(
+	function* () {
+		yield () => html`<p>x</p>`;
+	},
+	{ mode: "open", delegatesFocus: true },
 );

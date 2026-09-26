@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { component } from "../../index";
 import { html } from "../../template";
-import { hashValue } from "../../utils/hashing";
+import { hashValue } from "../value-hashing";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));

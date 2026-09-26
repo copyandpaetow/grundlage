@@ -105,6 +105,10 @@ There is a small helper to avoid re-fetching data when the component is transfer
   undeclared one (`class`, `style`, `data-*`) is not observed and does nothing
 - assigning a declared prop (`el.items = […]`) re-renders too: the accessor validates and schedules
 - update() can be awaited and resolves once the DOM is patched, after the renderable has fully settled
+- components render in document order: a component renders only once every component above it that
+  is also waiting to render has
+- code straight after a `yield` sees this component's own DOM, not the re-render of a child it just
+  wrote to; one more `yield` lets the queued children render first. Mount and update behave alike
 
 ```typescript
 import { component, html } from "grundlage";
@@ -186,7 +190,11 @@ Inputs are declared in `component(gen, { props })` and arrive on the generator's
 ```typescript
 import { component, html, type Schema } from "grundlage";
 
-const props = { label: String, href: String, size: [String, "md"] } satisfies Schema;
+const props = {
+	label: String,
+	href: String,
+	size: [String, "md"],
+} satisfies Schema;
 
 customElements.define(
 	"ui-badge",
@@ -343,7 +351,10 @@ import { html, type BaseComponent } from "grundlage";
 
 // a mixin declares the shape it reads, never a schema: schemas belong to elements, and this one is
 // handed whichever element mounted it
-type UserCardInput = { host: BaseComponent; readonly userId: string | undefined };
+type UserCardInput = {
+	host: BaseComponent;
+	readonly userId: string | undefined;
+};
 
 export async function* userCard(input: UserCardInput) {
 	yield () => html`<p aria-busy="true">loading…</p>`; // first paint

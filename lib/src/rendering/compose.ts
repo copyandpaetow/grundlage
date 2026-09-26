@@ -1,9 +1,6 @@
 import { Part } from "../parser/types";
-import {
-	combineOrderedHash,
-	hashValue,
-	PARTS_HASH_SEED,
-} from "../utils/hashing";
+import { combineOrderedHash, PARTS_HASH_SEED } from "../utils/hashing";
+import { hashValue } from "./value-hashing";
 
 const stringifyPart = (value: unknown): string =>
 	value == null ? "" : String(value);

@@ -189,7 +189,7 @@ describe("a render function returning a generator function", () => {
 	});
 
 	test("a branch returning a generator from an inner task is rejected", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield () =>
@@ -207,13 +207,13 @@ describe("a render function returning a generator function", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.textContent).toContain("grundlage");
-		expect(warn).toHaveBeenCalledTimes(1);
+		expect(consoleError).toHaveBeenCalledTimes(1);
 		element.remove();
 		vi.restoreAllMocks();
 	});
 
 	test("a branch's error is thrown into the outer at its yield", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let caught: unknown;
 		const element = mount(
 			component(function* () {
@@ -233,7 +233,7 @@ describe("a render function returning a generator function", () => {
 		await sleep();
 
 		expect((caught as Error)?.message).toBe("branch-boom");
-		expect(warn).not.toHaveBeenCalled(); //the outer swallowed it: never fatal
+		expect(consoleError).not.toHaveBeenCalled(); //the outer swallowed it: never fatal
 		element.remove();
 		vi.restoreAllMocks();
 	});
@@ -375,7 +375,7 @@ describe("a render function returning a generator function", () => {
 	});
 
 	test("a branch that forgot its `*` is a plain function, and fails", async () => {
-		vi.spyOn(console, "warn").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield () => () => html`<p>missing the star</p>`;

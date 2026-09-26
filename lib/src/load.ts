@@ -1,9 +1,6 @@
 import { isServer } from "./utils/guards";
-import { BaseComponent } from "./types";
-
-//a closed shadow root is absent from host.shadowRoot; internals is its only handle
-const resolveShadowRoot = (host: Element): ShadowRoot | null =>
-	host.shadowRoot ?? (host as BaseComponent).internals?.shadowRoot ?? null;
+import { isDevelopmentBuild, warnDuringDevelopment } from "./utils/diagnostics";
+import { resolveShadowRoot } from "./rendering/dom";
 
 export interface LoadOptions {
 	key?: string;
@@ -84,13 +81,14 @@ export const load = <Value>(
 };
 
 export const warnOnUnclaimedSsrPayloads = (shadowRoot: ShadowRoot): void => {
+	if (!isDevelopmentBuild) return;
 	const children = shadowRoot.children;
 	let leftover = 0;
 	for (let index = 0; index < children.length; index++)
 		if (children[index].matches(ANY_SSR_SELECTOR)) leftover++;
 	if (leftover === 0) return;
-	console.warn(
-		`grundlage: ${leftover} SSR load() payload(s) went unclaimed during hydration. ` +
+	warnDuringDevelopment(
+		`${leftover} SSR load() payload(s) went unclaimed during hydration. ` +
 			"A conditional or reordered load() call can hand the wrong data to the wrong load() " +
 			"— pass a stable key to the affected load() calls to opt out of positional replay.",
 	);
@@ -100,7 +98,6 @@ export const flushHostPayload = (host: Element): void => {
 	const collected = pendingSsrLoads.get(host);
 	if (collected === undefined) return;
 	pendingSsrLoads.delete(host);
-	if (collected.length === 0) return;
 
 	const ownerDocument = host.ownerDocument;
 	const shadowRoot = resolveShadowRoot(host);

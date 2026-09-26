@@ -763,6 +763,40 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
+		test("adopts a nested template's nodes instead of rebuilding them", async () => {
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const makeComponent = () =>
+				component(function* () {
+					yield () => html`<div>${html`<span>${"nested"}</span>`}</div>`;
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const element = hydrateFromHTML(clientHTML);
+			const serverSpan = element.shadowRoot!.querySelector("span");
+			expect(serverSpan?.textContent).toBe("nested");
+
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+			const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
+			warnSpy.mockRestore();
+
+			expect(
+				warnings.filter((text) => text.includes("hydration mismatch")).length,
+			).toBe(0);
+			expect(element.shadowRoot!.querySelectorAll("span").length).toBe(1);
+			expect(element.shadowRoot!.querySelector("span")).toBe(serverSpan);
+
+			cleanup(element);
+		});
+
 		test("cleanup callback fires after hydration", async () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();

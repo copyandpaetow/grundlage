@@ -1,22 +1,19 @@
 import { ComponentGenerator } from "../types";
 
-export const isStringable = (value: unknown) =>
+export const isStringable = (
+	value: unknown,
+): value is string | number | bigint | boolean =>
 	typeof value === "string" ||
 	typeof value === "number" ||
 	typeof value === "bigint" ||
 	typeof value === "boolean";
 
 export const assertPrimitiveString = (value: unknown): string => {
-	if (typeof value === "string") return value;
-	if (
-		typeof value === "number" ||
-		typeof value === "bigint" ||
-		typeof value === "boolean"
-	)
-		return String(value);
-	throw new Error(
-		`grundlage: Expected string, number, bigint, or boolean => got ${typeof value}`,
-	);
+	if (!isStringable(value))
+		throw new Error(
+			`grundlage: Expected string, number, bigint, or boolean => got ${typeof value}`,
+		);
+	return String(value);
 };
 
 export const isPlainObject = (

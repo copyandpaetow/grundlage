@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { BaseComponent } from "../../types";
 import { html, TemplateValue } from "../../template";
-import { hashValue } from "../../utils/hashing";
+import { hashValue } from "../value-hashing";
 import { getParsedTemplate } from "../../parser/html";
 import {
 	resolveNestedTemplate,

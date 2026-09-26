@@ -1,4 +1,5 @@
 import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
+import { elementAfterMarker } from "../markers";
 import {
 	commitStyleSheetDirect,
 	seedDeclarationValueHashes,
@@ -17,7 +18,7 @@ export const commitRawContent = (
 
 	const { parts } = liveBinding.staticBinding;
 	if (!claimHashChange(liveBinding, combinedPartsHash(parts, values))) return;
-	const element = liveBinding.openMarker.nextElementSibling!;
+	const element = elementAfterMarker(liveBinding.openMarker);
 	const composed = composeParts(parts, values);
 	if (element instanceof HTMLTemplateElement) {
 		if (element.innerHTML !== composed) element.innerHTML = composed;

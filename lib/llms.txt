@@ -13,8 +13,9 @@ generator's ONE argument is a props object carrying `host` plus every prop decla
 A returned function is the cleanup. There are no signals and no hooks. A re-render happens
 on `host.update()`, on `host.setProp(…)`, on assigning a declared prop to a NEW value, and
 when a DECLARED attribute on the host element changes. An undeclared attribute (`class`,
-`style`, `data-*`) does not re-render. State declared before the `yield` survives updates because the yielded
-render function closes over it; the generator body itself does not re-run.
+`style`, `data-*`) does not re-render, and neither does a render BINDING the host's own
+declared prop (see Host attributes). State declared before the `yield` survives updates
+because the yielded render function closes over it; the generator body itself does not re-run.
 
 ## Complete example
 
@@ -128,12 +129,12 @@ customElements.define(
   The same schema, read once from a plain `HTMLElement` that never went through `component`,
   or for reading something deliberately left unobserved. NOT the primary spelling: a
   component declares its props in `component(gen, { props })` and receives them as its one
-  argument. The returned object is a SNAPSHOT, and each call re-normalizes the schema. An own
-  property under the prop name wins over the attribute (case intact: `element.userTags`, not
-  `usertags`); with neither, the prop's function answers absence. A value the function refuses
-  warns and reads as absent, the same as everywhere else. The export collides with the
-  conventional `const props = {…}` schema name, so a module using both renames one
-  (`import { props as readProps }`).
+  argument. The returned object is a SNAPSHOT; the schema is normalized once per schema object,
+  so hoist it rather than writing it inline at the call. An own property under the prop name
+  wins over the attribute (case intact: `element.userTags`, not `usertags`); with neither, the
+  prop's function answers absence. A value the function refuses warns and reads as absent, the
+  same as everywhere else. The export collides with the conventional `const props = {…}`
+  schema name, so a module using both renames one (`import { props as readProps }`).
 
 `load(host, fetcher, options?) => Promise<Value>`
   Data needed before the first render. On the server the fetcher runs and the result is
@@ -147,7 +148,9 @@ customElements.define(
 
 `host.update() => Promise<void>`
   The re-render trigger. See Rules for what it re-fires and when it resolves. On the server
-  it is always a no-op: the single server paint ends the run.
+  it is always a no-op: the single server paint ends the run. On a DISCONNECTED host it is a
+  no-op too: it queues nothing and resolves immediately, and a removal settles an `update()`
+  that was already pending.
 
 `host.setProp(name, value, oldValue?) => void`
   Imperative counterpart to a markup binding, for a framework/interop driver feeding props
@@ -197,6 +200,14 @@ yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>�
   renders.
 - Event handlers bind here too (e.g. `on-form-*` for form components).
 - Attributes dropped by a later render are reverted on the host.
+- A host binding that writes one of the host's OWN declared props is OUTPUT, not input: it
+  runs the prop's function and reflects, and never schedules another render, at mount, at
+  hydration and on every patch alike. That is what makes
+  `` () => html`<template loadCount=${count + 1}>…</template>` `` terminate. An ASSIGNMENT
+  (`host.count = …`) always schedules, wherever it runs from, so the line is the SPELLING,
+  not the timing. Consequence: a value one render both binds to the host and paints from
+  (`<template theme=${x}>` with `componentProps.theme` read inside) paints one render behind,
+  and nothing warns. Paint from the source value instead.
 - A `<template>` WITH attributes in a nested position (content hole, list row) throws. A
   `<template>` that has top-level siblings is parsed as an ordinary element instead.
 
@@ -209,6 +220,11 @@ is consumed as its key, never reaches the DOM, and binds that row's DOM (focus, 
 input state) to the value. Text around the expression is fine, it is constant across the
 rows of one template, so only the expression tells rows apart: `<!--${id}-->` and
 `<!-- key: ${id} -->` work the same way.
+
+A row matched to the previous render is PATCHED when its template is the same literal. A
+KEYED row can also be matched ACROSS a template change, since the key is its whole identity
+then: that row is rebuilt in place, keeping its position in the list, with new nodes and no
+DOM state carried over. An unkeyed row is only ever matched to its own template.
 
 Row values: string / number / bigint render as text (`""`, `0`, `NaN` included); `null`,
 `undefined`, `true`, `false` render nothing but still occupy a row; a nested array renders
@@ -227,7 +243,8 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
 - Re-renders are triggered by `host.update()`, by `host.setProp(…)`, by assigning a declared
   prop a value it did not already hold (`el.items = […]`, `el.label = "x"`), and by a change
   to a DECLARED attribute. A write the prop's function refuses, and a re-write of the same
-  primitive, schedule nothing. Undeclared attributes are not observed at all. There is no
+  primitive, schedule nothing; neither does a component's own host binding writing one of its
+  own props (Host attributes). Undeclared attributes are not observed at all. There is no
   other reactivity.
 - `update()` re-fires whatever was yielded LAST: a render function is re-called, an inner
   generator is torn down (its cleanup runs) and re-run from the top, and an `html` template
@@ -243,6 +260,30 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   the browser paints, there is no rAF in the path. For an async inner generator it resolves
   only when that generator's whole run completes, so the awaited state is the settled UI.
   Concurrent `update()` calls coalesce onto the pending pass and share its promise.
+- Code that runs straight after a `yield` of a renderable sees THIS component's own DOM, never
+  the re-render of a child it just wrote to. The queued children render once no generator is
+  left on the stack, and nothing that code can do brings that forward: it holds on a mount as
+  on an update, for a child the paint just created as for one that was already there, after an
+  inner generator's install (`yield innerBody` resumes with that run's queue still waiting),
+  and around a component this code MOUNTS itself, which runs its own generator on the spot and
+  still leaves the queue alone. One more `yield` (of anything, a bare `Promise.resolve()`
+  included) parks the generator and lets that queue drain, so the code after it does see the
+  children. Never branch on which of the two it is. On HYDRATION the read is misleading rather
+  than empty: a child's shadow root already holds the SERVER's markup, so code that measures a
+  child there gets an answer, and that answer is not evidence the client render has happened.
+- Ordering exists only between a component and the one it waits for, and there are exactly two
+  reasons to wait. CAUSAL: a component written into during another component's paint renders
+  after that writer, and goes on waiting for it even if something else updates it in the same
+  tick. STRUCTURAL: with no writer, a component waits for every component ABOVE it that is
+  also waiting to render, where above means the component whose SHADOW TREE contains this one
+  (found by climbing `getRootNode().host`, through foreign shadow roots as well). So a parent
+  always renders before its children, each once, whichever end of the tree the change entered
+  from. It is NOT document order: two components with neither edge render in the order they
+  were DIRTIED. That covers two unrelated roots, two components in the same shadow tree, and a
+  component SLOTTED into another's light DOM, which has no edge to the component it is slotted
+  into, only to whatever shadow tree holds them both. A loop (two components each writing a
+  value that re-renders the other, or a render writing its own prop a new value every time) is
+  capped and ends in the same visible error an uncaught error gives.
 - A `yield` of a renderable (`html` template, render function, inner generator) evaluates to
   the host element: ``const host = yield () => html`…` ``. A yielded promise evaluates to its
   resolved value (`const data = yield fetch(...)`); any other value is echoed back. Render
@@ -283,9 +324,13 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   `disconnectedCallback` waits a microtask and re-checks `isConnected`, so moving an element
   inside the DOM does NOT tear the component down. The return position holds the cleanup and
   nothing else: a return that is neither a function nor `undefined` is dropped with a warning.
-- An uncaught error replaces the whole shadow tree with the error text and warns on the
-  console. An error from an inner generator is thrown INTO the outer generator at its
+- An uncaught error empties the shadow tree and dispatches `grundlage-error`
+  (`ComponentErrorEvent`: `error`, `tagName`; bubbles, composed, cancelable). Unless a listener
+  calls `preventDefault()`, the console logs an error naming the tag and the shadow tree shows the
+  error text. An error from an inner generator is thrown INTO the outer generator at its
   `yield`, so a `try/catch` there handles it; otherwise it reaches that root handler.
+- Warnings exist only in the development build, which bundlers pick through the `development`
+  export condition. An exception a cleanup throws goes to `reportError`, not the console.
 - In a CONTENT hole `null`, `undefined`, `false` and `true` render nothing, since a boolean is a
   condition result, not a value. Numbers, bigints and strings always render, `0`, `0n`,
   `NaN` and `""` included. So ``${isOpen && html`…`}`` is safe, but ``${items.length &&
@@ -300,6 +345,20 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   and leaves the child's previous value standing. Where the child's definition has not loaded
   yet, nothing knows the name is declared: a stringable value rides the attribute the prop
   observes, anything else lands as an own property, and both reach the store at upgrade.
+- Those rules are for a value that is exactly ONE hole, which is what picks that lane, whatever
+  the NAME is made of: `${name}=${value}` and `on${eventName}=${handler}` get them too. A value
+  with anything else in it (`class="card ${extra}"`, `style="top:${y}px"`) is COMPOSED to a
+  string instead, so that attribute is always SET and never removed: `null` and `undefined`
+  contribute `""`, `false` contributes `"false"`, and an object contributes `String(value)`
+  rather than reaching the property channel. Either way, a name that composes to something new
+  clears the slot the old name held, listener and property channel included, before writing
+  the new one.
+- A dynamic tag that composes to a DIFFERENT tag name swaps the element: a fresh element is
+  created, attributes are copied, children are moved over, every binding anchored to it is
+  re-pointed, and focus inside it is restored. Attributes survive the copy, so properties,
+  listeners and declared props are re-applied; the element's identity does not survive, so a
+  nested component in that position is torn down and mounted again. Composing the same name
+  is a no-op.
 - Events bind as `onEventName=${handler}`. The name is matched case-insensitively against the
   element's own `on*` properties, so `onClick` and `onclick` both bind `click`; a name with no
   matching property is assigned as a dead property and warns on the console. A name the target

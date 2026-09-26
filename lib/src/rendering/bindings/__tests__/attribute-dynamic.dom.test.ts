@@ -1,37 +1,75 @@
 import { describe, expect, test } from "vitest";
-import { normalizeToAttributeMap } from "../attribute-dynamic";
+import { BINDING } from "../../../parser/constants";
+import { UNSET_HASH } from "../../constants";
+import { commitDynamic } from "../attribute-dynamic";
+import { DynamicAttributeLiveBinding } from "../types";
 
-describe("normalizeToAttributeMap - scalar bare value", () => {
+const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
+	staticBinding: { type: BINDING.DYNAMIC_ATTRIBUTE, valueIndex: 0 },
+	anchor: document.createElement("div"),
+	appliedAttributes: new Map(),
+	lastValueHash: UNSET_HASH,
+	commitNumber: 0,
+});
+
+const attributesAfterCommitting = (...spreadValues: Array<unknown>) => {
+	const liveBinding = createSpreadBinding();
+	for (const spreadValue of spreadValues)
+		commitDynamic(liveBinding, [spreadValue]);
+	return liveBinding.anchor
+		.getAttributeNames()
+		.map((name) => [name, liveBinding.anchor.getAttribute(name)]);
+};
+
+describe("spread binding - value shapes", () => {
 	test("a non-empty string is a single boolean attribute name", () => {
-		expect([...normalizeToAttributeMap("disabled")]).toEqual([
-			["disabled", ""],
-		]);
+		expect(attributesAfterCommitting("disabled")).toEqual([["disabled", ""]]);
 	});
 
 	test("an empty string yields no attribute — the conditional-boolean idiom", () => {
 		//`${cond ? "" : "disabled"}` must produce no attribute in the empty branch,
 		//never setAttribute("", "") which throws InvalidCharacterError
-		expect(normalizeToAttributeMap("").size).toBe(0);
+		expect(attributesAfterCommitting("")).toEqual([]);
 	});
 
 	test("falsy scalars (false, null, undefined, 0) yield no attribute", () => {
-		expect(normalizeToAttributeMap(false).size).toBe(0);
-		expect(normalizeToAttributeMap(null).size).toBe(0);
-		expect(normalizeToAttributeMap(undefined).size).toBe(0);
-		expect(normalizeToAttributeMap(0).size).toBe(0);
+		expect(attributesAfterCommitting(false)).toEqual([]);
+		expect(attributesAfterCommitting(null)).toEqual([]);
+		expect(attributesAfterCommitting(undefined)).toEqual([]);
+		expect(attributesAfterCommitting(0)).toEqual([]);
 	});
 
 	test("an array of names becomes one boolean attribute each", () => {
-		expect([...normalizeToAttributeMap(["disabled", "hidden"])]).toEqual([
+		expect(attributesAfterCommitting(["disabled", "hidden"])).toEqual([
 			["disabled", ""],
 			["hidden", ""],
 		]);
 	});
 
 	test("a plain object maps names to their values", () => {
-		expect([...normalizeToAttributeMap({ id: "x", tabindex: 0 })]).toEqual([
+		expect(attributesAfterCommitting({ id: "x", tabindex: 0 })).toEqual([
 			["id", "x"],
-			["tabindex", 0],
+			["tabindex", "0"],
 		]);
+	});
+});
+
+describe("spread binding - across commits", () => {
+	test("a name the next value drops comes off the element, the names it keeps stay", () => {
+		expect(
+			attributesAfterCommitting({ id: "x", title: "t" }, { id: "y" }),
+		).toEqual([["id", "y"]]);
+	});
+
+	test("a name dropped, then brought back, is written again", () => {
+		expect(attributesAfterCommitting({ id: "x" }, {}, { id: "x" })).toEqual([
+			["id", "x"],
+		]);
+	});
+
+	test("a value switching shape removes the names of the old shape", () => {
+		expect(attributesAfterCommitting(["disabled", "hidden"], "hidden")).toEqual(
+			[["hidden", ""]],
+		);
 	});
 });
