@@ -2,16 +2,18 @@ import { BINDING } from "../../parser/constants";
 import {
 	AttributeStaticBinding,
 	CommentStaticBinding,
+	CompiledStyleSheet,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
 	ParsedTemplate,
 	RawContentStaticBinding,
 	TagStaticBinding,
 } from "../../parser/types";
-import { CONTENT_KIND } from "../constants";
+import { CONTENT_KIND, STYLE_SHEET_LANE } from "../constants";
 
 export interface Instance {
 	parsed: ParsedTemplate;
+	//empty slots while the bind walk fills it; the one reader during the walk is the tag swap
 	liveBindings: Array<LiveBinding>;
 	moveState: StyleSheetMoveState;
 }
@@ -37,7 +39,6 @@ export interface AttributeLiveBinding {
 export interface AppliedAttribute {
 	value: unknown;
 	hash: number;
-	lastSeenInCommit: number;
 }
 
 export interface DynamicAttributeLiveBinding {
@@ -45,8 +46,6 @@ export interface DynamicAttributeLiveBinding {
 	anchor: Element;
 	appliedAttributes: Map<string, AppliedAttribute>;
 	lastValueHash: number;
-	//a name not stamped with the current number was dropped by the value and comes off the element
-	commitNumber: number;
 }
 
 export interface ContentLiveBinding {
@@ -93,18 +92,31 @@ export interface ListContentState {
 	spareRows: Array<ListItem | undefined>;
 }
 
-export interface StyleSheetState {
+export interface BoundStyleSheet {
+	sheet: CSSStyleSheet;
+	ruleDeclarations: Array<CSSStyleDeclaration>;
+}
+
+export interface TextStyleSheetLane {
+	kind: typeof STYLE_SHEET_LANE.TEXT;
+}
+
+export interface CssomStyleSheetLane {
+	kind: typeof STYLE_SHEET_LANE.CSSOM;
+	compiledStyleSheet: CompiledStyleSheet;
 	styleElement: HTMLStyleElement;
 	declarationValueHashes: Array<number>;
-	ruleDeclarations: Array<CSSStyleDeclaration>;
-	sheet: CSSStyleSheet | null;
+	//null until a commit finds the element's sheet parsed
+	boundSheet: BoundStyleSheet | null;
 }
+
+export type StyleSheetLane = TextStyleSheetLane | CssomStyleSheetLane;
 
 export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;
 	openMarker: Comment;
 	lastValueHash: number;
-	styleSheetState: StyleSheetState | null;
+	styleSheetLane: StyleSheetLane;
 }
 
 export interface CommentLiveBinding {

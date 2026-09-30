@@ -1,19 +1,30 @@
 import { CompiledStyleSheet } from "../../parser/types";
 import { BaseComponent } from "../../types";
+import { assertDuringDevelopment } from "../../utils/diagnostics";
 import { combinedPartsHash, composeParts } from "../compose";
-import { UNSET_HASH } from "../constants";
-import { RawContentLiveBinding, StyleSheetState } from "./types";
+import { STYLE_SHEET_LANE, UNSET_HASH } from "../constants";
+import {
+	BoundStyleSheet,
+	CssomStyleSheetLane,
+	RawContentLiveBinding,
+	TextStyleSheetLane,
+} from "./types";
 
-export const createStyleSheetState = (
-	compiled: CompiledStyleSheet,
+export const TEXT_STYLE_SHEET_LANE: Readonly<TextStyleSheetLane> = {
+	kind: STYLE_SHEET_LANE.TEXT,
+};
+
+export const createCssomStyleSheetLane = (
+	compiledStyleSheet: CompiledStyleSheet,
 	styleElement: HTMLStyleElement,
-): StyleSheetState => ({
+): CssomStyleSheetLane => ({
+	kind: STYLE_SHEET_LANE.CSSOM,
+	compiledStyleSheet,
 	styleElement,
 	declarationValueHashes: new Array<number>(
-		compiled.dynamicDeclarations.length,
+		compiledStyleSheet.dynamicDeclarations.length,
 	).fill(UNSET_HASH),
-	ruleDeclarations: [],
-	sheet: null,
+	boundSheet: null,
 });
 
 //grouping and keyframes rules expose children as cssRules, leaf rules none. Duck-read: the rule
@@ -23,7 +34,7 @@ const childRulesOf = (rule: CSSRule | null): CSSRuleList | undefined =>
 
 const resolveRulePath = (
 	sheet: CSSStyleSheet,
-	rulePath: Array<number>,
+	rulePath: ReadonlyArray<number>,
 ): CSSRule | null => {
 	let childRules: CSSRuleList | undefined = sheet.cssRules;
 	let rule: CSSRule | null = null;
@@ -37,12 +48,16 @@ const resolveRulePath = (
 	return rule;
 };
 
+export const RULE_STRUCTURE_MISMATCH: unique symbol = Symbol(
+	"rule structure mismatch",
+);
+
 //the browser drops rules it cannot parse, shifting every later sibling index — the counts
 //recorded at compile time must match at every level a dynamic path runs through
-const resolveRuleDeclarations = (
+export const matchCompiledStyleSheet = (
 	compiled: CompiledStyleSheet,
 	sheet: CSSStyleSheet,
-): Array<CSSStyleDeclaration> | null => {
+): BoundStyleSheet | typeof RULE_STRUCTURE_MISMATCH => {
 	const { ruleCountChecks, dynamicDeclarations } = compiled;
 	for (let index = 0; index < ruleCountChecks.length; index++) {
 		const check = ruleCountChecks[index];
@@ -50,11 +65,9 @@ const resolveRuleDeclarations = (
 			check.rulePath.length === 0
 				? sheet.cssRules
 				: childRulesOf(resolveRulePath(sheet, check.rulePath));
-		if (
-			childRules === undefined ||
-			childRules.length !== check.expectedRuleCount
-		)
-			return null;
+		const hasExpectedRuleCount =
+			childRules !== undefined && childRules.length === check.expectedRuleCount;
+		if (!hasExpectedRuleCount) return RULE_STRUCTURE_MISMATCH;
 	}
 	const ruleDeclarations: Array<CSSStyleDeclaration> = new Array(
 		dynamicDeclarations.length,
@@ -62,19 +75,20 @@ const resolveRuleDeclarations = (
 	for (let index = 0; index < dynamicDeclarations.length; index++) {
 		const rule = resolveRulePath(sheet, dynamicDeclarations[index].rulePath);
 		const declarationBlock = (rule as CSSStyleRule | null)?.style;
-		if (declarationBlock === undefined) return null;
+		if (declarationBlock === undefined) return RULE_STRUCTURE_MISMATCH;
 		ruleDeclarations[index] = declarationBlock;
 	}
-	return ruleDeclarations;
+	return { sheet, ruleDeclarations };
 };
 
-const applyChangedDeclarations = (
-	compiled: CompiledStyleSheet,
-	state: StyleSheetState,
+export const applyChangedDeclarations = (
+	lane: CssomStyleSheetLane,
+	boundSheet: BoundStyleSheet,
 	values: Array<unknown>,
 ): void => {
-	const { dynamicDeclarations } = compiled;
-	const { declarationValueHashes, ruleDeclarations } = state;
+	const { dynamicDeclarations } = lane.compiledStyleSheet;
+	const { declarationValueHashes } = lane;
+	const { ruleDeclarations } = boundSheet;
 	for (let index = 0; index < dynamicDeclarations.length; index++) {
 		const declaration = dynamicDeclarations[index];
 		const valueHash = combinedPartsHash(declaration.valueParts, values);
@@ -88,35 +102,12 @@ const applyChangedDeclarations = (
 	}
 };
 
-export const commitStyleSheetDirect = (
-	liveBinding: RawContentLiveBinding,
-	values: Array<unknown>,
-): boolean => {
-	const state = liveBinding.styleSheetState!;
-	const compiled = liveBinding.staticBinding.compiledStyleSheet!;
-	const liveSheet = state.styleElement.sheet;
-	if (liveSheet === null) return false;
-	if (state.sheet !== liveSheet) {
-		const ruleDeclarations = resolveRuleDeclarations(compiled, liveSheet);
-		if (ruleDeclarations === null) {
-			liveBinding.styleSheetState = null;
-			return false;
-		}
-		//a reparse restored the last written text — every hole must be rewritten
-		if (state.sheet) state.declarationValueHashes.fill(UNSET_HASH);
-		state.ruleDeclarations = ruleDeclarations;
-		state.sheet = liveSheet;
-	}
-	applyChangedDeclarations(compiled, state, values);
-	return true;
-};
-
 export const seedDeclarationValueHashes = (
-	liveBinding: RawContentLiveBinding,
+	lane: CssomStyleSheetLane,
 	values: Array<unknown>,
 ): void => {
-	const { dynamicDeclarations } = liveBinding.staticBinding.compiledStyleSheet!;
-	const { declarationValueHashes } = liveBinding.styleSheetState!;
+	const { dynamicDeclarations } = lane.compiledStyleSheet;
+	const { declarationValueHashes } = lane;
 	for (let index = 0; index < dynamicDeclarations.length; index++)
 		declarationValueHashes[index] = combinedPartsHash(
 			dynamicDeclarations[index].valueParts,
@@ -127,33 +118,39 @@ export const seedDeclarationValueHashes = (
 //copies each hole's serialized value/priority off the orphaned pre-move sheet — no render
 //values are on hand at move time to recompose from
 export const rebindStyleSheet = (liveBinding: RawContentLiveBinding): void => {
-	const state = liveBinding.styleSheetState;
-	if (state === null || state.sheet === null) return;
-	const liveSheet = state.styleElement.sheet;
-	if (liveSheet === state.sheet) return;
-	const compiled = liveBinding.staticBinding.compiledStyleSheet!;
-	const ruleDeclarations =
-		liveSheet === null ? null : resolveRuleDeclarations(compiled, liveSheet);
-	if (ruleDeclarations === null) {
-		//no values to rebuild with — demote and re-render onto the text lane. a style element's
-		//root node is the component's own shadow root in every mode, closed included
-		liveBinding.styleSheetState = null;
+	const lane = liveBinding.styleSheetLane;
+	if (lane.kind === STYLE_SHEET_LANE.TEXT) return;
+	const orphanedSheet = lane.boundSheet;
+	if (orphanedSheet === null) return;
+	const liveSheet = lane.styleElement.sheet;
+	if (liveSheet === orphanedSheet.sheet) return;
+	const matchedSheet =
+		liveSheet === null
+			? RULE_STRUCTURE_MISMATCH
+			: matchCompiledStyleSheet(lane.compiledStyleSheet, liveSheet);
+	if (matchedSheet === RULE_STRUCTURE_MISMATCH) {
+		//no values to rebuild with: demote and re-render onto the text lane
+		liveBinding.styleSheetLane = TEXT_STYLE_SHEET_LANE;
 		liveBinding.lastValueHash = UNSET_HASH;
-		const host = (state.styleElement.getRootNode() as ShadowRoot)
-			.host as BaseComponent;
+		const componentShadowRoot = lane.styleElement.getRootNode();
+		assertDuringDevelopment(
+			componentShadowRoot instanceof ShadowRoot,
+			"a style element's root node is its component's shadow root, closed included",
+		);
+		//a shadow root types its host as a plain Element
+		const host = componentShadowRoot.host as BaseComponent;
 		host.update();
 		return;
 	}
-	const { dynamicDeclarations } = compiled;
+	const { dynamicDeclarations } = lane.compiledStyleSheet;
 	for (let index = 0; index < dynamicDeclarations.length; index++) {
 		const { propertyName } = dynamicDeclarations[index];
-		const orphanedDeclaration = state.ruleDeclarations[index];
-		ruleDeclarations[index].setProperty(
+		const orphanedDeclaration = orphanedSheet.ruleDeclarations[index];
+		matchedSheet.ruleDeclarations[index].setProperty(
 			propertyName,
 			orphanedDeclaration.getPropertyValue(propertyName),
 			orphanedDeclaration.getPropertyPriority(propertyName),
 		);
 	}
-	state.ruleDeclarations = ruleDeclarations;
-	state.sheet = liveSheet;
+	lane.boundSheet = matchedSheet;
 };

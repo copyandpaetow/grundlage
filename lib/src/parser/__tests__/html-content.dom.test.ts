@@ -7,7 +7,7 @@ import { ContentStaticBinding } from "../types";
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
 
-const valueIndices = (parsed: { bindings: Array<{ type: number }> }) =>
+const valueIndices = (parsed: { bindings: ReadonlyArray<{ type: number }> }) =>
 	parsed.bindings.map((b) => (b as ContentStaticBinding).valueIndex);
 
 describe("html parser — content bindings", () => {

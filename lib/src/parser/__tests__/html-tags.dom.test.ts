@@ -11,7 +11,7 @@ import {
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
 
-const tagBindings = (bindings: Array<StaticBinding>) =>
+const tagBindings = (bindings: ReadonlyArray<StaticBinding>) =>
 	bindings.filter((b) => b.type === BINDING.TAG);
 
 describe("html parser — tag bindings", () => {
@@ -139,17 +139,17 @@ describe("html parser — tag bindings", () => {
 
 	test("dynamic open paired with static close throws", () => {
 		const tag = "div";
-		expect(() => parse`<${tag}>content</div>`).toThrow(/Asymmetric tag/);
+		expect(() => parse`<${tag}>content</div>`).toThrow(/asymmetric tag/);
 	});
 
 	test("static open paired with dynamic close throws", () => {
 		const tag = "div";
-		expect(() => parse`<div>content</${tag}>`).toThrow(/Asymmetric tag/);
+		expect(() => parse`<div>content</${tag}>`).toThrow(/asymmetric tag/);
 	});
 
 	test("dynamic close with no matching dynamic open throws", () => {
 		const tag = "div";
-		expect(() => parse`</${tag}>`).toThrow(/Asymmetric tag/);
+		expect(() => parse`</${tag}>`).toThrow(/asymmetric tag/);
 	});
 
 	test("nested dynamic + static stays balanced", () => {

@@ -6,14 +6,14 @@ import { TemplateValue } from "../template";
 //classify (branch) or match (list rows), and this module mounts and patches the nested instances
 import {
 	commitLiveBinding,
-	createLiveBinding,
+	createContentLiveBinding,
+	createMarkedLiveBinding,
 	hydrateLiveBinding,
 } from "./bindings/dispatch";
 import { commitContent, hydrateContent } from "./bindings/content";
 import { rebindStyleSheet } from "./bindings/css-apply";
 import {
 	StyleSheetMoveState,
-	ContentLiveBinding,
 	Instance,
 	isContentBinding,
 	isRawContentBinding,
@@ -21,6 +21,7 @@ import {
 import { CONTENT_KIND } from "./constants";
 import { buildFragment } from "./dom";
 import { nextOpenMarker, scanToClose } from "./markers";
+import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 
 //liveBindings[0..hostBindingCount) are host bindings, owned by their element: only it knows a
 //write to its own declared prop is output, not a reason to render. A nested template has none
@@ -81,8 +82,9 @@ export const resolveNestedTemplate = (value: TemplateValue): ParsedTemplate => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	if (parsed.hostBindingCount > 0)
 		throw new Error(
-			"grundlage: `<template>` with attributes is only valid at the top level of a component's render " +
-				"output — not inside ${...} content, a list item, or any nested template position.",
+			libraryMessage(
+				"`<template>` with attributes is only valid at the top level of a component's render output, not inside ${...} content, a list item, or any nested template position. Move the attributes to the outermost <template>.",
+			),
 		);
 	return parsed;
 };
@@ -90,16 +92,12 @@ export const resolveNestedTemplate = (value: TemplateValue): ParsedTemplate => {
 const createInstance = (
 	parsed: ParsedTemplate,
 	moveState: StyleSheetMoveState,
-): Instance => {
-	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
-	return {
-		parsed,
-		liveBindings: new Array(parsed.bindings.length),
-		moveState,
-	};
-};
+): Instance => ({
+	parsed,
+	liveBindings: new Array(parsed.bindings.length),
+	moveState,
+});
 
-//a fresh clone carries every marker the parse counted, so the walk never runs out
 const bindFreshClone = (
 	walker: TreeWalker,
 	instance: Instance,
@@ -109,11 +107,15 @@ const bindFreshClone = (
 	const { liveBindings } = instance;
 
 	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length;) {
-		const openMarker = nextOpenMarker(walker, null)!;
+		const openMarker = nextOpenMarker(walker, null);
+		assertDuringDevelopment(
+			openMarker !== null,
+			"a fresh clone carries every marker the parse counted",
+		);
 		const staticBinding = bindings[bindingIndex];
 
 		if (staticBinding.type !== BINDING.CONTENT) {
-			const liveBinding = createLiveBinding(staticBinding, openMarker);
+			const liveBinding = createMarkedLiveBinding(staticBinding, openMarker);
 			commitLiveBinding(instance, liveBinding, values);
 			liveBindings[bindingIndex++] = liveBinding;
 			continue;
@@ -124,34 +126,82 @@ const bindFreshClone = (
 			openMarker,
 			staticBinding.closeMarkerData,
 			null,
-		)!;
-		const liveBinding = createLiveBinding(
+		);
+		assertDuringDevelopment(
+			closeMarker !== null,
+			"a fresh clone closes every content range it opens",
+		);
+		const liveBinding = createContentLiveBinding(
 			staticBinding,
 			openMarker,
 			closeMarker,
-		) as ContentLiveBinding;
+		);
 		commitContent(liveBinding, values, instance.moveState);
 		liveBindings[bindingIndex++] = liveBinding;
 	}
 };
 
-//false means a binding found no marker: the server markup does not match this template
-const bindServerRange = (
+//lives as long as the parse cache entry: every later mount of the template clones it instead of
+//parsing markup again, and the parser cannot build it because it also runs where there is no DOM
+const fragmentCloneSourceByParsedTemplate = new WeakMap<
+	ParsedTemplate,
+	DocumentFragment
+>();
+
+export const cloneTemplateFragment = (
+	parsed: ParsedTemplate,
+): DocumentFragment => {
+	let cloneSource = fragmentCloneSourceByParsedTemplate.get(parsed);
+	if (cloneSource === undefined) {
+		cloneSource = buildFragment(parsed.htmlWithMarkers);
+		fragmentCloneSourceByParsedTemplate.set(parsed, cloneSource);
+	}
+	//cloneNode is typed as Node; a fragment's clone is a fragment
+	return cloneSource.cloneNode(true) as DocumentFragment;
+};
+
+//binds a fresh clone from cloneTemplateFragment; the caller inserts it
+export const mountInstance = (
+	fragment: DocumentFragment,
+	value: TemplateValue,
+	parsed: ParsedTemplate,
+	moveState: StyleSheetMoveState,
+): Instance => {
+	//never reset: counting style bindings down would add a write to every teardown to spare a walk on a
+	//move, which is rare
+	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
+	const instance = createInstance(parsed, moveState);
+
+	bindFreshClone(
+		document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT),
+		instance,
+		value.values,
+	);
+	return instance;
+};
+
+export const HYDRATION_MISMATCH: unique symbol = Symbol("hydration mismatch");
+
+export const hydrateInstance = (
 	walker: TreeWalker,
-	instance: Instance,
-	values: Array<unknown>,
+	value: TemplateValue,
+	parsed: ParsedTemplate,
 	rangeEnd: Comment | null,
-): boolean => {
-	const { bindings, hostBindingCount } = instance.parsed;
+	moveState: StyleSheetMoveState,
+): Instance | typeof HYDRATION_MISMATCH => {
+	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
+	const instance = createInstance(parsed, moveState);
+	const { bindings, hostBindingCount } = parsed;
 	const { liveBindings } = instance;
+	const { values } = value;
 
 	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length;) {
 		const openMarker = nextOpenMarker(walker, rangeEnd);
-		if (openMarker === null) return false;
+		if (openMarker === null) return HYDRATION_MISMATCH;
 		const staticBinding = bindings[bindingIndex];
 
 		if (staticBinding.type !== BINDING.CONTENT) {
-			const liveBinding = createLiveBinding(staticBinding, openMarker);
+			const liveBinding = createMarkedLiveBinding(staticBinding, openMarker);
 			hydrateLiveBinding(instance, liveBinding, values);
 			liveBindings[bindingIndex++] = liveBinding;
 			continue;
@@ -163,12 +213,12 @@ const bindServerRange = (
 			staticBinding.closeMarkerData,
 			rangeEnd,
 		);
-		if (closeMarker === null) return false;
-		const liveBinding = createLiveBinding(
+		if (closeMarker === null) return HYDRATION_MISMATCH;
+		const liveBinding = createContentLiveBinding(
 			staticBinding,
 			openMarker,
 			closeMarker,
-		) as ContentLiveBinding;
+		);
 		//the scan left the walker on the close marker, so a nested hydration would start past its
 		//own range; this puts it back inside, and the line after the call undoes the descent
 		walker.currentNode = openMarker;
@@ -177,38 +227,5 @@ const bindServerRange = (
 		walker.currentNode = closeMarker;
 	}
 
-	return true;
-};
-
-export const mountInstance = (
-	value: TemplateValue,
-	parsed: ParsedTemplate,
-	moveState: StyleSheetMoveState,
-): { instance: Instance; fragment: DocumentFragment } => {
-	parsed.fragmentCloneSource ??= buildFragment(parsed.htmlWithMarkers);
-	const fragment = parsed.fragmentCloneSource.cloneNode(
-		true,
-	) as DocumentFragment;
-	const instance = createInstance(parsed, moveState);
-
-	bindFreshClone(
-		document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT),
-		instance,
-		value.values,
-	);
-
-	return { instance, fragment };
-};
-
-export const hydrateInstance = (
-	walker: TreeWalker,
-	value: TemplateValue,
-	parsed: ParsedTemplate,
-	rangeEnd: Comment | null,
-	moveState: StyleSheetMoveState,
-): Instance | null => {
-	const instance = createInstance(parsed, moveState);
-	return bindServerRange(walker, instance, value.values, rangeEnd)
-		? instance
-		: null;
+	return instance;
 };

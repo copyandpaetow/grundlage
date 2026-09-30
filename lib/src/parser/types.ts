@@ -1,55 +1,56 @@
-import { BINDING } from "./constants";
+import { BINDING, NO_KEY, STYLE_SHEET_NOT_COMPILED } from "./constants";
 
 export type Part = string | number;
 
 export interface DynamicDeclaration {
-	rulePath: Array<number>;
-	propertyName: string;
-	priority: string;
-	valueParts: Array<Part>;
+	readonly rulePath: ReadonlyArray<number>;
+	readonly propertyName: string;
+	readonly priority: string;
+	readonly valueParts: ReadonlyArray<Part>;
 }
 
 export interface RuleCountCheck {
-	rulePath: Array<number>;
-	expectedRuleCount: number;
+	readonly rulePath: ReadonlyArray<number>;
+	readonly expectedRuleCount: number;
 }
 
 export interface CompiledStyleSheet {
-	dynamicDeclarations: Array<DynamicDeclaration>;
-	ruleCountChecks: Array<RuleCountCheck>;
+	readonly dynamicDeclarations: ReadonlyArray<DynamicDeclaration>;
+	readonly ruleCountChecks: ReadonlyArray<RuleCountCheck>;
 }
 
 export interface TagStaticBinding {
-	type: typeof BINDING.TAG;
-	parts: Array<Part>;
+	readonly type: typeof BINDING.TAG;
+	readonly parts: ReadonlyArray<Part>;
 }
 
 export interface AttributeStaticBinding {
-	type: typeof BINDING.ATTRIBUTE;
-	nameParts: Array<Part>;
-	valueParts: Array<Part>;
+	readonly type: typeof BINDING.ATTRIBUTE;
+	readonly nameParts: ReadonlyArray<Part>;
+	readonly valueParts: ReadonlyArray<Part>;
 }
 
 export interface DynamicAttributeStaticBinding {
-	type: typeof BINDING.DYNAMIC_ATTRIBUTE;
-	valueIndex: number;
+	readonly type: typeof BINDING.DYNAMIC_ATTRIBUTE;
+	readonly valueIndex: number;
 }
 
 export interface ContentStaticBinding {
-	type: typeof BINDING.CONTENT;
-	valueIndex: number;
-	closeMarkerData: string;
+	readonly type: typeof BINDING.CONTENT;
+	readonly valueIndex: number;
+	readonly closeMarkerData: string;
 }
 
 export interface RawContentStaticBinding {
-	type: typeof BINDING.RAW_CONTENT;
-	parts: Array<Part>;
-	compiledStyleSheet: CompiledStyleSheet | null;
+	readonly type: typeof BINDING.RAW_CONTENT;
+	readonly parts: ReadonlyArray<Part>;
+	readonly compiledStyleSheet:
+		CompiledStyleSheet | typeof STYLE_SHEET_NOT_COMPILED;
 }
 
 export interface CommentStaticBinding {
-	type: typeof BINDING.COMMENT;
-	parts: Array<Part>;
+	readonly type: typeof BINDING.COMMENT;
+	readonly parts: ReadonlyArray<Part>;
 }
 
 export type StaticBinding =
@@ -61,11 +62,10 @@ export type StaticBinding =
 	| CommentStaticBinding;
 
 export interface ParsedTemplate {
-	htmlWithMarkers: string;
-	bindings: Array<StaticBinding>;
-	templateHash: number;
-	fragmentCloneSource: DocumentFragment | null;
-	hostBindingCount: number;
-	hasStyleSheetBinding: boolean;
-	keyValueParts: Array<Part> | null;
+	readonly htmlWithMarkers: string;
+	readonly bindings: ReadonlyArray<StaticBinding>;
+	readonly templateHash: number;
+	readonly hostBindingCount: number;
+	readonly hasStyleSheetBinding: boolean;
+	readonly keyValueParts: ReadonlyArray<Part> | typeof NO_KEY;
 }

@@ -1,16 +1,21 @@
 import { CHAR_CODE, MARKUP } from "../parser/chars";
-import { warnDuringDevelopment } from "../utils/diagnostics";
+import {
+	assertDuringDevelopment,
+	warnDuringDevelopment,
+} from "../utils/diagnostics";
 
 const MARKER_PREFIX = MARKUP.COMMENT_IDENTIFIER + " ";
 const CLOSE_SLASH_INDEX = MARKER_PREFIX.length;
 
-const isOpenMarker = (data: string): boolean =>
-	data.startsWith(MARKER_PREFIX) &&
-	data.charCodeAt(CLOSE_SLASH_INDEX) !== CHAR_CODE.SLASH;
-
 //a binding's open marker sits directly before the element it binds
-export const elementAfterMarker = (openMarker: Comment): Element =>
-	openMarker.nextElementSibling!;
+export const elementAfterMarker = (openMarker: Comment): Element => {
+	const element = openMarker.nextElementSibling;
+	assertDuringDevelopment(
+		element !== null,
+		"an attribute or tag marker sits right before its element",
+	);
+	return element;
+};
 
 //every walk stops at the range it may consume, so a contradicting server range is rejected rather
 //than adopting a later binding's markers. A null bound means the walker's own root bounds it
@@ -38,26 +43,31 @@ export const nextOpenMarker = (
 	let node: Comment | null;
 	while ((node = walker.nextNode() as Comment | null)) {
 		if (node === rangeEnd) return null;
-		if (isOpenMarker(node.data)) return node;
+		const isOpenMarker =
+			node.data.startsWith(MARKER_PREFIX) &&
+			node.data.charCodeAt(CLOSE_SLASH_INDEX) !== CHAR_CODE.SLASH;
+		if (isOpenMarker) return node;
 	}
 	return null;
 };
+
+export const NO_LIST_TAIL: unique symbol = Symbol("no list tail");
 
 export const nextListTail = (
 	walker: TreeWalker,
 	rangeEnd: Comment,
-): Comment | null => {
+): Comment | typeof NO_LIST_TAIL => {
 	let node: Comment | null;
 	while ((node = walker.nextNode() as Comment | null)) {
-		if (node === rangeEnd) return null;
+		if (node === rangeEnd) return NO_LIST_TAIL;
 		if (node.data === MARKUP.LIST_MARKER_DATA) return node;
 	}
-	return null;
+	return NO_LIST_TAIL;
 };
 
 export const warnOnRejectedServerRange = (): void =>
 	warnDuringDevelopment(
-		"hydration mismatch: the server's markup does not match this render. ",
+		"hydration mismatch: the server's markup does not match this render. Render the same first template on the server and the client.",
 	);
 
 export const clearRange = (

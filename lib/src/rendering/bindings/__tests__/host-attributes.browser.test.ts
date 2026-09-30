@@ -34,6 +34,34 @@ describe("root-template host attributes", () => {
 		cleanup(element);
 	});
 
+	test("a re-render with unchanged host values writes nothing on the host", async () => {
+		const tag = uniqueTag();
+		const onSelect = () => {};
+		const MyElement = component(function* () {
+			yield () =>
+				html`<template id="${"hero"}" onclick="${onSelect}"
+					><p>hi</p></template
+				>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const observer = new MutationObserver(() => {});
+		observer.observe(element, { attributes: true });
+		const addEventListener = vi.spyOn(element, "addEventListener");
+		const removeEventListener = vi.spyOn(element, "removeEventListener");
+		await element.update();
+		await sleep();
+
+		expect(observer.takeRecords()).toEqual([]);
+		expect(addEventListener).not.toHaveBeenCalled();
+		expect(removeEventListener).not.toHaveBeenCalled();
+
+		observer.disconnect();
+		cleanup(element);
+	});
+
 	test("dynamic host attribute lands on the component element", async () => {
 		const tag = uniqueTag();
 		const MyElement = component(function* () {
@@ -838,9 +866,8 @@ describe("root-template host attribute updates within a single template (refacto
 });
 
 describe("root-template host attribute writes do not feed back into the component", () => {
-	//the host MutationObserver in index.ts watches `this` with { attributes: true }
-	//a host write coming from a root-template binding is not a user mutation: observing it would
-	//queue an extra re-render one microtask after every render that writes one
+	//a host write from a root-template binding is output, not input: it must not queue another
+	//render after the render that wrote it
 	let tagId = 0;
 	const uniqueTag = () => `test-host-mo-${tagId++}-${Date.now()}`;
 
@@ -924,8 +951,7 @@ describe("root-template host attribute writes do not feed back into the componen
 	});
 
 	test("a user-driven setAttribute on the host still triggers a re-render after the host bindings settle", async () => {
-		//the suppression covers framework-driven writes only, rather than disabling the observer
-		//outright
+		//only the framework's own host writes are ignored; a write from outside is input
 		const tag = uniqueTag();
 		let renderCount = 0;
 		const MyElement = component(
@@ -1048,7 +1074,9 @@ describe("root-template host attributes are rejected when nested inside content"
 		//failing wipes the shadow root to error text; it must also revert host bindings, or
 		//the listener applied from the root <template> lingers as a dead closure on the host
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		let shouldThrow = false;
 		let clicks = 0;
 		const handler = () => {

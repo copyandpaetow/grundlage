@@ -1,8 +1,13 @@
 import { describe, test, expect } from "vitest";
 import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING } from "../constants";
+import { BINDING, STYLE_SHEET_NOT_COMPILED } from "../constants";
 import { RawContentStaticBinding } from "../types";
+
+const dynamicDeclarationsOf = (binding: RawContentStaticBinding) =>
+	binding.compiledStyleSheet === STYLE_SHEET_NOT_COMPILED
+		? undefined
+		: binding.compiledStyleSheet.dynamicDeclarations;
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
@@ -163,8 +168,7 @@ describe("html parser — css plan attachment", () => {
 		const color = "red";
 		const parsed = parse`<style>div { color: ${color}; }</style>`;
 
-		const compiledStyleSheet = rawContentBinding(parsed).compiledStyleSheet;
-		expect(compiledStyleSheet?.dynamicDeclarations).toEqual([
+		expect(dynamicDeclarationsOf(rawContentBinding(parsed))).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "color",
@@ -189,7 +193,9 @@ describe("html parser — css plan attachment", () => {
 		const selector = "div";
 		const parsed = parse`<style>${selector} { color: red; }</style>`;
 
-		expect(rawContentBinding(parsed).compiledStyleSheet).toBeNull();
+		expect(rawContentBinding(parsed).compiledStyleSheet).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
 	});
 
 	test("script and textarea holes get no css plan", () => {
@@ -198,15 +204,21 @@ describe("html parser — css plan attachment", () => {
 		const scriptParsed = parse`<script>${code}</script>`;
 		const textareaParsed = parse`<textarea>${value}</textarea>`;
 
-		expect(rawContentBinding(scriptParsed).compiledStyleSheet).toBeNull();
-		expect(rawContentBinding(textareaParsed).compiledStyleSheet).toBeNull();
+		expect(rawContentBinding(scriptParsed).compiledStyleSheet).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
+		expect(rawContentBinding(textareaParsed).compiledStyleSheet).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
 	});
 
 	test("a nested template hole gets no css plan", () => {
 		const content = "div { color: red; }";
 		const parsed = parse`<div><template>${content}</template></div>`;
 
-		expect(rawContentBinding(parsed).compiledStyleSheet).toBeNull();
+		expect(rawContentBinding(parsed).compiledStyleSheet).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
 	});
 
 	//values live on each instance's own CSSStyleSheet, so a host style binding no longer
@@ -219,7 +231,7 @@ describe("html parser — css plan attachment", () => {
 		const rawContent = parsed.bindings.find(
 			(binding) => binding.type === BINDING.RAW_CONTENT,
 		) as RawContentStaticBinding;
-		expect(rawContent.compiledStyleSheet).not.toBeNull();
+		expect(rawContent.compiledStyleSheet).not.toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("two style elements in one template get separate plans", () => {
@@ -230,7 +242,7 @@ describe("html parser — css plan attachment", () => {
 
 		const [firstBinding, secondBinding] =
 			parsed.bindings as Array<RawContentStaticBinding>;
-		expect(firstBinding.compiledStyleSheet?.dynamicDeclarations).toEqual([
+		expect(dynamicDeclarationsOf(firstBinding)).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "color",
@@ -238,7 +250,7 @@ describe("html parser — css plan attachment", () => {
 				valueParts: [" ", 0],
 			},
 		]);
-		expect(secondBinding.compiledStyleSheet?.dynamicDeclarations).toEqual([
+		expect(dynamicDeclarationsOf(secondBinding)).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "width",

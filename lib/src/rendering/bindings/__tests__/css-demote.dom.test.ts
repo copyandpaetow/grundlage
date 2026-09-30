@@ -6,12 +6,11 @@ import {
 } from "../../../parser/types";
 import { UNSET_HASH } from "../../constants";
 import { commitRawContent } from "../content-raw";
-import { createStyleSheetState } from "../css-apply";
+import { createCssomStyleSheetLane, TEXT_STYLE_SHEET_LANE } from "../css-apply";
 import { RawContentLiveBinding } from "../types";
 
 //a <style> whose live sheet parses to a different rule count than the compiler recorded
-//demotes to the full-text lane. The demotion nulls styleSheetState mid-commit, so the
-//text-lane seed step must read the live field, not a stale local, or it dereferences null
+//demotes to the full-text lane
 describe("css demotion to the full-text lane", () => {
 	const buildConnectedStyleBinding = (
 		cssText: string,
@@ -33,7 +32,7 @@ describe("css demotion to the full-text lane", () => {
 			staticBinding,
 			openMarker: marker,
 			lastValueHash: UNSET_HASH,
-			styleSheetState: createStyleSheetState(compiledStyleSheet, style),
+			styleSheetLane: createCssomStyleSheetLane(compiledStyleSheet, style),
 		};
 		return { liveBinding, style };
 	};
@@ -57,7 +56,7 @@ describe("css demotion to the full-text lane", () => {
 		expect(() => commitRawContent(liveBinding, ["blue"])).not.toThrow();
 
 		//the CSSOM lane is gone and the fallback rewrote the whole sheet text
-		expect(liveBinding.styleSheetState).toBeNull();
+		expect(liveBinding.styleSheetLane).toBe(TEXT_STYLE_SHEET_LANE);
 		expect(style.textContent).toBe("p { color: blue; }");
 
 		style.parentElement!.remove();
@@ -71,7 +70,7 @@ describe("css demotion to the full-text lane", () => {
 
 		commitRawContent(liveBinding, ["blue"]);
 		expect(() => commitRawContent(liveBinding, ["green"])).not.toThrow();
-		expect(liveBinding.styleSheetState).toBeNull();
+		expect(liveBinding.styleSheetLane).toBe(TEXT_STYLE_SHEET_LANE);
 		expect(style.textContent).toBe("p { color: green; }");
 
 		style.parentElement!.remove();

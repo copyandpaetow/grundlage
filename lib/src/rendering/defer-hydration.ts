@@ -8,7 +8,9 @@ export const markDeferredHydration = (
 	element: Element,
 	valueChannel: ValueOf<typeof ATTRIBUTE_MODE>,
 ): void => {
-	if (isServer() && valueChannel === ATTRIBUTE_MODE.PROPERTY)
+	const isLostFromServerMarkup =
+		isServer() && valueChannel === ATTRIBUTE_MODE.PROPERTY;
+	if (isLostFromServerMarkup)
 		element.setAttribute(DEFER_HYDRATION_ATTRIBUTE, "");
 };
 

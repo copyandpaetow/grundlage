@@ -255,3 +255,57 @@ describe("hashValue - depth", () => {
 		expect(hashValue(nest(65, "a"))).toBe(hashValue(nest(65, "b")));
 	});
 });
+
+describe("hashValue - seeded random inputs", () => {
+	//sequential values never collide, so they cannot tell a sound hash from one that lets
+	//inputs trade places; 5,000 inputs in 32 bits expect 0.003 collisions
+	const INPUT_COUNT = 5_000;
+
+	const createRandom = (seed: number) => {
+		let randomState = seed;
+		return (below: number) => {
+			randomState = (Math.imul(randomState, 1103515245) + 12345) >>> 0;
+			return (randomState >>> 8) % below;
+		};
+	};
+
+	const randomText = (random: (below: number) => number) => {
+		let text = "";
+		const length = random(12);
+		for (let index = 0; index < length; index++)
+			text += String.fromCharCode(65 + random(58));
+		return text;
+	};
+
+	const shapes: Array<
+		[string, (random: (below: number) => number) => unknown]
+	> = [
+		["strings", randomText],
+		[
+			"small integers in short arrays",
+			(random) => Array.from({ length: 1 + random(4) }, () => random(64)),
+		],
+		[
+			"plain objects",
+			(random) => ({ [randomText(random)]: random(64), size: random(64) }),
+		],
+	];
+
+	test.each(shapes)("%s: distinct inputs hash apart", (_shape, createInput) => {
+		const random = createRandom(7);
+		const inputByHash = new Map<number, string>();
+		const distinctInputs = new Set<string>();
+		let collisions = 0;
+		for (let draw = 0; draw < INPUT_COUNT; draw++) {
+			const input = createInput(random);
+			const spelling = JSON.stringify(input);
+			distinctInputs.add(spelling);
+			const hash = hashValue(input);
+			const earlier = inputByHash.get(hash);
+			if (earlier === undefined) inputByHash.set(hash, spelling);
+			else if (earlier !== spelling) collisions++;
+		}
+		expect(distinctInputs.size).toBeGreaterThan(INPUT_COUNT / 2);
+		expect(collisions).toBe(0);
+	});
+});

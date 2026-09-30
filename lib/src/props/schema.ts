@@ -2,6 +2,7 @@ import { MARKUP } from "../parser/chars";
 import { DEFER_HYDRATION_ATTRIBUTE } from "../rendering/constants";
 import { isTemplate } from "../template";
 import { Parse, Resolve, Schema } from "../types";
+import { libraryMessage } from "../utils/diagnostics";
 
 const PROP_NAME_PATTERN = /^[a-z][a-zA-Z0-9_-]*$/;
 
@@ -11,8 +12,9 @@ const resolveString: Resolve<string> = (incoming) =>
 const resolveNumber: Resolve<number> = (incoming) => {
 	if (incoming === undefined || incoming === "") return undefined;
 	const parsed = Number(incoming);
-	if (Number.isNaN(parsed) && String(incoming).trim() !== "NaN")
-		return undefined;
+	const isUnparsable =
+		Number.isNaN(parsed) && String(incoming).trim() !== "NaN";
+	if (isUnparsable) return undefined;
 	return parsed;
 };
 
@@ -21,6 +23,7 @@ const resolveBigInt: Resolve<bigint> = (incoming) => {
 	try {
 		return BigInt(incoming as string);
 	} catch {
+		//BigInt throws on text it cannot parse, and a resolver refuses with undefined
 		return undefined;
 	}
 };
@@ -36,19 +39,16 @@ const SHIPPED_RESOLVERS = new Map<unknown, Resolve<unknown>>([
 ]);
 
 export interface Prop {
-	propName: string;
-	resolve: Resolve<unknown>;
-	absenceReadsTrue: boolean;
+	readonly propName: string;
+	readonly resolve: Resolve<unknown>;
+	readonly absenceReadsTrue: boolean;
 }
 
-export type NormalizedSchema = Map<string, Prop>;
+export type NormalizedSchema = ReadonlyMap<string, Prop>;
 
 //a template is excluded because the strings array inside it is the identity the parse cache keys on
 const isCopiedPerElement = (fallback: unknown): fallback is object =>
 	fallback !== null && typeof fallback === "object" && !isTemplate(fallback);
-
-const copyOf = (fallback: unknown): unknown =>
-	isCopiedPerElement(fallback) ? structuredClone(fallback) : fallback;
 
 const assertFallbackIsUsable = (
 	propName: string,
@@ -61,47 +61,63 @@ const assertFallbackIsUsable = (
 			copy = structuredClone(fallback);
 		} catch {
 			throw new TypeError(
-				`grundlage: the fallback for prop "${propName}" cannot be copied for each element: structuredClone refuses a value holding a function.`,
+				libraryMessage(
+					`the fallback for prop "${propName}" cannot be copied for each element: structuredClone refuses it, as it does anything holding a function, DOM node, symbol or WeakMap. Use a fallback of plain data.`,
+				),
 			);
 		}
 		if (Object.getPrototypeOf(copy) !== Object.getPrototypeOf(fallback))
 			throw new TypeError(
-				`grundlage: the fallback for prop "${propName}" cannot be copied for each element: structuredClone returns a plain object, so a class instance loses its prototype.`,
+				libraryMessage(
+					`the fallback for prop "${propName}" cannot be copied for each element: structuredClone returns a plain object, so a class instance loses its prototype.`,
+				),
 			);
 	}
 
 	if (parse(copy) === undefined)
 		throw new TypeError(
-			`grundlage: the fallback for prop "${propName}" is not a value the prop accepts: its function refused it.`,
+			libraryMessage(
+				`the fallback for prop "${propName}" is not a value the prop accepts: its function refused it. Pass a fallback the function accepts.`,
+			),
 		);
 };
 
 const assertPropNameIsUsable = (propName: string): void => {
 	if (!PROP_NAME_PATTERN.test(propName))
 		throw new TypeError(
-			`grundlage: prop name "${propName}" must start with a lowercase letter and contain only letters, digits, "_" or "-".`,
+			libraryMessage(
+				`prop name "${propName}" must start with a lowercase letter and contain only letters, digits, "_" or "-".`,
+			),
 		);
 	if (propName.startsWith(MARKUP.CUSTOM_EVENT_PREFIX))
 		throw new TypeError(
-			`grundlage: prop name "${propName}" is reserved: "${MARKUP.CUSTOM_EVENT_PREFIX}" marks a custom event binding in markup.`,
+			libraryMessage(
+				`prop name "${propName}" is reserved: "${MARKUP.CUSTOM_EVENT_PREFIX}" marks a custom event binding in markup.`,
+			),
 		);
 	if (propName === "host")
 		throw new TypeError(
-			`grundlage: "host" is reserved: the props object carries the element under that name.`,
+			libraryMessage(
+				`"host" is reserved: the props object carries the element under that name.`,
+			),
 		);
 	if (propName === DEFER_HYDRATION_ATTRIBUTE)
 		throw new TypeError(
-			`grundlage: "${DEFER_HYDRATION_ATTRIBUTE}" is reserved: it marks a child that must not hydrate before its parent has supplied its values.`,
+			libraryMessage(
+				`"${DEFER_HYDRATION_ATTRIBUTE}" is reserved: it marks a child that must not hydrate before its parent has supplied its values.`,
+			),
 		);
 };
 
+//a schema is declared once and read again by every props() call, so it is normalized once for as long
+//as it lives
 const normalizedSchemasBySchema = new WeakMap<Schema, NormalizedSchema>();
 
 export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 	const alreadyNormalized = normalizedSchemasBySchema.get(schema);
 	if (alreadyNormalized !== undefined) return alreadyNormalized;
 
-	const props: NormalizedSchema = new Map();
+	const props = new Map<string, Prop>();
 
 	for (const propName in schema) {
 		assertPropNameIsUsable(propName);
@@ -115,7 +131,9 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 
 		if (typeof parse !== "function")
 			throw new TypeError(
-				`grundlage: prop "${propName}" must be String, Number, BigInt, Boolean, or a function.`,
+				libraryMessage(
+					`prop "${propName}" must be String, Number, BigInt, Boolean, or a function.`,
+				),
 			);
 		if (fallback !== undefined)
 			assertFallbackIsUsable(propName, parse, fallback);
@@ -124,14 +142,21 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 		const claimant = props.get(attributeName);
 		if (claimant !== undefined)
 			throw new TypeError(
-				`grundlage: props "${claimant.propName}" and "${propName}" both map to the attribute "${attributeName}".`,
+				libraryMessage(
+					`props "${claimant.propName}" and "${propName}" both map to the attribute "${attributeName}". Attribute names ignore case, so rename one of them.`,
+				),
 			);
 
+		const mustCopyFallback = isCopiedPerElement(fallback);
 		const resolve: Resolve<unknown> =
 			fallback === undefined
 				? parse
-				: (incoming) =>
-						parse(incoming === undefined ? copyOf(fallback) : incoming);
+				: (incoming) => {
+						if (incoming !== undefined) return parse(incoming);
+						return parse(
+							mustCopyFallback ? structuredClone(fallback) : fallback,
+						);
+					};
 
 		props.set(attributeName, {
 			propName,
@@ -154,6 +179,8 @@ export const assertPropNamesAreAvailable = (
 	for (const prop of props.values())
 		if (prop.propName in elementPrototype)
 			throw new TypeError(
-				`grundlage: prop "${prop.propName}" is already a property on the element.`,
+				libraryMessage(
+					`prop "${prop.propName}" is already a property on the element. Rename the prop.`,
+				),
 			);
 };

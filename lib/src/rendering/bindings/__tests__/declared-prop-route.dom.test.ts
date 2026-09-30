@@ -2,7 +2,6 @@ import { describe, expect, test, vi } from "vitest";
 import { component } from "../../../index";
 import {
 	applyAttributeValue,
-	assignDeclaredProp,
 	isAwaitingDefinition,
 	isDeclaredPropName,
 	reapplyValueOnSwap,
@@ -39,26 +38,6 @@ describe("isDeclaredPropName", () => {
 		const element = document.createElement("declaring-el");
 		expect(isDeclaredPropName(element, "tags")).toBe(true);
 		expect(isDeclaredPropName(element, "other")).toBe(false);
-	});
-});
-
-describe("assignDeclaredProp before the element upgrades", () => {
-	//a fragment's elements upgrade on insertion, so a binding routinely commits against a child
-	//whose accessors do not exist yet
-	test("a value lands as an own property, for recovery to run back through the setter", () => {
-		const element = document.createElement("not-yet-upgraded-el");
-		assignDeclaredProp(element, "tags", ["a"]);
-		expect(Object.hasOwn(element, "tags")).toBe(true);
-		expect(record(element).tags).toEqual(["a"]);
-	});
-
-	test("a dropped binding lands as absence, which the accessor resolves at recovery", () => {
-		const element = document.createElement("not-yet-upgraded-el");
-		record(element).count = 5;
-
-		assignDeclaredProp(element, "count", null);
-		expect(Object.hasOwn(element, "count")).toBe(true);
-		expect(record(element).count).toBe(null);
 	});
 });
 

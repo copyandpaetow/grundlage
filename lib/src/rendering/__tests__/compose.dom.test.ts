@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
+import { combinedPartsHash, composeParts } from "../compose";
 
 describe("composeParts", () => {
 	test("interleaves static string parts with interpolated values", () => {
@@ -7,7 +7,13 @@ describe("composeParts", () => {
 	});
 
 	test("stringifies non-string values", () => {
-		expect(composeParts([0, "/", 1], [42, true])).toBe("42/true");
+		expect(composeParts([0, "/", 1], [42, 7n])).toBe("42/7");
+	});
+
+	test("booleans, null and undefined compose as empty, like a content hole", () => {
+		expect(
+			composeParts(["card ", 0, 1, 2, 3], [false, true, null, undefined]),
+		).toBe("card ");
 	});
 
 	test("a parts array of only strings ignores values", () => {
@@ -34,26 +40,5 @@ describe("combinedPartsHash", () => {
 		value.n = 2;
 		const after = combinedPartsHash([0], [value]);
 		expect(after).not.toBe(before);
-	});
-});
-
-describe("claimHashChange", () => {
-	test("first observation is a change and seeds the gate", () => {
-		const gate = { lastValueHash: -1 };
-		expect(claimHashChange(gate, 42)).toBe(true);
-		expect(gate.lastValueHash).toBe(42);
-	});
-
-	test("re-observing the same hash is not a change", () => {
-		const gate = { lastValueHash: -1 };
-		claimHashChange(gate, 42);
-		expect(claimHashChange(gate, 42)).toBe(false);
-	});
-
-	test("a different hash is a change and updates the gate", () => {
-		const gate = { lastValueHash: -1 };
-		claimHashChange(gate, 42);
-		expect(claimHashChange(gate, 43)).toBe(true);
-		expect(gate.lastValueHash).toBe(43);
 	});
 });

@@ -1,13 +1,14 @@
-import { combinedPartsHash, composeParts, claimHashChange } from "../compose";
+import { combinedPartsHash, composeParts } from "../compose";
 import { combineOrderedHash } from "../../utils/hashing";
 import { AttributeStaticBinding, Part } from "../../parser/types";
 import { applyAttributeValue } from "./attribute-write";
+import { NO_ATTRIBUTE_WRITTEN } from "../constants";
 import { AttributeLiveBinding } from "./types";
 
 //one hole is the whole value and keeps its type; any text around a hole makes a string
 export const isSingleHoleValue = (
-	valueParts: Array<Part>,
-): valueParts is [number] =>
+	valueParts: ReadonlyArray<Part>,
+): valueParts is readonly [number] =>
 	valueParts.length === 1 && typeof valueParts[0] === "number";
 
 const attributeGateHash = (
@@ -32,19 +33,17 @@ export const commitAttribute = (
 	liveBinding: AttributeLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	if (
-		!claimHashChange(
-			liveBinding,
-			attributeGateHash(liveBinding.staticBinding, values),
-		)
-	)
-		return;
+	const hash = attributeGateHash(liveBinding.staticBinding, values);
+	if (hash === liveBinding.lastValueHash) return;
+	liveBinding.lastValueHash = hash;
 	const { nameParts, valueParts } = liveBinding.staticBinding;
 	const element = liveBinding.anchor;
 	const name = composeParts(nameParts, values);
 	const keepsTheSameName = name === liveBinding.lastComposedName;
 
-	if (!keepsTheSameName && liveBinding.lastComposedName !== "")
+	const leavesAStaleAttribute =
+		!keepsTheSameName && liveBinding.lastComposedName !== NO_ATTRIBUTE_WRITTEN;
+	if (leavesAStaleAttribute)
 		removeWrittenAttribute(liveBinding, liveBinding.lastComposedName);
 	liveBinding.lastComposedName = name;
 

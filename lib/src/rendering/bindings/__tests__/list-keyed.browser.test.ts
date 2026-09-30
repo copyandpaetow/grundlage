@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../../index";
+import { NO_KEY } from "../../../parser/constants";
 import { getParsedTemplate } from "../../../parser/html";
 import { coerceToTemplate } from "../../../template";
 import { combinedPartsHash } from "../../compose";
@@ -161,10 +162,9 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 				<li><input value=${id} /></li>`;
 		const keyHashOf = (row: unknown) => {
 			const value = coerceToTemplate(row);
-			return combinedPartsHash(
-				getParsedTemplate(value.__templateStrings).keyValueParts!,
-				value.values,
-			);
+			const { keyValueParts } = getParsedTemplate(value.__templateStrings);
+			if (keyValueParts === NO_KEY) throw new Error("expected a keyed row");
+			return combinedPartsHash(keyValueParts, value.values);
 		};
 		//an integer key enters the key hash as a plain addend, so negating the hash of key 0 lands on 0
 		const keyHashingToZero = -keyHashOf(viewRow(0)) | 0;

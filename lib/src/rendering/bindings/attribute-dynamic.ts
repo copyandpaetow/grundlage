@@ -1,42 +1,45 @@
 import { assertPrimitiveString, isPlainObject } from "../../utils/guards";
 import { hashValue } from "../value-hashing";
-import { claimHashChange } from "../compose";
 import { applyAttributeValue } from "./attribute-write";
 import { DynamicAttributeLiveBinding } from "./types";
+import { assertDuringDevelopment } from "../../utils/diagnostics";
 
-const applyDesiredAttribute = (
-	liveBinding: DynamicAttributeLiveBinding,
-	name: string,
-	desiredValue: unknown,
-): void => {
-	const { anchor: element, appliedAttributes, commitNumber } = liveBinding;
-	const hash = hashValue(desiredValue);
-	const previous = appliedAttributes.get(name);
-	if (previous === undefined) {
-		applyAttributeValue(element, name, desiredValue);
-		appliedAttributes.set(name, {
-			value: desiredValue,
-			hash,
-			lastSeenInCommit: commitNumber,
-		});
-		return;
+//TEMP sweep 9.5: "seen" is derived from the value instead of stamped per entry; keep it only if
+//the two benchmark pages show no change (+6-7% per spread commit in the direct measurement)
+const NO_ATTRIBUTE_NAMES: ReadonlyArray<unknown> = [];
+
+const attributeNamesOf = (value: unknown): ReadonlyArray<unknown> => {
+	if (Array.isArray(value)) return value;
+	if (isPlainObject(value)) return Object.keys(value);
+	if (value) return [value];
+	return NO_ATTRIBUTE_NAMES;
+};
+
+//names are compared as spelled: an array or scalar value may hold numbers, booleans or bigints
+const valueStillHoldsAttribute = (value: unknown, name: string): boolean => {
+	if (Array.isArray(value)) {
+		for (let index = 0; index < value.length; index++)
+			if (String(value[index]) === name) return true;
+		return false;
 	}
-	previous.lastSeenInCommit = commitNumber;
-	if (previous.hash === hash) return;
-	applyAttributeValue(element, name, desiredValue, previous.value);
-	previous.value = desiredValue;
-	previous.hash = hash;
+	if (isPlainObject(value)) return Object.hasOwn(value, name);
+	return Boolean(value) && String(value) === name;
 };
 
 //keys and a lookup rather than destructured entries: each entry is an array the engine does not
 //optimize away, 10 of them per commit on a five-name spread
-const removeAttributesNotSeenInThisCommit = (
+const removeAttributesTheValueDropped = (
 	liveBinding: DynamicAttributeLiveBinding,
+	value: unknown,
 ): void => {
-	const { anchor: element, appliedAttributes, commitNumber } = liveBinding;
+	const { anchor: element, appliedAttributes } = liveBinding;
 	for (const name of appliedAttributes.keys()) {
-		const previous = appliedAttributes.get(name)!;
-		if (previous.lastSeenInCommit === commitNumber) continue;
+		if (valueStillHoldsAttribute(value, name)) continue;
+		const previous = appliedAttributes.get(name);
+		assertDuringDevelopment(
+			previous !== undefined,
+			"a key read while iterating the map has an entry",
+		);
 		applyAttributeValue(element, name, null, previous.value);
 		appliedAttributes.delete(name);
 	}
@@ -47,19 +50,22 @@ export const commitDynamic = (
 	values: Array<unknown>,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
-	if (!claimHashChange(liveBinding, hashValue(value))) return;
-	liveBinding.commitNumber++;
-	if (Array.isArray(value))
-		for (let index = 0; index < value.length; index++)
-			applyDesiredAttribute(
-				liveBinding,
-				assertPrimitiveString(value[index]),
-				"",
-			);
-	else if (isPlainObject(value))
-		for (const name in value)
-			applyDesiredAttribute(liveBinding, name, value[name]);
-	else if (value)
-		applyDesiredAttribute(liveBinding, assertPrimitiveString(value), "");
-	removeAttributesNotSeenInThisCommit(liveBinding);
+	const hash = hashValue(value);
+	if (hash === liveBinding.lastValueHash) return;
+	liveBinding.lastValueHash = hash;
+	const { anchor: element, appliedAttributes } = liveBinding;
+	const names = attributeNamesOf(value);
+	for (let index = 0; index < names.length; index++) {
+		const name = assertPrimitiveString(names[index]);
+		const desiredValue = isPlainObject(value) ? value[name] : "";
+		const desiredValueHash = hashValue(desiredValue);
+		const previous = appliedAttributes.get(name);
+		if (previous?.hash === desiredValueHash) continue;
+		applyAttributeValue(element, name, desiredValue, previous?.value);
+		appliedAttributes.set(name, {
+			value: desiredValue,
+			hash: desiredValueHash,
+		});
+	}
+	removeAttributesTheValueDropped(liveBinding, value);
 };

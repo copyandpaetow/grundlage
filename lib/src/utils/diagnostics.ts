@@ -6,10 +6,31 @@ export const isDevelopmentBuild =
 	typeof GRUNDLAGE_IS_DEVELOPMENT_BUILD === "undefined" ||
 	GRUNDLAGE_IS_DEVELOPMENT_BUILD;
 
-export const warnDuringDevelopment = (message: string, detail?: unknown): void => {
+export const libraryMessage = (text: string): string => `grundlage: ${text}`;
+
+export const warnDuringDevelopment = (
+	message: string,
+	detail?: unknown,
+): void => {
 	if (!isDevelopmentBuild) return;
-	if (detail === undefined) console.warn(`grundlage: ${message}`);
-	else console.warn(`grundlage: ${message}`, detail);
+	if (detail === undefined) console.warn(libraryMessage(message));
+	else console.warn(libraryMessage(message), detail);
+};
+
+//its own class so every library catch can let it pass: a library bug must not reach a user's
+//try/catch or run cleanups on broken state
+export class InvariantError extends Error {
+	override name = "InvariantError";
+}
+
+//the production build inlines the early return, which drops the message and keeps the condition
+export const assertDuringDevelopment: (
+	condition: unknown,
+	invariant: string,
+) => asserts condition = (condition, invariant) => {
+	if (!isDevelopmentBuild) return;
+	if (!condition)
+		throw new InvariantError(libraryMessage(`invariant broken: ${invariant}`));
 };
 
 //an exception from user code that the library swallowed so teardown could continue; reportError

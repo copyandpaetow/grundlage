@@ -21,7 +21,8 @@ Read top to bottom. A lower rule never overrides a higher one.
   nested state survive. A false write (re-setting an unchanged value) is the worst performance bug.
   Patch over rebuild, move over recreate.
 - **Change detection notices in-place mutation.** A value mutated in place (same reference, new
-  contents) is a change. Equality never reports "unchanged" for something that changed.
+  contents) is a change. Equality never reports "unchanged" for something that changed. A hash is
+  treated as collision-free.
 - **Allocation causes GC pauses.** Allocate at setup, not per frame. Never keep a render's
   transient values past the frame that produced them.
 - **Everything else is the JIT's job**: hidden classes, monomorphic shapes, memory layout, loop
@@ -74,18 +75,19 @@ Read top to bottom. A lower rule never overrides a higher one.
   hold a real value". An optional parameter's own absence and a `Map.get` miss are honest
   `undefined`. Where the platform forces one channel to carry two meanings, the declaration names
   both in a comment.
-- Enums are `as const` objects read through `ValueOf<typeof X>`. Values are numbers, except where
-  two enums would overlap and one value could pass for the other: then strings.
+- Enums are `as const` objects read through `ValueOf<typeof X>`. Values are numbers. Enums that
+  meet get disjoint ranges, so one value cannot pass for another; an enum that indexes an array
+  starts at 0.
 - A variant without data is one shared constant, so switching to it allocates nothing.
 
 ## Functions and control flow
 
 1. **Push ifs up, fors down.** The parent holds the branching and the state; leaves are pure when
    their result is a value.
-2. **Inverse hourglass.** Few parameters, a simple return type, a meaty body. Prefer, in order:
-   `void`, `boolean`, `number`, `number | undefined`, throws, `Promise`.
+2. **Inverse hourglass.** Few parameters, a simple return type, a meaty body.
 3. **Command-query separation.** A function changes state or answers a question, never both. The
-   one exception is test-and-set, spelled `claim…`.
+   exceptions are test-and-set, spelled `claim…`, and a memoized read whose cache no caller can
+   observe.
 4. **A minimum of abstractions.** Every one leaks; add one only where it names the domain best. A
    forwarding function (`a(x) { return b(x) }`) is worse than the duplication it removes.
 5. **One entry point per state machine.** Every transition passes through it, and its assertions
@@ -103,14 +105,15 @@ Read top to bottom. A lower rule never overrides a higher one.
   comment.
 - A `switch` over a closed union ends in `default: return value satisfies never`.
 - An `if` with one statement has no braces; anything longer has braces.
-- A `void` function calls, then returns: `endRun(run); return;`, never `return endRun(run);`.
+- A `void` function never returns a call: an early exit is `endRun(run); return;`, and the last
+  statement is the call itself, with no `return` after it.
 - Loops: an indexed `for` over arrays, `for…of` over `Set` and `Map`, no `forEach`.
 - Name compound conditions as `const`s: naming, not abstraction, no function hop.
 - No boolean parameters. Split the function or take a named kind.
 - An options object when two arguments can be swapped by mistake, outside hot paths only. A
   `start, end` pair is exempt.
-- Every function has an annotated return type.
-- Order for top-down reading: the exported entry point first, its helpers below.
+- A return type is annotated where inference is not obvious: exported functions and unions with a
+  sentinel.
 
 ### Acquire and release
 
@@ -145,9 +148,9 @@ call, commented as intentionally inline.
 - Assertions are not guarded, so `asserts` narrows the type and replaces casts and `!`. The
   production build drops the helper and its message but keeps the condition; a condition that shows
   up in a measurement moves behind the development-build check.
-- A failed assertion throws a dedicated invariant error that is never routed into a generator, so
-  a user's `try`/`catch` cannot swallow a library bug. It ends the component through the fatal
-  path.
+- A failed assertion throws a dedicated invariant error that no library `catch` handles: it is never
+  routed into a generator or the fatal path, and surfaces uncaught with its stack. A user's
+  `try`/`catch` cannot swallow a library bug, and no cleanup runs on broken state.
 
 ## Naming
 
@@ -167,12 +170,12 @@ call, commented as intentionally inline.
 
 ### Verbs on the write path
 
-| verb | the function |
-| --- | --- |
-| `mount…` | creates the nodes for something that does not exist yet |
-| `patch…` | reuses the nodes of an existing thing of the same shape; the alternative to `mount` |
+| verb      | the function                                                                          |
+| --------- | ------------------------------------------------------------------------------------- |
+| `mount…`  | creates the nodes for something that does not exist yet                               |
+| `patch…`  | reuses the nodes of an existing thing of the same shape; the alternative to `mount`   |
 | `commit…` | takes the render's values and owns the change gate: one hash, or one per key or index |
-| `apply…` | performs the platform write, with no gate and no decision whether it is needed |
+| `apply…`  | performs the platform write, with no gate and no decision whether it is needed        |
 
 ## Modules and types
 
@@ -203,12 +206,12 @@ call, commented as intentionally inline.
 
 The rules a grep can check, run from the source directory:
 
-| rule | check |
-| --- | --- |
-| no `forEach` | `grep -rn "\.forEach(" .` finds nothing outside tests |
+| rule                         | check                                                       |
+| ---------------------------- | ----------------------------------------------------------- |
+| no `forEach`                 | `grep -rn "\.forEach(" .` finds nothing outside tests       |
 | `void` calls do not `return` | review each `return name(` inside a function typed `: void` |
-| exhaustive switches | every `switch` over a union ends in `satisfies never` |
-| casts carry a reason | every ` as ` and `!` outside tests has a comment or goes away |
-| no import cycles | no module imports one that imports it back |
-| "slot" only for `<slot>` | `grep -rni "slot" .` names only `<slot>` outside tests |
-| comment format | `grep -rn "^\s*// " .` finds nothing |
+| exhaustive switches          | every `switch` over a union ends in `satisfies never`       |
+| casts carry a reason         | every `as` and `!` outside tests has a comment or goes away |
+| no import cycles             | no module imports one that imports it back                  |
+| "slot" only for `<slot>`     | `grep -rni "slot" .` names only `<slot>` outside tests      |
+| comment format               | `grep -rn "^\s*// " .` finds nothing                        |

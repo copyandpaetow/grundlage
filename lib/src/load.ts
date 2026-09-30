@@ -68,16 +68,13 @@ export const load = <Value>(
 	}
 
 	const shadowRoot = resolveShadowRoot(host);
-	if (!skipSsr && shadowRoot) {
-		const script = findReplayScript(shadowRoot, key);
-		if (script) {
-			const value = JSON.parse(script.textContent || "null") as Value;
-			script.remove();
-			return Promise.resolve(value);
-		}
-	}
-
-	return fetcher();
+	const mayReplayServerData = !skipSsr && shadowRoot !== null;
+	if (!mayReplayServerData) return fetcher();
+	const script = findReplayScript(shadowRoot, key);
+	if (!script) return fetcher();
+	const value = JSON.parse(script.textContent || "null") as Value;
+	script.remove();
+	return Promise.resolve(value);
 };
 
 export const warnOnUnclaimedSsrPayloads = (shadowRoot: ShadowRoot): void => {
@@ -101,7 +98,7 @@ export const flushHostPayload = (host: Element): void => {
 
 	const ownerDocument = host.ownerDocument;
 	const shadowRoot = resolveShadowRoot(host);
-	if (ownerDocument === null || shadowRoot === null) return;
+	if (shadowRoot === null) return;
 
 	for (let index = 0; index < collected.length; index++) {
 		const entry = collected[index];

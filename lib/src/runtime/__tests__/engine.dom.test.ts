@@ -25,7 +25,9 @@ afterEach(() => {
 
 describe("engine terminal", () => {
 	test("an uncaught error logs exactly one console error", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield function* () {
@@ -122,7 +124,9 @@ describe("engine terminal", () => {
 	test("an outer parked on a yielded promise cannot catch its inner's failure", async () => {
 		//the yield a throw would land at is owned by the pending promise: catching there would let
 		//that promise step the generator a second time, from a position it had already left
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		let rejectInnerRender: (error: Error) => void = () => {};
 		const innerRender = new Promise((_resolve, reject) => {
 			rejectInnerRender = reject;
@@ -211,7 +215,9 @@ describe("the component error event", () => {
 	});
 
 	test("preventDefault skips the console error and the error text", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const tag = uniqueTag();
 		customElements.define(
 			tag,
@@ -230,6 +236,51 @@ describe("the component error event", () => {
 
 		expect(consoleError).not.toHaveBeenCalled();
 		expect(element.shadowRoot?.childNodes.length).toBe(0);
+		element.remove();
+	});
+});
+
+describe("a prop resolver that throws", () => {
+	const refusingResolver = (value: unknown) => {
+		if (value === "refused") throw new Error("refused");
+		return value;
+	};
+	const mountWithRefusingProp = () =>
+		mount(
+			component(
+				function* () {
+					yield () => html`<p>alive</p>`;
+				},
+				{ props: { label: refusingResolver } },
+			),
+		) as HTMLElement & { label: unknown };
+
+	test("from an attribute, ends the component through the error event", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const element = mountWithRefusingProp();
+		await sleep();
+		const received: Array<unknown> = [];
+		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
+			received.push(event.error),
+		);
+
+		expect(() => element.setAttribute("label", "refused")).not.toThrow();
+		expect(received).toHaveLength(1);
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		element.remove();
+	});
+
+	test("from a property, ends the component instead of throwing at the assignment", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const element = mountWithRefusingProp();
+		await sleep();
+		const received: Array<unknown> = [];
+		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
+			received.push(event.error),
+		);
+
+		expect(() => (element.label = "refused")).not.toThrow();
+		expect(received).toHaveLength(1);
 		element.remove();
 	});
 });
@@ -320,7 +371,9 @@ describe("the refire enters the task loop", () => {
 	//the two ways a throwing cleanup was observable before it was guarded: the paint it precedes
 	//never happened, and the sibling cleanup queued behind it never ran
 	test("a branch cleanup that throws does not eat the paint that tore it down", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield function* () {
@@ -551,7 +604,9 @@ describe("the refire enters the task loop", () => {
 	});
 
 	test("a paint throw during an update logs exactly one console error and is fatal", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		let bad = false;
 		const element = mount(
 			component(function* () {

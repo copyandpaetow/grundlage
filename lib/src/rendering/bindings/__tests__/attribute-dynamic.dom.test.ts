@@ -9,7 +9,6 @@ const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
 	anchor: document.createElement("div"),
 	appliedAttributes: new Map(),
 	lastValueHash: UNSET_HASH,
-	commitNumber: 0,
 });
 
 const attributesAfterCommitting = (...spreadValues: Array<unknown>) => {
@@ -65,6 +64,27 @@ describe("spread binding - across commits", () => {
 		expect(attributesAfterCommitting({ id: "x" }, {}, { id: "x" })).toEqual([
 			["id", "x"],
 		]);
+	});
+
+	test("a name whose value is unchanged is not written again when another name changes", () => {
+		//an object goes to the property channel, which has no read-before-write of its own
+		const settings = { theme: "dark" };
+		const liveBinding = createSpreadBinding();
+		commitDynamic(liveBinding, [{ id: "x", settings }]);
+		const { anchor } = liveBinding;
+		const writtenNames: Array<string> = [];
+		const setAttribute = anchor.setAttribute.bind(anchor);
+		const removeAttribute = anchor.removeAttribute.bind(anchor);
+		anchor.setAttribute = (name: string, value: string) => {
+			writtenNames.push(name);
+			setAttribute(name, value);
+		};
+		anchor.removeAttribute = (name: string) => {
+			writtenNames.push(name);
+			removeAttribute(name);
+		};
+		commitDynamic(liveBinding, [{ id: "y", settings }]);
+		expect(writtenNames).toEqual(["id"]);
 	});
 
 	test("a value switching shape removes the names of the old shape", () => {

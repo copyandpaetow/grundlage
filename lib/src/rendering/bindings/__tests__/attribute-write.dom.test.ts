@@ -154,12 +154,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		const secondHandler = () => received.push("second");
 
 		applyAttributeValue(element, "onpointerdown", firstHandler);
-		applyAttributeValue(
-			element,
-			"onpointerdown",
-			secondHandler,
-			firstHandler,
-		);
+		applyAttributeValue(element, "onpointerdown", secondHandler, firstHandler);
 
 		element.dispatchEvent(new Event("pointerdown"));
 		expect(received).toEqual(["second"]);

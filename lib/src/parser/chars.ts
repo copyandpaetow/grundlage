@@ -31,7 +31,6 @@ export const CHAR_CODE = {
 	BANG: 33,
 	OPEN_PAREN: 40,
 	CLOSE_PAREN: 41,
-	ASTERISK: 42,
 	COLON: 58,
 	SEMICOLON: 59,
 	AT: 64,

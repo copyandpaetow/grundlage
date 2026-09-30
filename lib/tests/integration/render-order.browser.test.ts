@@ -1211,18 +1211,19 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(shownText).not.toContain("waiting for each other");
 			});
 
-			//the limit counts renders, and a mount that fails is one: a component left ready to start by
-			//its own failure has no render function to loop on, so nothing else would end the pass
-			test("a component restarted by paint after paint ends in a visible error as well", async () => {
+			//an ended component stays ended while it is in the document, so paint after paint asking it
+			//to start again cannot loop it through its failing mount
+			test("a failed component ignores restarts from paint after paint", async () => {
 				const brokenTag = uniqueTag("broken");
 				const restarterTag = uniqueTag("restarter");
 				const relayTag = uniqueTag("relay");
-				//well past the limit, so the chain ends on the error rather than on running out
 				let restartsLeft = 140;
+				let mountAttempts = 0;
 
 				customElements.define(
 					brokenTag,
 					component(function* () {
+						mountAttempts++;
 						throw new Error("this one cannot mount");
 					}),
 				);
@@ -1255,9 +1256,9 @@ describe.skipIf("happyDOM" in globalThis)(
 				await sleep(100);
 				consoleError.mockRestore();
 
-				//each restarter paints once, so the only run that can trip the limit is the broken one
-				expect(visibleText(broken.shadowRoot)).toContain("rendered too often");
-				expect(visibleText(broken.shadowRoot)).not.toContain("cannot mount");
+				expect(mountAttempts).toBe(1);
+				expect(restartsLeft).toBeLessThan(0);
+				expect(visibleText(broken.shadowRoot)).toContain("cannot mount");
 			});
 
 			//a run that fails is out of the queue for good, so the runs that were waiting on it have

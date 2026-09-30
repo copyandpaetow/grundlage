@@ -5,7 +5,7 @@ import {
 	attributeSpellingOf,
 	PropValues,
 	recoverPreUpgradeAssignments,
-	writeProp,
+	claimPropValueChange,
 } from "../values";
 
 const setUp = (schema: Schema) => {
@@ -34,9 +34,9 @@ const asQuote = (incoming: unknown) =>
 describe("the write flow", () => {
 	test("a string is parsed and anything else is taken as it is", () => {
 		const { values, propOf } = setUp({ tags: [parseTags, []] });
-		writeProp(values, propOf("tags"), "a b");
+		claimPropValueChange(values, propOf("tags"), "a b");
 		expect(values.tags).toEqual(["a", "b"]);
-		writeProp(values, propOf("tags"), ["x"]);
+		claimPropValueChange(values, propOf("tags"), ["x"]);
 		expect(values.tags).toEqual(["x"]);
 	});
 
@@ -44,9 +44,11 @@ describe("the write flow", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const { values, propOf } = setUp({ quote: asQuote });
 		const quote = new Quote("hi");
-		writeProp(values, propOf("quote"), quote);
+		claimPropValueChange(values, propOf("quote"), quote);
 
-		expect(writeProp(values, propOf("quote"), "garbage")).toBe(false);
+		expect(claimPropValueChange(values, propOf("quote"), "garbage")).toBe(
+			false,
+		);
 		expect(values.quote).toBe(quote);
 		expect(warn).toHaveBeenCalledTimes(1);
 		warn.mockRestore();
@@ -56,8 +58,8 @@ describe("the write flow", () => {
 		const { values, propOf } = setUp({ tags: [parseTags, ["seed"]] });
 		const atConstruction = values.tags;
 
-		writeProp(values, propOf("tags"), ["x"]);
-		expect(writeProp(values, propOf("tags"), undefined)).toBe(true);
+		claimPropValueChange(values, propOf("tags"), ["x"]);
+		expect(claimPropValueChange(values, propOf("tags"), undefined)).toBe(true);
 		expect(values.tags).toEqual(["seed"]);
 		expect(values.tags).not.toBe(atConstruction);
 	});
@@ -65,8 +67,8 @@ describe("the write flow", () => {
 	test("null is absence, the same as undefined", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const { values, propOf } = setUp({ count: [Number, 0] });
-		writeProp(values, propOf("count"), 7);
-		expect(writeProp(values, propOf("count"), null)).toBe(true);
+		claimPropValueChange(values, propOf("count"), 7);
+		expect(claimPropValueChange(values, propOf("count"), null)).toBe(true);
 		expect(values.count).toBe(0);
 		expect(warn).not.toHaveBeenCalled();
 		warn.mockRestore();
@@ -74,18 +76,18 @@ describe("the write flow", () => {
 
 	test("an unchanged primitive reports no change; a changed one does", () => {
 		const { values, propOf } = setUp({ count: [Number, 0] });
-		expect(writeProp(values, propOf("count"), "6")).toBe(true);
-		expect(writeProp(values, propOf("count"), 6)).toBe(false);
-		expect(writeProp(values, propOf("count"), "6")).toBe(false);
-		expect(writeProp(values, propOf("count"), 7)).toBe(true);
+		expect(claimPropValueChange(values, propOf("count"), "6")).toBe(true);
+		expect(claimPropValueChange(values, propOf("count"), 6)).toBe(false);
+		expect(claimPropValueChange(values, propOf("count"), "6")).toBe(false);
+		expect(claimPropValueChange(values, propOf("count"), 7)).toBe(true);
 	});
 
 	test("re-assigning the same object always reports a change, because it may have been mutated", () => {
 		const { values, propOf } = setUp({ tags: [parseTags, []] });
 		const items = ["a"];
-		expect(writeProp(values, propOf("tags"), items)).toBe(true);
+		expect(claimPropValueChange(values, propOf("tags"), items)).toBe(true);
 		items.push("b");
-		expect(writeProp(values, propOf("tags"), items)).toBe(true);
+		expect(claimPropValueChange(values, propOf("tags"), items)).toBe(true);
 	});
 
 	test("an empty attribute is refused by Number and BigInt, and is a value for String and Boolean", () => {
@@ -96,10 +98,10 @@ describe("the write flow", () => {
 			label: String,
 			open: Boolean,
 		});
-		writeProp(values, propOf("count"), "");
-		writeProp(values, propOf("total"), "");
-		writeProp(values, propOf("label"), "");
-		writeProp(values, propOf("open"), "");
+		claimPropValueChange(values, propOf("count"), "");
+		claimPropValueChange(values, propOf("total"), "");
+		claimPropValueChange(values, propOf("label"), "");
+		claimPropValueChange(values, propOf("open"), "");
 
 		expect(values.count).toBe(0);
 		expect(values.total).toBe(undefined);
@@ -110,13 +112,13 @@ describe("the write flow", () => {
 
 	test("an assignment is parsed rather than type-checked", () => {
 		const { values, propOf } = setUp({ label: String });
-		writeProp(values, propOf("label"), 5);
+		claimPropValueChange(values, propOf("label"), 5);
 		expect(values.label).toBe("5");
 	});
 
 	test("the NaN the library itself writes reads back", () => {
 		const { values, propOf } = setUp({ count: Number });
-		writeProp(values, propOf("count"), "NaN");
+		claimPropValueChange(values, propOf("count"), "NaN");
 		expect(values.count).toBeNaN();
 	});
 });

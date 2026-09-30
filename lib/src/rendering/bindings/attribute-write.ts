@@ -40,13 +40,7 @@ export const isAwaitingDefinition = (element: Element): boolean =>
 	element.localName.includes("-") &&
 	customElements.get(element.localName) === undefined;
 
-export const assignDeclaredProp = (
-	element: Element,
-	propName: string,
-	value: unknown,
-): void => {
-	(element as unknown as Record<string, unknown>)[propName] = value;
-};
+const NOT_AN_EVENT: unique symbol = Symbol("not an event");
 
 //the one place that knows a key parsed as a native handler and found no property to bind it to, so
 //the warning belongs here rather than at the call site that would have to ask all of it again
@@ -54,19 +48,20 @@ const resolveEventNameFromKey = (
 	key: string,
 	element: Element,
 	value: unknown,
-): string | null => {
-	if (!key.startsWith(MARKUP.EVENT_PREFIX)) return null;
+): string | typeof NOT_AN_EVENT => {
+	if (!key.startsWith(MARKUP.EVENT_PREFIX)) return NOT_AN_EVENT;
 	if (key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX))
 		return key.slice(MARKUP.CUSTOM_EVENT_PREFIX.length).toLowerCase();
 	const lowerKey = key.toLowerCase();
 	if (lowerKey in element) return lowerKey.slice(MARKUP.EVENT_PREFIX.length);
 	if (typeof value === "function")
 		warnDuringDevelopment(
-			`"${key}" looks like an event handler but "${lowerKey}" is not a property of <${element.localName}> — the function was assigned as a dead property and will never fire. Check the spelling, or use "on-${key.slice(2).toLowerCase()}" to bind it as a custom event.`,
+			`"${key}" looks like an event handler but "${lowerKey}" is not a property of <${element.localName}> — the function was assigned as a dead property and will never fire. Check the spelling, or use "on-${key.slice(MARKUP.EVENT_PREFIX.length).toLowerCase()}" to bind it as a custom event.`,
 		);
-	return null;
+	return NOT_AN_EVENT;
 };
 
+//Element has no index signature; props are read and written by their runtime name
 const clearPropertyChannel = (element: Element, key: string): void => {
 	if (!Object.hasOwn(element, key)) return;
 	delete (element as unknown as Record<string, unknown>)[key];
@@ -85,12 +80,13 @@ export const applyAttributeValue = (
 	//`key in element` is true, which a prop's own accessor makes true. A prop named `once` would
 	//add a listener for "ce" instead of being assigned
 	if (isDeclaredPropName(element, key)) {
-		assignDeclaredProp(element, key, value);
-		return markDeferredHydration(element, valueChannel);
+		(element as unknown as Record<string, unknown>)[key] = value;
+		markDeferredHydration(element, valueChannel);
+		return;
 	}
 
 	const listenerName = resolveEventNameFromKey(key, element, value);
-	if (listenerName !== null) {
+	if (listenerName !== NOT_AN_EVENT) {
 		if (typeof oldValue === "function")
 			element.removeEventListener(listenerName, oldValue as EventListener);
 		if (typeof value === "function")
@@ -104,21 +100,24 @@ export const applyAttributeValue = (
 			element.removeAttribute(key);
 			//until the element is defined, a missing attribute reads as absence, which `[Boolean, true]`
 			//resolves to true; the own property carries the false across the upgrade
-			if (value === false && isAwaitingDefinition(element))
+			const mustCarryFalseAcrossUpgrade =
+				value === false && isAwaitingDefinition(element);
+			if (mustCarryFalseAcrossUpgrade)
 				(element as unknown as Record<string, unknown>)[key] = false;
-			return;
+			break;
 		case ATTRIBUTE_MODE.ATTRIBUTE: {
 			clearPropertyChannel(element, key);
 			const attributeValue = String(value);
 			if (element.getAttribute(key) !== attributeValue)
 				element.setAttribute(key, attributeValue);
-			return;
+			break;
 		}
 		case ATTRIBUTE_MODE.PROPERTY:
 			element.removeAttribute(key);
 			(element as unknown as Record<string, unknown>)[key] = value;
 			triggerComponentUpdate(element);
-			return markDeferredHydration(element, valueChannel);
+			markDeferredHydration(element, valueChannel);
+			break;
 		default:
 			return valueChannel satisfies never;
 	}

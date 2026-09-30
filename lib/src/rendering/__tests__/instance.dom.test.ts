@@ -4,14 +4,20 @@ import { html, TemplateValue } from "../../template";
 import { hashValue } from "../value-hashing";
 import { getParsedTemplate } from "../../parser/html";
 import {
+	HYDRATION_MISMATCH,
 	resolveNestedTemplate,
 	hydrateInstance,
+	cloneTemplateFragment,
 	mountInstance,
 	patchInstance,
 	isPatchableInPlace,
 	refreshStyleSheetsAfterMove,
 } from "../instance";
-import { StyleSheetMoveState } from "../bindings/types";
+import {
+	ContentLiveBinding,
+	Instance,
+	StyleSheetMoveState,
+} from "../bindings/types";
 
 //a div stands in for the component element; only a demoted stylesheet calls back into it
 const createHost = () =>
@@ -26,12 +32,12 @@ const moveState = (): StyleSheetMoveState => ({
 const mountTemplateValue = (
 	value: TemplateValue,
 	moveStateValue: StyleSheetMoveState,
-) =>
-	mountInstance(
-		value,
-		getParsedTemplate(value.__templateStrings),
-		moveStateValue,
-	);
+) => {
+	const parsed = getParsedTemplate(value.__templateStrings);
+	const fragment = cloneTemplateFragment(parsed);
+	const instance = mountInstance(fragment, value, parsed, moveStateValue);
+	return { instance, fragment };
+};
 
 //the host must be connected: a detached <style> has no sheet, so the CSSOM lane never engages
 const mountIntoShadow = (value: TemplateValue) => {
@@ -56,6 +62,14 @@ const hydrateShadowRoot = (
 		rangeEnd,
 		moveState,
 	);
+
+const instanceOrThrow = (
+	instance: Instance | typeof HYDRATION_MISMATCH,
+): Instance => {
+	if (instance === HYDRATION_MISMATCH)
+		throw new Error("expected the server range to hydrate");
+	return instance;
+};
 
 const textNodeOf = (element: Element): Text =>
 	Array.from(element.childNodes).find(
@@ -264,7 +278,7 @@ describe("raw content with a css plan", () => {
 		);
 		expect(style.firstChild).toBe(sheetTextNode);
 
-		patchInstance(instance!, sheet("blue").values);
+		patchInstance(instanceOrThrow(instance), sheet("blue").values);
 		expect(style.firstChild).toBe(sheetTextNode);
 		expect(declarationOf(style).getPropertyValue("color")).toBe("blue");
 	});
@@ -440,7 +454,7 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 		);
 		expect(shadowRoot.querySelector("p")?.textContent).toBe("client-text");
 
-		patchInstance(instance!, ["refreshed"]);
+		patchInstance(instanceOrThrow(instance), ["refreshed"]);
 		expect(shadowRoot.querySelector("p")?.textContent).toBe("refreshed");
 	});
 
@@ -456,7 +470,7 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 			moveState(),
 		);
 
-		patchInstance(instance!, ["updated-class"]);
+		patchInstance(instanceOrThrow(instance), ["updated-class"]);
 		expect(span.getAttribute("class")).toBe("updated-class");
 	});
 
@@ -501,6 +515,27 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 
 		expect(shadowRoot.querySelectorAll("li").length).toBe(2);
 		expect(shadowRoot.querySelectorAll("span").length).toBe(4);
+	});
+
+	//a reconcile of equal rows paints the same DOM, so only the kept rows array shows the gate held
+	test("the first patch with the hydrated list value stops at the change gate", () => {
+		const rows = (labels: Array<string>) =>
+			html`<ul>
+				${labels.map((label) => html`<li>${label}</li>`)}
+			</ul>`;
+		const { shadowRoot } = mountIntoShadow(rows(["a", "b"]));
+		const instance = instanceOrThrow(
+			hydrateShadowRoot(rows(["a", "b"]), shadowRoot, null, moveState()),
+		);
+		const listContent = () =>
+			(instance.liveBindings[0] as ContentLiveBinding).content as {
+				items: Array<unknown>;
+			};
+		const hydratedItems = listContent().items;
+
+		patchInstance(instance, rows(["a", "b"]).values);
+
+		expect(listContent().items).toBe(hydratedItems);
 	});
 });
 
@@ -603,7 +638,7 @@ describe("hydrateInstance: rejects a server range that contradicts the value", (
 				null,
 				moveState(),
 			),
-		).toBeNull();
+		).toBe(HYDRATION_MISMATCH);
 	});
 
 	test("text fills a server range that holds no text node at all", () => {

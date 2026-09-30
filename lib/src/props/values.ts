@@ -14,10 +14,7 @@ export const createComponentProps = (
 	return componentProps;
 };
 
-const cannotChangeBehindItsReference = (value: unknown): boolean =>
-	value === null || (typeof value !== "object" && typeof value !== "function");
-
-export const writeProp = (
+export const claimPropValueChange = (
 	values: PropValues,
 	prop: Prop,
 	incoming: unknown,
@@ -25,16 +22,18 @@ export const writeProp = (
 	const isAbsent = incoming === undefined || incoming === null;
 	const next = prop.resolve(isAbsent ? undefined : incoming);
 
-	if (next === undefined && !isAbsent) {
+	const isRefused = next === undefined && !isAbsent;
+	if (isRefused) {
 		warnDuringDevelopment(
 			`prop "${prop.propName}" refused a ${typeof incoming}: its function returned undefined, so the previous value stays.`,
 		);
 		return false;
 	}
 
+	const cannotChangeBehindItsReference =
+		next === null || (typeof next !== "object" && typeof next !== "function");
 	const isUnchanged =
-		Object.is(values[prop.propName], next) &&
-		cannotChangeBehindItsReference(next);
+		Object.is(values[prop.propName], next) && cannotChangeBehindItsReference;
 	if (isUnchanged) return false;
 
 	values[prop.propName] = next;
@@ -63,6 +62,7 @@ export const recoverPreUpgradeAssignments = (
 	element: HTMLElement,
 	props: NormalizedSchema,
 ): void => {
+	//Element has no index signature; props are read and written by their runtime name
 	const record = element as unknown as Record<string, unknown>;
 	for (const prop of props.values()) {
 		if (!Object.hasOwn(record, prop.propName)) continue;
