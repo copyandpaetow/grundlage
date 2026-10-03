@@ -2,6 +2,9 @@
 	"name": "grundlage-repo",
 	"private": true,
 	"type": "module",
+	"engines": {
+		"node": ">=24.11"
+	},
 	"scripts": {
 		"dev": "npm run dev -w website",
 		"build": "npm run build -w grundlage",
@@ -23,18 +26,18 @@
 		"version:plugin:patch": "npm version patch -w vite-plugin-grundlage",
 		"version:plugin:minor": "npm version minor -w vite-plugin-grundlage",
 		"version:plugin:major": "npm version major -w vite-plugin-grundlage",
-		"release": "npm run build -w grundlage && npm test -- --run && npm publish -w grundlage",
+		"release": "npm run test:ci && npm publish -w grundlage",
 		"release:plugin": "npm run build -w vite-plugin-grundlage && npm test -- --run && npm publish -w vite-plugin-grundlage"
 	},
 	"devDependencies": {
 		"@types/node": "^26.0.1",
-		"@vitest/browser-playwright": "^4.1.0",
-		"@vitest/coverage-v8": "^4.1.2",
+		"@vitest/browser-playwright": "^5.0.2",
+		"@vitest/coverage-v8": "^5.0.2",
 		"happy-dom": "^20.3.7",
 		"prettier": "^3.9.6",
 		"typescript": "^7.0.2",
 		"vite": "^8.0.1",
-		"vitest": "^4.1.0"
+		"vitest": "^5.0.2"
 	},
 	"overrides": {
 		"happy-dom": "$happy-dom"

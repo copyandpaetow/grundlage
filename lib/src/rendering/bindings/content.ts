@@ -1,11 +1,11 @@
 import { isTemplate, TemplateValue } from "../../template";
-import { assertPrimitiveString } from "../../utils/guards";
+import { stringifyPrimitive } from "../../utils/guards";
 import { hashValue } from "../value-hashing";
 import { ValueOf } from "../../utils/types";
 import { CONTENT_KIND, UNSET_HASH } from "../constants";
 import {
 	HYDRATION_MISMATCH,
-	resolveNestedTemplate,
+	parseNestedTemplate,
 	hydrateInstance,
 	isPatchableInPlace,
 	cloneTemplateFragment,
@@ -17,7 +17,7 @@ import {
 	aggregateHashOfItems,
 	EMPTY_LIST_SCRATCH,
 	hydrateListItems,
-	patchListContent,
+	commitList,
 } from "./content-list";
 import {
 	ContentLiveBinding,
@@ -75,10 +75,10 @@ const createContentState = (
 const coerceToText = (value: unknown): string => {
 	const isAbsentContent =
 		value === null || value === undefined || typeof value === "boolean";
-	return isAbsentContent ? "" : assertPrimitiveString(value);
+	return isAbsentContent ? "" : stringifyPrimitive(value);
 };
 
-const patchText = (
+const commitText = (
 	liveBinding: ContentLiveBinding,
 	textState: TextContentState,
 	value: unknown,
@@ -114,11 +114,11 @@ export const commitContent = (
 	}
 	switch (content.kind) {
 		case CONTENT_KIND.TEXT:
-			patchText(liveBinding, content, value);
+			commitText(liveBinding, content, value);
 			break;
 		case CONTENT_KIND.BRANCH: {
 			const template = value as TemplateValue;
-			const parsed = resolveNestedTemplate(template);
+			const parsed = parseNestedTemplate(template);
 			if (isPatchableInPlace(content.instance, parsed)) {
 				patchInstance(content.instance, template.values);
 				break;
@@ -131,19 +131,14 @@ export const commitContent = (
 			break;
 		}
 		case CONTENT_KIND.LIST:
-			patchListContent(
-				liveBinding,
-				content,
-				value as Array<unknown>,
-				moveState,
-			);
+			commitList(liveBinding, content, value as Array<unknown>, moveState);
 			break;
 		default:
 			return content satisfies never;
 	}
 };
 
-//one text write destroys nothing, so an adoptable text range is repaired by patchText rather than
+//one text write destroys nothing, so an adoptable text range is repaired by commitText rather than
 //rejected; anything else in the range means the server rendered a different kind and it is not ours
 const isAdoptableTextRange = ({
 	openMarker,
@@ -170,7 +165,7 @@ export const hydrateContent = (
 	switch (content.kind) {
 		case CONTENT_KIND.TEXT:
 			if (isAdoptableTextRange(liveBinding)) {
-				patchText(liveBinding, content, value);
+				commitText(liveBinding, content, value);
 				return;
 			}
 			break;
@@ -179,7 +174,7 @@ export const hydrateContent = (
 			const hydrated = hydrateInstance(
 				walker,
 				template,
-				resolveNestedTemplate(template),
+				parseNestedTemplate(template),
 				liveBinding.closeMarker,
 				moveState,
 			);

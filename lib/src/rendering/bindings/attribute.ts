@@ -1,7 +1,12 @@
 import { combinedPartsHash, composeParts } from "../compose";
 import { combineOrderedHash } from "../../utils/hashing";
 import { AttributeStaticBinding, Part } from "../../parser/types";
-import { applyAttributeValue } from "./attribute-write";
+import {
+	applyAttributeValue,
+	applyLiveState,
+	applyLiveStateDefault,
+	isLiveStatePropertyOf,
+} from "./attribute-apply";
 import { NO_ATTRIBUTE_WRITTEN } from "../constants";
 import { AttributeLiveBinding } from "./types";
 
@@ -39,11 +44,11 @@ export const commitAttribute = (
 	const { nameParts, valueParts } = liveBinding.staticBinding;
 	const element = liveBinding.anchor;
 	const name = composeParts(nameParts, values);
-	const keepsTheSameName = name === liveBinding.lastComposedName;
+	const keepsSameName = name === liveBinding.lastComposedName;
 
-	const leavesAStaleAttribute =
-		!keepsTheSameName && liveBinding.lastComposedName !== NO_ATTRIBUTE_WRITTEN;
-	if (leavesAStaleAttribute)
+	const leavesStaleAttribute =
+		!keepsSameName && liveBinding.lastComposedName !== NO_ATTRIBUTE_WRITTEN;
+	if (leavesStaleAttribute)
 		removeWrittenAttribute(liveBinding, liveBinding.lastComposedName);
 	liveBinding.lastComposedName = name;
 
@@ -56,11 +61,16 @@ export const commitAttribute = (
 		return;
 	}
 	const value = values[valueParts[0]];
-	applyAttributeValue(
-		element,
-		name,
-		value,
-		keepsTheSameName ? liveBinding.lastValue : undefined,
-	);
+	//the first write is markup and sets the default; every later one drives what is shown
+	const isLiveState = isLiveStatePropertyOf(element, name);
+	if (isLiveState && keepsSameName) applyLiveState(element, name, value);
+	else if (isLiveState) applyLiveStateDefault(element, name, value);
+	else
+		applyAttributeValue(
+			element,
+			name,
+			value,
+			keepsSameName ? liveBinding.lastValue : undefined,
+		);
 	liveBinding.lastValue = value;
 };

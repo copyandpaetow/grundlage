@@ -296,7 +296,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("writes a bigint to the attribute channel, like a number", async () => {
+	test("writes a bigint to the attribute mode, like a number", async () => {
 		const tag = uniqueTag();
 		let value: unknown = 9007199254740993n;
 

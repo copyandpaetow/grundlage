@@ -267,7 +267,9 @@ describe("error handling", () => {
 	//unlike a resolved one it is not neutralized by the cancelled generator's return()
 	test("an async step rejecting after disconnect paints nothing and stays silent", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		customElements.define(
 			tag,
@@ -291,7 +293,9 @@ describe("error handling", () => {
 
 	test("sync generator: render function error is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield () => {
@@ -310,7 +314,9 @@ describe("error handling", () => {
 
 	test("async generator: render function error is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const MyElement = component(async function* () {
 			yield () => {
@@ -329,7 +335,9 @@ describe("error handling", () => {
 
 	test("sync generator: error in second yield is shown after first renders", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield () => html`<p>works</p>`;
@@ -349,7 +357,9 @@ describe("error handling", () => {
 
 	test("async generator: error in second yield is shown after first renders", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const MyElement = component(async function* () {
 			yield () => html`<p>works</p>`;
@@ -369,7 +379,9 @@ describe("error handling", () => {
 
 	test("error in update() is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		let shouldThrow = false;
 
 		const MyElement = component(function* () {
@@ -396,7 +408,9 @@ describe("error handling", () => {
 
 	test("rejected yielded promise is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield Promise.reject(new Error("promise rejection"));
@@ -439,7 +453,9 @@ describe("error handling", () => {
 
 	test("error stops further updates", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield () => {
@@ -507,7 +523,9 @@ describe("error handling", () => {
 
 	test("a rejected render promise is fatal and logs one console error", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield async () => {
@@ -631,7 +649,9 @@ describe("a superseded render promise", () => {
 
 	test("does not fail the component when it rejects after a newer call", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		let calls = 0;
 
 		const MyElement = component(function* () {

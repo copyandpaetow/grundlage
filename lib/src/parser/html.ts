@@ -6,18 +6,28 @@ import {
 	STYLE_SHEET_NOT_COMPILED,
 } from "./constants";
 import { ParsedTemplate, Part, StaticBinding } from "./types";
-import { CHAR_CODE, isQuoteCode, isWhitespaceCode, MARKUP } from "./chars";
+import {
+	CHARACTER_CODE,
+	isQuoteCode,
+	isWhitespaceCode,
+	MARKUP,
+} from "./characters";
 import { compileStyleSheet } from "./css";
 import { decodeTextareaParts } from "./rcdata";
 import { ValueOf } from "../utils/types";
-import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
+import {
+	assertDuringDevelopment,
+	libraryMessage,
+	warnDuringDevelopment,
+} from "../utils/diagnostics";
 
-type StateValue = ValueOf<typeof STATE>;
+type StateKind = ValueOf<typeof STATE>;
 
 const PLACEHOLDER_TAG = "div";
 const TEMPLATE_TAG = "template";
 const SCRIPT_TAG = "script";
 const TEXTAREA_TAG = "textarea";
+const SELECT_TAG = "select";
 const STYLE_TAG = "style";
 const COMMENT_OPEN_LENGTH = MARKUP.COMMENT_OPEN.length;
 const COMMENT_CLOSE_LENGTH = MARKUP.COMMENT_CLOSE.length;
@@ -44,7 +54,7 @@ const STATE = {
 } as const;
 
 type BindingStartingState = Exclude<
-	StateValue,
+	StateKind,
 	typeof STATE.ELEMENT | typeof STATE.END_TAG
 >;
 
@@ -72,7 +82,7 @@ const OPEN_CONSTRUCT_FOR_STATE: Record<
 ];
 
 const PARSE_MODE = { OPTIMISTIC_ROOT: 30, NO_ROOT_TEMPLATE: 31 } as const;
-type ParseMode = ValueOf<typeof PARSE_MODE>;
+type ParseModeKind = ValueOf<typeof PARSE_MODE>;
 
 const ROOT_TEMPLATE = {
 	UNDECIDED: 40,
@@ -81,25 +91,25 @@ const ROOT_TEMPLATE = {
 	CONTENT_OPEN: 43,
 	CLOSED: 44,
 } as const;
-type RootTemplateState = ValueOf<typeof ROOT_TEMPLATE>;
+type RootTemplateKind = ValueOf<typeof ROOT_TEMPLATE>;
 
 //scan helpers write this struct directly: each moves three or four cursor fields, and returning
 //them costs an object per character or one loop of every scanner. Parsing runs once per template
 interface ParserState {
-	state: StateValue;
+	scanState: StateKind;
 	bindings: Array<StaticBinding>;
 	startedBindingCount: number;
 	openConstructKind: OpenConstructKind;
-	templates: TemplateStringsArray;
-	index: number;
-	activeTemplate: string;
-	charIndex: number;
+	templateStrings: TemplateStringsArray;
+	stringIndex: number;
+	activeString: string;
+	characterIndex: number;
 	splitIndex: number;
 	hostBindingCount: number;
 	attributeQuoteCode: number;
 	currentTagName: string;
 	isSelfClosing: boolean;
-	rootTemplate: RootTemplateState;
+	rootTemplate: RootTemplateKind;
 	hasSeenTopLevelSibling: boolean;
 	hasStyleSheetBinding: boolean;
 	keyValueParts: Array<Part> | typeof NO_KEY;
@@ -113,16 +123,16 @@ interface ParserState {
 
 const createParser = (
 	strings: TemplateStringsArray,
-	mode: ParseMode,
+	mode: ParseModeKind,
 ): ParserState => ({
-	state: STATE.TEXT,
+	scanState: STATE.TEXT,
 	bindings: [],
 	startedBindingCount: 0,
 	openConstructKind: NO_OPEN_CONSTRUCT,
-	templates: strings,
-	index: 0,
-	activeTemplate: strings[0],
-	charIndex: 0,
+	templateStrings: strings,
+	stringIndex: 0,
+	activeString: strings[0],
+	characterIndex: 0,
 	splitIndex: 0,
 	hostBindingCount: 0,
 	attributeQuoteCode: 0,
@@ -152,7 +162,8 @@ const openMarkerData = (parser: ParserState) =>
 const closeMarkerData = (parser: ParserState) =>
 	`${MARKUP.COMMENT_IDENTIFIER} /${parser.openConstructKind}-${parser.startedBindingCount - 1}`;
 
-const openComment = (parser: ParserState) => asComment(openMarkerData(parser));
+const openMarkerComment = (parser: ParserState) =>
+	asComment(openMarkerData(parser));
 
 const hasOpenConstruct = (parser: ParserState) =>
 	parser.openConstructKind !== NO_OPEN_CONSTRUCT;
@@ -163,16 +174,16 @@ const takeParts = (parser: ParserState, state: HoleCapturingState) => {
 	return taken;
 };
 
-const updateBinding = (parser: ParserState) => {
-	if (parser.state === STATE.TEXT) {
+const recordHole = (parser: ParserState) => {
+	if (parser.scanState === STATE.TEXT) {
 		const closeMarker = closeMarkerData(parser);
 		parser.contentMarkup +=
-			sliceActiveTemplate(parser, parser.splitIndex) +
-			openComment(parser) +
+			sliceActiveString(parser, parser.splitIndex) +
+			openMarkerComment(parser) +
 			asComment(closeMarker);
 		parser.bindings.push({
 			type: BINDING.CONTENT,
-			valueIndex: parser.index,
+			valueIndex: parser.stringIndex,
 			closeMarkerData: closeMarker,
 		});
 		parser.openConstructKind = NO_OPEN_CONSTRUCT;
@@ -181,21 +192,21 @@ const updateBinding = (parser: ParserState) => {
 		return;
 	}
 
-	if (parser.state === STATE.END_TAG) {
-		parser.endTagMarkup += sliceActiveTemplate(parser, parser.splitIndex);
+	if (parser.scanState === STATE.END_TAG) {
+		parser.endTagMarkup += sliceActiveString(parser, parser.splitIndex);
 		return;
 	}
 
 	assertDuringDevelopment(
-		parser.state !== STATE.ELEMENT,
+		parser.scanState !== STATE.ELEMENT,
 		"a hole right after a quoted attribute value throws before it starts a binding",
 	);
-	const parts = parser.parts[parser.state];
-	capture(parser, parts, parser.splitIndex);
-	parts.push(parser.index);
+	const parts = parser.parts[parser.scanState];
+	appendSlice(parser, parts, parser.splitIndex);
+	parts.push(parser.stringIndex);
 };
 
-const emptyBinding = (
+const createEmptyBinding = (
 	openConstructKind: Exclude<
 		OpenConstructKind,
 		typeof OPEN_CONSTRUCT.CONTENT | typeof NO_OPEN_CONSTRUCT
@@ -219,22 +230,22 @@ const emptyBinding = (
 	}
 };
 
-const sliceActiveTemplate = (
+const sliceActiveString = (
 	parser: ParserState,
 	start: number,
 	end?: number,
 ) => {
 	if (end !== undefined && end <= start) return "";
-	return parser.activeTemplate.slice(start, end);
+	return parser.activeString.slice(start, end);
 };
 
-const capture = (
+const appendSlice = (
 	parser: ParserState,
 	parts: Array<Part>,
 	start: number,
 	end?: number,
 ) => {
-	const slice = sliceActiveTemplate(parser, start, end);
+	const slice = sliceActiveString(parser, start, end);
 	if (slice) parts.push(slice);
 };
 
@@ -258,7 +269,7 @@ const completeComment = (parser: ParserState) => {
 		parser.startedBindingCount--;
 		return;
 	}
-	parser.contentMarkup += openComment(parser) + MARKUP.EMPTY_COMMENT;
+	parser.contentMarkup += openMarkerComment(parser) + MARKUP.EMPTY_COMMENT;
 	parser.bindings.push({
 		type: BINDING.COMMENT,
 		parts: takeParts(parser, STATE.COMMENT),
@@ -270,7 +281,7 @@ const completeRawContent = (parser: ParserState) => {
 		parser.contentMarkup += drainPartsAsMarkup(parser.parts[STATE.RAW_CONTENT]);
 		return;
 	}
-	parser.resultMarkup += openComment(parser);
+	parser.resultMarkup += openMarkerComment(parser);
 	const parts = takeParts(parser, STATE.RAW_CONTENT);
 	if (parser.currentTagName === TEXTAREA_TAG) decodeTextareaParts(parts);
 	//the sheet text is composed with literal values at first commit, while the clone is
@@ -288,9 +299,9 @@ const completeRawContent = (parser: ParserState) => {
 	});
 };
 
-const rootTemplateAfterANonRootTag = (
-	rootTemplate: RootTemplateState,
-): RootTemplateState => {
+const rootTemplateAfterNonRootTag = (
+	rootTemplate: RootTemplateKind,
+): RootTemplateKind => {
 	switch (rootTemplate) {
 		case ROOT_TEMPLATE.UNDECIDED:
 			return ROOT_TEMPLATE.RULED_OUT;
@@ -311,13 +322,13 @@ const completeTag = (parser: ParserState) => {
 	if (hasOpenConstruct(parser)) {
 		parser.currentTagName = PLACEHOLDER_TAG;
 		parser.elementMarkup += PLACEHOLDER_TAG;
-		parser.resultMarkup += openComment(parser);
+		parser.resultMarkup += openMarkerComment(parser);
 		parser.bindings.push({
 			type: BINDING.TAG,
 			parts: takeParts(parser, STATE.TAG),
 		});
 		parser.openTagIsDynamic.push(true);
-		parser.rootTemplate = rootTemplateAfterANonRootTag(parser.rootTemplate);
+		parser.rootTemplate = rootTemplateAfterNonRootTag(parser.rootTemplate);
 		return;
 	}
 
@@ -338,7 +349,7 @@ const completeTag = (parser: ParserState) => {
 		parser.rootTemplate = ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
 		tagNameParts.length = 0;
 	} else {
-		parser.rootTemplate = rootTemplateAfterANonRootTag(parser.rootTemplate);
+		parser.rootTemplate = rootTemplateAfterNonRootTag(parser.rootTemplate);
 		parser.elementMarkup += drainPartsAsMarkup(tagNameParts);
 	}
 	parser.openTagIsDynamic.push(false);
@@ -381,24 +392,24 @@ const rangeHasNonWhitespace = (
 	end: number,
 ) => {
 	for (let scanIndex = start; scanIndex < end; scanIndex++)
-		if (!isWhitespaceCode(parser.activeTemplate.charCodeAt(scanIndex)))
+		if (!isWhitespaceCode(parser.activeString.charCodeAt(scanIndex)))
 			return true;
 	return false;
 };
 
-const markTopLevelTextSibling = (
+const appendTextAndMarkTopLevelSibling = (
 	parser: ParserState,
 	start: number,
 	end: number,
 ) => {
-	parser.contentMarkup += sliceActiveTemplate(parser, start, end);
+	parser.contentMarkup += sliceActiveString(parser, start, end);
 	const isTopLevelText =
 		parser.openTagIsDynamic.length === 0 &&
 		rangeHasNonWhitespace(parser, start, end);
 	if (isTopLevelText) parser.hasSeenTopLevelSibling = true;
 };
 
-const drainAttributeBinding = (parser: ParserState): StaticBinding => {
+const takeAttributeBinding = (parser: ParserState): StaticBinding => {
 	const nameParts = takeParts(parser, STATE.ATTRIBUTE_KEY);
 	const valueParts = takeParts(parser, STATE.ATTRIBUTE_VALUE);
 	const isExpandableSpread =
@@ -418,13 +429,33 @@ const drainAttributeBinding = (parser: ParserState): StaticBinding => {
 	};
 };
 
+//<select> has no value attribute, and its options are not there yet when its own bindings commit
+const warnOnSelectValueBinding = (
+	parser: ParserState,
+	binding: StaticBinding,
+): void => {
+	if (parser.currentTagName !== SELECT_TAG) return;
+	if (binding.type !== BINDING.ATTRIBUTE) return;
+	const [name] = binding.nameParts;
+	const isValueName =
+		binding.nameParts.length === 1 &&
+		typeof name === "string" &&
+		name.toLowerCase() === "value";
+	if (isValueName)
+		warnDuringDevelopment(
+			"`<select value=${…}>` selects nothing: <select> has no value attribute. Bind `selected` on the option instead: `<option selected=${…}>`.",
+		);
+};
+
 const completeAttribute = (parser: ParserState) => {
 	const isOnRootTemplate =
 		parser.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
 	if (hasOpenConstruct(parser)) {
-		parser.bindings.push(drainAttributeBinding(parser));
+		const binding = takeAttributeBinding(parser);
+		warnOnSelectValueBinding(parser, binding);
+		parser.bindings.push(binding);
 		if (isOnRootTemplate) parser.hostBindingCount++;
-		else parser.resultMarkup += openComment(parser);
+		else parser.resultMarkup += openMarkerComment(parser);
 		return;
 	}
 	if (parser.parts[STATE.ATTRIBUTE_KEY].length === 0) return;
@@ -432,7 +463,7 @@ const completeAttribute = (parser: ParserState) => {
 		//a static host attribute emits no marker but still owns a binding index, and every marker
 		//after it is numbered from this count
 		parser.startedBindingCount++;
-		parser.bindings.push(drainAttributeBinding(parser));
+		parser.bindings.push(takeAttributeBinding(parser));
 		parser.hostBindingCount++;
 		return;
 	}
@@ -474,131 +505,145 @@ const flushElement = (parser: ParserState) => {
 };
 
 const closeOpenTag = (parser: ParserState) => {
-	parser.splitIndex = parser.charIndex + 1;
+	parser.splitIndex = parser.characterIndex + 1;
 	const endsWithSlash =
-		parser.activeTemplate.charCodeAt(parser.charIndex - 1) === CHAR_CODE.SLASH;
+		parser.activeString.charCodeAt(parser.characterIndex - 1) ===
+		CHARACTER_CODE.SLASH;
 	if (endsWithSlash) {
 		parser.openTagIsDynamic.pop();
 		parser.isSelfClosing = true;
 		flushElement(parser);
-		parser.state = STATE.TEXT;
+		parser.scanState = STATE.TEXT;
 		return;
 	}
-	parser.state = parsesContentAsRaw(parser, parser.currentTagName)
+	parser.scanState = parsesContentAsRaw(parser, parser.currentTagName)
 		? STATE.RAW_CONTENT
 		: STATE.TEXT;
 };
 
 const endAttribute = (parser: ParserState, parts: Array<Part>) => {
-	capture(parser, parts, parser.splitIndex, parser.charIndex);
+	appendSlice(parser, parts, parser.splitIndex, parser.characterIndex);
 	completeAttribute(parser);
 	parser.openConstructKind = NO_OPEN_CONSTRUCT;
 	parser.attributeQuoteCode = 0;
-	parser.state = STATE.ELEMENT;
+	parser.scanState = STATE.ELEMENT;
 };
 
 const scanText = (parser: ParserState) => {
-	const tagStart = parser.activeTemplate.indexOf(
+	const tagStart = parser.activeString.indexOf(
 		MARKUP.TAG_OPEN,
-		parser.charIndex,
+		parser.characterIndex,
 	);
 	if (tagStart === -1) {
-		parser.charIndex = parser.activeTemplate.length;
+		parser.characterIndex = parser.activeString.length;
 		return;
 	}
-	parser.charIndex = tagStart;
-	markTopLevelTextSibling(parser, parser.splitIndex, parser.charIndex);
-	parser.splitIndex = parser.charIndex + 1;
+	parser.characterIndex = tagStart;
+	appendTextAndMarkTopLevelSibling(
+		parser,
+		parser.splitIndex,
+		parser.characterIndex,
+	);
+	parser.splitIndex = parser.characterIndex + 1;
 
-	const nextCode = parser.activeTemplate.charCodeAt(parser.charIndex + 1);
+	const nextCode = parser.activeString.charCodeAt(parser.characterIndex + 1);
 
-	if (nextCode === CHAR_CODE.BANG) {
-		parser.state = STATE.COMMENT;
-		parser.splitIndex = parser.charIndex + COMMENT_OPEN_LENGTH;
+	if (nextCode === CHARACTER_CODE.BANG) {
+		parser.scanState = STATE.COMMENT;
+		parser.splitIndex = parser.characterIndex + COMMENT_OPEN_LENGTH;
 		//resume on the "--" so an empty <!----> still matches its "-->"
-		parser.charIndex += COMMENT_OPEN_LENGTH - COMMENT_DASHES_LENGTH;
+		parser.characterIndex += COMMENT_OPEN_LENGTH - COMMENT_DASHES_LENGTH;
 		return;
 	}
 
-	if (nextCode === CHAR_CODE.SLASH) {
-		parser.state = STATE.END_TAG;
-		parser.splitIndex = parser.charIndex + END_TAG_OPEN_LENGTH;
-		parser.charIndex++;
+	if (nextCode === CHARACTER_CODE.SLASH) {
+		parser.scanState = STATE.END_TAG;
+		parser.splitIndex = parser.characterIndex + END_TAG_OPEN_LENGTH;
+		parser.characterIndex++;
 		return;
 	}
 
 	flushElement(parser);
-	parser.state = STATE.ELEMENT;
-	parser.charIndex--;
+	parser.scanState = STATE.ELEMENT;
+	parser.characterIndex--;
 };
 
 const scanComment = (parser: ParserState) => {
 	//searching from the opener's dashes is what lets the abrupt "<!-->" close on them
-	const commentClose = parser.activeTemplate.indexOf(
+	const commentClose = parser.activeString.indexOf(
 		MARKUP.COMMENT_CLOSE,
-		parser.charIndex - COMMENT_DASHES_LENGTH,
+		parser.characterIndex - COMMENT_DASHES_LENGTH,
 	);
 	if (commentClose === -1) {
-		parser.charIndex = parser.activeTemplate.length;
+		parser.characterIndex = parser.activeString.length;
 		return;
 	}
 
 	//on the closing ">", which the loop's own step moves past
-	parser.charIndex = commentClose + COMMENT_CLOSE_LENGTH - 1;
-	capture(parser, parser.parts[STATE.COMMENT], parser.splitIndex, commentClose);
-	parser.splitIndex = parser.charIndex + 1;
+	parser.characterIndex = commentClose + COMMENT_CLOSE_LENGTH - 1;
+	appendSlice(
+		parser,
+		parser.parts[STATE.COMMENT],
+		parser.splitIndex,
+		commentClose,
+	);
+	parser.splitIndex = parser.characterIndex + 1;
 	completeComment(parser);
 	parser.openConstructKind = NO_OPEN_CONSTRUCT;
-	parser.state = STATE.TEXT;
+	parser.scanState = STATE.TEXT;
 };
 
 const scanRawContent = (parser: ParserState) => {
-	const closeTagStart = parser.activeTemplate.indexOf(
+	const closeTagStart = parser.activeString.indexOf(
 		MARKUP.END_TAG_OPEN,
-		parser.charIndex,
+		parser.characterIndex,
 	);
 	if (closeTagStart === -1) {
-		parser.charIndex = parser.activeTemplate.length;
+		parser.characterIndex = parser.activeString.length;
 		return;
 	}
 
-	parser.charIndex = closeTagStart;
-	const closesCurrentElement = parser.activeTemplate.startsWith(
+	parser.characterIndex = closeTagStart;
+	const closesCurrentElement = parser.activeString.startsWith(
 		parser.currentTagName,
-		parser.charIndex + END_TAG_OPEN_LENGTH,
+		parser.characterIndex + END_TAG_OPEN_LENGTH,
 	);
 	if (!closesCurrentElement) return;
-	capture(
+	appendSlice(
 		parser,
 		parser.parts[STATE.RAW_CONTENT],
 		parser.splitIndex,
-		parser.charIndex,
+		parser.characterIndex,
 	);
 	parser.splitIndex =
-		parser.charIndex + END_TAG_OPEN_LENGTH + parser.currentTagName.length;
-	parser.charIndex += 1;
+		parser.characterIndex + END_TAG_OPEN_LENGTH + parser.currentTagName.length;
+	parser.characterIndex += 1;
 	completeRawContent(parser);
 	parser.openConstructKind = NO_OPEN_CONSTRUCT;
-	parser.state = STATE.END_TAG;
+	parser.scanState = STATE.END_TAG;
 	parser.endTagMarkup += parser.currentTagName;
 };
 
 const scanTagName = (parser: ParserState, code: number) => {
-	const endsTagName = code === CHAR_CODE.GREATER_THAN || isWhitespaceCode(code);
+	const endsTagName =
+		code === CHARACTER_CODE.GREATER_THAN || isWhitespaceCode(code);
 	if (!endsTagName) return;
 
 	const isSelfClosing =
-		code === CHAR_CODE.GREATER_THAN &&
-		parser.activeTemplate.charCodeAt(parser.charIndex - 1) === CHAR_CODE.SLASH;
-	const tagEnd = isSelfClosing ? parser.charIndex - 1 : parser.charIndex;
-	capture(parser, parser.parts[STATE.TAG], parser.splitIndex, tagEnd);
-	parser.splitIndex = parser.charIndex;
+		code === CHARACTER_CODE.GREATER_THAN &&
+		parser.activeString.charCodeAt(parser.characterIndex - 1) ===
+			CHARACTER_CODE.SLASH;
+	const tagEnd = isSelfClosing
+		? parser.characterIndex - 1
+		: parser.characterIndex;
+	appendSlice(parser, parser.parts[STATE.TAG], parser.splitIndex, tagEnd);
+	parser.splitIndex = parser.characterIndex;
 	completeTag(parser);
 	parser.openConstructKind = NO_OPEN_CONSTRUCT;
 
-	if (code !== CHAR_CODE.GREATER_THAN) {
-		parser.state = STATE.ELEMENT;
-		parser.charIndex--;
+	if (code !== CHARACTER_CODE.GREATER_THAN) {
+		parser.scanState = STATE.ELEMENT;
+		parser.characterIndex--;
 		return;
 	}
 
@@ -606,65 +651,65 @@ const scanTagName = (parser: ParserState, code: number) => {
 };
 
 const scanBetweenAttributes = (parser: ParserState, code: number) => {
-	if (code === CHAR_CODE.LESS_THAN) {
-		parser.state = STATE.TAG;
+	if (code === CHARACTER_CODE.LESS_THAN) {
+		parser.scanState = STATE.TAG;
 		return;
 	}
 
-	if (code === CHAR_CODE.GREATER_THAN) {
+	if (code === CHARACTER_CODE.GREATER_THAN) {
 		closeOpenTag(parser);
 		return;
 	}
 
-	parser.state = STATE.ATTRIBUTE_KEY;
+	parser.scanState = STATE.ATTRIBUTE_KEY;
 	if (!isWhitespaceCode(code)) {
-		parser.splitIndex = parser.charIndex;
-		parser.charIndex--;
+		parser.splitIndex = parser.characterIndex;
+		parser.characterIndex--;
 		return;
 	}
 
 	//an indented tag separates its attributes with a whole run of whitespace,
 	//and every character of it would otherwise open and close an empty attribute
-	const templateLength = parser.activeTemplate.length;
-	let attributeStart = parser.charIndex + 1;
+	const templateLength = parser.activeString.length;
+	let attributeStart = parser.characterIndex + 1;
 	while (
 		attributeStart < templateLength &&
-		isWhitespaceCode(parser.activeTemplate.charCodeAt(attributeStart))
+		isWhitespaceCode(parser.activeString.charCodeAt(attributeStart))
 	)
 		attributeStart++;
 	parser.splitIndex = attributeStart;
-	parser.charIndex = attributeStart - 1;
+	parser.characterIndex = attributeStart - 1;
 };
 
 const scanAttributeKey = (parser: ParserState, code: number) => {
-	if (code === CHAR_CODE.EQUALS) {
-		capture(
+	if (code === CHARACTER_CODE.EQUALS) {
+		appendSlice(
 			parser,
 			parser.parts[STATE.ATTRIBUTE_KEY],
 			parser.splitIndex,
-			parser.charIndex,
+			parser.characterIndex,
 		);
-		parser.splitIndex = parser.charIndex + 1;
-		parser.state = STATE.ATTRIBUTE_VALUE;
+		parser.splitIndex = parser.characterIndex + 1;
+		parser.scanState = STATE.ATTRIBUTE_VALUE;
 		return;
 	}
 	if (isWhitespaceCode(code)) {
 		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
-		parser.splitIndex = parser.charIndex;
-		parser.charIndex--;
+		parser.splitIndex = parser.characterIndex;
+		parser.characterIndex--;
 		return;
 	}
 	const startsSelfClosingEnd =
-		code === CHAR_CODE.SLASH &&
-		parser.activeTemplate.charCodeAt(parser.charIndex + 1) ===
-			CHAR_CODE.GREATER_THAN;
+		code === CHARACTER_CODE.SLASH &&
+		parser.activeString.charCodeAt(parser.characterIndex + 1) ===
+			CHARACTER_CODE.GREATER_THAN;
 	if (startsSelfClosingEnd) {
 		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
 		return;
 	}
-	if (code !== CHAR_CODE.GREATER_THAN) return;
+	if (code !== CHARACTER_CODE.GREATER_THAN) return;
 	endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
-	parser.charIndex--;
+	parser.characterIndex--;
 };
 
 const scanAttributeValue = (parser: ParserState, code: number) => {
@@ -672,53 +717,53 @@ const scanAttributeValue = (parser: ParserState, code: number) => {
 	if (isInsideQuotes) {
 		if (code !== parser.attributeQuoteCode) return;
 		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-		parser.splitIndex = parser.charIndex + 1;
+		parser.splitIndex = parser.characterIndex + 1;
 		return;
 	}
 	if (isQuoteCode(code)) {
 		parser.attributeQuoteCode = code;
-		parser.splitIndex = parser.charIndex + 1;
+		parser.splitIndex = parser.characterIndex + 1;
 		//nothing between the quotes can end the value, so the scan is a search
-		const closingQuote = parser.activeTemplate.indexOf(
+		const closingQuote = parser.activeString.indexOf(
 			String.fromCharCode(code),
 			parser.splitIndex,
 		);
 		if (closingQuote === -1) {
-			parser.charIndex = parser.activeTemplate.length;
+			parser.characterIndex = parser.activeString.length;
 			return;
 		}
-		parser.charIndex = closingQuote;
+		parser.characterIndex = closingQuote;
 		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-		parser.splitIndex = parser.charIndex + 1;
+		parser.splitIndex = parser.characterIndex + 1;
 		return;
 	}
 	if (isWhitespaceCode(code)) {
 		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-		parser.splitIndex = parser.charIndex;
-		parser.charIndex--;
+		parser.splitIndex = parser.characterIndex;
+		parser.characterIndex--;
 		return;
 	}
-	if (code !== CHAR_CODE.GREATER_THAN) return;
+	if (code !== CHARACTER_CODE.GREATER_THAN) return;
 	endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-	parser.charIndex--;
+	parser.characterIndex--;
 };
 
 const scanEndTag = (parser: ParserState, code: number) => {
-	if (code !== CHAR_CODE.GREATER_THAN) return;
-	parser.endTagMarkup += sliceActiveTemplate(
+	if (code !== CHARACTER_CODE.GREATER_THAN) return;
+	parser.endTagMarkup += sliceActiveString(
 		parser,
 		parser.splitIndex,
-		parser.charIndex,
+		parser.characterIndex,
 	);
-	parser.splitIndex = parser.charIndex + 1;
+	parser.splitIndex = parser.characterIndex + 1;
 	flushElement(parser);
 	completeEndTag(parser);
 	parser.openConstructKind = NO_OPEN_CONSTRUCT;
-	parser.state = STATE.TEXT;
+	parser.scanState = STATE.TEXT;
 };
 
 const startBindingAtHole = (parser: ParserState) => {
-	if (parser.state === STATE.END_TAG) {
+	if (parser.scanState === STATE.END_TAG) {
 		const openerIsDynamic =
 			parser.openTagIsDynamic[parser.openTagIsDynamic.length - 1];
 		if (!openerIsDynamic)
@@ -731,39 +776,39 @@ const startBindingAtHole = (parser: ParserState) => {
 		return;
 	}
 	//a quoted value ends its attribute on the quote, so a hole right after it belongs to no attribute
-	if (parser.state === STATE.ELEMENT)
+	if (parser.scanState === STATE.ELEMENT)
 		throw new Error(
 			libraryMessage(
 				'a ${…} right after a quoted attribute value belongs to no attribute. Put a space before it: a="1" ${…}',
 			),
 		);
 	parser.startedBindingCount++;
-	parser.openConstructKind = OPEN_CONSTRUCT_FOR_STATE[parser.state];
+	parser.openConstructKind = OPEN_CONSTRUCT_FOR_STATE[parser.scanState];
 };
 
 const parse = (
 	strings: TemplateStringsArray,
-	mode: ParseMode = PARSE_MODE.OPTIMISTIC_ROOT,
+	mode: ParseModeKind = PARSE_MODE.OPTIMISTIC_ROOT,
 ): ParsedTemplate => {
 	const parser = createParser(strings, mode);
 
 	for (
-		parser.index = 0;
-		parser.index < parser.templates.length;
-		parser.index++
+		parser.stringIndex = 0;
+		parser.stringIndex < parser.templateStrings.length;
+		parser.stringIndex++
 	) {
-		parser.activeTemplate = parser.templates[parser.index];
+		parser.activeString = parser.templateStrings[parser.stringIndex];
 		parser.splitIndex = 0;
-		const templateLength = parser.activeTemplate.length;
+		const templateLength = parser.activeString.length;
 
 		for (
-			parser.charIndex = 0;
-			parser.charIndex < templateLength;
-			parser.charIndex++
+			parser.characterIndex = 0;
+			parser.characterIndex < templateLength;
+			parser.characterIndex++
 		) {
-			const code = parser.activeTemplate.charCodeAt(parser.charIndex);
+			const code = parser.activeString.charCodeAt(parser.characterIndex);
 
-			switch (parser.state) {
+			switch (parser.scanState) {
 				case STATE.TEXT:
 					scanText(parser);
 					break;
@@ -789,22 +834,22 @@ const parse = (
 					scanEndTag(parser, code);
 					break;
 				default:
-					return parser.state satisfies never;
+					return parser.scanState satisfies never;
 			}
 		}
 
-		if (parser.index + 1 >= parser.templates.length) break;
+		if (parser.stringIndex + 1 >= parser.templateStrings.length) break;
 		if (!hasOpenConstruct(parser)) startBindingAtHole(parser);
-		updateBinding(parser);
+		recordHole(parser);
 	}
 	const hasTrailingText =
-		parser.state === STATE.TEXT &&
-		parser.splitIndex < parser.activeTemplate.length;
+		parser.scanState === STATE.TEXT &&
+		parser.splitIndex < parser.activeString.length;
 	if (hasTrailingText)
-		markTopLevelTextSibling(
+		appendTextAndMarkTopLevelSibling(
 			parser,
 			parser.splitIndex,
-			parser.activeTemplate.length,
+			parser.activeString.length,
 		);
 	flushElement(parser);
 
@@ -816,7 +861,7 @@ const parse = (
 				openConstructKind !== NO_OPEN_CONSTRUCT,
 			"a content hole completes as it starts, so only another construct is left open",
 		);
-		parser.bindings.push(emptyBinding(openConstructKind));
+		parser.bindings.push(createEmptyBinding(openConstructKind));
 	}
 
 	const hasRootTemplate =

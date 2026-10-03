@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { component, html } from "../index";
 import { BaseComponent } from "../types";
 
@@ -222,7 +222,7 @@ describe("the update window before the first renderable", () => {
 });
 
 describe("a component writing its own host attributes", () => {
-	test("a self-referential host binding settles rather than hangs", async () => {
+	test("a self-referential host binding ends in a visible error rather than hanging", async () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
 		customElements.define(
@@ -238,12 +238,16 @@ describe("a component writing its own host attributes", () => {
 				{ props: { label: [String, ""] } },
 			),
 		);
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const element = mount(tag);
 		await sleep(50);
+		consoleError.mockRestore();
 
-		//without the flag each pass would feed the next one and the microtask queue never drains
-		expect(renderCount).toBeLessThan(5);
-		expect(element.getAttribute("label")).toBe("!");
+		expect(renderCount).toBeLessThan(200);
+		expect(element.shadowRoot?.querySelector("p")).toBeNull();
+		expect(element.shadowRoot?.textContent).toContain("grundlage");
 		element.remove();
 	});
 
@@ -277,7 +281,7 @@ describe("a component writing its own host attributes", () => {
 });
 
 //under the flag there is a real DOM, so attributeChangedCallback fires on the server too — what
-//makes that safe is the paint region's flag plus the cancel that follows the single server paint
+//makes that safe is the cancel that follows the single server paint
 describe("a server run", () => {
 	test("schedules nothing from an attribute write after its one paint", async () => {
 		const tag = uniqueTag();

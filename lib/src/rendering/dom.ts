@@ -7,7 +7,7 @@ export const buildFragment = (markup: string): DocumentFragment => {
 };
 
 //a closed shadow root is absent from host.shadowRoot; internals is its only handle
-export const resolveShadowRoot = (host: Element): ShadowRoot | null =>
+export const findShadowRoot = (host: Element): ShadowRoot | null =>
 	host.shadowRoot ?? (host as BaseComponent).internals?.shadowRoot ?? null;
 
 //duck-typed user surface: any custom element exposing update() opts into a property-set re-render

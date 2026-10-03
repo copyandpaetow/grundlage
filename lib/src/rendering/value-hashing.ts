@@ -20,7 +20,7 @@ const TAG = {
 	TRUNCATED: 11,
 } as const;
 
-const MAX_DEPTH = 64;
+const HASH_DEPTH_LIMIT = 64;
 
 const floatView = new Float64Array(1);
 const floatIntView = new Int32Array(floatView.buffer);
@@ -85,7 +85,7 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 	if (typeof value === "function") return referenceId(value);
 	if (isTemplate(value)) return hashTemplateValue(value, depth);
 
-	if (depth >= MAX_DEPTH) return TAG.TRUNCATED;
+	if (depth >= HASH_DEPTH_LIMIT) return TAG.TRUNCATED;
 	const childDepth = depth + 1;
 
 	if (Array.isArray(value)) {

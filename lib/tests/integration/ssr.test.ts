@@ -282,7 +282,9 @@ describe("SSR: server stops at first renderable yield", () => {
 		//the fatal display logs, so the console error is silenced here
 		const tag = uniqueTag();
 		let postYieldRan = false;
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const Component = component(function* () {
 			yield Promise.reject(new Error("boom"));
@@ -422,6 +424,47 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(element.getAttribute("data-x")).toBe("server-x");
 	});
 
+	test("a host binding writing the component's own prop reaches the server markup it paints", async () => {
+		const tag = uniqueTag();
+		let renderFunctionCalls = 0;
+
+		const Component = component(
+			function* () {
+				yield ({ theme }) => {
+					renderFunctionCalls++;
+					return html`<template theme=${"dark"}><p>${theme}</p></template>`;
+				};
+			},
+			{ props: { theme: [String, "light"] } },
+		);
+
+		const element = track(await mount(tag, Component));
+		await flushMicrotasks();
+
+		expect(element.getAttribute("theme")).toBe("dark");
+		expect(element.shadowRoot!.querySelector("p")!.textContent).toBe("dark");
+		expect(renderFunctionCalls).toBe(2);
+	});
+
+	test("a synchronous update() inside the server render re-renders before the run ends", async () => {
+		const tag = uniqueTag();
+		let renderFunctionCalls = 0;
+
+		const Component = component(function* ({ host }) {
+			yield () => {
+				renderFunctionCalls++;
+				if (renderFunctionCalls === 1) host.update();
+				return html`<p>call ${renderFunctionCalls}</p>`;
+			};
+		});
+
+		const element = track(await mount(tag, Component));
+		await flushMicrotasks();
+
+		expect(renderFunctionCalls).toBe(2);
+		expect(element.shadowRoot!.querySelector("p")!.textContent).toBe("call 2");
+	});
+
 	test("expressions in the first-yield template evaluate against the closure at yield time", async () => {
 		//rendering after closing the generator would re-bind the expression to the post-mutation value
 		const tag = uniqueTag();
@@ -495,7 +538,7 @@ describe("SSR: server stops at first renderable yield", () => {
 describe("SSR: an attribute write after the server paint schedules nothing", () => {
 	test("attributeChangedCallback fires on the server and reaches no render", async () => {
 		//isServer() is `typeof window === "undefined"`, so there is a real DOM here and aCC does
-		//fire — what makes dropping the old `!wasMountedOnTheServer` observer guard safe is that
+		//fire — what makes dropping the old `!wasMountedOnServer` observer guard safe is that
 		//#cancelBothTasks() runs immediately after the server's first paint
 		const tag = uniqueTag();
 		let renderCount = 0;

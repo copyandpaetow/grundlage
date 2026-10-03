@@ -5,7 +5,7 @@ import { hashValue } from "../value-hashing";
 import { getParsedTemplate } from "../../parser/html";
 import {
 	HYDRATION_MISMATCH,
-	resolveNestedTemplate,
+	parseNestedTemplate,
 	hydrateInstance,
 	cloneTemplateFragment,
 	mountInstance,
@@ -93,20 +93,20 @@ describe("template value hashing", () => {
 	});
 });
 
-describe("resolveNestedTemplate: host binding requirement", () => {
+describe("parseNestedTemplate: host binding requirement", () => {
 	test("throws when a root template with host bindings is nested", () => {
 		const value = html`<template id="${"missing-host"}"><p>hi</p></template>`;
 		expect(
 			getParsedTemplate(value.__templateStrings).hostBindingCount,
 		).toBeGreaterThan(0);
-		expect(() => resolveNestedTemplate(value)).toThrow(
+		expect(() => parseNestedTemplate(value)).toThrow(
 			/top level of a component's render output/,
 		);
 	});
 
 	test("does not throw for a template without host bindings", () => {
 		const value = html`<p>${"x"}</p>`;
-		expect(() => resolveNestedTemplate(value)).not.toThrow();
+		expect(() => parseNestedTemplate(value)).not.toThrow();
 	});
 
 	test("mounting a parent whose content is a nested root template throws", () => {

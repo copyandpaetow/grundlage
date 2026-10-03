@@ -5,7 +5,7 @@ import {
 	isAwaitingDefinition,
 	isDeclaredPropName,
 	reapplyValueOnSwap,
-} from "../attribute-write";
+} from "../attribute-apply";
 
 const record = (element: Element): Record<string, unknown> =>
 	element as unknown as Record<string, unknown>;

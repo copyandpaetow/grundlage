@@ -13,6 +13,8 @@ Object.assign(globalThis, {
 	Comment: happyWindow.Comment,
 	DocumentFragment: happyWindow.DocumentFragment,
 	Element: happyWindow.Element,
+	ShadowRoot: happyWindow.ShadowRoot,
+	Text: happyWindow.Text,
 	Range: happyWindow.Range,
 	NodeFilter: happyWindow.NodeFilter,
 	MutationObserver: happyWindow.MutationObserver,

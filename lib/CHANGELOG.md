@@ -9,6 +9,8 @@
 - **The schema** needs to be declared from the options `component(gen, { props })`.
   `component(someGenerator)` no longer inherits props from that generator.
   - The standalone function `props(element, schema)` can still be used for elements in general
+- **`load()` option `skipSsr` → `skipSSR`.** Acronyms keep their capitals inside a name. TypeScript
+  flags the old spelling; in plain JavaScript it is ignored and the load replays again.
 
 ### Types
 
@@ -33,9 +35,23 @@
 
 ### Changed
 
+- **Live state follows the binding after the first render.** `value` (input, textarea),
+  `checked`, `indeterminate` and `selected` were always written as attributes, which only set the
+  default once the user had interacted, so a state change stopped showing. The first commit still
+  writes the attribute (for a textarea, its text); every later one writes the property. Absence
+  empties the shown value and keeps the default. `<select value=${…}>` warns and selects nothing:
+  bind `selected` on the option.
+
 - **A fatal error logs `console.error` naming the tag,** not `console.warn`.
 - **A throwing cleanup or a rejected async `return()` goes to `reportError`,** so `window.onerror`
   trackers see it. Without `reportError` (Node) it falls back to `console.error`.
+
+- **A host binding writing the component's own declared prop re-renders.** It was output only and
+  scheduled nothing, so a value both bound on the host `<template>` and painted from the prop
+  showed one render behind, and a binding derived from the prop itself (`count=${count + 1}`)
+  silently counted renders. A changed value now re-renders once and settles; a self-derived one
+  ends in the runaway-render error. The server converges the same way before it ends the run, so
+  a re-render asked for during the server paint is no longer dropped.
 
 - **A return that is neither a function nor `undefined` warns.** The runtime drops it — the return
   position is the cleanup function — and the drop used to be silent for anyone not running the types.

@@ -13,8 +13,8 @@ generator's ONE argument is a props object carrying `host` plus every prop decla
 A returned function is the cleanup. There are no signals and no hooks. A re-render happens
 on `host.update()`, on `host.setProp(…)`, on assigning a declared prop to a NEW value, and
 when a DECLARED attribute on the host element changes. An undeclared attribute (`class`,
-`style`, `data-*`) does not re-render, and neither does a render BINDING the host's own
-declared prop (see Host attributes). State declared before the `yield` survives updates
+`style`, `data-*`) does not re-render. A render BINDING the host's own declared prop to a new
+value re-renders too (see Host attributes). State declared before the `yield` survives updates
 because the yielded render function closes over it; the generator body itself does not re-run.
 
 ## Complete example
@@ -70,15 +70,15 @@ customElements.define(
   nothing was supplied. That is the whole schema. There is no separate optional or required
   shape, and no type guard: a prop is its function.
 
-  The function is the ONE place a value is parsed or validated, and it serves both channels.
+  The function is the ONE place a value is parsed or validated, and it serves the attribute and the property mode.
   A string means the value came from markup and needs parsing; anything else came from JS and
   is already itself: `(incoming) => typeof incoming === "string" ? incoming.split(" ") :
   incoming`.
 
   Five rules cover the whole model:
 
-  1. ONE VALUE PER PROP, in one store the element owns. Last write wins, whichever channel it
-     came from, and nothing is compared across channels.
+  1. ONE VALUE PER PROP, in one store the element owns. Last write wins, whichever mode it
+     came from, and nothing is compared across modes.
   2. EVERY INCOMING VALUE runs through the prop's function: markup, a property assignment, a
      parent's binding, `setProp`, the fallback at construction.
   3. A REFUSAL IS IGNORED. The previous value stays and the console warns; nothing throws and
@@ -140,15 +140,17 @@ customElements.define(
   Data needed before the first render. On the server the fetcher runs and the result is
   serialized into the markup as a `<script type="application/json" data-ssr>`; on the client
   that payload is replayed once during hydration (the script is consumed) and every later
-  call runs the fetcher normally. `options` is `{ key?, skipSsr? }`, or a string shorthand
-  for `{ key }`. `skipSsr` skips the serialization only. The fetcher still runs on the
+  call runs the fetcher normally. `options` is `{ key?, skipSSR? }`, or a string shorthand
+  for `{ key }`. `skipSSR` skips the serialization only. The fetcher still runs on the
   server, and the client always fetches. Unkeyed replay is POSITIONAL (first payload to
   first `load`), so a conditional or reordered `load` can claim the wrong payload; a key
   pins each payload to its call, and unclaimed payloads warn on hydration.
 
 `host.update() => Promise<void>`
   The re-render trigger. See Rules for what it re-fires and when it resolves. On the server
-  it is always a no-op: the single server paint ends the run. On a DISCONNECTED host it is a
+  a re-render asked for during the paint (a host binding writing an own prop, a synchronous
+  `update()` or prop assignment inside the render) runs before the run ends, so the markup
+  shows the settled value; once the run has ended, it is a no-op. On a DISCONNECTED host it is a
   no-op too: it queues nothing and resolves immediately, and a removal settles an `update()`
   that was already pending.
 
@@ -158,7 +160,7 @@ customElements.define(
   function, reflects and schedules, and `null`/`undefined` is the absence that writes the
   fallback back. An undeclared name resolves the same way a dynamic attribute does:
   stringable → attribute, non-stringable → property, `on*`/`on-*` plus a function → event
-  listener. Pass `oldValue` so a previously bound listener is removed; the other channel is
+  listener. Pass `oldValue` so a previously bound listener is removed; the other mode is
   cleared either way.
 
 `host.internals => ElementInternals | null`
@@ -200,14 +202,14 @@ yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>�
   renders.
 - Event handlers bind here too (e.g. `on-form-*` for form components).
 - Attributes dropped by a later render are reverted on the host.
-- A host binding that writes one of the host's OWN declared props is OUTPUT, not input: it
-  runs the prop's function and reflects, and never schedules another render, at mount, at
-  hydration and on every patch alike. That is what makes
-  `` () => html`<template loadCount=${count + 1}>…</template>` `` terminate. An ASSIGNMENT
-  (`host.count = …`) always schedules, wherever it runs from, so the line is the SPELLING,
-  not the timing. Consequence: a value one render both binds to the host and paints from
-  (`<template theme=${x}>` with `componentProps.theme` read inside) paints one render behind,
-  and nothing warns. Paint from the source value instead.
+- A host binding that writes one of the host's OWN declared props is a write like any other:
+  it runs the prop's function, reflects, and re-renders when the value changed, at mount, at
+  hydration and on every patch alike. The next render binds the same value, the change gate
+  skips it, and the component settles, so `<template theme=${x}>` with `componentProps.theme`
+  painted inside shows `x` in the same frame, at the cost of one extra render call. A binding
+  derived from the prop itself (`` html`<template count=${componentProps.count + 1}>…` ``)
+  never settles: it is the render loop below and ends in a visible error. Derive the bound
+  value from something the render does not write (a local, another prop).
 - A `<template>` WITH attributes in a nested position (content hole, list row) throws. A
   `<template>` that has top-level siblings is parsed as an ordinary element instead.
 
@@ -243,9 +245,9 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
 - Re-renders are triggered by `host.update()`, by `host.setProp(…)`, by assigning a declared
   prop a value it did not already hold (`el.items = […]`, `el.label = "x"`), and by a change
   to a DECLARED attribute. A write the prop's function refuses, and a re-write of the same
-  primitive, schedule nothing; neither does a component's own host binding writing one of its
-  own props (Host attributes). Undeclared attributes are not observed at all. There is no
-  other reactivity.
+  primitive, schedule nothing. A component's own host binding writing one of its own props
+  schedules like any other write (Host attributes). Undeclared attributes are not observed at
+  all. There is no other reactivity.
 - `update()` re-fires whatever was yielded LAST: a render function is re-called, an inner
   generator is torn down (its cleanup runs) and re-run from the top, and an `html` template
   yielded plainly from the component body never re-renders. After that yield `update()` is
@@ -350,9 +352,22 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   with anything else in it (`class="card ${extra}"`, `style="top:${y}px"`) is COMPOSED to a
   string instead, so that attribute is always SET and never removed: `null` and `undefined`
   contribute `""`, `false` contributes `"false"`, and an object contributes `String(value)`
-  rather than reaching the property channel. Either way, a name that composes to something new
-  clears the slot the old name held, listener and property channel included, before writing
+  rather than reaching the property mode. Either way, a name that composes to something new
+  clears the slot the old name held, listener and property mode included, before writing
   the new one.
+- LIVE STATE: `value` on `<input>`/`<textarea>`, `checked` and `indeterminate` on
+  `<input>`, and `selected` on `<option>` are written as the ATTRIBUTE on a binding's first commit
+  (mount, server render, hydration) and as the PROPERTY on every later one. A `<textarea>` keeps
+  its default in its TEXT, so its first commit writes the text instead. The attribute is the
+  platform's default (`defaultValue`, `defaultChecked`), so `form.reset()` returns to the first
+  rendered value and `value !== defaultValue` still detects edits; the property is what is shown,
+  so a state change replaces what the user typed. `null`, `undefined` and `false` empty what is
+  shown (`""` or `false`) and leave the default. The change gate still compares against the last
+  RENDER, not the field: an unrelated re-render leaves typed text alone, and writing the value the
+  last render already had writes nothing, so keep state in sync from `onInput` if a reset to that
+  same value must land. Custom elements keep the ordinary attribute rules for these names. A
+  composed value (`value="a ${b}"`) stays an attribute write. `<select>` has no value attribute:
+  bind `selected` on each `<option>` instead (`<select value=${…}>` warns and selects nothing).
 - A dynamic tag that composes to a DIFFERENT tag name swaps the element: a fresh element is
   created, attributes are copied, children are moved over, every binding anchored to it is
   re-pointed, and focus inside it is restored. Attributes survive the copy, so properties,

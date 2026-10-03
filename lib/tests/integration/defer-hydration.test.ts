@@ -79,7 +79,7 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 		).toBe(false);
 	});
 
-	test("an undeclared name taking the property channel marks the child", async () => {
+	test("an undeclared name taking the property mode marks the child", async () => {
 		const childTag = childTagRenderingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
 			yield () => html`<${childTag} rows=${[1, 2, 3]}></${childTag}>`;

@@ -3,11 +3,11 @@ import { coerceToTemplate, TemplateValue } from "../../template";
 import { combineOrderedHash, LIST_HASH_SEED } from "../../utils/hashing";
 import { hashValue } from "../value-hashing";
 import { combinedPartsHash } from "../compose";
-import { MARKUP } from "../../parser/chars";
+import { MARKUP } from "../../parser/characters";
 import { NO_KEY } from "../../parser/constants";
 import {
 	HYDRATION_MISMATCH,
-	resolveNestedTemplate,
+	parseNestedTemplate,
 	hydrateInstance,
 	isPatchableInPlace,
 	cloneTemplateFragment,
@@ -45,7 +45,7 @@ const shapeOrKeyHashOf = (
 		? parsed.templateHash
 		: combinedPartsHash(parsed.keyValueParts, value.values);
 
-export const patchListContent = (
+export const commitList = (
 	liveBinding: ContentLiveBinding,
 	list: ListContentState,
 	itemValues: Array<unknown>,
@@ -236,7 +236,7 @@ const matchUnsettledRows = (
 		const value = coerceToTemplate(itemValues[index]);
 		const row = claimLeftmostUnclaimedRow(
 			list,
-			shapeOrKeyHashOf(value, resolveNestedTemplate(value)),
+			shapeOrKeyHashOf(value, parseNestedTemplate(value)),
 		);
 		if (row !== undefined) resolvedRows[index] = row;
 	}
@@ -294,7 +294,7 @@ const placeRows = (
 	itemValues: Array<unknown>,
 	moveState: StyleSheetMoveState,
 ): void => {
-	//still the previous rows: patchListContent replaces them once this has placed the new ones
+	//still the previous rows: commitList replaces them once this has placed the new ones
 	const previousRowCount = list.items.length;
 	if (list.nextInSubsequence.length < previousRowCount) {
 		list.subsequenceStarts = new Int32Array(previousRowCount);
@@ -320,7 +320,7 @@ const placeRows = (
 			//every other row the match found was already equal in content
 			if (row.itemHash !== itemHashes[index]) {
 				const value = coerceToTemplate(itemValues[index]);
-				const parsed = resolveNestedTemplate(value);
+				const parsed = parseNestedTemplate(value);
 				row.itemHash = itemHashes[index];
 				if (isPatchableInPlace(row.instance, parsed))
 					patchInstance(row.instance, value.values);
@@ -354,7 +354,7 @@ const mountRowAfter = (
 	moveState: StyleSheetMoveState,
 ): ListItem => {
 	const value = coerceToTemplate(rawValue);
-	const parsed = resolveNestedTemplate(value);
+	const parsed = parseNestedTemplate(value);
 	const fragment = cloneTemplateFragment(parsed);
 	const instance = mountInstance(fragment, value, parsed, moveState);
 	const tailMarker = document.createComment(MARKUP.LIST_MARKER_DATA);
@@ -399,7 +399,7 @@ export const hydrateListItems = (
 	const items: Array<ListItem> = new Array(count);
 	for (let index = 0; index < count; index++) {
 		const value = coerceToTemplate(itemValues[index]);
-		const parsed = resolveNestedTemplate(value);
+		const parsed = parseNestedTemplate(value);
 		const startNode = walker.currentNode.nextSibling;
 		assertDuringDevelopment(
 			startNode !== null,

@@ -5,7 +5,7 @@ import { combinedPartsHash, composeParts } from "../compose";
 import { STYLE_SHEET_LANE, UNSET_HASH } from "../constants";
 import {
 	BoundStyleSheet,
-	CssomStyleSheetLane,
+	CSSOMStyleSheetLane,
 	RawContentLiveBinding,
 	TextStyleSheetLane,
 } from "./types";
@@ -14,10 +14,10 @@ export const TEXT_STYLE_SHEET_LANE: Readonly<TextStyleSheetLane> = {
 	kind: STYLE_SHEET_LANE.TEXT,
 };
 
-export const createCssomStyleSheetLane = (
+export const createCSSOMStyleSheetLane = (
 	compiledStyleSheet: CompiledStyleSheet,
 	styleElement: HTMLStyleElement,
-): CssomStyleSheetLane => ({
+): CSSOMStyleSheetLane => ({
 	kind: STYLE_SHEET_LANE.CSSOM,
 	compiledStyleSheet,
 	styleElement,
@@ -32,7 +32,7 @@ export const createCssomStyleSheetLane = (
 const childRulesOf = (rule: CSSRule | null): CSSRuleList | undefined =>
 	(rule as CSSGroupingRule | null)?.cssRules;
 
-const resolveRulePath = (
+const findRuleAtPath = (
 	sheet: CSSStyleSheet,
 	rulePath: ReadonlyArray<number>,
 ): CSSRule | null => {
@@ -64,7 +64,7 @@ export const matchCompiledStyleSheet = (
 		const childRules =
 			check.rulePath.length === 0
 				? sheet.cssRules
-				: childRulesOf(resolveRulePath(sheet, check.rulePath));
+				: childRulesOf(findRuleAtPath(sheet, check.rulePath));
 		const hasExpectedRuleCount =
 			childRules !== undefined && childRules.length === check.expectedRuleCount;
 		if (!hasExpectedRuleCount) return RULE_STRUCTURE_MISMATCH;
@@ -73,7 +73,7 @@ export const matchCompiledStyleSheet = (
 		dynamicDeclarations.length,
 	);
 	for (let index = 0; index < dynamicDeclarations.length; index++) {
-		const rule = resolveRulePath(sheet, dynamicDeclarations[index].rulePath);
+		const rule = findRuleAtPath(sheet, dynamicDeclarations[index].rulePath);
 		const declarationBlock = (rule as CSSStyleRule | null)?.style;
 		if (declarationBlock === undefined) return RULE_STRUCTURE_MISMATCH;
 		ruleDeclarations[index] = declarationBlock;
@@ -81,8 +81,8 @@ export const matchCompiledStyleSheet = (
 	return { sheet, ruleDeclarations };
 };
 
-export const applyChangedDeclarations = (
-	lane: CssomStyleSheetLane,
+export const commitChangedDeclarations = (
+	lane: CSSOMStyleSheetLane,
 	boundSheet: BoundStyleSheet,
 	values: Array<unknown>,
 ): void => {
@@ -103,7 +103,7 @@ export const applyChangedDeclarations = (
 };
 
 export const seedDeclarationValueHashes = (
-	lane: CssomStyleSheetLane,
+	lane: CSSOMStyleSheetLane,
 	values: Array<unknown>,
 ): void => {
 	const { dynamicDeclarations } = lane.compiledStyleSheet;

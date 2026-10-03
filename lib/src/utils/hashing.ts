@@ -18,21 +18,21 @@ const HASH_MULTIPLIER_CUBED =
 const HASH_MULTIPLIER_FOURTH =
 	Math.imul(HASH_MULTIPLIER_CUBED, HASH_MULTIPLIER) | 0;
 
-export const stringHash = (str: string): number => {
-	const length = str.length;
+export const stringHash = (text: string): number => {
+	const length = text.length;
 	let hash = 0;
 	let index = 0;
 	for (const blockEnd = length - 3; index < blockEnd; index += 4) {
 		hash =
 			(Math.imul(hash, HASH_MULTIPLIER_FOURTH) +
-				Math.imul(str.charCodeAt(index), HASH_MULTIPLIER_CUBED) +
-				Math.imul(str.charCodeAt(index + 1), HASH_MULTIPLIER_SQUARED) +
-				Math.imul(str.charCodeAt(index + 2), HASH_MULTIPLIER) +
-				str.charCodeAt(index + 3)) |
+				Math.imul(text.charCodeAt(index), HASH_MULTIPLIER_CUBED) +
+				Math.imul(text.charCodeAt(index + 1), HASH_MULTIPLIER_SQUARED) +
+				Math.imul(text.charCodeAt(index + 2), HASH_MULTIPLIER) +
+				text.charCodeAt(index + 3)) |
 			0;
 	}
 	for (; index < length; index++) {
-		hash = combineOrderedHash(hash, str.charCodeAt(index));
+		hash = combineOrderedHash(hash, text.charCodeAt(index));
 	}
 	return hash;
 };

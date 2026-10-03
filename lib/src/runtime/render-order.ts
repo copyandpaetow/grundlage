@@ -25,14 +25,14 @@ const registry = createRunRegistry();
 //the registration count starts at 0 and only grows
 export const NEVER_SEARCHED = -1;
 
-export const registerRunForItsHost = (run: OrderedRun): void => {
+export const registerRunForHost = (run: OrderedRun): void => {
 	registry.runsByHost.set(run.root.host, run);
 	registry.hostRegistrationCount++;
 };
 
 //the WeakMap entry dies with the host, the edge does not. A move can put a different component
 //above this one and a stale edge would close the ancestor chain into a ring, so any insert drops it
-export const forgetWhereThisRunSits = (run: OrderedRun): void => {
+export const forgetAncestorRun = (run: OrderedRun): void => {
 	run.ancestorRun = null;
 	run.lastAncestorSearchAtHostRegistrationCount = NEVER_SEARCHED;
 };
@@ -56,14 +56,14 @@ export const hasQueuedAncestorRun = (
 	queuedRuns: ReadonlySet<OrderedRun>,
 ): boolean => {
 	const hostRegistrationCount = registry.hostRegistrationCount;
-	//ends at the outermost component: forgetWhereThisRunSits drops a moved host's edge, so no chain
+	//ends at the outermost component: forgetAncestorRun drops a moved host's edge, so no chain
 	//closes into a ring
 	for (
 		let current: OrderedRun | null = run;
 		current !== null;
 		current = current.ancestorRun
 	) {
-		//registerRunForItsHost is the only thing that can change the answer, so its count is an exact
+		//registerRunForHost is the only thing that can change the answer, so its count is an exact
 		//memo key rather than a heuristic, and a settled app walks the tree zero times
 		const mustSearchAgain =
 			current.ancestorRun === null &&

@@ -983,14 +983,15 @@ describe("root-template host attribute writes do not feed back into the componen
 		cleanup(element);
 	});
 
-	test("a host binding feeding its own declared prop settles on a patch too", async () => {
+	test("a host binding feeding its own declared prop renders once more and paints the new value, on a patch too", async () => {
 		const tag = uniqueTag();
 		let renderCount = 0;
+		let source = "a";
 		const MyElement = component(
 			function* () {
 				yield ({ label }) => {
 					renderCount++;
-					return html`<template label="${label}!"><p>${label}</p></template>`;
+					return html`<template label=${source}><p>${label}</p></template>`;
 				};
 			},
 			{ props: { label: [String, ""] } },
@@ -998,16 +999,18 @@ describe("root-template host attribute writes do not feed back into the componen
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep(50);
-		expect(renderCount).toBe(1);
-		expect(element.label).toBe("!");
+		expect(renderCount).toBe(2);
+		expect(element.label).toBe("a");
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("a");
 
 		//the same template, so the patch path writes the host bindings rather than the mount path
+		source = "b";
 		await element.update();
 		await sleep(50);
 
-		expect(renderCount).toBe(2);
-		expect(element.label).toBe("!!");
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("!");
+		expect(renderCount).toBe(4);
+		expect(element.label).toBe("b");
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("b");
 
 		cleanup(element);
 	});

@@ -2,25 +2,24 @@ import { getFormAssociatedBaseClass } from "./forms";
 import {
 	applyAttributeValue,
 	isDeclaredPropName,
-} from "./rendering/bindings/attribute-write";
+} from "./rendering/bindings/attribute-apply";
 import {
 	ComponentRoot,
 	createComponentRoot,
 	renderedInstanceOf,
 } from "./rendering/component-root";
 import {
-	alreadySettled,
 	createRenderRun,
 	endRunWithFatalError,
 	RENDER_REQUEST,
 	RenderRun,
 	requestRender,
 } from "./runtime/driver";
-import { forgetWhereThisRunSits } from "./runtime/render-order";
+import { forgetAncestorRun } from "./runtime/render-order";
 import { html as htmlValue } from "./template";
 import { refreshStyleSheetsAfterMove } from "./rendering/instance";
 import { DEFER_HYDRATION_ATTRIBUTE } from "./rendering/constants";
-import { resolveShadowRoot } from "./rendering/dom";
+import { findShadowRoot } from "./rendering/dom";
 import {
 	BaseComponent,
 	ComponentConstructor,
@@ -31,7 +30,7 @@ import {
 	Template,
 } from "./types";
 import {
-	assertPropNamesAreAvailable,
+	ensurePropNamesAreAvailable,
 	normalizeSchema,
 	Prop,
 } from "./props/schema";
@@ -106,7 +105,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		}
 
 		static {
-			assertPropNamesAreAvailable(this.prototype, props);
+			ensurePropNamesAreAvailable(this.prototype, props);
 			for (const [attributeName, prop] of props)
 				Object.defineProperty(this.prototype, prop.propName, {
 					enumerable: true,
@@ -150,7 +149,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			//only a closed root is worth reaching through internals, and reading them attaches them
 			const existingRoot =
 				mergedOptions.mode === "closed"
-					? resolveShadowRoot(this)
+					? findShadowRoot(this)
 					: this.shadowRoot;
 			this.#root = createComponentRoot(
 				this,
@@ -169,7 +168,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			if (instance !== null) refreshStyleSheetsAfterMove(instance);
 			//an insertion is the only notice of a move, and a move can put a different component above
 			//this one
-			forgetWhereThisRunSits(this.#renderRun);
+			forgetAncestorRun(this.#renderRun);
 			try {
 				recoverPreUpgradeAssignments(this, props);
 			} catch (error) {
@@ -197,8 +196,8 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			if (attributeName === DEFER_HYDRATION_ATTRIBUTE) {
 				//upgrade replays a present attribute as null → "", which is the mark arriving; only its
 				//removal is the parent releasing this child
-				const parentHasSuppliedItsValues = newValue === null;
-				if (parentHasSuppliedItsValues)
+				const parentHasSuppliedValues = newValue === null;
+				if (parentHasSuppliedValues)
 					requestRender(this.#renderRun, RENDER_REQUEST.START);
 				return;
 			}
@@ -209,13 +208,11 @@ export const component = <DeclaredSchema extends Schema = {}>(
 
 		setProp(name: string, value: unknown, oldValue?: unknown) {
 			applyAttributeValue(this, name, value, oldValue);
-			const nothingElseWillScheduleThisWrite = !isDeclaredPropName(this, name);
-			if (nothingElseWillScheduleThisWrite) this.update();
+			const nothingElseWillScheduleWrite = !isDeclaredPropName(this, name);
+			if (nothingElseWillScheduleWrite) this.update();
 		}
 
 		update(): Promise<void> {
-			//four paths reach here from inside a host-binding write; this is the one funnel
-			if (this.#root.isWritingHostBindings) return alreadySettled;
 			return requestRender(this.#renderRun, RENDER_REQUEST.RERENDER);
 		}
 	}

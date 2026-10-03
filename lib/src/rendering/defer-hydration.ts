@@ -2,14 +2,14 @@ import { isServer } from "../utils/guards";
 import { ValueOf } from "../utils/types";
 import { ATTRIBUTE_MODE, DEFER_HYDRATION_ATTRIBUTE } from "./constants";
 
-//a property-channel value reaches the child only through the parent's binding, so the server
+//a property-mode value reaches the child only through the parent's binding, so the server
 //marks that child to keep it from hydrating against markup rendered with values it no longer has
 export const markDeferredHydration = (
 	element: Element,
-	valueChannel: ValueOf<typeof ATTRIBUTE_MODE>,
+	attributeMode: ValueOf<typeof ATTRIBUTE_MODE>,
 ): void => {
 	const isLostFromServerMarkup =
-		isServer() && valueChannel === ATTRIBUTE_MODE.PROPERTY;
+		isServer() && attributeMode === ATTRIBUTE_MODE.PROPERTY;
 	if (isLostFromServerMarkup)
 		element.setAttribute(DEFER_HYDRATION_ATTRIBUTE, "");
 };

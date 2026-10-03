@@ -13,14 +13,14 @@ import {
 import { elementAfterMarker } from "../markers";
 import { commitAttribute, removeWrittenAttribute } from "./attribute";
 import { commitDynamic } from "./attribute-dynamic";
-import { applyAttributeValue } from "./attribute-write";
+import { applyAttributeValue } from "./attribute-apply";
 import { commitComment } from "./comment";
 import { commitContent, UNRESOLVED_CONTENT } from "./content";
 import {
-	createCssomStyleSheetLane,
+	createCSSOMStyleSheetLane,
 	seedDeclarationValueHashes,
 	TEXT_STYLE_SHEET_LANE,
-} from "./css-apply";
+} from "./style-sheet";
 import { commitRawContent } from "./content-raw";
 import { commitTag } from "./tag";
 import {
@@ -99,7 +99,7 @@ export const createMarkedLiveBinding = (
 				styleSheetLane:
 					compiledStyleSheet === STYLE_SHEET_NOT_COMPILED
 						? TEXT_STYLE_SHEET_LANE
-						: createCssomStyleSheetLane(
+						: createCSSOMStyleSheetLane(
 								compiledStyleSheet,
 								//the parser compiles a sheet only for a <style>
 								elementAfterMarker(openMarker) as HTMLStyleElement,

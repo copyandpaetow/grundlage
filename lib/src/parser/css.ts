@@ -1,4 +1,4 @@
-import { CHAR_CODE, isQuoteCode, isWhitespaceCode } from "./chars";
+import { CHARACTER_CODE, isQuoteCode, isWhitespaceCode } from "./characters";
 import { ValueOf } from "../utils/types";
 import { STYLE_SHEET_NOT_COMPILED } from "./constants";
 import {
@@ -9,7 +9,7 @@ import {
 } from "./types";
 import { assertDuringDevelopment } from "../utils/diagnostics";
 
-type CssStateValue = ValueOf<typeof CSS_STATE>;
+type CSSStateKind = ValueOf<typeof CSS_STATE>;
 
 const CSS_STATE = {
 	SELECTOR: 50,
@@ -17,7 +17,7 @@ const CSS_STATE = {
 	VALUE: 52,
 } as const;
 
-type RuleKindValue = ValueOf<typeof RULE_KIND>;
+type RuleKind = ValueOf<typeof RULE_KIND>;
 
 const RULE_KIND = {
 	STYLE: 60,
@@ -47,39 +47,39 @@ const FAST_PATH_KEYFRAMES_AT_RULE_NAME = "keyframes";
 
 //every branch of the character loop below ignores anything outside this set, and CSS is
 //overwhelmingly made of characters that are not in it
-const LAST_SIGNIFICANT_CODE = 128;
-const SIGNIFICANT_CODES = new Uint8Array(LAST_SIGNIFICANT_CODE);
+const SIGNIFICANT_CODE_LIMIT = 128;
+const SIGNIFICANT_CODES = new Uint8Array(SIGNIFICANT_CODE_LIMIT);
 for (const code of [
-	CHAR_CODE.SINGLE_QUOTE,
-	CHAR_CODE.DOUBLE_QUOTE,
-	CHAR_CODE.SLASH,
-	CHAR_CODE.OPEN_PAREN,
-	CHAR_CODE.CLOSE_PAREN,
-	CHAR_CODE.OPEN_BRACE,
-	CHAR_CODE.CLOSE_BRACE,
-	CHAR_CODE.SEMICOLON,
-	CHAR_CODE.COLON,
-	CHAR_CODE.AT,
-	CHAR_CODE.BANG,
+	CHARACTER_CODE.SINGLE_QUOTE,
+	CHARACTER_CODE.DOUBLE_QUOTE,
+	CHARACTER_CODE.SLASH,
+	CHARACTER_CODE.OPEN_PAREN,
+	CHARACTER_CODE.CLOSE_PAREN,
+	CHARACTER_CODE.OPEN_BRACE,
+	CHARACTER_CODE.CLOSE_BRACE,
+	CHARACTER_CODE.SEMICOLON,
+	CHARACTER_CODE.COLON,
+	CHARACTER_CODE.AT,
+	CHARACTER_CODE.BANG,
 ]) {
 	SIGNIFICANT_CODES[code] = 1;
 }
 
 const isLetterCode = (code: number) =>
-	(code >= CHAR_CODE.LOWERCASE_A && code <= CHAR_CODE.LOWERCASE_Z) ||
-	(code >= CHAR_CODE.UPPERCASE_A && code <= CHAR_CODE.UPPERCASE_Z);
+	(code >= CHARACTER_CODE.LOWERCASE_A && code <= CHARACTER_CODE.LOWERCASE_Z) ||
+	(code >= CHARACTER_CODE.UPPERCASE_A && code <= CHARACTER_CODE.UPPERCASE_Z);
 
 const isDigitCode = (code: number) =>
-	code >= CHAR_CODE.DIGIT_ZERO && code <= CHAR_CODE.DIGIT_NINE;
+	code >= CHARACTER_CODE.DIGIT_ZERO && code <= CHARACTER_CODE.DIGIT_NINE;
 
 const isAtRuleNameCode = (code: number) =>
-	isLetterCode(code) || code === CHAR_CODE.DASH;
+	isLetterCode(code) || code === CHARACTER_CODE.DASH;
 
 const isStandardNameCode = (code: number) =>
-	isLetterCode(code) || isDigitCode(code) || code === CHAR_CODE.DASH;
+	isLetterCode(code) || isDigitCode(code) || code === CHARACTER_CODE.DASH;
 
 const isCustomNameCode = (code: number) =>
-	isStandardNameCode(code) || code === CHAR_CODE.UNDERSCORE;
+	isStandardNameCode(code) || code === CHARACTER_CODE.UNDERSCORE;
 
 const skipWhitespaceAndComments = (raw: string, index: number): number => {
 	while (index < raw.length) {
@@ -113,7 +113,7 @@ const findClosingQuoteIndex = (
 		let scanIndex = closingIndex - 1;
 		while (
 			scanIndex > openingQuoteIndex &&
-			raw.charCodeAt(scanIndex) === CHAR_CODE.BACKSLASH
+			raw.charCodeAt(scanIndex) === CHARACTER_CODE.BACKSLASH
 		) {
 			backslashCount++;
 			scanIndex--;
@@ -145,7 +145,7 @@ const normalizePropertyName = (
 		name = raw.slice(start, end);
 	} else {
 		let head = start;
-		if (raw.charCodeAt(head) === CHAR_CODE.DASH) head++;
+		if (raw.charCodeAt(head) === CHARACTER_CODE.DASH) head++;
 		if (!isLetterCode(raw.charCodeAt(head))) return NOT_A_PROPERTY_NAME;
 		end = head + 1;
 		while (isStandardNameCode(raw.charCodeAt(end))) end++;
@@ -157,10 +157,10 @@ const normalizePropertyName = (
 };
 
 interface RuleFrame {
-	kind: RuleKindValue;
+	kind: RuleKind;
 	rulePath: Array<number>;
 	childRuleCount: number;
-	declarationsCreateRuns: boolean;
+	doDeclarationsCreateRuns: boolean;
 	openRunIndex: number;
 	isInsideStyleRule: boolean;
 	isInsideDescriptor: boolean;
@@ -171,12 +171,12 @@ interface RuleFrame {
 
 //scan helpers write this struct and its rule frames directly: returning several cursor fields costs
 //an object per declaration or one loop of every scanner. Parsing runs once per template
-interface CssParserState {
-	state: CssStateValue;
-	charIndex: number;
+interface CSSParserState {
+	scanState: CSSStateKind;
+	characterIndex: number;
 	splitIndex: number;
 	parenDepth: number;
-	pendingRuleKind: RuleKindValue;
+	pendingRuleKind: RuleKind;
 	propertyStartIndex: number;
 	propertyNamePart: string;
 	propertyNameStart: number;
@@ -200,7 +200,7 @@ const OUTSIDE_EVERY_RULE: Readonly<EnclosingRuleContext> = {
 };
 
 const createRuleFrame = (
-	kind: RuleKindValue,
+	kind: RuleKind,
 	rulePath: Array<number>,
 	parent: EnclosingRuleContext,
 ): RuleFrame => {
@@ -210,7 +210,7 @@ const createRuleFrame = (
 		kind,
 		rulePath,
 		childRuleCount: 0,
-		declarationsCreateRuns: kind === RULE_KIND.GROUPING && isInsideStyleRule,
+		doDeclarationsCreateRuns: kind === RULE_KIND.GROUPING && isInsideStyleRule,
 		openRunIndex: NO_OPEN_RUN,
 		isInsideStyleRule,
 		isInsideDescriptor:
@@ -221,9 +221,9 @@ const createRuleFrame = (
 	};
 };
 
-const createCssParser = (): CssParserState => ({
-	state: CSS_STATE.SELECTOR,
-	charIndex: 0,
+const createCSSParser = (): CSSParserState => ({
+	scanState: CSS_STATE.SELECTOR,
+	characterIndex: 0,
 	splitIndex: 0,
 	parenDepth: 0,
 	pendingRuleKind: RULE_KIND.STYLE,
@@ -245,15 +245,15 @@ const readAtRuleName = (part: string, atIndex: number): string => {
 	return part.slice(atIndex + 1, endIndex).toLowerCase();
 };
 
-const readAtRuleKind = (part: string, atIndex: number): RuleKindValue => {
+const readAtRuleKind = (part: string, atIndex: number): RuleKind => {
 	const name = readAtRuleName(part, atIndex);
 	if (FAST_PATH_GROUPING_AT_RULE_NAMES.has(name)) return RULE_KIND.GROUPING;
 	if (name === FAST_PATH_KEYFRAMES_AT_RULE_NAME) return RULE_KIND.KEYFRAMES;
 	return RULE_KIND.DESCRIPTOR;
 };
 
-const captureStaticValueText = (
-	parser: CssParserState,
+const appendStaticValueSlice = (
+	parser: CSSParserState,
 	part: string,
 	end: number,
 ) => {
@@ -261,7 +261,7 @@ const captureStaticValueText = (
 	parser.valueBuffer.push(part.slice(parser.splitIndex, end));
 };
 
-const activeFrame = (parser: CssParserState): RuleFrame =>
+const activeFrame = (parser: CSSParserState): RuleFrame =>
 	parser.ruleStack[parser.ruleStack.length - 1];
 
 //setProperty replaces a rule's whole entry for a property, so a duplicate of a holed
@@ -286,22 +286,22 @@ const claimHoledProperty = (
 	return true;
 };
 
-const registerChildRule = (frame: RuleFrame): void => {
+const recordChildRule = (frame: RuleFrame): void => {
 	frame.childRuleCount++;
 	frame.openRunIndex = NO_OPEN_RUN;
-	if (frame.kind === RULE_KIND.STYLE) frame.declarationsCreateRuns = true;
+	if (frame.kind === RULE_KIND.STYLE) frame.doDeclarationsCreateRuns = true;
 };
 
-const resetDeclaration = (parser: CssParserState) => {
+const resetDeclaration = (parser: CSSParserState) => {
 	parser.valueBuffer.length = 0;
 	parser.valueTopLevelBangCount = 0;
-	parser.state = CSS_STATE.PROPERTY;
+	parser.scanState = CSS_STATE.PROPERTY;
 };
 
 //CSSOM takes priority as a separate setProperty argument, so a trailing !important is
 //split off the value parts here
 const splitTrailingImportantPriority = (
-	parser: CssParserState,
+	parser: CSSParserState,
 ): string | typeof UNSUPPORTED_PRIORITY => {
 	const topLevelBangCount = parser.valueTopLevelBangCount;
 	const hasNoImportant = topLevelBangCount === 0;
@@ -311,8 +311,8 @@ const splitTrailingImportantPriority = (
 
 	const valueParts = parser.valueBuffer;
 	const lastValuePart = valueParts[valueParts.length - 1];
-	const bangSitsInAHole = typeof lastValuePart !== "string";
-	if (bangSitsInAHole) return UNSUPPORTED_PRIORITY;
+	const bangSitsInHole = typeof lastValuePart !== "string";
+	if (bangSitsInHole) return UNSUPPORTED_PRIORITY;
 
 	const bangIndex = lastValuePart.lastIndexOf("!");
 	const keywordAfterBang = lastValuePart
@@ -330,18 +330,18 @@ const splitTrailingImportantPriority = (
 
 const isHole = (part: Part): part is number => typeof part === "number";
 
-const finishDeclarationValue = (parser: CssParserState): boolean => {
+const completeDeclaration = (parser: CSSParserState): boolean => {
 	const frame = activeFrame(parser);
 	if (frame.isInsideDescriptor) {
 		resetDeclaration(parser);
 		return true;
 	}
 	const opensRun =
-		frame.declarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN;
+		frame.doDeclarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN;
 	if (opensRun) frame.openRunIndex = frame.childRuleCount++;
 	const valueHasHole = parser.valueBuffer.some(isHole);
 	const isDeclarationHolder =
-		frame.kind === RULE_KIND.STYLE || frame.declarationsCreateRuns;
+		frame.kind === RULE_KIND.STYLE || frame.doDeclarationsCreateRuns;
 	const propertyName = isDeclarationHolder
 		? normalizePropertyName(
 				parser.propertyNamePart,
@@ -376,7 +376,7 @@ const finishDeclarationValue = (parser: CssParserState): boolean => {
 	const ruleStack = parser.ruleStack;
 	for (let index = 0; index < ruleStack.length - 1; index++)
 		ruleStack[index].isOnDynamicPath = true;
-	if (frame.declarationsCreateRuns) frame.isOnDynamicPath = true;
+	if (frame.doDeclarationsCreateRuns) frame.isOnDynamicPath = true;
 	resetDeclaration(parser);
 	return true;
 };
@@ -384,13 +384,13 @@ const finishDeclarationValue = (parser: CssParserState): boolean => {
 export const compileStyleSheet = (
 	parts: Array<Part>,
 ): CompiledStyleSheet | typeof STYLE_SHEET_NOT_COMPILED => {
-	const parser = createCssParser();
+	const parser = createCSSParser();
 
 	for (let partIndex = 0; partIndex < parts.length; partIndex++) {
 		const part = parts[partIndex];
 		if (typeof part === "number") {
 			const isDeclarationValueHole =
-				parser.state === CSS_STATE.VALUE &&
+				parser.scanState === CSS_STATE.VALUE &&
 				!activeFrame(parser).isInsideDescriptor;
 			if (!isDeclarationValueHole) return STYLE_SHEET_NOT_COMPILED;
 			parser.valueBuffer.push(part);
@@ -400,63 +400,63 @@ export const compileStyleSheet = (
 		parser.splitIndex = 0;
 		parser.propertyStartIndex = 0;
 		for (
-			parser.charIndex = 0;
-			parser.charIndex < part.length;
-			parser.charIndex++
+			parser.characterIndex = 0;
+			parser.characterIndex < part.length;
+			parser.characterIndex++
 		) {
-			const code = part.charCodeAt(parser.charIndex);
+			const code = part.charCodeAt(parser.characterIndex);
 			const isInsignificant =
-				code >= LAST_SIGNIFICANT_CODE || SIGNIFICANT_CODES[code] === 0;
+				code >= SIGNIFICANT_CODE_LIMIT || SIGNIFICANT_CODES[code] === 0;
 			if (isInsignificant) continue;
 
 			//a string or a comment left open by this part can never compile: whatever follows
 			//is either a hole outside a value or the end of a sheet that never left the rule
 			if (isQuoteCode(code)) {
-				const closingQuote = findClosingQuoteIndex(part, parser.charIndex);
+				const closingQuote = findClosingQuoteIndex(part, parser.characterIndex);
 				if (closingQuote === -1) return STYLE_SHEET_NOT_COMPILED;
-				parser.charIndex = closingQuote;
+				parser.characterIndex = closingQuote;
 				continue;
 			}
-			if (code === CHAR_CODE.SLASH) {
-				if (!part.startsWith(COMMENT_OPEN, parser.charIndex)) continue;
+			if (code === CHARACTER_CODE.SLASH) {
+				if (!part.startsWith(COMMENT_OPEN, parser.characterIndex)) continue;
 				const commentClose = part.indexOf(
 					COMMENT_CLOSE,
-					parser.charIndex + COMMENT_OPEN.length,
+					parser.characterIndex + COMMENT_OPEN.length,
 				);
 				if (commentClose === -1) return STYLE_SHEET_NOT_COMPILED;
 				//on the closing "/", which the loop's own step moves past
-				parser.charIndex = commentClose + COMMENT_CLOSE.length - 1;
+				parser.characterIndex = commentClose + COMMENT_CLOSE.length - 1;
 				continue;
 			}
-			if (code === CHAR_CODE.OPEN_PAREN) {
+			if (code === CHARACTER_CODE.OPEN_PAREN) {
 				parser.parenDepth++;
 				continue;
 			}
 			if (parser.parenDepth > 0) {
-				if (code === CHAR_CODE.CLOSE_PAREN) parser.parenDepth--;
+				if (code === CHARACTER_CODE.CLOSE_PAREN) parser.parenDepth--;
 				continue;
 			}
 
 			switch (code) {
-				case CHAR_CODE.OPEN_BRACE: {
-					if (parser.state === CSS_STATE.VALUE) return STYLE_SHEET_NOT_COMPILED;
+				case CHARACTER_CODE.OPEN_BRACE: {
+					if (parser.scanState === CSS_STATE.VALUE)
+						return STYLE_SHEET_NOT_COMPILED;
 					const parent = activeFrame(parser);
 					const ruleIndex = parent.childRuleCount;
-					registerChildRule(parent);
+					recordChildRule(parent);
 					const kind = parser.pendingRuleKind;
 					parser.ruleStack.push(
 						createRuleFrame(kind, parent.rulePath.concat(ruleIndex), parent),
 					);
 					parser.pendingRuleKind = RULE_KIND.STYLE;
-					parser.state = CSS_STATE.PROPERTY;
-					parser.propertyStartIndex = parser.charIndex + 1;
+					parser.scanState = CSS_STATE.PROPERTY;
+					parser.propertyStartIndex = parser.characterIndex + 1;
 					break;
 				}
-				case CHAR_CODE.CLOSE_BRACE: {
-					if (parser.state === CSS_STATE.VALUE) {
-						captureStaticValueText(parser, part, parser.charIndex);
-						if (!finishDeclarationValue(parser))
-							return STYLE_SHEET_NOT_COMPILED;
+				case CHARACTER_CODE.CLOSE_BRACE: {
+					if (parser.scanState === CSS_STATE.VALUE) {
+						appendStaticValueSlice(parser, part, parser.characterIndex);
+						if (!completeDeclaration(parser)) return STYLE_SHEET_NOT_COMPILED;
 					}
 					if (parser.ruleStack.length === 1) return STYLE_SHEET_NOT_COMPILED;
 					const closedFrame = parser.ruleStack.pop();
@@ -469,49 +469,52 @@ export const compileStyleSheet = (
 							rulePath: closedFrame.rulePath,
 							expectedRuleCount: closedFrame.childRuleCount,
 						});
-					parser.state =
+					parser.scanState =
 						parser.ruleStack.length === 1
 							? CSS_STATE.SELECTOR
 							: CSS_STATE.PROPERTY;
-					parser.propertyStartIndex = parser.charIndex + 1;
+					parser.propertyStartIndex = parser.characterIndex + 1;
 					break;
 				}
-				case CHAR_CODE.SEMICOLON:
-					if (parser.state === CSS_STATE.VALUE) {
-						captureStaticValueText(parser, part, parser.charIndex);
-						if (!finishDeclarationValue(parser))
-							return STYLE_SHEET_NOT_COMPILED;
+				case CHARACTER_CODE.SEMICOLON:
+					if (parser.scanState === CSS_STATE.VALUE) {
+						appendStaticValueSlice(parser, part, parser.characterIndex);
+						if (!completeDeclaration(parser)) return STYLE_SHEET_NOT_COMPILED;
 					}
 					if (parser.pendingRuleKind !== RULE_KIND.STYLE) {
-						registerChildRule(activeFrame(parser));
+						recordChildRule(activeFrame(parser));
 						parser.pendingRuleKind = RULE_KIND.STYLE;
 					}
-					parser.propertyStartIndex = parser.charIndex + 1;
+					parser.propertyStartIndex = parser.characterIndex + 1;
 					break;
-				case CHAR_CODE.COLON:
-					if (parser.state === CSS_STATE.PROPERTY) {
+				case CHARACTER_CODE.COLON:
+					if (parser.scanState === CSS_STATE.PROPERTY) {
 						parser.propertyNamePart = part;
 						parser.propertyNameStart = parser.propertyStartIndex;
-						parser.propertyNameEnd = parser.charIndex;
-						parser.state = CSS_STATE.VALUE;
-						parser.splitIndex = parser.charIndex + 1;
+						parser.propertyNameEnd = parser.characterIndex;
+						parser.scanState = CSS_STATE.VALUE;
+						parser.splitIndex = parser.characterIndex + 1;
 					}
 					break;
-				case CHAR_CODE.AT:
-					if (parser.state !== CSS_STATE.VALUE)
-						parser.pendingRuleKind = readAtRuleKind(part, parser.charIndex);
+				case CHARACTER_CODE.AT:
+					if (parser.scanState !== CSS_STATE.VALUE)
+						parser.pendingRuleKind = readAtRuleKind(
+							part,
+							parser.characterIndex,
+						);
 					break;
-				case CHAR_CODE.BANG:
-					if (parser.state === CSS_STATE.VALUE) parser.valueTopLevelBangCount++;
+				case CHARACTER_CODE.BANG:
+					if (parser.scanState === CSS_STATE.VALUE)
+						parser.valueTopLevelBangCount++;
 					break;
 			}
 		}
-		if (parser.state === CSS_STATE.VALUE)
-			captureStaticValueText(parser, part, part.length);
+		if (parser.scanState === CSS_STATE.VALUE)
+			appendStaticValueSlice(parser, part, part.length);
 	}
 
 	const endedCleanly =
-		parser.state === CSS_STATE.SELECTOR &&
+		parser.scanState === CSS_STATE.SELECTOR &&
 		parser.ruleStack.length === 1 &&
 		parser.parenDepth === 0;
 	if (!endedCleanly) return STYLE_SHEET_NOT_COMPILED;

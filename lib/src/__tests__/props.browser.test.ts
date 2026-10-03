@@ -19,7 +19,7 @@ const createElement = (
 };
 
 describe("props on a plain element", () => {
-	describe("the attribute channel", () => {
+	describe("the attribute mode", () => {
 		it("reads and parses each shipped token", () => {
 			const element = createElement({
 				label: "hello",
@@ -82,7 +82,7 @@ describe("props on a plain element", () => {
 		});
 	});
 
-	describe("the property channel", () => {
+	describe("the property mode", () => {
 		it("an own property wins over the attribute, case intact", () => {
 			const payload = [1, 2];
 			const element = createElement(
@@ -111,7 +111,7 @@ describe("props on a plain element", () => {
 			expect(first).not.toBe(second);
 		});
 
-		it("reads a function-typed prop from the property channel", () => {
+		it("reads a function-typed prop from the property mode", () => {
 			const handler = () => {};
 			const element = createElement({}, { onSelect: handler });
 			expect(props(element, { onSelect: asCallback }).onSelect).toBe(handler);
@@ -141,7 +141,7 @@ describe("props on a plain element", () => {
 	});
 
 	describe("mixed schema", () => {
-		it("resolves each channel independently", () => {
+		it("resolves each mode independently", () => {
 			const tags = ["a"];
 			const element = createElement(
 				{ label: "hi", count: "3", open: "" },

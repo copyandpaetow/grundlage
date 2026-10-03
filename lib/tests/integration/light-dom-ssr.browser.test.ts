@@ -5,7 +5,7 @@ import {
 	ComponentConstructor,
 	ComponentOptions,
 	Schema,
-	Parse,
+	PropEntry,
 } from "../../src/types";
 
 //The claim that reads the server's slot markers back (light-dom/PLAN.md §3.5, §4.5, §4.6, R20—R27).
@@ -16,8 +16,8 @@ import {
 //neither export exists yet; typed as the schema entry each one will be, so these suites typecheck
 //against the target API instead of around it
 const { Slot, DefaultSlot } = grundlage as typeof grundlage & {
-	Slot: Parse;
-	DefaultSlot: Parse;
+	Slot: PropEntry;
+	DefaultSlot: PropEntry;
 };
 
 const light = <DeclaredSchema extends Schema>(

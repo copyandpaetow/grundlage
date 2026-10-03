@@ -6,7 +6,10 @@ import {
 } from "../../../parser/types";
 import { UNSET_HASH } from "../../constants";
 import { commitRawContent } from "../content-raw";
-import { createCssomStyleSheetLane, TEXT_STYLE_SHEET_LANE } from "../css-apply";
+import {
+	createCSSOMStyleSheetLane,
+	TEXT_STYLE_SHEET_LANE,
+} from "../style-sheet";
 import { RawContentLiveBinding } from "../types";
 
 //a <style> whose live sheet parses to a different rule count than the compiler recorded
@@ -32,7 +35,7 @@ describe("css demotion to the full-text lane", () => {
 			staticBinding,
 			openMarker: marker,
 			lastValueHash: UNSET_HASH,
-			styleSheetLane: createCssomStyleSheetLane(compiledStyleSheet, style),
+			styleSheetLane: createCSSOMStyleSheetLane(compiledStyleSheet, style),
 		};
 		return { liveBinding, style };
 	};

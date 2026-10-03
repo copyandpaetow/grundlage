@@ -1,6 +1,11 @@
-import { assertPrimitiveString, isPlainObject } from "../../utils/guards";
+import { stringifyPrimitive, isPlainObject } from "../../utils/guards";
 import { hashValue } from "../value-hashing";
-import { applyAttributeValue } from "./attribute-write";
+import {
+	applyAttributeValue,
+	applyLiveState,
+	applyLiveStateDefault,
+	isLiveStatePropertyOf,
+} from "./attribute-apply";
 import { DynamicAttributeLiveBinding } from "./types";
 import { assertDuringDevelopment } from "../../utils/diagnostics";
 
@@ -28,19 +33,19 @@ const valueStillHoldsAttribute = (value: unknown, name: string): boolean => {
 
 //keys and a lookup rather than destructured entries: each entry is an array the engine does not
 //optimize away, 10 of them per commit on a five-name spread
-const removeAttributesTheValueDropped = (
+const removeDroppedAttributes = (
 	liveBinding: DynamicAttributeLiveBinding,
 	value: unknown,
 ): void => {
 	const { anchor: element, appliedAttributes } = liveBinding;
 	for (const name of appliedAttributes.keys()) {
 		if (valueStillHoldsAttribute(value, name)) continue;
-		const previous = appliedAttributes.get(name);
+		const appliedEntry = appliedAttributes.get(name);
 		assertDuringDevelopment(
-			previous !== undefined,
+			appliedEntry !== undefined,
 			"a key read while iterating the map has an entry",
 		);
-		applyAttributeValue(element, name, null, previous.value);
+		applyAttributeValue(element, name, null, appliedEntry.value);
 		appliedAttributes.delete(name);
 	}
 };
@@ -56,16 +61,20 @@ export const commitDynamic = (
 	const { anchor: element, appliedAttributes } = liveBinding;
 	const names = attributeNamesOf(value);
 	for (let index = 0; index < names.length; index++) {
-		const name = assertPrimitiveString(names[index]);
+		const name = stringifyPrimitive(names[index]);
 		const desiredValue = isPlainObject(value) ? value[name] : "";
 		const desiredValueHash = hashValue(desiredValue);
-		const previous = appliedAttributes.get(name);
-		if (previous?.hash === desiredValueHash) continue;
-		applyAttributeValue(element, name, desiredValue, previous?.value);
+		const appliedEntry = appliedAttributes.get(name);
+		if (appliedEntry?.hash === desiredValueHash) continue;
+		const isLiveState = isLiveStatePropertyOf(element, name);
+		if (isLiveState && appliedEntry !== undefined)
+			applyLiveState(element, name, desiredValue);
+		else if (isLiveState) applyLiveStateDefault(element, name, desiredValue);
+		else applyAttributeValue(element, name, desiredValue, appliedEntry?.value);
 		appliedAttributes.set(name, {
 			value: desiredValue,
 			hash: desiredValueHash,
 		});
 	}
-	removeAttributesTheValueDropped(liveBinding, value);
+	removeDroppedAttributes(liveBinding, value);
 };

@@ -22,11 +22,11 @@ export type ShippedToken =
 	| BigIntConstructor
 	| BooleanConstructor;
 
-export type Parse = ShippedToken | Resolve<unknown>;
-export type SchemaDefinition = Parse | readonly [Parse, unknown];
+export type PropEntry = ShippedToken | Resolve<unknown>;
+export type SchemaDefinition = PropEntry | readonly [PropEntry, unknown];
 export type Schema = Record<string, SchemaDefinition>;
 
-type ValueOf<Declared> = Declared extends StringConstructor
+type ParsedValueOf<Declared> = Declared extends StringConstructor
 	? string
 	: Declared extends NumberConstructor
 		? number
@@ -42,10 +42,10 @@ export type InferProp<Definition> = Definition extends readonly [
 	infer Declared,
 	unknown,
 ]
-	? Exclude<ValueOf<Declared>, undefined>
+	? Exclude<ParsedValueOf<Declared>, undefined>
 	: Definition extends BooleanConstructor
 		? boolean
-		: ValueOf<Definition> | undefined;
+		: ParsedValueOf<Definition> | undefined;
 
 export type DeclaredProps<DeclaredSchema extends Schema = Schema> = {
 	-readonly [Name in keyof DeclaredSchema]: InferProp<DeclaredSchema[Name]>;

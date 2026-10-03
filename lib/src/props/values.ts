@@ -30,10 +30,10 @@ export const claimPropValueChange = (
 		return false;
 	}
 
-	const cannotChangeBehindItsReference =
+	const cannotChangeBehindReference =
 		next === null || (typeof next !== "object" && typeof next !== "function");
 	const isUnchanged =
-		Object.is(values[prop.propName], next) && cannotChangeBehindItsReference;
+		Object.is(values[prop.propName], next) && cannotChangeBehindReference;
 	if (isUnchanged) return false;
 
 	values[prop.propName] = next;
@@ -52,7 +52,7 @@ export const attributeSpellingOf = (
 			return String(value);
 		case "boolean":
 			if (value) return "";
-			return prop.absenceReadsTrue ? "false" : null;
+			return prop.isTrueWhenAbsent ? "false" : null;
 		default:
 			return null;
 	}

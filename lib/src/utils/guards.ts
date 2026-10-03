@@ -8,7 +8,7 @@ export const isStringable = (
 	typeof value === "bigint" ||
 	typeof value === "boolean";
 
-export const assertPrimitiveString = (value: unknown): string => {
+export const stringifyPrimitive = (value: unknown): string => {
 	if (!isStringable(value))
 		throw new Error(
 			libraryMessage(

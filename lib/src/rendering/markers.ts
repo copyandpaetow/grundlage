@@ -1,4 +1,4 @@
-import { CHAR_CODE, MARKUP } from "../parser/chars";
+import { CHARACTER_CODE, MARKUP } from "../parser/characters";
 import {
 	assertDuringDevelopment,
 	warnDuringDevelopment,
@@ -45,7 +45,7 @@ export const nextOpenMarker = (
 		if (node === rangeEnd) return null;
 		const isOpenMarker =
 			node.data.startsWith(MARKER_PREFIX) &&
-			node.data.charCodeAt(CLOSE_SLASH_INDEX) !== CHAR_CODE.SLASH;
+			node.data.charCodeAt(CLOSE_SLASH_INDEX) !== CHARACTER_CODE.SLASH;
 		if (isOpenMarker) return node;
 	}
 	return null;

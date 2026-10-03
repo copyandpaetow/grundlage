@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { applyAttributeValue } from "../attribute-write";
+import { applyAttributeValue, reapplyValueOnSwap } from "../attribute-apply";
 
 describe("applyAttributeValue - event listeners", () => {
 	test("attaches an event listener for an on* key whose value is a function", () => {
@@ -519,7 +519,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 	});
 
 	test("the prior stringable attribute is removed by the transition", () => {
-		//both channels populated is a silent stale render: a child reading getAttribute("config")
+		//both modes populated is a silent stale render: a child reading getAttribute("config")
 		//after the switch would see the stringified previous value
 		const element = document.createElement("div");
 
@@ -530,7 +530,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 		expect(element.getAttribute("config")).toBe(null);
 	});
 
-	test("a full stringable → object → stringable cycle leaves exactly one channel populated", () => {
+	test("a full stringable → object → stringable cycle leaves exactly one mode populated", () => {
 		const element = document.createElement("div");
 
 		applyAttributeValue(element, "config", "first");
@@ -546,7 +546,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 		expect(Object.hasOwn(element, "config")).toBe(false);
 	});
 
-	test("the other channel is cleared without an oldValue — the two-argument setProp form", () => {
+	test("the other mode is cleared without an oldValue — the two-argument setProp form", () => {
 		//setProp(name, value) tracks nothing, so the element's own state has to be what decides
 		const element = document.createElement("div");
 
@@ -573,5 +573,17 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 
 		applyAttributeValue(element, "config", { x: 1 }, "before");
 		expect(updateSpy).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("reapplyValueOnSwap - live state", () => {
+	test("writes what is shown onto the swapped-in element and keeps the copied default", () => {
+		const input = document.createElement("input");
+		input.setAttribute("value", "initial");
+
+		reapplyValueOnSwap(input, "value", "current");
+
+		expect(input.value).toBe("current");
+		expect(input.getAttribute("value")).toBe("initial");
 	});
 });

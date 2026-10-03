@@ -14,7 +14,7 @@ export const MARKUP = {
 	CUSTOM_EVENT_PREFIX: "on-",
 } as const;
 
-export const CHAR_CODE = {
+export const CHARACTER_CODE = {
 	TAB: 9,
 	LINE_FEED: 10,
 	CARRIAGE_RETURN: 13,
@@ -45,10 +45,10 @@ export const CHAR_CODE = {
 } as const;
 
 export const isWhitespaceCode = (code: number) =>
-	code === CHAR_CODE.SPACE ||
-	code === CHAR_CODE.LINE_FEED ||
-	code === CHAR_CODE.TAB ||
-	code === CHAR_CODE.CARRIAGE_RETURN;
+	code === CHARACTER_CODE.SPACE ||
+	code === CHARACTER_CODE.LINE_FEED ||
+	code === CHARACTER_CODE.TAB ||
+	code === CHARACTER_CODE.CARRIAGE_RETURN;
 
 export const isQuoteCode = (code: number) =>
-	code === CHAR_CODE.SINGLE_QUOTE || code === CHAR_CODE.DOUBLE_QUOTE;
+	code === CHARACTER_CODE.SINGLE_QUOTE || code === CHARACTER_CODE.DOUBLE_QUOTE;

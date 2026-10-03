@@ -75,7 +75,8 @@ Read top to bottom. A lower rule never overrides a higher one.
   hold a real value". An optional parameter's own absence and a `Map.get` miss are honest
   `undefined`. Where the platform forces one channel to carry two meanings, the declaration names
   both in a comment.
-- Enums are `as const` objects read through `ValueOf<typeof X>`. Values are numbers. Enums that
+- Enums are `as const` objects read through a type named after the constant plus `Kind`:
+  `type ParseModeKind = ValueOf<typeof PARSE_MODE>`. Values are numbers. Enums that
   meet get disjoint ranges, so one value cannot pass for another; an enum that indexes an array
   starts at 0.
 - A variant without data is one shared constant, so switching to it allocates nothing.
@@ -115,18 +116,11 @@ Read top to bottom. A lower rule never overrides a higher one.
 - A return type is annotated where inference is not obvious: exported functions and unions with a
   sentinel.
 
-### Acquire and release
-
-Every acquire has a paired release in the same module, named as a pair and never inlined. The
-release reads as the acquire's opposite (`register…` / `forget…`, `create…` / `revert…`). A pair
-that must stay balanced across a throw uses `try`/`finally`. _Exception:_ a single bare platform
-call, commented as intentionally inline.
-
 ## Errors and assertions
 
-- **Parse, don't validate.** User input is checked once, at the public boundary, and a bad input
-  throws an error with a remedy. Past the boundary, internal state is trusted and checked only by
-  assertions. The two never mix.
+- **Parse, don't validate.** User input is checked once, at the public boundary, by an
+  `ensure…` function, and a bad input throws an error with a remedy. Past the boundary, internal
+  state is trusted and checked only by `assert…` assertions. The two never mix.
 - **Define errors out of existence** where the API shape allows it: absence of a prop is a write of
   its fallback, so no prop read fails.
 - **Every error message names the fix.** "A block body needs an explicit return", not "unexpected
@@ -170,12 +164,12 @@ call, commented as intentionally inline.
 
 ### Verbs on the write path
 
-| verb      | the function                                                                          |
-| --------- | ------------------------------------------------------------------------------------- |
-| `mount…`  | creates the nodes for something that does not exist yet                               |
-| `patch…`  | reuses the nodes of an existing thing of the same shape; the alternative to `mount`   |
-| `commit…` | takes the render's values and owns the change gate: one hash, or one per key or index |
-| `apply…`  | performs the platform write, with no gate and no decision whether it is needed        |
+| verb      | the function                                                                                                                |
+| --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `mount…`  | creates the nodes for something that does not exist yet                                                                     |
+| `patch…`  | reuses the nodes of an existing thing of the same shape; the alternative to `mount`                                         |
+| `commit…` | takes the render's values and owns the change gate (one hash, or one per key or index), or routes them to functions that do |
+| `apply…`  | performs the platform write, with no gate and no decision whether it is needed                                              |
 
 ## Modules and types
 

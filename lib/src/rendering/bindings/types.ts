@@ -101,7 +101,7 @@ export interface TextStyleSheetLane {
 	kind: typeof STYLE_SHEET_LANE.TEXT;
 }
 
-export interface CssomStyleSheetLane {
+export interface CSSOMStyleSheetLane {
 	kind: typeof STYLE_SHEET_LANE.CSSOM;
 	compiledStyleSheet: CompiledStyleSheet;
 	styleElement: HTMLStyleElement;
@@ -110,7 +110,7 @@ export interface CssomStyleSheetLane {
 	boundSheet: BoundStyleSheet | null;
 }
 
-export type StyleSheetLane = TextStyleSheetLane | CssomStyleSheetLane;
+export type StyleSheetLane = TextStyleSheetLane | CSSOMStyleSheetLane;
 
 export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;

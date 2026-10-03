@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html } from "../../template";
 import { Schema } from "../../types";
-import { assertPropNamesAreAvailable, normalizeSchema } from "../schema";
+import { ensurePropNamesAreAvailable, normalizeSchema } from "../schema";
 
 class Quote {
 	constructor(readonly text: string) {}
@@ -124,7 +124,7 @@ describe("reserved names", () => {
 		"%s is already on the prototype chain",
 		(propName) => {
 			expect(() =>
-				assertPropNamesAreAvailable(
+				ensurePropNamesAreAvailable(
 					FakeBase.prototype,
 					normalizeSchema({ [propName]: String }),
 				),
@@ -134,7 +134,7 @@ describe("reserved names", () => {
 
 	test("a free name passes", () => {
 		expect(() =>
-			assertPropNamesAreAvailable(
+			ensurePropNamesAreAvailable(
 				FakeBase.prototype,
 				normalizeSchema({ userId: String, tags: takeAsIs }),
 			),

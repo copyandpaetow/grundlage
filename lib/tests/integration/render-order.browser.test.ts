@@ -171,7 +171,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(cardSetups).toEqual(["selected=b ids=ab", "selected=c ids=abc"]);
 			});
 
-			test("a host binding that writes its host's own prop never renders the host again, on mount or on update", async () => {
+			test("a host binding that writes its host's own prop renders the host once more and settles, on mount and on update", async () => {
 				const tag = uniqueTag("user-panel");
 				const fetchedUserIds: Array<string | undefined> = [];
 				const fetchUser = async (userId: string | undefined) => {
@@ -179,12 +179,22 @@ describe.skipIf("happyDOM" in globalThis)(
 					await sleep(5);
 					return { name: `user ${userId}` };
 				};
+				let renderCount = 0;
 				const UserPanel = component(
 					function* (componentProps) {
+						let loadCount = 0;
+						let loadedUserId: string | undefined | null = null;
+						let loadedUserName = "";
 						yield async () => {
-							const user = await fetchUser(componentProps.userId);
-							return html`<template loadCount=${componentProps.loadCount + 1}
-								><p>${user.name}</p></template
+							renderCount++;
+							const userId = componentProps.userId;
+							if (userId !== loadedUserId) {
+								loadedUserName = (await fetchUser(userId)).name;
+								loadedUserId = userId;
+								loadCount++;
+							}
+							return html`<template loadCount=${loadCount}
+								><p>${loadedUserName}</p></template
 							>`;
 						};
 					},
@@ -200,11 +210,13 @@ describe.skipIf("happyDOM" in globalThis)(
 				await sleep(50);
 				expect(fetchedUserIds).toEqual(["7"]);
 				expect(userPanel.loadCount).toBe(1);
+				expect(renderCount).toBe(2);
 
 				userPanel.userId = "8";
 				await sleep(50);
 				expect(fetchedUserIds).toEqual(["7", "8"]);
 				expect(userPanel.loadCount).toBe(2);
+				expect(renderCount).toBe(4);
 				expect(visibleText(userPanel.shadowRoot)).toBe("user 8");
 			});
 		});
@@ -279,6 +291,42 @@ describe.skipIf("happyDOM" in globalThis)(
 
 				expect(sizedBox.shadowRoot!.querySelector("p")).toBeNull();
 				expect(sizedBox.shadowRoot!.textContent).toContain("grundlage");
+			});
+
+			test("a host binding that writes its own prop a new value every time ends in a visible error", async () => {
+				const tag = uniqueTag("runaway-host-value");
+				//without a render limit this loop runs through microtasks and freezes the browser the tests run in
+				const renderCountAtWhichTheTestEndsTheLoop = 1_000;
+				let renderCount = 0;
+				customElements.define(
+					tag,
+					component(
+						function* (componentProps) {
+							yield () => {
+								renderCount++;
+								const hasTheTestEndedTheLoop =
+									renderCount >= renderCountAtWhichTheTestEndsTheLoop;
+								const nextValue = hasTheTestEndedTheLoop
+									? componentProps.value
+									: componentProps.value + 1;
+								return html`<template value=${nextValue}
+									><p>${componentProps.value}</p></template
+								>`;
+							};
+						},
+						{ props: { value: [Number, 0] } },
+					),
+				);
+
+				const consoleError = vi
+					.spyOn(console, "error")
+					.mockImplementation(() => {});
+				const element = mount(tag);
+				await sleep(50);
+				consoleError.mockRestore();
+
+				expect(element.shadowRoot!.querySelector("p")).toBeNull();
+				expect(element.shadowRoot!.textContent).toContain("grundlage");
 			});
 
 			test("a write into a component that rendered earlier lands before the frame, without writing any text twice", async () => {
@@ -1150,7 +1198,7 @@ describe.skipIf("happyDOM" in globalThis)(
 			});
 
 			//a component only ever paints into its own shadow root, so the one way a paint reaches a
-			//component beside it is a plain element's setter on the property channel
+			//component beside it is a plain element's setter on the property mode
 			test("two components that write each other through a paint end in a visible error", async () => {
 				const relayTag = uniqueTag("relay");
 				const leftTag = uniqueTag("left");
@@ -1367,7 +1415,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					.mockImplementation(() => {});
 				const parent = mount(parentTag);
 				await sleep(100);
-				const loggedErrors = consoleError.mock.calls.map((call) => call.join(" "));
+				const loggedErrors = consoleError.mock.calls.map((call) =>
+					call.join(" "),
+				);
 				consoleError.mockRestore();
 
 				//whichever of the two the queue was holding when the ring closed is the one that shows it

@@ -67,7 +67,7 @@ describe("spread binding - across commits", () => {
 	});
 
 	test("a name whose value is unchanged is not written again when another name changes", () => {
-		//an object goes to the property channel, which has no read-before-write of its own
+		//an object goes to the property mode, which has no read-before-write of its own
 		const settings = { theme: "dark" };
 		const liveBinding = createSpreadBinding();
 		commitDynamic(liveBinding, [{ id: "x", settings }]);

@@ -6,7 +6,7 @@ import {
 	ComponentOptions,
 	ComponentProps,
 	Schema,
-	Parse,
+	PropEntry,
 	Template,
 } from "../types";
 
@@ -17,8 +17,8 @@ import {
 //neither export exists yet; typed as the schema entry each one will be, so these suites typecheck
 //against the target API instead of around it
 const { Slot, DefaultSlot } = grundlage as typeof grundlage & {
-	Slot: Parse;
-	DefaultSlot: Parse;
+	Slot: PropEntry;
+	DefaultSlot: PropEntry;
 };
 const slotsShip =
 	(Slot as unknown) !== undefined && (DefaultSlot as unknown) !== undefined;

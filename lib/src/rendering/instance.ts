@@ -9,9 +9,9 @@ import {
 	createContentLiveBinding,
 	createMarkedLiveBinding,
 	hydrateLiveBinding,
-} from "./bindings/dispatch";
+} from "./bindings/live-binding";
 import { commitContent, hydrateContent } from "./bindings/content";
-import { rebindStyleSheet } from "./bindings/css-apply";
+import { rebindStyleSheet } from "./bindings/style-sheet";
 import {
 	StyleSheetMoveState,
 	Instance,
@@ -78,7 +78,7 @@ export const isPatchableInPlace = (
 ): current is Instance =>
 	current !== null && current.parsed.templateHash === parsed.templateHash;
 
-export const resolveNestedTemplate = (value: TemplateValue): ParsedTemplate => {
+export const parseNestedTemplate = (value: TemplateValue): ParsedTemplate => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	if (parsed.hostBindingCount > 0)
 		throw new Error(

@@ -2,12 +2,12 @@ import { combinedPartsHash, composeParts } from "../compose";
 import { STYLE_SHEET_LANE, UNSET_HASH } from "../constants";
 import { elementAfterMarker } from "../markers";
 import {
-	applyChangedDeclarations,
+	commitChangedDeclarations,
 	matchCompiledStyleSheet,
 	RULE_STRUCTURE_MISMATCH,
 	seedDeclarationValueHashes,
 	TEXT_STYLE_SHEET_LANE,
-} from "./css-apply";
+} from "./style-sheet";
 import { RawContentLiveBinding } from "./types";
 
 const writeRawContentAsText = (
@@ -58,5 +58,5 @@ export const commitRawContent = (
 		if (lane.boundSheet !== null) lane.declarationValueHashes.fill(UNSET_HASH);
 		lane.boundSheet = matchedSheet;
 	}
-	applyChangedDeclarations(lane, lane.boundSheet, values);
+	commitChangedDeclarations(lane, lane.boundSheet, values);
 };

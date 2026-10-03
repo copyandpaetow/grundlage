@@ -753,12 +753,11 @@ describe("shared generator functions", () => {
 	test("async sub-generator delegated with yield* sequences async work", async () => {
 		const loadInTwoStages: (
 			element: BaseComponent,
-		) => AsyncGenerator<YieldableValue> =
-			async function* () {
-				yield html`<p>stage-1</p>`;
-				await new Promise((resolve) => setTimeout(resolve, 10));
-				yield () => html`<p>stage-2</p>`;
-			};
+		) => AsyncGenerator<YieldableValue> = async function* () {
+			yield html`<p>stage-1</p>`;
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			yield () => html`<p>stage-2</p>`;
+		};
 
 		const tag = uniqueTag("async-delegate");
 		customElements.define(
@@ -1253,7 +1252,9 @@ describe("framework-parity patterns", () => {
 	);
 
 	test("error thrown in nested child does not break the parent", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 
 		const childTag = uniqueTag("err-child");
 		let shouldChildThrow = true;

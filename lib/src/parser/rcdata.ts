@@ -1,4 +1,4 @@
-import { CHAR_CODE } from "./chars";
+import { CHARACTER_CODE } from "./characters";
 import { Part } from "./types";
 import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 
@@ -109,7 +109,7 @@ export const decodeTextareaParts = (parts: Array<Part>): void => {
 	const firstPart = parts[0];
 	if (
 		typeof firstPart === "string" &&
-		firstPart.charCodeAt(0) === CHAR_CODE.LINE_FEED
+		firstPart.charCodeAt(0) === CHARACTER_CODE.LINE_FEED
 	)
 		parts[0] = firstPart.slice(1);
 };

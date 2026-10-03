@@ -99,7 +99,9 @@ describe("outer yields a generator function (nested generator)", () => {
 	});
 
 	test("inner generator yielding a generator function throws and surfaces the error", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const tag = uniqueTag("inner-yields-gen");
 
 		customElements.define(
@@ -209,7 +211,9 @@ describe("disconnect cleanup with nested generators", () => {
 
 describe("inner generator error contracts", () => {
 	test("outer try/catch around the inner can recover by yielding new content", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const tag = uniqueTag("recover");
 
 		customElements.define(
@@ -240,7 +244,9 @@ describe("inner generator error contracts", () => {
 	});
 
 	test("outer catches and returns a cleanup: prior view persists, cleanup deferred to disconnect", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const tag = uniqueTag("catch-return");
 		const events: string[] = [];
 
@@ -283,7 +289,9 @@ describe("inner generator error contracts", () => {
 	});
 
 	test("uncaught inner error becomes a terminal: console error + error text in shadow", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const tag = uniqueTag("terminal");
 
 		customElements.define(
@@ -311,7 +319,9 @@ describe("inner generator error contracts", () => {
 	});
 
 	test("after a terminal error, update() is a no-op", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const tag = uniqueTag("terminal-noop");
 		let shouldThrow = true;
 

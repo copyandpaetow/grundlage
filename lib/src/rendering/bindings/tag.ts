@@ -1,7 +1,7 @@
 import { combinedPartsHash, composeParts } from "../compose";
 import { elementAfterMarker } from "../markers";
 import { isSingleHoleValue } from "./attribute";
-import { reapplyValueOnSwap } from "./attribute-write";
+import { reapplyValueOnSwap } from "./attribute-apply";
 import {
 	isAttributeBinding,
 	isDynamicAttributeBinding,

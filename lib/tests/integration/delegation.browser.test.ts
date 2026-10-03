@@ -189,7 +189,9 @@ describe("a render function returning a generator function", () => {
 	});
 
 	test("a branch returning a generator from an inner task is rejected", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield () =>
@@ -213,7 +215,9 @@ describe("a render function returning a generator function", () => {
 	});
 
 	test("a branch's error is thrown into the outer at its yield", async () => {
-		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
 		let caught: unknown;
 		const element = mount(
 			component(function* () {

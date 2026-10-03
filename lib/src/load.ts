@@ -1,10 +1,10 @@
 import { isServer } from "./utils/guards";
 import { isDevelopmentBuild, warnDuringDevelopment } from "./utils/diagnostics";
-import { resolveShadowRoot } from "./rendering/dom";
+import { findShadowRoot } from "./rendering/dom";
 
 export interface LoadOptions {
 	key?: string;
-	skipSsr?: boolean;
+	skipSSR?: boolean;
 }
 
 interface CollectedEntry {
@@ -13,7 +13,7 @@ interface CollectedEntry {
 }
 
 //written by collectOnServer during the render, drained once by flushHostPayload
-const pendingSsrLoads = new WeakMap<Element, Array<CollectedEntry>>();
+const pendingSSRLoads = new WeakMap<Element, Array<CollectedEntry>>();
 
 const SSR_ATTRIBUTE = "data-ssr";
 const KEY_ATTRIBUTE = "data-key";
@@ -43,8 +43,8 @@ const collectOnServer = async <Value>(
 	key: string | undefined,
 ): Promise<Value> => {
 	const value = await fetcher();
-	const existing = pendingSsrLoads.get(host);
-	if (existing === undefined) pendingSsrLoads.set(host, [{ key, value }]);
+	const existing = pendingSSRLoads.get(host);
+	if (existing === undefined) pendingSSRLoads.set(host, [{ key, value }]);
 	else existing.push({ key, value });
 	return value;
 };
@@ -55,20 +55,20 @@ export const load = <Value>(
 	options?: string | LoadOptions,
 ): Promise<Value> => {
 	let key: string | undefined;
-	let skipSsr = false;
+	let skipSSR = false;
 	if (typeof options === "string") key = options;
 	else if (options !== undefined) {
 		key = options.key;
-		skipSsr = options.skipSsr === true;
+		skipSSR = options.skipSSR === true;
 	}
 
 	if (isServer()) {
-		if (skipSsr) return fetcher();
+		if (skipSSR) return fetcher();
 		return collectOnServer(host, fetcher, key);
 	}
 
-	const shadowRoot = resolveShadowRoot(host);
-	const mayReplayServerData = !skipSsr && shadowRoot !== null;
+	const shadowRoot = findShadowRoot(host);
+	const mayReplayServerData = !skipSSR && shadowRoot !== null;
 	if (!mayReplayServerData) return fetcher();
 	const script = findReplayScript(shadowRoot, key);
 	if (!script) return fetcher();
@@ -77,27 +77,27 @@ export const load = <Value>(
 	return Promise.resolve(value);
 };
 
-export const warnOnUnclaimedSsrPayloads = (shadowRoot: ShadowRoot): void => {
+export const warnOnUnclaimedSSRPayloads = (shadowRoot: ShadowRoot): void => {
 	if (!isDevelopmentBuild) return;
 	const children = shadowRoot.children;
-	let leftover = 0;
+	let leftoverCount = 0;
 	for (let index = 0; index < children.length; index++)
-		if (children[index].matches(ANY_SSR_SELECTOR)) leftover++;
-	if (leftover === 0) return;
+		if (children[index].matches(ANY_SSR_SELECTOR)) leftoverCount++;
+	if (leftoverCount === 0) return;
 	warnDuringDevelopment(
-		`${leftover} SSR load() payload(s) went unclaimed during hydration. ` +
+		`${leftoverCount} SSR load() payload(s) went unclaimed during hydration. ` +
 			"A conditional or reordered load() call can hand the wrong data to the wrong load() " +
 			"— pass a stable key to the affected load() calls to opt out of positional replay.",
 	);
 };
 
 export const flushHostPayload = (host: Element): void => {
-	const collected = pendingSsrLoads.get(host);
+	const collected = pendingSSRLoads.get(host);
 	if (collected === undefined) return;
-	pendingSsrLoads.delete(host);
+	pendingSSRLoads.delete(host);
 
 	const ownerDocument = host.ownerDocument;
-	const shadowRoot = resolveShadowRoot(host);
+	const shadowRoot = findShadowRoot(host);
 	if (shadowRoot === null) return;
 
 	for (let index = 0; index < collected.length; index++) {

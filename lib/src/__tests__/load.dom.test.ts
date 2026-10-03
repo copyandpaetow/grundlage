@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { flushHostPayload, load, warnOnUnclaimedSsrPayloads } from "../load";
+import { flushHostPayload, load, warnOnUnclaimedSSRPayloads } from "../load";
 
 //happy-dom env — `window` is defined here, so load takes the client path
 //these tests cover the DOM-as-queue behavior plus the round-trip via flushHostPayload
@@ -54,7 +54,7 @@ describe("client replay reads scripts from the host's shadow root", () => {
 
 		const fetcher = vi.fn(() => Promise.resolve("fetched"));
 		const value = await load(host, fetcher);
-		warnOnUnclaimedSsrPayloads(host.shadowRoot!);
+		warnOnUnclaimedSSRPayloads(host.shadowRoot!);
 
 		expect(value).toBe("fetched");
 		expect(fetcher).toHaveBeenCalledTimes(1);
@@ -113,7 +113,7 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		).not.toBeNull();
 	});
 
-	test("skipSsr bypasses replay even when a matching script is present", async () => {
+	test("skipSSR bypasses replay even when a matching script is present", async () => {
 		const host = createHostWithShadow();
 		const script = document.createElement("script");
 		script.setAttribute("type", "application/json");
@@ -122,13 +122,13 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		host.shadowRoot!.append(script);
 
 		const fetcher = vi.fn(() => Promise.resolve("forced"));
-		const value = await load(host, fetcher, { skipSsr: true });
+		const value = await load(host, fetcher, { skipSSR: true });
 		expect(value).toBe("forced");
 		expect(host.shadowRoot!.querySelector("script[data-ssr]")).not.toBeNull();
 	});
 });
 
-describe("warnOnUnclaimedSsrPayloads flags drift between server and client load() calls", () => {
+describe("warnOnUnclaimedSSRPayloads flags drift between server and client load() calls", () => {
 	test("warns with a count when unclaimed data-ssr scripts remain after hydration", async () => {
 		const host = createHostWithShadow();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -146,7 +146,7 @@ describe("warnOnUnclaimedSsrPayloads flags drift between server and client load(
 		//simulates a conditional load() call that never ran on the client this time
 		await load(host, () => Promise.resolve("fallback"));
 
-		warnOnUnclaimedSsrPayloads(host.shadowRoot!);
+		warnOnUnclaimedSSRPayloads(host.shadowRoot!);
 
 		expect(warnSpy).toHaveBeenCalledTimes(1);
 		expect(warnSpy.mock.calls[0][0]).toContain("1 SSR load()");
@@ -164,7 +164,7 @@ describe("warnOnUnclaimedSsrPayloads flags drift between server and client load(
 
 		await load(host, () => Promise.resolve("fallback"));
 
-		warnOnUnclaimedSsrPayloads(host.shadowRoot!);
+		warnOnUnclaimedSSRPayloads(host.shadowRoot!);
 
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();
@@ -222,11 +222,11 @@ describe("flushHostPayload writes server-collected values into the shadow root",
 		expect(host.shadowRoot!.children.length).toBe(1);
 	});
 
-	test("a skipSsr load runs the fetcher but emits no script — nothing to replay on the client", async () => {
+	test("a skipSSR load runs the fetcher but emits no script — nothing to replay on the client", async () => {
 		const host = createHostWithShadow();
 		const fetcher = vi.fn(() => Promise.resolve("server-only"));
 		const value = await withoutWindow(() =>
-			load(host, fetcher, { skipSsr: true }),
+			load(host, fetcher, { skipSSR: true }),
 		);
 		flushHostPayload(host);
 

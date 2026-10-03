@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { isWhitespaceCode, isQuoteCode, MARKUP } from "../chars";
+import { isWhitespaceCode, isQuoteCode, MARKUP } from "../characters";
 
 //the parser hot loop reads char codes, so the assertions go through `.charCodeAt(0)` of the literal
 //character: readable intent, numeric predicate

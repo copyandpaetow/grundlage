@@ -22,7 +22,7 @@ export const isGeneratorFunction = (
 
 //identity is the resume permit: a continuation may only step the task still parked on its own
 export interface Suspension {
-	isAtARenderableYield: boolean;
+	isAtRenderableYield: boolean;
 }
 
 type GeneratorStepResult =
@@ -57,8 +57,8 @@ export const createRenderTask = (
 	nestedGeneratorTask: null,
 });
 
-export const isParkedAtARenderableYield = (task: Task): boolean =>
-	task.suspension?.isAtARenderableYield === true;
+export const isParkedAtRenderableYield = (task: Task): boolean =>
+	task.suspension?.isAtRenderableYield === true;
 
 export const isStillParkedAt = (
 	task: Task,

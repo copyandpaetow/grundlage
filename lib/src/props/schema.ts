@@ -1,7 +1,7 @@
-import { MARKUP } from "../parser/chars";
+import { MARKUP } from "../parser/characters";
 import { DEFER_HYDRATION_ATTRIBUTE } from "../rendering/constants";
 import { isTemplate } from "../template";
-import { Parse, Resolve, Schema } from "../types";
+import { PropEntry, Resolve, Schema } from "../types";
 import { libraryMessage } from "../utils/diagnostics";
 
 const PROP_NAME_PATTERN = /^[a-z][a-zA-Z0-9_-]*$/;
@@ -41,7 +41,7 @@ const SHIPPED_RESOLVERS = new Map<unknown, Resolve<unknown>>([
 export interface Prop {
 	readonly propName: string;
 	readonly resolve: Resolve<unknown>;
-	readonly absenceReadsTrue: boolean;
+	readonly isTrueWhenAbsent: boolean;
 }
 
 export type NormalizedSchema = ReadonlyMap<string, Prop>;
@@ -50,9 +50,9 @@ export type NormalizedSchema = ReadonlyMap<string, Prop>;
 const isCopiedPerElement = (fallback: unknown): fallback is object =>
 	fallback !== null && typeof fallback === "object" && !isTemplate(fallback);
 
-const assertFallbackIsUsable = (
+const ensureFallbackIsUsable = (
 	propName: string,
-	parse: Resolve<unknown>,
+	resolve: Resolve<unknown>,
 	fallback: unknown,
 ): void => {
 	let copy = fallback;
@@ -74,7 +74,7 @@ const assertFallbackIsUsable = (
 			);
 	}
 
-	if (parse(copy) === undefined)
+	if (resolve(copy) === undefined)
 		throw new TypeError(
 			libraryMessage(
 				`the fallback for prop "${propName}" is not a value the prop accepts: its function refused it. Pass a fallback the function accepts.`,
@@ -82,7 +82,7 @@ const assertFallbackIsUsable = (
 		);
 };
 
-const assertPropNameIsUsable = (propName: string): void => {
+const ensurePropNameIsUsable = (propName: string): void => {
 	if (!PROP_NAME_PATTERN.test(propName))
 		throw new TypeError(
 			libraryMessage(
@@ -120,23 +120,23 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 	const props = new Map<string, Prop>();
 
 	for (const propName in schema) {
-		assertPropNameIsUsable(propName);
+		ensurePropNameIsUsable(propName);
 
 		const definition = schema[propName];
 		const [declared, fallback] = (
 			Array.isArray(definition) ? definition : [definition, undefined]
-		) as [Parse, unknown];
-		const parse =
+		) as [PropEntry, unknown];
+		const resolveWithoutFallback =
 			SHIPPED_RESOLVERS.get(declared) ?? (declared as Resolve<unknown>);
 
-		if (typeof parse !== "function")
+		if (typeof resolveWithoutFallback !== "function")
 			throw new TypeError(
 				libraryMessage(
 					`prop "${propName}" must be String, Number, BigInt, Boolean, or a function.`,
 				),
 			);
 		if (fallback !== undefined)
-			assertFallbackIsUsable(propName, parse, fallback);
+			ensureFallbackIsUsable(propName, resolveWithoutFallback, fallback);
 
 		const attributeName = propName.toLowerCase();
 		const claimant = props.get(attributeName);
@@ -150,10 +150,10 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 		const mustCopyFallback = isCopiedPerElement(fallback);
 		const resolve: Resolve<unknown> =
 			fallback === undefined
-				? parse
+				? resolveWithoutFallback
 				: (incoming) => {
-						if (incoming !== undefined) return parse(incoming);
-						return parse(
+						if (incoming !== undefined) return resolveWithoutFallback(incoming);
+						return resolveWithoutFallback(
 							mustCopyFallback ? structuredClone(fallback) : fallback,
 						);
 					};
@@ -164,7 +164,9 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 			//[Boolean, true] is the one shape where removing the attribute would read back as the
 			//opposite, so reflection writes "false" instead; only the shipped token's absence rule is
 			//documented, so a user-supplied boolean function is left out of it
-			absenceReadsTrue: parse === resolveBoolean && resolve(undefined) === true,
+			isTrueWhenAbsent:
+				resolveWithoutFallback === resolveBoolean &&
+				resolve(undefined) === true,
 		});
 	}
 
@@ -172,7 +174,7 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 	return props;
 };
 
-export const assertPropNamesAreAvailable = (
+export const ensurePropNamesAreAvailable = (
 	elementPrototype: object,
 	props: NormalizedSchema,
 ): void => {
