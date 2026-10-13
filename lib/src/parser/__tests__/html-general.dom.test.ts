@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { html } from "../../template";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING } from "../constants";
-import { SingleValueAttributeStaticBinding } from "../types";
+import { BINDING, DYNAMIC_TAG_PLACEHOLDER } from "../constants";
+import { AttributeStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
@@ -52,15 +52,15 @@ describe("html parser — expression to binding mapping", () => {
 	test("expressions in different attributes map to different bindings", () => {
 		const parsed = parse` <div class="${"a"}" id="${"b"}"></div>`;
 		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 		]);
 	});
 
 	test("mixed content and attribute expressions", () => {
 		const parsed = parse` <div class="${"a"}">${"text"}</div>`;
 		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 			BINDING.CONTENT,
 		]);
 	});
@@ -109,8 +109,8 @@ describe("html parser — whitespace handling", () => {
 		const id = "main";
 		const parsed = parse` <div class="${cls}" id="${id}"></div>`;
 
-		const b0 = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		const b1 = parsed.bindings[1] as SingleValueAttributeStaticBinding;
+		const b0 = parsed.bindings[0] as AttributeStaticBinding;
+		const b1 = parsed.bindings[1] as AttributeStaticBinding;
 		expect(b0.nameParts).toEqual(["class"]);
 		expect(b1.nameParts).toEqual(["id"]);
 	});
@@ -120,8 +120,8 @@ describe("html parser — whitespace handling", () => {
 		const id = "main";
 		const parsed = parse`<div class="${cls}" id="${id}"></div>`;
 
-		const first = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		const second = parsed.bindings[1] as SingleValueAttributeStaticBinding;
+		const first = parsed.bindings[0] as AttributeStaticBinding;
+		const second = parsed.bindings[1] as AttributeStaticBinding;
 		expect(first.nameParts).toEqual(["class"]);
 		expect(second.nameParts).toEqual(["id"]);
 	});
@@ -151,8 +151,8 @@ describe("html parser — void and self-closing elements", () => {
 		const parsed = parse`<input type="${type1}" /><input type="${type2}" />`;
 
 		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 		]);
 	});
 
@@ -161,7 +161,7 @@ describe("html parser — void and self-closing elements", () => {
 		const parsed = parse`<img src="${src}" />`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
 		expect(binding.nameParts).toEqual(["src"]);
 	});
 
@@ -222,13 +222,15 @@ describe("html parser — fragment structure", () => {
 		expect(ps.length).toBe(3);
 	});
 
-	test("dynamic tag uses placeholder div in fragment", () => {
+	test("dynamic tag uses the placeholder element in fragment", () => {
 		const tag = "section";
 		const parsed = parse`
             <${tag}>content</${tag}>`;
 
-		const div = buildFragment(parsed.htmlWithMarkers).querySelector("div");
-		expect(div).not.toBeNull();
+		const placeholder = buildFragment(parsed.htmlWithMarkers).querySelector(
+			DYNAMIC_TAG_PLACEHOLDER,
+		);
+		expect(placeholder).not.toBeNull();
 	});
 
 	test("static attributes are present in fragment", () => {
@@ -282,7 +284,7 @@ describe("html parser — complex templates", () => {
 
 		const types = parsed.bindings.map((b) => b.type);
 		expect(types).toContain(BINDING.TAG);
-		expect(types).toContain(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(types).toContain(BINDING.ATTRIBUTE);
 		expect(types).toContain(BINDING.CONTENT);
 	});
 
@@ -341,7 +343,7 @@ describe("html parser — mixed scenarios", () => {
 
 		expect(parsed.bindings.map((b) => b.type)).toEqual([
 			BINDING.CONTENT,
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 			BINDING.CONTENT,
 		]);
 	});
@@ -368,7 +370,7 @@ describe("html parser — mixed scenarios", () => {
 			</style>`;
 
 		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 			BINDING.RAW_CONTENT,
 		]);
 	});
@@ -385,7 +387,7 @@ describe("html parser — mixed scenarios", () => {
 
 		const types = parsed.bindings.map((b) => b.type);
 		expect(types).toContain(BINDING.TAG);
-		expect(types).toContain(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(types).toContain(BINDING.ATTRIBUTE);
 		expect(types).toContain(BINDING.CONTENT);
 		expect(types).toContain(BINDING.RAW_CONTENT);
 	});
@@ -455,8 +457,7 @@ describe("html parser — mixed scenarios", () => {
 		expect(parsed.bindings.length).toBe(4);
 		const types = parsed.bindings.map((b) => b.type);
 		expect(types).toContain(BINDING.RAW_CONTENT);
-		expect(types).toContain(BINDING.SINGLE_VALUE_ATTRIBUTE);
-		expect(types).toContain(BINDING.NAMED_DYNAMIC);
+		expect(types).toContain(BINDING.ATTRIBUTE);
 		expect(types).toContain(BINDING.CONTENT);
 	});
 });

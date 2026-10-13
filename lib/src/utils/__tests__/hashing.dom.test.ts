@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { hashValue, stringHash } from "../hashing";
+import { hashValue } from "../../rendering/value-hashing";
+import { stringHash } from "../hashing";
 
 describe("stringHash", () => {
 	test("empty string hashes to 0", () => {
@@ -46,8 +47,8 @@ describe("hashValue - primitives", () => {
 	});
 
 	test("tightly-clustered floats produce distinct hashes", () => {
-		// Regression guard: the float hash must distinguish neighbouring values
-		// the animation stress test actually produces (widths like 50.1, 50.100001, 50.2).
+		//the float hash has to separate neighbouring values an animation actually produces, widths like
+		//50.1, 50.100001, 50.2
 		const values = [50.1, 50.1000001, 50.10001, 50.2, 50.20000001];
 		const hashes = new Set(values.map(hashValue));
 		expect(hashes.size).toBe(values.length);
@@ -142,8 +143,9 @@ describe("hashValue - reference types", () => {
 	});
 
 	test("two fresh class instances get distinct counter ids", () => {
-		//the WeakMap fallback path hands out monotonically increasing counter ids — two distinct objects must never collide
-		//we keep this test separate from the function case so a regression that only hits one branch surfaces here, not in the function test where lambda identity already differs
+		//the WeakMap fallback hands out monotonically increasing ids, so two distinct objects never
+		//collide. It stays separate from the function case because there lambda identity already
+		//differs, and a regression hitting only one branch would hide there
 		class Foo {}
 		const firstInstance = new Foo();
 		const secondInstance = new Foo();
@@ -156,7 +158,7 @@ describe("hashValue - reference types", () => {
 	});
 
 	test("two fresh Maps with identical contents hash equal", () => {
-		//Maps are walked for content now, so equal entries hash equal across references
+		//maps are walked for content now, so equal entries hash equal across references
 		const first = new Map<string, number>([["a", 1]]);
 		const second = new Map<string, number>([["a", 1]]);
 		expect(hashValue(first)).toBe(hashValue(second));
@@ -177,8 +179,9 @@ describe("hashValue - reference types", () => {
 });
 
 describe("hashValue - prototype-less objects", () => {
-	//`Object.create(null)` is a real object literal in disguise — it has no `.constructor`, so the `value.constructor === Object` guard in hashValue is `undefined === Object` which is false
-	//=> these objects fall through to the WeakMap reference branch. We pin that contract here so a future change (e.g. switching to a tag check) makes an intentional decision about prototype-less objects.
+	//`Object.create(null)` has no `.constructor`, so the plain-object guard reads `undefined ===
+	//Object` and is false: these fall through to the reference branch. Pinned so a later switch to a
+	//tag check is a deliberate decision about prototype-less objects
 	test("hashes the same reference equally across calls", () => {
 		const plain = Object.create(null) as Record<string, unknown>;
 		plain.value = 1;
@@ -191,5 +194,118 @@ describe("hashValue - prototype-less objects", () => {
 		const second = Object.create(null) as Record<string, unknown>;
 		second.value = 1;
 		expect(hashValue(first)).not.toBe(hashValue(second));
+	});
+});
+
+describe("hashValue - digits that could trade places", () => {
+	//a multiplier at or below the character range lets one character absorb another's carry;
+	//these six were live collisions under `h * 31 + c`
+	test("two-character strings that collide under a small multiplier stay apart", () => {
+		expect(hashValue("Aa")).not.toBe(hashValue("BB"));
+		expect(hashValue("aaa")).not.toBe(hashValue("abB"));
+	});
+
+	test("the same trade inside a container stays apart", () => {
+		expect(hashValue([0, 31])).not.toBe(hashValue([1, 0]));
+		expect(hashValue({ name: "Aa" })).not.toBe(hashValue({ name: "BB" }));
+		expect(hashValue(new Set(["Aa"]))).not.toBe(hashValue(new Set(["BB"])));
+	});
+
+	test("every three-character string over the common alphabet hashes uniquely", () => {
+		const alphabet =
+			"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
+		const seen = new Set<number>();
+		for (const first of alphabet)
+			for (const second of alphabet)
+				for (const third of alphabet)
+					seen.add(stringHash(first + second + third));
+		expect(seen.size).toBe(alphabet.length ** 3);
+	});
+});
+
+describe("hashValue - depth", () => {
+	const nest = (levels: number, leaf: unknown): unknown => {
+		let value: unknown = leaf;
+		for (let index = 0; index < levels; index++) value = { inner: value };
+		return value;
+	};
+
+	test("a cycle truncates instead of overflowing the stack", () => {
+		const cyclic: Record<string, unknown> = { name: "root" };
+		cyclic.self = cyclic;
+
+		expect(() => hashValue(cyclic)).not.toThrow();
+		expect(hashValue(cyclic)).toBe(hashValue(cyclic));
+	});
+
+	test("two cycles that differ above the limit still hash apart", () => {
+		const first: Record<string, unknown> = { name: "a" };
+		first.self = first;
+		const second: Record<string, unknown> = { name: "b" };
+		second.self = second;
+
+		expect(hashValue(first)).not.toBe(hashValue(second));
+	});
+
+	test("a change at the documented depth of 64 is still seen", () => {
+		expect(hashValue(nest(64, "a"))).not.toBe(hashValue(nest(64, "b")));
+	});
+
+	test("a change past it reads as unchanged, which is what the limit costs", () => {
+		expect(hashValue(nest(65, "a"))).toBe(hashValue(nest(65, "b")));
+	});
+});
+
+describe("hashValue - seeded random inputs", () => {
+	//sequential values never collide, so they cannot tell a sound hash from one that lets
+	//inputs trade places; 5,000 inputs in 32 bits expect 0.003 collisions
+	const INPUT_COUNT = 5_000;
+
+	const createRandom = (seed: number) => {
+		let randomState = seed;
+		return (below: number) => {
+			randomState = (Math.imul(randomState, 1103515245) + 12345) >>> 0;
+			return (randomState >>> 8) % below;
+		};
+	};
+
+	const randomText = (random: (below: number) => number) => {
+		let text = "";
+		const length = random(12);
+		for (let index = 0; index < length; index++)
+			text += String.fromCharCode(65 + random(58));
+		return text;
+	};
+
+	const shapes: Array<
+		[string, (random: (below: number) => number) => unknown]
+	> = [
+		["strings", randomText],
+		[
+			"small integers in short arrays",
+			(random) => Array.from({ length: 1 + random(4) }, () => random(64)),
+		],
+		[
+			"plain objects",
+			(random) => ({ [randomText(random)]: random(64), size: random(64) }),
+		],
+	];
+
+	test.each(shapes)("%s: distinct inputs hash apart", (_shape, createInput) => {
+		const random = createRandom(7);
+		const inputByHash = new Map<number, string>();
+		const distinctInputs = new Set<string>();
+		let collisions = 0;
+		for (let draw = 0; draw < INPUT_COUNT; draw++) {
+			const input = createInput(random);
+			const spelling = JSON.stringify(input);
+			distinctInputs.add(spelling);
+			const hash = hashValue(input);
+			const earlier = inputByHash.get(hash);
+			if (earlier === undefined) inputByHash.set(hash, spelling);
+			else if (earlier !== spelling) collisions++;
+		}
+		expect(distinctInputs.size).toBeGreaterThan(INPUT_COUNT / 2);
+		expect(collisions).toBe(0);
 	});
 });

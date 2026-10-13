@@ -2,9 +2,11 @@ import { describe, expect, test, vi } from "vitest";
 import { flushHostPayload, load } from "../load";
 
 //node env — `window` is undefined here, so load takes the server path
-//these tests exercise the server-side collection + flushHostPayload contract; the client-side DOM behavior lives in load.dom.test.ts
+//the server-side collection and flushHostPayload contract; the client-side DOM behaviour lives in
+//load.dom.test.ts
 
-//minimal host stand-in: WeakMap keying needs only object identity, and flushHostPayload bails when shadowRoot/ownerDocument are missing
+//a minimal host stand-in: WeakMap keying needs only object identity, and flushHostPayload bails
+//when shadowRoot or ownerDocument is missing
 const createServerHost = (): Element => ({}) as unknown as Element;
 
 describe("load on the server collects values per host", () => {

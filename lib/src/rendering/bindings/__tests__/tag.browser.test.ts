@@ -210,8 +210,9 @@ describe("tag updates", () => {
 	});
 
 	test("tag swap concurrent with attribute change lands new values on the new element", async () => {
-		//tag.ts replaces the element and re-points every related-attribute target at the new element, then marks them dirty for the next flush
-		//if the dirty-mark order were wrong, the new element would still carry the old value or the old element would receive the new value (visible only via DOM observation)
+		//the swap replaces the element, re-points every related attribute target at the new one and
+		//marks them dirty for the next flush. A wrong order leaves the new element carrying the old
+		//value, or the old element receiving the new one, visible only through the DOM
 		const tag = uniqueTag();
 		let tagName = "div";
 		let label = "first";
@@ -242,8 +243,83 @@ describe("tag updates", () => {
 		cleanup(element);
 	});
 
+	test("a multi-part attribute keeps writing to the new element after a tag swap", async () => {
+		//the multi-part lane is the one the swap does not rewrite, because copying the attributes
+		//across already carries its whole value. It still has to be re-pointed, or every later
+		//render writes into the element the swap detached
+		const tag = uniqueTag();
+		let tagName = "div";
+		let modifier = "small";
+
+		const MyElement = component(function* () {
+			yield () => html`
+                <${tagName} class="box ${modifier}">content</${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		expect(
+			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
+		).toBe("box small");
+
+		tagName = "section";
+		modifier = "large";
+		await element.update();
+		await sleep();
+
+		const section = element.shadowRoot?.querySelector("section")!;
+		expect(section.getAttribute("class")).toBe("box large");
+
+		modifier = "wide";
+		await element.update();
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("section")).toBe(section);
+		expect(section.getAttribute("class")).toBe("box wide");
+
+		cleanup(element);
+	});
+
+	test("a spread's property value is written again after a tag swap", async () => {
+		//copying the attributes across carries the stringable half of a spread, and nothing else:
+		//a property was never an attribute, so the swap has to write it onto the new element
+		const tag = uniqueTag();
+		let tagName = "div";
+		const payload = [{ id: 1 }];
+		const attributes = { title: "kept", payload };
+
+		const MyElement = component(function* () {
+			yield () => html`
+                <${tagName} ${attributes}>content</${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const div = element.shadowRoot?.querySelector("div")!;
+		expect(div.getAttribute("title")).toBe("kept");
+		expect((div as unknown as Record<string, unknown>).payload).toBe(payload);
+
+		tagName = "section";
+		await element.update();
+		await sleep();
+
+		const section = element.shadowRoot?.querySelector("section")!;
+		expect(section.getAttribute("title")).toBe("kept");
+		expect(section.hasAttribute("payload")).toBe(false);
+		expect((section as unknown as Record<string, unknown>).payload).toBe(
+			payload,
+		);
+
+		cleanup(element);
+	});
+
 	test("tag swap with concurrent content change updates the inner text on the new element", async () => {
-		//the content binding sits inside the dynamic tag; when the tag rewraps, the parser keeps the comment markers inside, so updateContent should still find its anchor on the new element's child list
+		//the content binding sits inside the dynamic tag, and a rewrap keeps the marker comments inside
+		//it, so the content update still finds its anchor on the new element's child list
 		const tag = uniqueTag();
 		let tagName = "div";
 		let text = "before";
@@ -274,8 +350,9 @@ describe("tag updates", () => {
 	});
 
 	test("event handler is reattached after a tag swap that also changes the handler", async () => {
-		//`onclick="${fn}"` compiles to a static EVENT binding (addEventListener); listeners are not copyable off element.attributes
-		//=> swapElement carries the EVENT binding onto the new element, and commitEvent's changed-handler path installs the new one
+		//`onclick="${fn}"` compiles to a static EVENT binding and a listener is not copyable off
+		//element.attributes, so the swap has to carry the binding itself onto the new element for the
+		//changed-handler path to install it
 		const tag = uniqueTag();
 		let tagName = "button";
 		const clicks: string[] = [];
@@ -306,8 +383,8 @@ describe("tag updates", () => {
 	});
 
 	test("static event listener survives a tag swap when the handler reference is unchanged", async () => {
-		//the load-bearing case for reapplyOnSwap: with an identical handler, commitEvent's gate returns early,
-		//so the listener only lands on the new element if swapElement carried the EVENT binding across
+		//with an identical handler the event gate returns early, so the listener only lands on the new
+		//element if the swap carried the EVENT binding across
 		const tag = uniqueTag();
 		let tagName = "button";
 		const clicks: string[] = [];
@@ -400,6 +477,44 @@ describe("tag updates", () => {
 		expect(element.shadowRoot?.querySelector("h3")?.textContent).toBe(
 			"heading",
 		);
+
+		cleanup(element);
+	});
+
+	test("carried props arrive before the swapped-in element mounts", async () => {
+		const childTag = uniqueTag();
+		customElements.define(
+			childTag,
+			component(
+				function* ({ items }) {
+					yield () => html`<span>${items.length}</span>`;
+				},
+				{
+					props: {
+						items: [(incoming: unknown) => incoming as Array<unknown>, []],
+					},
+				},
+			),
+		);
+
+		const tag = uniqueTag();
+		let tagName = "div";
+		const rows = ["a", "b"];
+
+		const MyElement = component(function* () {
+			yield () => html`<${tagName} items=${rows}></${tagName}>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		tagName = childTag;
+		await element.update();
+		await sleep();
+
+		const child = element.shadowRoot?.querySelector(childTag);
+		expect(child?.shadowRoot?.textContent).toContain("2");
 
 		cleanup(element);
 	});

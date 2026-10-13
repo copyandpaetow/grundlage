@@ -1,15 +1,30 @@
 import { defineConfig } from "tsdown";
 
-export default defineConfig({
+const sharedOptions = {
 	entry: ["src/index.ts"],
 	format: ["esm"],
 	target: "es2024",
-	outDir: "dist",
-	dts: true,
-	minify: true,
 	sourcemap: true,
-	clean: true,
 	deps: {
 		skipNodeModulesBundle: true,
 	},
-});
+} as const;
+
+export default defineConfig([
+	{
+		...sharedOptions,
+		outDir: "dist",
+		dts: true,
+		minify: true,
+		clean: ["dist/*.mjs", "dist/*.mts", "dist/*.map"],
+		define: { GRUNDLAGE_IS_DEVELOPMENT_BUILD: "false" },
+	},
+	{
+		...sharedOptions,
+		outDir: "dist/development",
+		dts: false,
+		minify: false,
+		clean: true,
+		define: { GRUNDLAGE_IS_DEVELOPMENT_BUILD: "true" },
+	},
+]);

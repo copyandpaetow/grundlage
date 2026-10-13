@@ -1,6 +1,6 @@
 {
 	"name": "grundlage",
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"description": "Zero-dependency library for building web components with tagged template literals, server-rendered and hydrated on the client.",
 	"license": "MIT",
 	"author": "Lucas Paetow",
@@ -31,6 +31,7 @@
 	"exports": {
 		".": {
 			"types": "./dist/index.d.mts",
+			"development": "./dist/development/index.mjs",
 			"import": "./dist/index.mjs"
 		},
 		"./llms.txt": "./llms.txt",
@@ -38,7 +39,8 @@
 	},
 	"files": [
 		"dist",
-		"llms.txt"
+		"llms.txt",
+		"CHANGELOG.md"
 	],
 	"scripts": {
 		"build": "tsdown",

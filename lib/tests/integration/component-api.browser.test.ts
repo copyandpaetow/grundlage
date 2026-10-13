@@ -17,7 +17,7 @@ describe("BaseComponent.setProp", () => {
 	test("applies a string value as an attribute and triggers a re-render", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = component(function* (element) {
+		const MyElement = component(function* ({ host: element }) {
 			yield () =>
 				html`<span>${element.getAttribute("data-label") ?? "none"}</span>`;
 		});
@@ -136,5 +136,89 @@ describe("component() input validation", () => {
 
 	test("an async generator function is accepted", () => {
 		expect(() => component(async function* () {})).not.toThrow();
+	});
+});
+
+describe("BaseComponent.setProp on a declared prop", () => {
+	let tagId = 0;
+	const uniqueTag = () => `test-set-prop-declared-${tagId++}-${Date.now()}`;
+
+	const mountWithRenderCounter = async (
+		tag: string,
+	): Promise<{ element: HTMLElement; renderCount: () => number }> => {
+		let renders = 0;
+		customElements.define(
+			tag,
+			component(
+				function* () {
+					yield () => {
+						renders++;
+						return html`<span>rendered</span>`;
+					};
+				},
+				{ props: { label: [String, "start"] as const } },
+			),
+		);
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+		await sleep();
+		return { element, renderCount: () => renders };
+	};
+
+	test("a refused value does not re-render", async () => {
+		const tag = uniqueTag();
+		let renders = 0;
+		customElements.define(
+			tag,
+			component(
+				function* () {
+					yield () => {
+						renders++;
+						return html`<span>rendered</span>`;
+					};
+				},
+				{
+					props: {
+						evenOnly: [
+							(incoming: unknown) =>
+								Number(incoming) % 2 === 0 ? Number(incoming) : undefined,
+							0,
+						] as const,
+					},
+				},
+			),
+		);
+		const element = document.createElement(tag) as HTMLElement & {
+			setProp: (name: string, value: unknown) => void;
+		};
+		document.body.appendChild(element);
+		await sleep();
+		const rendersAfterMount = renders;
+
+		element.setProp("evenOnly", 3);
+		await sleep(50);
+
+		expect(renders).toBe(rendersAfterMount);
+		element.remove();
+	});
+
+	test("re-writing the same primitive does not re-render", async () => {
+		const tag = uniqueTag();
+		const { element, renderCount } = await mountWithRenderCounter(tag);
+		const setProp = (
+			element as HTMLElement & {
+				setProp: (name: string, value: unknown) => void;
+			}
+		).setProp.bind(element);
+
+		setProp("label", "next");
+		await sleep(50);
+		const rendersAfterFirstWrite = renderCount();
+
+		setProp("label", "next");
+		await sleep(50);
+
+		expect(renderCount()).toBe(rendersAfterFirstWrite);
+		element.remove();
 	});
 });

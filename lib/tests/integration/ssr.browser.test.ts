@@ -1,10 +1,12 @@
-import { describe, expect, test } from "vitest";
-import { html, component } from "../../src/index";
+import { describe, expect, test, vi } from "vitest";
+import { html, component, load } from "../../src/index";
+import { ComponentConstructor } from "../../src/types";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
-//resolve as soon as the first-yield content lands; a fixed sleep would silently flake on slower async-before-yield generators
+//resolves as soon as the first-yield content lands; a fixed sleep flakes on slower
+//async-before-yield generators
 const waitForShadowContent = async (element: HTMLElement, timeoutMs = 200) => {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -21,14 +23,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		element.remove();
 	};
 
-	/**
-	 * Flips `__grundlage_ssr__`, mounts, polls for first-yield content,
-	 * serializes, removes the element, clears the flag.
-	 * Returns the declarative-shadow-DOM HTML the plugin would emit.
-	 */
 	const serverRender = async (
 		tag: string,
-		ComponentClass: ReturnType<typeof render>,
+		ComponentClass: ComponentConstructor,
 	): Promise<string> => {
 		(globalThis as { __grundlage_ssr__?: boolean }).__grundlage_ssr__ = true;
 		try {
@@ -37,13 +34,14 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			document.body.appendChild(element);
 			//poll rather than sleep — async-before-yield settle times are workload-dependent
 			await waitForShadowContent(element);
-			//host attrs land on the element itself; getHTML returns shadow content only, so we re-emit them around it
+			//host attributes land on the element itself and getHTML returns shadow content only, so they
+			//are re-emitted around it
 			const hostAttrs = Array.from(element.attributes)
 				.map((attribute) => ` ${attribute.name}="${attribute.value}"`)
 				.join("");
 			const serialized = element.getHTML({ serializableShadowRoots: true });
 			element.remove();
-			//let the async disconnectedCallback drain so the next test's customElements.define can't race teardown
+			//let the async disconnectedCallback drain, so the next define cannot race teardown
 			await sleep();
 			return `<${tag}${hostAttrs}>${serialized}</${tag}>`;
 		} finally {
@@ -51,11 +49,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 		}
 	};
 
-	/**
-	 * Mounts serialized SSR HTML via setHTMLUnsafe — simulates the browser
-	 * parsing declarative shadow DOM. The custom element class must NOT be
-	 * defined yet at this point.
-	 */
+	//the tag must still be undefined when this runs, so the element is parsed and connected before
+	//anything upgrades it — the order a real page loads in
 	const hydrateFromHTML = (serializedHTML: string): HTMLElement => {
 		const wrapper = document.createElement("div");
 		wrapper.setHTMLUnsafe(serializedHTML);
@@ -214,7 +209,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 				customElements.define(clientTag, makeComponent());
 				await sleep();
-				//hydrate wires bindings without overwriting the server text
+				//server and client render the same value here, so hydration compares and writes nothing
 				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 					"loading",
 				);
@@ -232,7 +227,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("comment markers survive serialization → setHTMLUnsafe → hydrate", async () => {
-				//hydrate() walks COMMENT_IDENTIFIER markers — if serialization strips them, every update silently misfires
+				//hydration walks the marker comments: serialization stripping them makes every later update
+				//misfire silently
 				//proof-by-effect: a post-hydrate update must change the DOM
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
@@ -339,7 +335,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				await serverRender(serverTag, ServerComponent);
 				expect(serverPostYieldRan).toBe(false);
 
-				//separate factory + flag so we can prove the client ran its own post-yield body
+				//a separate factory and flag are what prove the client ran its own post-yield body
 				const ClientComponent = component(function* () {
 					yield () => html`<p>shared</p>`;
 					clientPostYieldRan = true;
@@ -360,8 +356,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				cleanup(element);
 			});
 
-			test("nested generator: server stops at INNER's first yield, client hydrates against it", async () => {
-				//client MUST be single-yield: a second yield with a different templateHash would replaceChildren and waste the hydrate
+			test("nested generator: server stops at the inner's first yield, client hydrates against it", async () => {
+				//the client has to be single-yield: a second yield with a different template hash replaces
+				//the children and wastes the adoption
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				let innerSecondYielded = false;
@@ -400,8 +397,164 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				cleanup(element);
 			});
 
+			test("an inner generator's throw the outer catches paints the recovery content", async () => {
+				const serverTag = uniqueTag();
+				const clientTag = uniqueTag();
+
+				const ServerComponent = component(function* () {
+					yield function* inner() {
+						yield () => html`<p>server-content</p>`;
+					};
+				});
+
+				const serialized = await serverRender(serverTag, ServerComponent);
+				expect(serialized).toContain("server-content");
+
+				const ClientComponent = component(function* () {
+					try {
+						yield function* inner() {
+							//an object in a content hole throws, and an inner generator's throw reaches the
+							//outer's yield rather than the fatal display
+							yield () => html`<p>${new Date() as unknown as string}</p>`;
+						};
+					} catch {
+						yield () => html`<p>recovered</p>`;
+					}
+				});
+
+				const clientHTML = serialized.replace(
+					new RegExp(serverTag, "g"),
+					clientTag,
+				);
+				const element = hydrateFromHTML(clientHTML);
+				customElements.define(clientTag, ClientComponent);
+				await sleep();
+
+				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+					"recovered",
+				);
+
+				cleanup(element);
+			});
+
+			//the three content kinds the server range can be rejected for; each one lands on the
+			//rebuild in hydrateContent, which had no coverage at all
+			const hydrateContentMismatch = async (
+				serverBody: () => unknown,
+				clientBody: () => unknown,
+			) => {
+				const serverTag = uniqueTag();
+				const clientTag = uniqueTag();
+				const serialized = await serverRender(
+					serverTag,
+					component(function* () {
+						yield () => html`<div>${serverBody()}</div>`;
+					}),
+				);
+				const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+				const element = hydrateFromHTML(
+					serialized.replace(new RegExp(serverTag, "g"), clientTag),
+				);
+				customElements.define(
+					clientTag,
+					component(function* () {
+						yield () => html`<div>${clientBody()}</div>`;
+					}),
+				);
+				await sleep();
+				const warned = warnSpy.mock.calls.some((call) =>
+					String(call[0]).includes("hydration mismatch"),
+				);
+				warnSpy.mockRestore();
+				return { element, warned };
+			};
+
+			test("content mismatch: a server text range rejected by a client list rebuilds as a list", async () => {
+				const { element, warned } = await hydrateContentMismatch(
+					() => "server text",
+					() => ["one", "two", "three"].map((item) => html`<p>${item}</p>`),
+				);
+
+				expect(warned).toBe(true);
+				expect(
+					Array.from(element.shadowRoot!.querySelectorAll("p")).map(
+						(paragraph) => paragraph.textContent,
+					),
+				).toEqual(["one", "two", "three"]);
+				expect(element.shadowRoot!.textContent).not.toContain("server text");
+
+				cleanup(element);
+			});
+
+			test("content mismatch: a server list range rejected by a client text rebuilds as text", async () => {
+				const { element, warned } = await hydrateContentMismatch(
+					() => ["one", "two"].map((item) => html`<p>${item}</p>`),
+					() => "client text",
+				);
+
+				expect(warned).toBe(true);
+				expect(element.shadowRoot!.querySelector("p")).toBe(null);
+				expect(element.shadowRoot!.textContent).toContain("client text");
+
+				cleanup(element);
+			});
+
+			test("content mismatch: a server text range rejected by a client branch rebuilds as a branch", async () => {
+				const { element, warned } = await hydrateContentMismatch(
+					() => "server text",
+					() => html`<section>${"branch"}</section>`,
+				);
+
+				expect(warned).toBe(true);
+				expect(element.shadowRoot!.querySelector("section")?.textContent).toBe(
+					"branch",
+				);
+				expect(element.shadowRoot!.textContent).not.toContain("server text");
+
+				cleanup(element);
+			});
+
+			test("a root-rejected range still reports the payloads it left unclaimed", async () => {
+				const serverTag = uniqueTag();
+				const clientTag = uniqueTag();
+				const serialized = await serverRender(
+					serverTag,
+					component(function* ({ host }) {
+						yield load(host, async () => "server payload");
+						yield () => html`<div>${"server"}</div>`;
+					}),
+				);
+				expect(serialized).toContain("data-ssr");
+
+				const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+				const element = hydrateFromHTML(
+					serialized.replace(new RegExp(serverTag, "g"), clientTag),
+				);
+				//one binding more than the server wrote markers for, so the walk fails at the root
+				customElements.define(
+					clientTag,
+					component(function* () {
+						yield () =>
+							html`<div>${"a"}</div>
+								<span>${"b"}</span>`;
+					}),
+				);
+				await sleep();
+				const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
+				warnSpy.mockRestore();
+
+				expect(
+					warnings.some((text) => text.includes("hydration mismatch")),
+				).toBe(true);
+				expect(
+					warnings.some((text) => text.includes("1 SSR load() payload(s)")),
+				).toBe(true);
+
+				cleanup(element);
+			});
+
 			test("host attribute mismatch: server's first-yield value is overwritten by the client's first-yield value", async () => {
-				//hydrate re-applies ATTR bindings — host attrs are the one category where the client value wins
+				//hydrate re-applies attribute bindings — host attrs are the one category where the client value wins
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 
@@ -448,12 +601,13 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 			test("update() scheduled from inside the first-yield render fn does not re-invoke it (infinite-loop guard)", async () => {
 				//RENDER_FUNCTION source caches the fn — a broken guard would loop forever
-				//count render-fn calls specifically; yields alone would pass even with a broken guard because the cancel still stops the generator
+				//render-function calls, not yields: a yield count passes even with a broken guard, because
+				//the cancel still stops the generator
 				const serverTag = uniqueTag();
 				let renderFunctionCalls = 0;
 				let secondYieldRan = false;
 
-				const Component = component(function* (host) {
+				const Component = component(function* ({ host }) {
 					yield () => {
 						renderFunctionCalls++;
 						queueMicrotask(() => host.update());
@@ -471,7 +625,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("client mount without server-side flag runs the generator normally", async () => {
-				//paranoia: if the flag unset in serverRender's finally ever broke, the client would stop at first yield too
+				//a flag left set by serverRender's finally would stop the client at its first yield too
 				const clientTag = uniqueTag();
 				let firstYield = true;
 
@@ -508,7 +662,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const element = hydrateFromHTML(serialized);
 			await sleep();
 
-			// Server-rendered content should be preserved (not replaced by CSR mount)
+			//server-rendered content should be preserved (not replaced by CSR mount)
 			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
 				"content",
 			);
@@ -609,6 +763,40 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
+		test("adopts a nested template's nodes instead of rebuilding them", async () => {
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const makeComponent = () =>
+				component(function* () {
+					yield () => html`<div>${html`<span>${"nested"}</span>`}</div>`;
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const element = hydrateFromHTML(clientHTML);
+			const serverSpan = element.shadowRoot!.querySelector("span");
+			expect(serverSpan?.textContent).toBe("nested");
+
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+			const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
+			warnSpy.mockRestore();
+
+			expect(
+				warnings.filter((text) => text.includes("hydration mismatch")).length,
+			).toBe(0);
+			expect(element.shadowRoot!.querySelectorAll("span").length).toBe(1);
+			expect(element.shadowRoot!.querySelector("span")).toBe(serverSpan);
+
+			cleanup(element);
+		});
+
 		test("cleanup callback fires after hydration", async () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
@@ -647,11 +835,17 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
+			//declared, because only a declared attribute re-renders — an undeclared write is ignored
 			const makeComponent = () =>
-				component(function* (element) {
-					yield () =>
-						html`<span>${element.getAttribute("data-label") ?? "none"}</span>`;
-				});
+				component(
+					function* ({ host: element }) {
+						yield () =>
+							html`<span
+								>${element.getAttribute("data-label") ?? "none"}</span
+							>`;
+					},
+					{ props: { "data-label": String } },
+				);
 
 			const serialized = await serverRender(serverTag, makeComponent());
 			const clientHTML = serialized.replace(
@@ -703,9 +897,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
-		test("hydrate leaves server CONTENT in place even when client's first render carries a different value", async () => {
-			//hydrate re-applies ATTR bindings only — CONTENT is left alone so we don't overwrite the server text
-			//two unrelated classes with hardcoded text so server/client disagree; the DOM must match the server
+		test("hydrate repairs server content when the client's first render carries a different value", async () => {
+			//two unrelated classes with hardcoded text so server/client disagree; adopting text the
+			//client no longer renders is the silent stale render, so hydrate compares and writes
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
@@ -726,17 +920,19 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			await sleep();
 
 			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-				"server-value",
+				"client-value",
 			);
 
-			//no update() follow-up here — both renders carry the same hardcoded expression, so update would see current === previous and skip
+			//no update() follow-up: both renders carry the same hardcoded expression, so it would see
+			//current === previous and skip
 			//"responds to update() after hydration" above covers the actual refresh path
 
 			cleanup(element);
 		});
 
 		test("hydrate refreshes a host attribute when the client renders a different value", async () => {
-			//host attrs aren't serialized into the shadow root; hydrate re-applies all ATTR bindings, so the client value wins
+			//host attributes are not serialized into the shadow root, so hydration re-applies every
+			//attribute binding and the client value wins
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
@@ -864,6 +1060,95 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				customData?: unknown;
 			};
 			expect(target.customData).toEqual(payload);
+
+			cleanup(element);
+		});
+
+		test("a spread rewrites nothing the server already carries", async () => {
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const makeComponent = () =>
+				component(function* () {
+					const attributes = { "data-role": "row", title: "same" };
+					yield () => html`<div ${attributes}>x</div>`;
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+			const element = hydrateFromHTML(clientHTML);
+
+			const rewrittenAttributes: Array<string> = [];
+			const observer = new MutationObserver((records) => {
+				for (const record of records)
+					rewrittenAttributes.push(record.attributeName!);
+			});
+			observer.observe(element.shadowRoot!, {
+				attributes: true,
+				subtree: true,
+			});
+
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+			observer.disconnect();
+
+			expect(rewrittenAttributes).toEqual([]);
+
+			cleanup(element);
+		});
+
+		test("a dynamic style sheet hydrates without touching the CSSOM, then updates through it", async () => {
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const makeComponent = () =>
+				component(function* ({ host }) {
+					let color = "red";
+					(host as HTMLElement & { recolor?: () => void }).recolor = () => {
+						color = "blue";
+						host.update();
+					};
+					yield () =>
+						html`<style>
+								p {
+									color: ${color};
+								}
+							</style>
+							<p>text</p>`;
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			expect(serialized).toContain("color: red");
+
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+			const element = hydrateFromHTML(clientHTML) as HTMLElement & {
+				recolor: () => void;
+			};
+
+			const setProperty = vi.spyOn(
+				CSSStyleDeclaration.prototype,
+				"setProperty",
+			);
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+
+			expect(setProperty).not.toHaveBeenCalled();
+
+			element.recolor();
+			await sleep();
+
+			//the lane still works: seeding the hashes must not read as a demotion to the text lane
+			expect(setProperty).toHaveBeenCalledTimes(1);
+			setProperty.mockRestore();
+			expect(
+				getComputedStyle(element.shadowRoot!.querySelector("p")!).color,
+			).toBe("rgb(0, 0, 255)");
 
 			cleanup(element);
 		});

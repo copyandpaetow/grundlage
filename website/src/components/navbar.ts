@@ -20,6 +20,8 @@ customElements.define(
 				<a href="/grundlage/pages/nesting/">nesting</a>
 				<a href="/grundlage/pages/krausest/">krausest</a>
 				<a href="/grundlage/pages/ssr-vs-csr/">ssr vs csr</a>
+				<a href="/grundlage/pages/parser-bench/">parser bench</a>
+				<a href="/grundlage/pages/render-bench/">render bench</a>
 			</nav>
 		`;
 	}),

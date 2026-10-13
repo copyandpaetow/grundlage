@@ -68,7 +68,7 @@ const mutateValues = (rows: Array<Row>) => {
 
 customElements.define(
 	"reorder-stress",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		let itemCount = Number(element.getAttribute("items") ?? 1000);
 		let rows: Array<Row> = buildRows(itemCount);
 		const measurements = new Map<string, Measurement>();

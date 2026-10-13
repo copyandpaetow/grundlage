@@ -31,7 +31,7 @@ const buildRows = (count: number): Array<Row> => {
 
 customElements.define(
 	"mutation-stress",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		let itemCount = Number(element.getAttribute("items") ?? 1000);
 		let rows: Array<Row> = buildRows(itemCount);
 		let nextIdentifier = itemCount;

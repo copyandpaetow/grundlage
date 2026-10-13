@@ -98,7 +98,7 @@ describe("html parser — root template dynamic attributes", () => {
 
 		expect(parsed.hostBindingCount).toBe(1);
 		expect(parsed.bindings).toHaveLength(1);
-		expect(parsed.bindings[0].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[0].type).toBe(BINDING.ATTRIBUTE);
 	});
 
 	test("multiple dynamic host attributes each contribute one binding", () => {
@@ -171,9 +171,9 @@ describe("html parser — root template dynamic attributes", () => {
 			valueParts: ["static"],
 		});
 		expect(parsed.bindings[1]).toMatchObject({
-			type: BINDING.SINGLE_VALUE_ATTRIBUTE,
+			type: BINDING.ATTRIBUTE,
 			nameParts: ["data-x"],
-			valueIndex: 0,
+			valueParts: [0],
 		});
 		expect(parsed.bindings[2]).toMatchObject({
 			nameParts: ["role"],
@@ -198,7 +198,7 @@ describe("html parser — root template binding ordering", () => {
 
 		expect(parsed.hostBindingCount).toBe(1);
 		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 			BINDING.CONTENT,
 		]);
 	});
@@ -213,8 +213,8 @@ describe("html parser — root template binding ordering", () => {
 
 		expect(parsed.hostBindingCount).toBe(2);
 		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 			BINDING.CONTENT,
 		]);
 	});
@@ -417,7 +417,7 @@ describe("html parser — root template misdetection and reparse", () => {
 
 		expect(parsed.hostBindingCount).toBe(0);
 		expect(parsed.bindings).toHaveLength(1);
-		expect(parsed.bindings[0].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[0].type).toBe(BINDING.ATTRIBUTE);
 	});
 
 	test("reparse path does not leak forceNoRootTemplate to the next parse", () => {
@@ -463,7 +463,7 @@ describe("html parser — root template misdetection and reparse", () => {
 		expect(parsed.hostBindingCount).toBe(0);
 		expect(parsed.bindings.map((b) => b.type)).toEqual([
 			BINDING.TAG,
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 		]);
 	});
 
@@ -516,7 +516,7 @@ describe("html parser — root template nested cases", () => {
 			nameParts: ["id"],
 			valueParts: ["host"],
 		});
-		expect(parsed.bindings[1].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[1].type).toBe(BINDING.ATTRIBUTE);
 	});
 
 	test("dynamic inner tag with dynamic attribute does not count as host", () => {
@@ -531,6 +531,6 @@ describe("html parser — root template nested cases", () => {
 			valueParts: ["host"],
 		});
 		expect(parsed.bindings[1].type).toBe(BINDING.TAG);
-		expect(parsed.bindings[2].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[2].type).toBe(BINDING.ATTRIBUTE);
 	});
 });

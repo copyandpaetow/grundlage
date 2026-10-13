@@ -1,36 +1,40 @@
-import { CHAR_CODE, isQuoteCode, isWhitespaceCode } from "./chars";
+import { CHARACTER_CODE, isQuoteCode, isWhitespaceCode } from "./characters";
 import { ValueOf } from "../utils/types";
+import { STYLE_SHEET_NOT_COMPILED } from "./constants";
 import {
 	CompiledStyleSheet,
 	DynamicDeclaration,
 	Part,
 	RuleCountCheck,
 } from "./types";
+import { assertDuringDevelopment } from "../utils/diagnostics";
 
-type CssStateValue = ValueOf<typeof CSS_STATE>;
+type CSSStateKind = ValueOf<typeof CSS_STATE>;
 
 const CSS_STATE = {
-	SELECTOR: 0,
-	PROPERTY: 1,
-	VALUE: 2,
-	STRING: 3,
-	COMMENT: 4,
+	SELECTOR: 50,
+	PROPERTY: 51,
+	VALUE: 52,
 } as const;
 
-type RuleKindValue = ValueOf<typeof RULE_KIND>;
+type RuleKind = ValueOf<typeof RULE_KIND>;
 
 const RULE_KIND = {
-	STYLE: 0,
-	GROUPING: 1,
-	KEYFRAMES: 2,
-	DESCRIPTOR: 3,
+	STYLE: 60,
+	GROUPING: 61,
+	KEYFRAMES: 62,
+	DESCRIPTOR: 63,
 } as const;
 
 const NO_OPEN_RUN = -1;
+const NOT_A_PROPERTY_NAME: unique symbol = Symbol("not a property name");
+const UNSUPPORTED_PRIORITY: unique symbol = Symbol("unsupported priority");
+const COMMENT_OPEN = "/*";
+const COMMENT_CLOSE = "*/";
+const CUSTOM_PROPERTY_PREFIX = "--";
 
-//grouping at-rules keep the fast path: they nest style rules whose declarations land on an
-//addressable CSSOM block, so a hole inside stays updatable — unlike descriptor at-rules
-//(@font-face, @property, …), which the default arm of readAtRuleKind drops to the fallback
+//grouping at-rules nest style rules on an addressable CSSOM block, so a hole inside stays
+//updatable; descriptor at-rules (@font-face, @property) fall back in readAtRuleKind's default arm
 const FAST_PATH_GROUPING_AT_RULE_NAMES = new Set([
 	"media",
 	"supports",
@@ -41,96 +45,142 @@ const FAST_PATH_GROUPING_AT_RULE_NAMES = new Set([
 ]);
 const FAST_PATH_KEYFRAMES_AT_RULE_NAME = "keyframes";
 
+//every branch of the character loop below ignores anything outside this set, and CSS is
+//overwhelmingly made of characters that are not in it
+const SIGNIFICANT_CODE_LIMIT = 128;
+const SIGNIFICANT_CODES = new Uint8Array(SIGNIFICANT_CODE_LIMIT);
+for (const code of [
+	CHARACTER_CODE.SINGLE_QUOTE,
+	CHARACTER_CODE.DOUBLE_QUOTE,
+	CHARACTER_CODE.SLASH,
+	CHARACTER_CODE.OPEN_PAREN,
+	CHARACTER_CODE.CLOSE_PAREN,
+	CHARACTER_CODE.OPEN_BRACE,
+	CHARACTER_CODE.CLOSE_BRACE,
+	CHARACTER_CODE.SEMICOLON,
+	CHARACTER_CODE.COLON,
+	CHARACTER_CODE.AT,
+	CHARACTER_CODE.BANG,
+]) {
+	SIGNIFICANT_CODES[code] = 1;
+}
+
 const isLetterCode = (code: number) =>
-	(code >= CHAR_CODE.LOWERCASE_A && code <= CHAR_CODE.LOWERCASE_Z) ||
-	(code >= CHAR_CODE.UPPERCASE_A && code <= CHAR_CODE.UPPERCASE_Z);
+	(code >= CHARACTER_CODE.LOWERCASE_A && code <= CHARACTER_CODE.LOWERCASE_Z) ||
+	(code >= CHARACTER_CODE.UPPERCASE_A && code <= CHARACTER_CODE.UPPERCASE_Z);
 
 const isDigitCode = (code: number) =>
-	code >= CHAR_CODE.DIGIT_ZERO && code <= CHAR_CODE.DIGIT_NINE;
+	code >= CHARACTER_CODE.DIGIT_ZERO && code <= CHARACTER_CODE.DIGIT_NINE;
 
 const isAtRuleNameCode = (code: number) =>
-	isLetterCode(code) || code === CHAR_CODE.DASH;
+	isLetterCode(code) || code === CHARACTER_CODE.DASH;
 
 const isStandardNameCode = (code: number) =>
-	isLetterCode(code) || isDigitCode(code) || code === CHAR_CODE.DASH;
+	isLetterCode(code) || isDigitCode(code) || code === CHARACTER_CODE.DASH;
 
 const isCustomNameCode = (code: number) =>
-	isStandardNameCode(code) || code === CHAR_CODE.UNDERSCORE;
+	isStandardNameCode(code) || code === CHARACTER_CODE.UNDERSCORE;
 
 const skipWhitespaceAndComments = (raw: string, index: number): number => {
-	for (;;) {
+	while (index < raw.length) {
 		const code = raw.charCodeAt(index);
 		if (isWhitespaceCode(code)) {
 			index++;
 			continue;
 		}
-		const opensComment =
-			code === CHAR_CODE.SLASH &&
-			raw.charCodeAt(index + 1) === CHAR_CODE.ASTERISK;
-		if (!opensComment) return index;
-		index += 2;
-		while (
-			index < raw.length &&
-			!(
-				raw.charCodeAt(index) === CHAR_CODE.ASTERISK &&
-				raw.charCodeAt(index + 1) === CHAR_CODE.SLASH
-			)
-		)
-			index++;
-		index += 2;
+		if (!raw.startsWith(COMMENT_OPEN, index)) return index;
+		const commentClose = raw.indexOf(
+			COMMENT_CLOSE,
+			index + COMMENT_OPEN.length,
+		);
+		if (commentClose === -1) return raw.length;
+		index = commentClose + COMMENT_CLOSE.length;
 	}
+	return index;
 };
 
-const normalizePropertyName = (raw: string): string | null => {
-	const start = skipWhitespaceAndComments(raw, 0);
-	const isCustom =
-		raw.charCodeAt(start) === CHAR_CODE.DASH &&
-		raw.charCodeAt(start + 1) === CHAR_CODE.DASH;
+const findClosingQuoteIndex = (
+	raw: string,
+	openingQuoteIndex: number,
+): number => {
+	const quote = raw[openingQuoteIndex];
+	let searchIndex = openingQuoteIndex + 1;
+	while (searchIndex < raw.length) {
+		const closingIndex = raw.indexOf(quote, searchIndex);
+		if (closingIndex === -1) return -1;
+
+		let backslashCount = 0;
+		let scanIndex = closingIndex - 1;
+		while (
+			scanIndex > openingQuoteIndex &&
+			raw.charCodeAt(scanIndex) === CHARACTER_CODE.BACKSLASH
+		) {
+			backslashCount++;
+			scanIndex--;
+		}
+		if (backslashCount % 2 === 0) return closingIndex;
+		searchIndex = closingIndex + 1;
+	}
+	return -1;
+};
+
+//the declaration's value can span holes, so the name is read back from the part it was
+//written in rather than sliced out at the colon
+const normalizePropertyName = (
+	raw: string,
+	nameStart: number,
+	nameEnd: number,
+): string | typeof NOT_A_PROPERTY_NAME => {
+	const start = skipWhitespaceAndComments(raw, nameStart);
+	const isCustom = raw.startsWith(CUSTOM_PROPERTY_PREFIX, start);
 
 	let end: number;
 	let name: string;
 	if (isCustom) {
-		end = start + 2;
+		const nameTailStart = start + CUSTOM_PROPERTY_PREFIX.length;
+		end = nameTailStart;
 		while (isCustomNameCode(raw.charCodeAt(end))) end++;
-		if (end === start + 2) return null; //"--" needs at least one tail character
+		const hasNameTail = end > nameTailStart;
+		if (!hasNameTail) return NOT_A_PROPERTY_NAME;
 		name = raw.slice(start, end);
 	} else {
 		let head = start;
-		if (raw.charCodeAt(head) === CHAR_CODE.DASH) head++;
-		if (!isLetterCode(raw.charCodeAt(head))) return null;
+		if (raw.charCodeAt(head) === CHARACTER_CODE.DASH) head++;
+		if (!isLetterCode(raw.charCodeAt(head))) return NOT_A_PROPERTY_NAME;
 		end = head + 1;
 		while (isStandardNameCode(raw.charCodeAt(end))) end++;
 		name = raw.slice(start, end).toLowerCase();
 	}
 
-	if (skipWhitespaceAndComments(raw, end) < raw.length) return null;
+	if (skipWhitespaceAndComments(raw, end) < nameEnd) return NOT_A_PROPERTY_NAME;
 	return name;
 };
 
 interface RuleFrame {
-	kind: RuleKindValue;
+	kind: RuleKind;
 	rulePath: Array<number>;
 	childRuleCount: number;
-	declarationsCreateRuns: boolean;
+	doDeclarationsCreateRuns: boolean;
 	openRunIndex: number;
 	isInsideStyleRule: boolean;
 	isInsideDescriptor: boolean;
 	isOnDynamicPath: boolean;
-	declaredProperties: Map<string, boolean> | null;
+	declaredPropertyNames: Set<string>;
+	holedPropertyNames: Set<string>;
 }
 
-interface CssParserState {
-	state: CssStateValue;
-	returnState: CssStateValue;
-	quoteCode: number;
-	activeTemplate: string;
-	charIndex: number;
+//scan helpers write this struct and its rule frames directly: returning several cursor fields costs
+//an object per declaration or one loop of every scanner. Parsing runs once per template
+interface CSSParserState {
+	scanState: CSSStateKind;
+	characterIndex: number;
 	splitIndex: number;
 	parenDepth: number;
-	pendingRuleKind: RuleKindValue;
+	pendingRuleKind: RuleKind;
 	propertyStartIndex: number;
-	activePropertyName: string;
-	valueHasHole: boolean;
+	propertyNamePart: string;
+	propertyNameStart: number;
+	propertyNameEnd: number;
 	valueTopLevelBangCount: number;
 	valueBuffer: Array<Part>;
 	ruleStack: Array<RuleFrame>;
@@ -138,157 +188,131 @@ interface CssParserState {
 	ruleCountChecks: Array<RuleCountCheck>;
 }
 
-const createCssParser = (): CssParserState => ({
-	state: CSS_STATE.SELECTOR,
-	returnState: CSS_STATE.SELECTOR,
-	quoteCode: 0,
-	activeTemplate: "",
-	charIndex: 0,
-	splitIndex: 0,
-	parenDepth: 0,
-	pendingRuleKind: RULE_KIND.STYLE,
-	propertyStartIndex: 0,
-	activePropertyName: "",
-	valueHasHole: false,
-	valueTopLevelBangCount: 0,
-	valueBuffer: [],
-	ruleStack: [],
-	dynamicDeclarations: [],
-	ruleCountChecks: [],
-});
+type EnclosingRuleContext = Pick<
+	RuleFrame,
+	"kind" | "isInsideStyleRule" | "isInsideDescriptor"
+>;
 
-const createSheetRootFrame = (): RuleFrame => ({
+const OUTSIDE_EVERY_RULE: Readonly<EnclosingRuleContext> = {
 	kind: RULE_KIND.GROUPING,
-	rulePath: [],
-	childRuleCount: 0,
-	declarationsCreateRuns: false,
-	openRunIndex: NO_OPEN_RUN,
 	isInsideStyleRule: false,
 	isInsideDescriptor: false,
-	isOnDynamicPath: false,
-	declaredProperties: null,
-});
-
-const resetCssParser = (parser: CssParserState) => {
-	parser.state = CSS_STATE.SELECTOR;
-	parser.returnState = CSS_STATE.SELECTOR;
-	parser.quoteCode = 0;
-	parser.activeTemplate = "";
-	parser.charIndex = 0;
-	parser.splitIndex = 0;
-	parser.parenDepth = 0;
-	parser.pendingRuleKind = RULE_KIND.STYLE;
-	parser.propertyStartIndex = 0;
-	parser.activePropertyName = "";
-	parser.valueHasHole = false;
-	parser.valueTopLevelBangCount = 0;
-	parser.valueBuffer.length = 0;
-	parser.ruleStack.length = 0;
-	parser.ruleStack.push(createSheetRootFrame());
-	parser.dynamicDeclarations = [];
-	parser.ruleCountChecks = [];
 };
-
-const readAtRuleName = (parser: CssParserState): string => {
-	const staticText = parser.activeTemplate;
-	let endIndex = parser.charIndex + 1;
-	while (
-		endIndex < staticText.length &&
-		isAtRuleNameCode(staticText.charCodeAt(endIndex))
-	)
-		endIndex++;
-	return staticText.slice(parser.charIndex + 1, endIndex).toLowerCase();
-};
-
-const readAtRuleKind = (parser: CssParserState): RuleKindValue => {
-	const name = readAtRuleName(parser);
-	if (FAST_PATH_GROUPING_AT_RULE_NAMES.has(name)) return RULE_KIND.GROUPING;
-	if (name === FAST_PATH_KEYFRAMES_AT_RULE_NAME) return RULE_KIND.KEYFRAMES;
-	return RULE_KIND.DESCRIPTOR;
-};
-
-const captureStaticValueText = (parser: CssParserState, end: number) => {
-	if (end <= parser.splitIndex) return;
-	parser.valueBuffer.push(parser.activeTemplate.slice(parser.splitIndex, end));
-};
-
-const activeFrame = (parser: CssParserState): RuleFrame =>
-	parser.ruleStack[parser.ruleStack.length - 1];
 
 const createRuleFrame = (
-	parser: CssParserState,
-	parent: RuleFrame,
-	ruleIndex: number,
+	kind: RuleKind,
+	rulePath: Array<number>,
+	parent: EnclosingRuleContext,
 ): RuleFrame => {
-	const kind = parser.pendingRuleKind;
 	const isInsideStyleRule =
 		parent.kind === RULE_KIND.STYLE || parent.isInsideStyleRule;
 	return {
 		kind,
-		rulePath: parent.rulePath.concat(ruleIndex),
+		rulePath,
 		childRuleCount: 0,
-		declarationsCreateRuns: kind === RULE_KIND.GROUPING && isInsideStyleRule,
+		doDeclarationsCreateRuns: kind === RULE_KIND.GROUPING && isInsideStyleRule,
 		openRunIndex: NO_OPEN_RUN,
 		isInsideStyleRule,
 		isInsideDescriptor:
 			kind === RULE_KIND.DESCRIPTOR || parent.isInsideDescriptor,
 		isOnDynamicPath: false,
-		declaredProperties: null,
+		declaredPropertyNames: new Set(),
+		holedPropertyNames: new Set(),
 	};
 };
 
+const createCSSParser = (): CSSParserState => ({
+	scanState: CSS_STATE.SELECTOR,
+	characterIndex: 0,
+	splitIndex: 0,
+	parenDepth: 0,
+	pendingRuleKind: RULE_KIND.STYLE,
+	propertyStartIndex: 0,
+	propertyNamePart: "",
+	propertyNameStart: 0,
+	propertyNameEnd: 0,
+	valueTopLevelBangCount: 0,
+	valueBuffer: [],
+	ruleStack: [createRuleFrame(RULE_KIND.GROUPING, [], OUTSIDE_EVERY_RULE)],
+	dynamicDeclarations: [],
+	ruleCountChecks: [],
+});
+
+const readAtRuleName = (part: string, atIndex: number): string => {
+	let endIndex = atIndex + 1;
+	while (endIndex < part.length && isAtRuleNameCode(part.charCodeAt(endIndex)))
+		endIndex++;
+	return part.slice(atIndex + 1, endIndex).toLowerCase();
+};
+
+const readAtRuleKind = (part: string, atIndex: number): RuleKind => {
+	const name = readAtRuleName(part, atIndex);
+	if (FAST_PATH_GROUPING_AT_RULE_NAMES.has(name)) return RULE_KIND.GROUPING;
+	if (name === FAST_PATH_KEYFRAMES_AT_RULE_NAME) return RULE_KIND.KEYFRAMES;
+	return RULE_KIND.DESCRIPTOR;
+};
+
+const appendStaticValueSlice = (
+	parser: CSSParserState,
+	part: string,
+	end: number,
+) => {
+	if (end <= parser.splitIndex) return;
+	parser.valueBuffer.push(part.slice(parser.splitIndex, end));
+};
+
+const activeFrame = (parser: CSSParserState): RuleFrame =>
+	parser.ruleStack[parser.ruleStack.length - 1];
+
 //setProperty replaces a rule's whole entry for a property, so a duplicate of a holed
 //property inside one rule would let an update defeat the cascade order the author wrote
-const registerDeclaredProperty = (
+const claimStaticProperty = (
 	frame: RuleFrame,
 	propertyName: string,
-	hasHole: boolean,
 ): boolean => {
-	const declaredProperties = (frame.declaredProperties ??= new Map());
-	const existingHasHole = declaredProperties.get(propertyName);
-	if (existingHasHole === undefined) {
-		declaredProperties.set(propertyName, hasHole);
-		return true;
-	}
-	return !hasHole && existingHasHole === false;
+	if (frame.declaredPropertyNames.has(propertyName))
+		return !frame.holedPropertyNames.has(propertyName);
+	frame.declaredPropertyNames.add(propertyName);
+	return true;
 };
 
-const registerChildRule = (frame: RuleFrame): number => {
-	const ruleIndex = frame.childRuleCount++;
+const claimHoledProperty = (
+	frame: RuleFrame,
+	propertyName: string,
+): boolean => {
+	if (frame.declaredPropertyNames.has(propertyName)) return false;
+	frame.declaredPropertyNames.add(propertyName);
+	frame.holedPropertyNames.add(propertyName);
+	return true;
+};
+
+const recordChildRule = (frame: RuleFrame): void => {
+	frame.childRuleCount++;
 	frame.openRunIndex = NO_OPEN_RUN;
-	if (frame.kind === RULE_KIND.STYLE) frame.declarationsCreateRuns = true;
-	return ruleIndex;
+	if (frame.kind === RULE_KIND.STYLE) frame.doDeclarationsCreateRuns = true;
 };
 
-const markDynamicPath = (parser: CssParserState, holderFrame: RuleFrame) => {
-	const ruleStack = parser.ruleStack;
-	for (let index = 0; index < ruleStack.length - 1; index++)
-		ruleStack[index].isOnDynamicPath = true;
-	if (holderFrame.declarationsCreateRuns) holderFrame.isOnDynamicPath = true;
-};
-
-const resetDeclaration = (parser: CssParserState) => {
+const resetDeclaration = (parser: CSSParserState) => {
 	parser.valueBuffer.length = 0;
-	parser.valueHasHole = false;
 	parser.valueTopLevelBangCount = 0;
-	parser.state = CSS_STATE.PROPERTY;
+	parser.scanState = CSS_STATE.PROPERTY;
 };
 
 //CSSOM takes priority as a separate setProperty argument, so a trailing !important is
-//split off the value parts here — returns the priority ("important" or none), or null to bail
+//split off the value parts here
 const splitTrailingImportantPriority = (
-	parser: CssParserState,
-): string | null => {
+	parser: CSSParserState,
+): string | typeof UNSUPPORTED_PRIORITY => {
 	const topLevelBangCount = parser.valueTopLevelBangCount;
 	const hasNoImportant = topLevelBangCount === 0;
 	if (hasNoImportant) return "";
 	const hasAmbiguousBangs = topLevelBangCount > 1;
-	if (hasAmbiguousBangs) return null;
+	if (hasAmbiguousBangs) return UNSUPPORTED_PRIORITY;
 
 	const valueParts = parser.valueBuffer;
 	const lastValuePart = valueParts[valueParts.length - 1];
-	const bangSitsInAHole = typeof lastValuePart !== "string";
-	if (bangSitsInAHole) return null;
+	const bangSitsInHole = typeof lastValuePart !== "string";
+	if (bangSitsInHole) return UNSUPPORTED_PRIORITY;
 
 	const bangIndex = lastValuePart.lastIndexOf("!");
 	const keywordAfterBang = lastValuePart
@@ -296,7 +320,7 @@ const splitTrailingImportantPriority = (
 		.trim()
 		.toLowerCase();
 	const isImportant = bangIndex !== -1 && keywordAfterBang === "important";
-	if (!isImportant) return null;
+	if (!isImportant) return UNSUPPORTED_PRIORITY;
 
 	const valueBeforeBang = lastValuePart.slice(0, bangIndex);
 	if (valueBeforeBang === "") valueParts.pop();
@@ -304,35 +328,65 @@ const splitTrailingImportantPriority = (
 	return "important";
 };
 
-const finishDeclarationValue = (parser: CssParserState): boolean => {
+const LEADING_CSS_WHITESPACE = /^[ \t\n\r\f]+/;
+const TRAILING_CSS_WHITESPACE = /[ \t\n\r\f]+$/;
+
+//setProperty keeps edge whitespace in a custom property's value, and " inherit" there is the
+//literal token, not the keyword. Runs after the !important split, which leaves a trailing space
+const trimValueEdgeWhitespace = (parser: CSSParserState): void => {
+	const valueParts = parser.valueBuffer;
+	const firstPart = valueParts[0];
+	if (typeof firstPart === "string") {
+		const trimmedFirstPart = firstPart.replace(LEADING_CSS_WHITESPACE, "");
+		if (trimmedFirstPart === "") valueParts.shift();
+		else valueParts[0] = trimmedFirstPart;
+	}
+	const lastIndex = valueParts.length - 1;
+	const lastPart = valueParts[lastIndex];
+	if (typeof lastPart === "string") {
+		const trimmedLastPart = lastPart.replace(TRAILING_CSS_WHITESPACE, "");
+		if (trimmedLastPart === "") valueParts.pop();
+		else valueParts[lastIndex] = trimmedLastPart;
+	}
+};
+
+const isHole = (part: Part): part is number => typeof part === "number";
+
+const completeDeclaration = (parser: CSSParserState): boolean => {
 	const frame = activeFrame(parser);
 	if (frame.isInsideDescriptor) {
 		resetDeclaration(parser);
 		return true;
 	}
+	const opensRun =
+		frame.doDeclarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN;
+	if (opensRun) frame.openRunIndex = frame.childRuleCount++;
+	const valueHasHole = parser.valueBuffer.some(isHole);
 	const isDeclarationHolder =
-		frame.kind === RULE_KIND.STYLE || frame.declarationsCreateRuns;
-	if (!isDeclarationHolder) {
-		if (parser.valueHasHole) return false;
+		frame.kind === RULE_KIND.STYLE || frame.doDeclarationsCreateRuns;
+	const propertyName = isDeclarationHolder
+		? normalizePropertyName(
+				parser.propertyNamePart,
+				parser.propertyNameStart,
+				parser.propertyNameEnd,
+			)
+		: NOT_A_PROPERTY_NAME;
+	//nothing here a setProperty could ever address; a hole that lands on it cannot compile,
+	//and without one there is nothing to keep
+	if (propertyName === NOT_A_PROPERTY_NAME) {
+		if (valueHasHole) return false;
 		resetDeclaration(parser);
 		return true;
 	}
-	if (frame.declarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN)
-		frame.openRunIndex = frame.childRuleCount++;
-	const propertyName = normalizePropertyName(parser.activePropertyName);
-	if (propertyName === null) {
-		if (parser.valueHasHole) return false;
+	if (!valueHasHole) {
+		if (!claimStaticProperty(frame, propertyName)) return false;
 		resetDeclaration(parser);
 		return true;
 	}
-	if (!registerDeclaredProperty(frame, propertyName, parser.valueHasHole))
-		return false;
-	if (!parser.valueHasHole) {
-		resetDeclaration(parser);
-		return true;
-	}
+	if (!claimHoledProperty(frame, propertyName)) return false;
 	const priority = splitTrailingImportantPriority(parser);
-	if (priority === null) return false;
+	if (priority === UNSUPPORTED_PRIORITY) return false;
+	trimValueEdgeWhitespace(parser);
 	parser.dynamicDeclarations.push({
 		rulePath:
 			frame.openRunIndex === NO_OPEN_RUN
@@ -342,153 +396,152 @@ const finishDeclarationValue = (parser: CssParserState): boolean => {
 		priority,
 		valueParts: parser.valueBuffer.slice(),
 	});
-	markDynamicPath(parser, frame);
+	const ruleStack = parser.ruleStack;
+	for (let index = 0; index < ruleStack.length - 1; index++)
+		ruleStack[index].isOnDynamicPath = true;
+	if (frame.doDeclarationsCreateRuns) frame.isOnDynamicPath = true;
 	resetDeclaration(parser);
 	return true;
 };
 
-const parser = createCssParser();
-
 export const compileStyleSheet = (
 	parts: Array<Part>,
-): CompiledStyleSheet | null => {
-	resetCssParser(parser);
+): CompiledStyleSheet | typeof STYLE_SHEET_NOT_COMPILED => {
+	const parser = createCSSParser();
 
 	for (let partIndex = 0; partIndex < parts.length; partIndex++) {
 		const part = parts[partIndex];
 		if (typeof part === "number") {
 			const isDeclarationValueHole =
-				parser.state === CSS_STATE.VALUE &&
+				parser.scanState === CSS_STATE.VALUE &&
 				!activeFrame(parser).isInsideDescriptor;
-			if (!isDeclarationValueHole) return null;
+			if (!isDeclarationValueHole) return STYLE_SHEET_NOT_COMPILED;
 			parser.valueBuffer.push(part);
-			parser.valueHasHole = true;
 			continue;
 		}
 
-		parser.activeTemplate = part;
 		parser.splitIndex = 0;
 		parser.propertyStartIndex = 0;
 		for (
-			parser.charIndex = 0;
-			parser.charIndex < part.length;
-			parser.charIndex++
+			parser.characterIndex = 0;
+			parser.characterIndex < part.length;
+			parser.characterIndex++
 		) {
-			const code = part.charCodeAt(parser.charIndex);
+			const code = part.charCodeAt(parser.characterIndex);
+			const isInsignificant =
+				code >= SIGNIFICANT_CODE_LIMIT || SIGNIFICANT_CODES[code] === 0;
+			if (isInsignificant) continue;
 
-			if (parser.state === CSS_STATE.STRING) {
-				if (code === CHAR_CODE.BACKSLASH) {
-					parser.charIndex++;
-					continue;
-				}
-				if (code === parser.quoteCode) parser.state = parser.returnState;
-				continue;
-			}
-			if (parser.state === CSS_STATE.COMMENT) {
-				const isCommentClose =
-					code === CHAR_CODE.ASTERISK &&
-					part.charCodeAt(parser.charIndex + 1) === CHAR_CODE.SLASH;
-				if (isCommentClose) {
-					parser.charIndex++;
-					parser.state = parser.returnState;
-				}
-				continue;
-			}
-
+			//a string or a comment left open by this part can never compile: whatever follows
+			//is either a hole outside a value or the end of a sheet that never left the rule
 			if (isQuoteCode(code)) {
-				parser.quoteCode = code;
-				parser.returnState = parser.state;
-				parser.state = CSS_STATE.STRING;
+				const closingQuote = findClosingQuoteIndex(part, parser.characterIndex);
+				if (closingQuote === -1) return STYLE_SHEET_NOT_COMPILED;
+				parser.characterIndex = closingQuote;
 				continue;
 			}
-			const opensComment =
-				code === CHAR_CODE.SLASH &&
-				part.charCodeAt(parser.charIndex + 1) === CHAR_CODE.ASTERISK;
-			if (opensComment) {
-				parser.charIndex++;
-				parser.returnState = parser.state;
-				parser.state = CSS_STATE.COMMENT;
+			if (code === CHARACTER_CODE.SLASH) {
+				if (!part.startsWith(COMMENT_OPEN, parser.characterIndex)) continue;
+				const commentClose = part.indexOf(
+					COMMENT_CLOSE,
+					parser.characterIndex + COMMENT_OPEN.length,
+				);
+				if (commentClose === -1) return STYLE_SHEET_NOT_COMPILED;
+				//on the closing "/", which the loop's own step moves past
+				parser.characterIndex = commentClose + COMMENT_CLOSE.length - 1;
 				continue;
 			}
-			if (code === CHAR_CODE.OPEN_PAREN) {
+			if (code === CHARACTER_CODE.OPEN_PAREN) {
 				parser.parenDepth++;
 				continue;
 			}
 			if (parser.parenDepth > 0) {
-				if (code === CHAR_CODE.CLOSE_PAREN) parser.parenDepth--;
+				if (code === CHARACTER_CODE.CLOSE_PAREN) parser.parenDepth--;
 				continue;
 			}
 
 			switch (code) {
-				case CHAR_CODE.OPEN_BRACE: {
-					if (parser.state === CSS_STATE.VALUE) return null;
+				case CHARACTER_CODE.OPEN_BRACE: {
+					if (parser.scanState === CSS_STATE.VALUE)
+						return STYLE_SHEET_NOT_COMPILED;
 					const parent = activeFrame(parser);
-					const ruleIndex = registerChildRule(parent);
-					parser.ruleStack.push(createRuleFrame(parser, parent, ruleIndex));
+					const ruleIndex = parent.childRuleCount;
+					recordChildRule(parent);
+					const kind = parser.pendingRuleKind;
+					parser.ruleStack.push(
+						createRuleFrame(kind, parent.rulePath.concat(ruleIndex), parent),
+					);
 					parser.pendingRuleKind = RULE_KIND.STYLE;
-					parser.state = CSS_STATE.PROPERTY;
-					parser.propertyStartIndex = parser.charIndex + 1;
+					parser.scanState = CSS_STATE.PROPERTY;
+					parser.propertyStartIndex = parser.characterIndex + 1;
 					break;
 				}
-				case CHAR_CODE.CLOSE_BRACE: {
-					if (parser.state === CSS_STATE.VALUE) {
-						captureStaticValueText(parser, parser.charIndex);
-						if (!finishDeclarationValue(parser)) return null;
+				case CHARACTER_CODE.CLOSE_BRACE: {
+					if (parser.scanState === CSS_STATE.VALUE) {
+						appendStaticValueSlice(parser, part, parser.characterIndex);
+						if (!completeDeclaration(parser)) return STYLE_SHEET_NOT_COMPILED;
 					}
-					if (parser.ruleStack.length === 1) return null;
-					const closedFrame = parser.ruleStack.pop()!;
+					if (parser.ruleStack.length === 1) return STYLE_SHEET_NOT_COMPILED;
+					const closedFrame = parser.ruleStack.pop();
+					assertDuringDevelopment(
+						closedFrame !== undefined,
+						"a rule stack deeper than its root frame has a frame to close",
+					);
 					if (closedFrame.isOnDynamicPath)
 						parser.ruleCountChecks.push({
 							rulePath: closedFrame.rulePath,
 							expectedRuleCount: closedFrame.childRuleCount,
 						});
-					parser.state =
+					parser.scanState =
 						parser.ruleStack.length === 1
 							? CSS_STATE.SELECTOR
 							: CSS_STATE.PROPERTY;
-					parser.propertyStartIndex = parser.charIndex + 1;
+					parser.propertyStartIndex = parser.characterIndex + 1;
 					break;
 				}
-				case CHAR_CODE.SEMICOLON:
-					if (parser.state === CSS_STATE.VALUE) {
-						captureStaticValueText(parser, parser.charIndex);
-						if (!finishDeclarationValue(parser)) return null;
+				case CHARACTER_CODE.SEMICOLON:
+					if (parser.scanState === CSS_STATE.VALUE) {
+						appendStaticValueSlice(parser, part, parser.characterIndex);
+						if (!completeDeclaration(parser)) return STYLE_SHEET_NOT_COMPILED;
 					}
 					if (parser.pendingRuleKind !== RULE_KIND.STYLE) {
-						registerChildRule(activeFrame(parser));
+						recordChildRule(activeFrame(parser));
 						parser.pendingRuleKind = RULE_KIND.STYLE;
 					}
-					parser.propertyStartIndex = parser.charIndex + 1;
+					parser.propertyStartIndex = parser.characterIndex + 1;
 					break;
-				case CHAR_CODE.COLON:
-					if (parser.state === CSS_STATE.PROPERTY) {
-						parser.activePropertyName = parser.activeTemplate.slice(
-							parser.propertyStartIndex,
-							parser.charIndex,
-						);
-						parser.state = CSS_STATE.VALUE;
-						parser.splitIndex = parser.charIndex + 1;
+				case CHARACTER_CODE.COLON:
+					if (parser.scanState === CSS_STATE.PROPERTY) {
+						parser.propertyNamePart = part;
+						parser.propertyNameStart = parser.propertyStartIndex;
+						parser.propertyNameEnd = parser.characterIndex;
+						parser.scanState = CSS_STATE.VALUE;
+						parser.splitIndex = parser.characterIndex + 1;
 					}
 					break;
-				case CHAR_CODE.AT:
-					if (parser.state !== CSS_STATE.VALUE)
-						parser.pendingRuleKind = readAtRuleKind(parser);
+				case CHARACTER_CODE.AT:
+					if (parser.scanState !== CSS_STATE.VALUE)
+						parser.pendingRuleKind = readAtRuleKind(
+							part,
+							parser.characterIndex,
+						);
 					break;
-				case CHAR_CODE.BANG:
-					if (parser.state === CSS_STATE.VALUE) parser.valueTopLevelBangCount++;
+				case CHARACTER_CODE.BANG:
+					if (parser.scanState === CSS_STATE.VALUE)
+						parser.valueTopLevelBangCount++;
 					break;
 			}
 		}
-		if (parser.state === CSS_STATE.VALUE)
-			captureStaticValueText(parser, part.length);
+		if (parser.scanState === CSS_STATE.VALUE)
+			appendStaticValueSlice(parser, part, part.length);
 	}
 
 	const endedCleanly =
-		parser.state === CSS_STATE.SELECTOR &&
+		parser.scanState === CSS_STATE.SELECTOR &&
 		parser.ruleStack.length === 1 &&
 		parser.parenDepth === 0;
-	if (!endedCleanly) return null;
-	if (parser.dynamicDeclarations.length === 0) return null;
+	if (!endedCleanly) return STYLE_SHEET_NOT_COMPILED;
+	if (parser.dynamicDeclarations.length === 0) return STYLE_SHEET_NOT_COMPILED;
 	const sheetRoot = parser.ruleStack[0];
 	parser.ruleCountChecks.push({
 		rulePath: sheetRoot.rulePath,

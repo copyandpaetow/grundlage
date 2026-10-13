@@ -23,7 +23,7 @@ import { component, html } from "../../../lib/src";
 
 customElements.define(
 	"list-component",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		let entries = Array.from({ length: 10 }, (_, index) => index * 10);
 
 		const shuffleEntries = () => {

@@ -1,43 +1,39 @@
+import { BINDING } from "../../parser/constants";
 import {
 	AttributeStaticBinding,
 	CommentStaticBinding,
+	CompiledStyleSheet,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
-	NamedDynamicStaticBinding,
+	ParsedTemplate,
 	RawContentStaticBinding,
-	SingleValueAttributeStaticBinding,
 	TagStaticBinding,
 } from "../../parser/types";
-import { ATTRIBUTE_MODE, CONTENT_KIND } from "../constants";
-import { Instance } from "../instance";
-import { ValueOf } from "../../utils/types";
+import { CONTENT_KIND, STYLE_SHEET_LANE } from "../constants";
+
+export interface Instance {
+	parsed: ParsedTemplate;
+	//empty slots while the bind walk fills it; the one reader during the walk is the tag swap
+	liveBindings: Array<LiveBinding>;
+	moveState: StyleSheetMoveState;
+}
 
 export interface StyleSheetMoveState {
 	needsStyleSheetRefreshOnMove: boolean;
-	needsRerenderAfterMove: boolean;
 }
 
 export interface TagLiveBinding {
 	staticBinding: TagStaticBinding;
-	markerComment: Comment;
+	openMarker: Comment;
 	lastValueHash: number;
 }
 
-//anchor is the host element for a host binding, else the marker comment before the target
-//element; resolveTargetElement discriminates by node type. One field makes "exactly one" unbreakable.
 export interface AttributeLiveBinding {
 	staticBinding: AttributeStaticBinding;
-	anchor: Comment | Element;
+	anchor: Element;
 	lastValueHash: number;
 	lastComposedName: string;
-}
-
-export interface SingleValueAttributeLiveBinding {
-	staticBinding: SingleValueAttributeStaticBinding;
-	anchor: Comment | Element;
-	lastValueHash: number;
-	lastComposedName: string;
-	appliedAttributeMode: ValueOf<typeof ATTRIBUTE_MODE>;
+	lastValue: unknown;
 }
 
 export interface AppliedAttribute {
@@ -47,22 +43,15 @@ export interface AppliedAttribute {
 
 export interface DynamicAttributeLiveBinding {
 	staticBinding: DynamicAttributeStaticBinding;
-	anchor: Comment | Element;
+	anchor: Element;
 	appliedAttributes: Map<string, AppliedAttribute>;
 	lastValueHash: number;
 }
 
-export interface NamedDynamicLiveBinding {
-	staticBinding: NamedDynamicStaticBinding;
-	anchor: Comment | Element;
-	lastValueHash: number;
-	lastValue: unknown;
-}
-
 export interface ContentLiveBinding {
 	staticBinding: ContentStaticBinding;
-	startMarker: Comment;
-	endMarker: Comment;
+	openMarker: Comment;
+	closeMarker: Comment;
 	content: ContentState;
 }
 
@@ -89,44 +78,91 @@ export interface BranchContentState {
 export interface ListContentState {
 	kind: typeof CONTENT_KIND.LIST;
 	items: Array<ListItem>;
-	aggregateHash: number;
+	lastValueHash: number;
+	//scratch kept across patches instead of allocated per patch: each patch fills what it reads, and
+	//the arrays only grow, so a length is a capacity, never a row count
 	itemHashes: Array<number>;
+	nextRowWithSameHash: Int32Array;
+	subsequenceStarts: Int32Array;
+	nextInSubsequence: Int32Array;
+	hashAtTableIndex: Int32Array;
+	chainHeadAtTableIndex: Int32Array;
+	tableIndexShift: number;
+	//alternates with items: placeRows returns the array it was given
+	spareRows: Array<ListItem | undefined>;
 }
 
-export interface StyleSheetState {
+export interface BoundStyleSheet {
+	sheet: CSSStyleSheet;
+	ruleDeclarations: Array<CSSStyleDeclaration>;
+}
+
+export interface TextStyleSheetLane {
+	kind: typeof STYLE_SHEET_LANE.TEXT;
+}
+
+export interface CSSOMStyleSheetLane {
+	kind: typeof STYLE_SHEET_LANE.CSSOM;
+	compiledStyleSheet: CompiledStyleSheet;
 	styleElement: HTMLStyleElement;
 	declarationValueHashes: Array<number>;
-	ruleDeclarations: Array<CSSStyleDeclaration>;
-	sheet: CSSStyleSheet | null;
+	//null until a commit finds the element's sheet parsed
+	boundSheet: BoundStyleSheet | null;
 }
+
+export type StyleSheetLane = TextStyleSheetLane | CSSOMStyleSheetLane;
 
 export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;
-	markerComment: Comment;
+	openMarker: Comment;
 	lastValueHash: number;
-	styleSheetState: StyleSheetState | null;
+	styleSheetLane: StyleSheetLane;
 }
 
 export interface CommentLiveBinding {
 	staticBinding: CommentStaticBinding;
-	markerComment: Comment;
+	openMarker: Comment;
 	lastValueHash: number;
 }
 
 export type LiveBinding =
 	| TagLiveBinding
 	| AttributeLiveBinding
-	| SingleValueAttributeLiveBinding
 	| DynamicAttributeLiveBinding
-	| NamedDynamicLiveBinding
 	| ContentLiveBinding
 	| RawContentLiveBinding
 	| CommentLiveBinding;
+
+export type AttributeLaneLiveBinding =
+	AttributeLiveBinding | DynamicAttributeLiveBinding;
+
+//a switch on `staticBinding.type` narrows the static binding and leaves the live binding as the
+//whole union, so the kind test lives here once per kind instead of as a cast at every call site
+export const isAttributeBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is AttributeLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.ATTRIBUTE;
+
+export const isDynamicAttributeBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is DynamicAttributeLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
+
+export const isContentBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is ContentLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.CONTENT;
+
+export const isRawContentBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is RawContentLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.RAW_CONTENT;
 
 export interface ListItem {
 	tailMarker: Comment;
 	instance: Instance;
 	itemHash: number;
-	keyHash: number;
+	shapeOrKeyHash: number;
 	startNode: ChildNode;
+	placedAtIndex: number;
 }

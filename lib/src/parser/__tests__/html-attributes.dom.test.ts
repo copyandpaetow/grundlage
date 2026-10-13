@@ -2,11 +2,7 @@ import { describe, test, expect } from "vitest";
 import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
 import { BINDING } from "../constants";
-import {
-	AttributeStaticBinding,
-	NamedDynamicStaticBinding,
-	SingleValueAttributeStaticBinding,
-} from "../types";
+import { AttributeStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
@@ -17,10 +13,10 @@ describe("html parser — attribute bindings", () => {
 		const parsed = parse` <div class="${cls}"></div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
 		expect(binding.nameParts).toEqual(["class"]);
-		expect(binding.valueIndex).toBe(0);
+		expect(binding.valueParts).toEqual([0]);
 	});
 
 	test("multi-part attribute value shares one composed binding", () => {
@@ -60,20 +56,20 @@ describe("html parser — attribute bindings", () => {
 		const parsed = parse` <div class="${cls}" id="${id}"></div>`;
 
 		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 		]);
 	});
 
-	test("event handler attribute lowers to a named-dynamic binding", () => {
+	test("event handler attribute lowers to a single-value binding", () => {
 		const handler = () => {};
 		const parsed = parse` <button onclick="${handler}"></button>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as NamedDynamicStaticBinding;
-		expect(binding.type).toBe(BINDING.NAMED_DYNAMIC);
-		expect(binding.name).toBe("onclick");
-		expect(binding.valueIndex).toBe(0);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
+		expect(binding.nameParts).toEqual(["onclick"]);
+		expect(binding.valueParts).toEqual([0]);
 	});
 
 	test("unquoted attribute value", () => {
@@ -81,7 +77,7 @@ describe("html parser — attribute bindings", () => {
 		const parsed = parse` <div class=${val}></div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		expect(parsed.bindings[0].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[0].type).toBe(BINDING.ATTRIBUTE);
 	});
 
 	test("boolean (spread) attribute followed by regular attribute", () => {
@@ -91,11 +87,11 @@ describe("html parser — attribute bindings", () => {
 
 		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
 			BINDING.DYNAMIC_ATTRIBUTE,
-			BINDING.SINGLE_VALUE_ATTRIBUTE,
+			BINDING.ATTRIBUTE,
 		]);
-		expect(
-			(parsed.bindings[1] as SingleValueAttributeStaticBinding).nameParts,
-		).toEqual(["class"]);
+		expect((parsed.bindings[1] as AttributeStaticBinding).nameParts).toEqual([
+			"class",
+		]);
 	});
 });
 
@@ -149,8 +145,8 @@ describe("html parser — attribute edge cases", () => {
 		const parsed = parse` <div class="${val}"></div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
 		expect(binding.nameParts).toEqual(["class"]);
 	});
 
@@ -159,7 +155,7 @@ describe("html parser — attribute edge cases", () => {
 		const parsed = parse` <div class=${val}>text</div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		expect(parsed.bindings[0].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[0].type).toBe(BINDING.ATTRIBUTE);
 	});
 
 	test("multiple boolean (spread) attributes", () => {
@@ -179,10 +175,10 @@ describe("html parser — attribute edge cases", () => {
 		const parsed = parse` <div ${key}="${val}"></div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
 		expect(binding.nameParts).toEqual([0]);
-		expect(binding.valueIndex).toBe(1);
+		expect(binding.valueParts).toEqual([1]);
 	});
 
 	test("attribute with empty string value", () => {
@@ -190,8 +186,8 @@ describe("html parser — attribute edge cases", () => {
 		const parsed = parse` <div class="${val}"></div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
 		expect(binding.nameParts).toEqual(["class"]);
 	});
 
@@ -200,8 +196,8 @@ describe("html parser — attribute edge cases", () => {
 		const parsed = parse`<input type="${val}" />`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		expect(binding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
 		expect(binding.nameParts).toEqual(["type"]);
 	});
 
@@ -223,7 +219,7 @@ describe("html parser — attribute edge cases", () => {
 		></div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
 		expect(binding.nameParts).toEqual(["class"]);
 	});
 
@@ -237,28 +233,39 @@ describe("html parser — attribute edge cases", () => {
 		expect(binding.valueParts).toEqual(["prefix-", 0, "-suffix"]);
 	});
 
-	test("event handler without quotes lowers to a named-dynamic binding", () => {
+	test("event handler without quotes lowers to a single-value binding", () => {
 		const handler = () => {};
 		const parsed = parse` <button onclick=${handler}></button>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as NamedDynamicStaticBinding;
-		expect(binding.type).toBe(BINDING.NAMED_DYNAMIC);
-		expect(binding.name).toBe("onclick");
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
+		expect(binding.nameParts).toEqual(["onclick"]);
 	});
 
 	test("an on-prefixed non-handler keeps its whole name (no eventType slice)", () => {
 		const value = () => {};
 		//the whole name survives to commit-time resolution; the old bug sliced "once" → event "ce"
 		const once = parse` <button once=${value}></button>`
-			.bindings[0] as NamedDynamicStaticBinding;
-		expect(once.type).toBe(BINDING.NAMED_DYNAMIC);
-		expect(once.name).toBe("once");
+			.bindings[0] as AttributeStaticBinding;
+		expect(once.type).toBe(BINDING.ATTRIBUTE);
+		expect(once.nameParts).toEqual(["once"]);
 
 		const online = parse` <button online=${value}></button>`
-			.bindings[0] as NamedDynamicStaticBinding;
-		expect(online.type).toBe(BINDING.NAMED_DYNAMIC);
-		expect(online.name).toBe("online");
+			.bindings[0] as AttributeStaticBinding;
+		expect(online.type).toBe(BINDING.ATTRIBUTE);
+		expect(online.nameParts).toEqual(["online"]);
+	});
+
+	test("a hole inside an event name survives into the name parts", () => {
+		const handler = () => {};
+		const parsed = parse` <button on${"click"}=${handler}></button>`;
+
+		expect(parsed.bindings).toHaveLength(1);
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(binding.type).toBe(BINDING.ATTRIBUTE);
+		expect(binding.nameParts).toEqual(["on", 0]);
+		expect(binding.valueParts).toEqual([1]);
 	});
 });
 
@@ -277,7 +284,7 @@ describe("html parser — custom element and namespaced attribute names", () => 
 		const value = "red";
 		const parsed = parse`<my-component class="${value}"></my-component>`;
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
 		expect(binding.nameParts).toEqual(["class"]);
 		expect(
 			buildFragment(parsed.htmlWithMarkers).querySelector("my-component"),
@@ -292,8 +299,8 @@ describe("html parser — custom element and namespaced attribute names", () => 
 			data-test-id="${id}"
 		></button>`;
 		expect(parsed.bindings).toHaveLength(2);
-		const first = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		const second = parsed.bindings[1] as SingleValueAttributeStaticBinding;
+		const first = parsed.bindings[0] as AttributeStaticBinding;
+		const second = parsed.bindings[1] as AttributeStaticBinding;
 		expect(first.nameParts).toEqual(["aria-label"]);
 		expect(second.nameParts).toEqual(["data-test-id"]);
 	});
@@ -302,7 +309,7 @@ describe("html parser — custom element and namespaced attribute names", () => 
 		const value = "en";
 		const parsed = parse`<div xml:lang="${value}"></div>`;
 		expect(parsed.bindings).toHaveLength(1);
-		const binding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
+		const binding = parsed.bindings[0] as AttributeStaticBinding;
 		expect(binding.nameParts).toEqual(["xml:lang"]);
 	});
 });

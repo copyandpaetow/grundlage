@@ -1,51 +1,62 @@
-import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
-import { RawContentStaticBinding } from "../../parser/types";
+import { combinedPartsHash, composeParts } from "../compose";
+import { STYLE_SHEET_LANE, UNSET_HASH } from "../constants";
+import { elementAfterMarker } from "../markers";
 import {
-	commitStyleSheetDirect,
+	commitChangedDeclarations,
+	matchCompiledStyleSheet,
+	RULE_STRUCTURE_MISMATCH,
 	seedDeclarationValueHashes,
-} from "./css-apply";
+	TEXT_STYLE_SHEET_LANE,
+} from "./style-sheet";
 import { RawContentLiveBinding } from "./types";
 
-const rawContentGateHash = (
-	staticBinding: RawContentStaticBinding,
+const writeRawContentAsText = (
+	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
-): number => combinedPartsHash(staticBinding.parts, values);
+): boolean => {
+	const { parts } = liveBinding.staticBinding;
+	const hash = combinedPartsHash(parts, values);
+	if (hash === liveBinding.lastValueHash) return false;
+	liveBinding.lastValueHash = hash;
+	const element = elementAfterMarker(liveBinding.openMarker);
+	const composed = composeParts(parts, values);
+	if (element instanceof HTMLTemplateElement) {
+		if (element.innerHTML !== composed) element.innerHTML = composed;
+		return true;
+	}
+	if (element.textContent !== composed) element.textContent = composed;
+	return true;
+};
 
 export const commitRawContent = (
 	liveBinding: RawContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	const committedToLiveSheet =
-		liveBinding.styleSheetState && commitStyleSheetDirect(liveBinding, values);
-	if (committedToLiveSheet) return;
-
-	if (
-		!hasHashChanged(
-			liveBinding,
-			rawContentGateHash(liveBinding.staticBinding, values),
-		)
-	)
-		return;
-	const element = liveBinding.markerComment.nextElementSibling!;
-	const composed = composeParts(liveBinding.staticBinding.parts, values);
-	if (element instanceof HTMLTemplateElement) {
-		if (element.innerHTML !== composed) element.innerHTML = composed;
+	const lane = liveBinding.styleSheetLane;
+	if (lane.kind === STYLE_SHEET_LANE.TEXT) {
+		writeRawContentAsText(liveBinding, values);
 		return;
 	}
-	if (element.textContent !== composed) element.textContent = composed;
-	//commitStyleSheetDirect above may have demoted this binding to null — re-read, don't cache
-	if (liveBinding.styleSheetState)
-		seedDeclarationValueHashes(liveBinding, values);
-};
-
-export const hydrateRawContent = (
-	liveBinding: RawContentLiveBinding,
-	values: Array<unknown>,
-): void => {
-	liveBinding.lastValueHash = rawContentGateHash(
-		liveBinding.staticBinding,
-		values,
-	);
-	if (liveBinding.styleSheetState)
-		seedDeclarationValueHashes(liveBinding, values);
+	const liveSheet = lane.styleElement.sheet;
+	//the sheet will parse from the text written here, so its declarations already hold these values
+	if (liveSheet === null) {
+		if (writeRawContentAsText(liveBinding, values))
+			seedDeclarationValueHashes(lane, values);
+		return;
+	}
+	if (lane.boundSheet?.sheet !== liveSheet) {
+		const matchedSheet = matchCompiledStyleSheet(
+			lane.compiledStyleSheet,
+			liveSheet,
+		);
+		if (matchedSheet === RULE_STRUCTURE_MISMATCH) {
+			liveBinding.styleSheetLane = TEXT_STYLE_SHEET_LANE;
+			writeRawContentAsText(liveBinding, values);
+			return;
+		}
+		//a reparse restored the last written text — every hole must be rewritten
+		if (lane.boundSheet !== null) lane.declarationValueHashes.fill(UNSET_HASH);
+		lane.boundSheet = matchedSheet;
+	}
+	commitChangedDeclarations(lane, lane.boundSheet, values);
 };

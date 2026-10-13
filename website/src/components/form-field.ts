@@ -6,7 +6,7 @@ import { type ComponentConstructor } from "../../../lib/src/types";
 // browser's formResetCallback / formDisabledCallback as on-form-reset /
 // on-form-disabled listeners on this host.
 const FormField = component(
-	function* (host) {
+	function* ({ host }) {
 		let value = "";
 		let disabled = false;
 		const internals = host.internals;

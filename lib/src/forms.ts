@@ -36,8 +36,8 @@ export type FormAssociatedBase = InstanceType<
 	ReturnType<typeof createFormAssociatedBaseClass>
 >;
 
-// built on first use so importing the library never touches `HTMLElement`, and shared from
-// then on so every form-associated component stays a single `instanceof` lineage
+//built on first use so importing the library never touches `HTMLElement`, and shared from
+//then on so every form-associated component stays a single `instanceof` lineage
 let sharedFormAssociatedBaseClass: ReturnType<
 	typeof createFormAssociatedBaseClass
 > | null = null;

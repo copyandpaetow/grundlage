@@ -26,9 +26,9 @@ describe("raw content updates", () => {
 	const ruleDeclarationOf = (style: HTMLStyleElement): CSSStyleDeclaration =>
 		(style.sheet!.cssRules[0] as CSSStyleRule).style;
 
-	// the browser-as-dom project runs this file under happy-dom, whose
-	// getComputedStyle returns specified values instead of resolving them, so
-	// computed-style assertions skip there and the chromium project carries them
+	//the browser-as-dom project runs this file under happy-dom, whose
+	//getComputedStyle returns specified values instead of resolving them, so
+	//computed-style assertions skip there and the chromium project carries them
 	const detectComputedColorResolution = () => {
 		const probe = document.createElement("div");
 		probe.style.color = "red";
@@ -423,6 +423,42 @@ describe("raw content updates", () => {
 		},
 	);
 
+	test.skipIf(!resolvesComputedColors)(
+		"a custom property updated to a css-wide keyword takes its normal effect",
+		async () => {
+			const tag = uniqueTag();
+			let width = "45px";
+
+			const MyElement = component(function* () {
+				yield () =>
+					html`<style>
+							p {
+								--width: ${width};
+								width: var(--width, 7px);
+							}
+						</style>
+						<p>text</p>`;
+			});
+
+			customElements.define(tag, MyElement);
+			const element = mount(tag) as InstanceType<typeof MyElement>;
+			await sleep();
+			const paragraph = element.shadowRoot!.querySelector("p")!;
+			expect(getComputedStyle(paragraph).width).toBe("45px");
+
+			//the update goes through setProperty, which would read " initial" as a literal token
+			for (const keyword of ["initial", "inherit", "unset"]) {
+				width = "45px";
+				await element.update();
+				width = keyword;
+				await element.update();
+				expect(getComputedStyle(paragraph).width).toBe("7px");
+			}
+
+			cleanup(element);
+		},
+	);
+
 	test("nested template hole populates .content as markup, not light children", async () => {
 		const tag = uniqueTag();
 		let label = "first";
@@ -440,14 +476,14 @@ describe("raw content updates", () => {
 
 		const template =
 			element.shadowRoot!.querySelector<HTMLTemplateElement>("template")!;
-		// Markup must live in .content — the render/serialize surface — not in
-		// light children, which never render and never serialize.
+		//markup must live in .content — the render/serialize surface — not in
+		//light children, which never render and never serialize
 		expect(template.childNodes.length).toBe(0);
 		expect(
 			normalizeWhitespace(template.content.querySelector("p")!.textContent),
 		).toBe("first");
 
-		// The template serializes from .content, so a round-trip must survive.
+		//the template serializes from .content, so a round-trip must survive
 		expect(template.outerHTML).toContain("<p>first</p>");
 
 		label = "second";

@@ -27,7 +27,7 @@ const CAMERA_VARIABLES = [
 
 customElements.define(
 	"scene-world",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		yield html`
 			<style>
 				:host {

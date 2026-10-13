@@ -468,7 +468,6 @@ describe("content updates", () => {
 		expect(lis.length).toBe(3);
 		expect(lis[0].textContent).toContain("one");
 
-		// Reverse the order
 		items = [
 			{ id: 3, text: "three" },
 			{ id: 2, text: "two" },
@@ -814,7 +813,7 @@ describe("content updates", () => {
 		);
 		expect(originalItems.length).toBe(4);
 
-		// Every value changes, so no hash match anywhere, but structure is identical.
+		//every value changes, so no hash match anywhere, but structure is identical
 		items = [11, 21, 31, 41];
 		await element.update();
 		await sleep();
@@ -824,9 +823,9 @@ describe("content updates", () => {
 			element.shadowRoot!.querySelectorAll("span"),
 		);
 		expect(updatedItems.length).toBe(4);
-		// no hash matches anywhere, but the structure is identical, so tier-2
-		// patches each row in place: node identity survives and the DOM carries
-		// the new values.
+		//no hash matches anywhere, but the structure is identical, so tier-2
+		//patches each row in place: node identity survives and the DOM carries
+		//the new values
 		for (let index = 0; index < 4; index++) {
 			expect(updatedItems[index]).toBe(originalItems[index]);
 			expect(updatedSpans[index]).toBe(originalSpans[index]);
@@ -856,9 +855,9 @@ describe("content updates", () => {
 			element.shadowRoot!.querySelectorAll("li"),
 		);
 
-		// alpha stays (hash match keeps its node); beta's slot changes to "gamma",
-		// which has no content match but the same shape, so tier-2 patches betaNode
-		// in place.
+		//alpha stays (hash match keeps its node); beta's slot changes to "gamma",
+		//which has no content match but the same shape, so tier-2 patches betaNode
+		//in place
 		items = ["alpha", "gamma"];
 		await element.update();
 		await sleep();
@@ -891,8 +890,8 @@ describe("content updates", () => {
 			element.shadowRoot!.querySelectorAll("li"),
 		);
 
-		// Inserting in the middle: hash for "c" must still find the existing cNode
-		// rather than cNode being consumed by an in-place update for "b".
+		//inserting in the middle: hash for "c" must still find the existing cNode
+		//rather than cNode being consumed by an in-place update for "b"
 		items = ["a", "b", "c"];
 		await element.update();
 		await sleep();
@@ -938,8 +937,8 @@ describe("content updates", () => {
 		await sleep();
 
 		const updatedLis = Array.from(element.shadowRoot!.querySelectorAll("li"));
-		// width changed => no content match, but same shape => tier-2 patches each
-		// item in place, updating the attribute on the surviving node
+		//width changed => no content match, but same shape => tier-2 patches each
+		//item in place, updating the attribute on the surviving node
 		expect(updatedLis[0]).toBe(originalLis[0]);
 		expect(updatedLis[1]).toBe(originalLis[1]);
 		expect(updatedLis[0].getAttribute("style")).toContain("15px");
@@ -985,9 +984,9 @@ describe("content updates", () => {
 			bGroupNode.querySelector("ul")!.children,
 		) as Array<HTMLElement>;
 
-		// Phase 1: pure outer reorder, inner items unchanged. Outer hashes
-		// match, so hash-identity reuse should move whole groups (and their
-		// inner subtrees) to the new positions without disturbing inner DOM.
+		//phase 1: pure outer reorder, inner items unchanged. Outer hashes
+		//match, so hash-identity reuse should move whole groups (and their
+		//inner subtrees) to the new positions without disturbing inner DOM
 		groups = [
 			{ name: "b", items: ["b1", "b2"] },
 			{ name: "a", items: ["a1", "a2"] },
@@ -1007,12 +1006,12 @@ describe("content updates", () => {
 			aInnerItemsBefore,
 		);
 
-		// Phase 2: inner reorder within one group, outer unchanged. The inner
-		// change folds into group b's hash, so b no longer content-matches, but its
-		// shape is unchanged, so tier-2 patches group b in place (its outer node
-		// survives) and the nested list reorders inside it. Group a is untouched.
-		// This also exercises re-entrant list reconciliation without corrupting the
-		// sibling group.
+		//phase 2: inner reorder within one group, outer unchanged. The inner
+		//change folds into group b's hash, so b no longer content-matches, but its
+		//shape is unchanged, so tier-2 patches group b in place (its outer node
+		//survives) and the nested list reorders inside it. Group a is untouched.
+		//this also exercises re-entrant list reconciliation without corrupting the
+		//sibling group
 		groups = [
 			{ name: "b", items: ["b2", "b1"] },
 			{ name: "a", items: ["a1", "a2"] },
@@ -1193,9 +1192,9 @@ describe("content updates", () => {
 		expect(liNodesBefore.length).toBe(2);
 		expect(hrNodeBefore.getAttribute("data-label")).toBe("---");
 
-		// Pure reorder of mixed-shape entries. Hash matching must preserve
-		// each node across the reshuffle even though neighbours at every
-		// position change shape (pass-2 structural reuse must NOT kick in).
+		//pure reorder of mixed-shape entries. Hash matching must preserve
+		//each node across the reshuffle even though neighbours at every
+		//position change shape (pass-2 structural reuse must not kick in)
 		items = [
 			{ kind: "divider", value: "---" },
 			{ kind: "item", value: "two" },
@@ -1306,9 +1305,9 @@ describe("content updates", () => {
 			element.shadowRoot!.querySelectorAll("li"),
 		);
 
-		// Ends are hash-stable; only the middle three change value. Head/tail
-		// peel should isolate the middle so the reconciler's map is sized to
-		// three slots, and the two end <li>s must keep identity untouched.
+		//ends are hash-stable; only the middle three change value. Head/tail
+		//peel should isolate the middle so the reconciler's map is sized to
+		//three slots, and the two end <li>s must keep identity untouched
 		items = ["a", "m", "n", "o", "d"];
 		await element.update();
 		await sleep();
@@ -1322,8 +1321,8 @@ describe("content updates", () => {
 		expect(afterMiddleSwap[1].textContent).toContain("m");
 		expect(afterMiddleSwap[2].textContent).toContain("n");
 		expect(afterMiddleSwap[3].textContent).toContain("o");
-		// the middle three have no content match but the same shape, so tier-2
-		// patches them in place — every node keeps identity, ends included
+		//the middle three have no content match but the same shape, so tier-2
+		//patches them in place — every node keeps identity, ends included
 		expect(afterMiddleSwap[1]).toBe(xNode);
 		expect(afterMiddleSwap[2]).toBe(yNode);
 		expect(afterMiddleSwap[3]).toBe(zNode);
@@ -1333,10 +1332,10 @@ describe("content updates", () => {
 
 	test("re-renders an identical list without disturbing DOM identity", async () => {
 		const tag = uniqueTag();
-		// New array reference each render, identical hash-per-item contents.
-		// The binding still dirties (array path in update()), so renderList
-		// runs; head peel should consume everything with zero DOM work and no
-		// middle bookkeeping.
+		//new array reference each render, identical hash-per-item contents.
+		//the binding still dirties (array path in update()), so renderList
+		//runs; head peel should consume everything with zero DOM work and no
+		//middle bookkeeping
 		let items = ["a", "b", "c"];
 
 		const MyElement = component(function* () {
@@ -1427,8 +1426,8 @@ describe("content updates", () => {
 		expect(afterPrepend[0].textContent).toContain("a");
 		expect(afterPrepend[1].textContent).toContain("b");
 		expect(afterPrepend[2].textContent).toContain("c");
-		// Tail peel preserves both existing <li>s; the inserts land ahead of
-		// them with no moves.
+		//tail peel preserves both existing <li>s; the inserts land ahead of
+		//them with no moves
 		expect(afterPrepend[3]).toBe(dNode);
 		expect(afterPrepend[4]).toBe(eNode);
 
@@ -1469,10 +1468,8 @@ describe("content updates", () => {
 	});
 
 	test("wraps primitive list items in templates without forcing the caller to call html`` themselves", async () => {
-		// content.ts toTemplateList (line 31) lifts each non-template entry into
-		// `html\`${entry}\``. Callers that map straight to strings or numbers
-		// should still render, and updates that change a primitive in place
-		// must update the corresponding text without disturbing siblings.
+		//a non-template row is lifted into a template of its own, so a caller mapping straight to
+		//strings or numbers still renders, and changing one primitive updates only its own text
 		const tag = uniqueTag();
 		let items: Array<string | number> = ["alpha", 2, "gamma"];
 
@@ -1502,11 +1499,11 @@ describe("content updates", () => {
 	});
 
 	test("re-renders a list mutated in place on the same array reference", async () => {
-		// A held array mutated in place (push / index assignment) and re-rendered
-		// without allocating a fresh array: renderList diffs the live array against
-		// its own snapshot, so the mutation is seen even though the binding's value
-		// is `=== ` its prior value. The user's array is never rewritten into
-		// HTMLTemplates as a side channel.
+		//a held array mutated in place (push / index assignment) and re-rendered
+		//without allocating a fresh array: renderList diffs the live array against
+		//its own snapshot, so the mutation is seen even though the binding's value
+		//is `=== ` its prior value. The user's array is never rewritten into
+		//HTMLTemplates as a side channel
 		const tag = uniqueTag();
 		const items: Array<string> = ["a", "b", "c"];
 
@@ -1521,11 +1518,11 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		// bare primitive items render as adjacent text nodes with no separator
+		//bare primitive items render as adjacent text nodes with no separator
 		const text = () =>
 			element.shadowRoot!.textContent!.replace(/\s+/g, "").trim();
 		expect(text()).toBe("abc");
-		// the engine must not have replaced the caller's primitives with wrappers
+		//the engine must not have replaced the caller's primitives with wrappers
 		expect(items).toEqual(["a", "b", "c"]);
 
 		items.push("d");
@@ -1546,11 +1543,9 @@ describe("content updates", () => {
 	});
 
 	test("static HTML comments in the template survive a render pass", async () => {
-		// template-html.ts #findTargets walks every comment but only treats those
-		// carrying the binding-marker prefix as markers. Static author
-		// comments must pass through the tree walker untouched and not be picked
-		// up as markers; if they were, the binding indices would shift and the
-		// content binding below would lose its anchors.
+		//only a comment carrying the binding-marker prefix is a marker. An author's own comment
+		//counted as one would shift every binding index after it and the content binding below
+		//would lose its anchors
 		const tag = uniqueTag();
 		let label = "first";
 
@@ -1577,19 +1572,18 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		// The binding still resolves to the correct text after update, which proves
-		// the static comment didn't get treated as an extra marker and shift the
-		// content binding's start/end anchors.
+		//the binding still resolves to the correct text after update, which proves
+		//the static comment didn't get treated as an extra marker and shift the
+		//content binding's start/end anchors
 		expect(section.textContent).toContain("second");
 
 		cleanup(element);
 	});
 
 	test("renders and updates a dynamic HTML comment binding", async () => {
-		// content.ts renderComment path: a comment whose content interpolates an
-		// expression renders as a real comment node between its markers, and update()
-		// recreates it with the new value. The leading comment is the list key, which
-		// is stripped at parse time — only a later dynamic comment reaches the DOM.
+		//a comment interpolating an expression renders as a real comment node between its markers
+		//and is recreated on update. The leading comment is the list key, stripped at parse time,
+		//so only a later dynamic comment reaches the DOM
 		const tag = uniqueTag();
 		const key = "note";
 		let note = "first";
@@ -1610,8 +1604,8 @@ describe("content updates", () => {
 				.map((node) => (node as Comment).data);
 
 		const section = element.shadowRoot!.querySelector("section")!;
-		// the rendered comment carries the interpolated value; the bracketing
-		// marker comments carry the binding identifier, never the user value
+		//the rendered comment carries the interpolated value; the bracketing
+		//marker comments carry the binding identifier, never the user value
 		expect(commentText(section)).toContain(" first ");
 
 		note = "second";
@@ -1625,9 +1619,9 @@ describe("content updates", () => {
 	});
 
 	test("a tight <!--${x}--> stays a comment node and never leaks visible text", async () => {
-		// whitespace must not flip the semantics: `<!--${x}-->` is the same comment
-		// binding as `<!-- ${x} -->`, so the value lands in comment data, not as
-		// rendered content in the section.
+		//whitespace must not flip the semantics: `<!--${x}-->` is the same comment
+		//binding as `<!-- ${x} -->`, so the value lands in comment data, not as
+		//rendered content in the section
 		const tag = uniqueTag();
 		const key = "note";
 		let note = "hidden";
@@ -1665,8 +1659,8 @@ describe("content updates", () => {
 	});
 
 	test("updates one expression in a multi-expression comment binding", async () => {
-		// `<!-- ${a} and ${b} -->` folds both expressions into a single comment
-		// binding; changing one must re-render the comment with both current values.
+		//`<!-- ${a} and ${b} -->` folds both expressions into a single comment
+		//binding; changing one must re-render the comment with both current values
 		const tag = uniqueTag();
 		const key = "pair";
 		let left = "a";

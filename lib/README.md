@@ -15,27 +15,31 @@ npm install grundlage
 #### example
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { start: [Number, 0] } satisfies Schema;
 
 customElements.define(
 	"count-seconds",
-	component(function* (host) {
-		// this runs only once
-		const { start } = props(host, { start: [Number, 0] }); // helper to deal with string attributes
-		let seconds = start;
-		const interval = setInterval(() => {
-			seconds++;
-			host.update();
-		}, 1000);
+	component(
+		function* ({ host, start }) {
+			// runs once, so `start` is a seed. See props for reading a live value
+			let seconds = start;
+			const interval = setInterval(() => {
+				seconds++;
+				host.update();
+			}, 1000);
 
-		// this runs on every update
-		yield () => html`<p>${seconds} seconds</p>`;
+			// this runs on every update
+			yield () => html`<p>${seconds} seconds</p>`;
 
-		// this runs on component disconnect
-		return () => {
-			clearInterval(interval);
-		};
-	}),
+			// this runs on component disconnect
+			return () => {
+				clearInterval(interval);
+			};
+		},
+		{ props },
+	),
 );
 ```
 
@@ -97,15 +101,30 @@ There is a small helper to avoid re-fetching data when the component is transfer
   - yield a renderable (render fn / static template / inner generator) → renders and remembers
   - yield something else → returns the value
 - update-calls re-render the last remembered renderable
-- an attribute change on the host re-renders as well, a MutationObserver on the element calls update()
+  - a render function is called again, an inner generator is torn down and re-run from the top
+  - a plain `yield html` is remembered as static: after it, every `update()` is a no-op
+  - an `update()` while the body is awaiting re-renders whatever it yielded last, e.g. the loading view
+- a change to a DECLARED attribute re-renders as well, through `attributeChangedCallback`; an
+  undeclared one (`class`, `style`, `data-*`) is not observed and does nothing
+- assigning a declared prop (`el.items = […]`) re-renders too: the accessor validates and schedules.
+  So do `host.setProp(…)` and a [host template](#host-template) binding that changes the component's
+  own prop
+- the generator, its render functions and inner generators all receive the same props object
+  ([see host api](#host-api) for where to read them live)
 - update() can be awaited and resolves once the DOM is patched, after the renderable has fully settled
+- a parent renders before its children, each once; beyond that, components render in the order they
+  were updated, not in document order
+- code straight after a `yield` sees this component's own DOM, not the re-render of a child it just
+  wrote to; one more `yield` lets the queued children render first. Mount and update behave alike.
+  On hydration a child's shadow root already holds the server's markup, so measuring it there is no
+  evidence the client render has happened
 
 ```typescript
 import { component, html } from "grundlage";
 
 customElements.define(
 	"user-disclosure",
-	component(function* (host) {
+	component(function* ({ host }) {
 		yield () => html`<p>loading…</p>`; // first render of a static template
 
 		const user = yield fetchUser(); // yield a promise → the const becomes its resolved value
@@ -128,40 +147,65 @@ customElements.define(
 ### cleanup
 
 - runs on the disconnectedCallback of the custom element (see the counter example in the [intro](#example))
+- an inner generator's cleanup also runs before every re-run of it, and when the body paints its own
+  content over it
 - disconnect is confirmed a microtask later, so moving an element inside the DOM keeps the component alive
+- the return position holds it and nothing else: returning any other value warns and drops it. In
+  TypeScript that position is `Cleanup | void`, so the wrong return is a compile error instead
 
 ### errors
 
-- uncaught errors in the main function body propagate to the custom element and render their error instead of the
-  content (root #fail), leaving the rest of the page intact
+- an uncaught error ends the component: its shadow root is emptied and the host dispatches a `grundlage-error`
+  event (`ComponentErrorEvent` with `error` and `tagName`, bubbling and composed). Unless a listener calls
+  `preventDefault()`, the console logs an error naming the tag and the shadow root shows the error text. The rest
+  of the page is unaffected
 - an error from a nested generator is thrown into the main body at its `yield` first, so a try/catch there handles it
+- an exception thrown by a cleanup goes to `reportError`
+- warnings exist only in the development build, which bundlers pick through the `development` export condition
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { src: String } satisfies Schema;
 
 customElements.define(
 	"data-view",
-	component(function* (host) {
-		const { src } = props(host, { src: [String] });
-		if (!src) throw new Error("<data-view> requires a src"); // → root #fail
+	component(
+		function* ({ src }) {
+			if (!src) throw new Error("<data-view> requires a src"); // ends the component
 
-		let data;
-		try {
-			data = yield fetchJson(src);
-		} catch (error) {
-			data = { error }; // handle locally instead of letting it reach #fail
-		}
+			let data;
+			try {
+				data = yield fetchJson(src);
+			} catch (error) {
+				data = { error }; // handled locally, the component keeps running
+			}
 
-		yield () => html`<p>${data.error ? "failed" : data.title}</p>`;
-	}),
+			yield () => html`<p>${data.error ? "failed" : data.title}</p>`;
+		},
+		{ props },
+	),
 );
 ```
 
-`props(host, schema)` reads typed inputs from attributes or properties [helper → props](#props).
+Inputs are declared in `component(gen, { props })` and arrive on the generator's one argument
+[see props](#props).
 
 ## components
 
 ### rendering
+
+Five ways to hand the component something to render, from least to most lifecycle:
+
+| spelling                                              | on `update()`                                         | setup and cleanup                                     | reach for it when                                                                                        |
+| ----------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| ``yield html`…` ``                                    | nothing, it never re-renders                          | the body's, once                                      | the markup only needs seeds (badge, static layout)                                                       |
+| ``yield () => html`…` ``                              | the function is called again                          | the body's, once                                      | anything that changes: the default                                                                       |
+| `yield () => (isEditing ? editorBody : readOnlyBody)` | called again; the chosen body is torn down and re-run | per branch: the old cleanup runs before the new setup | two shapes that each need their own setup                                                                |
+| `yield body` (a `function*`)                          | torn down (cleanup runs) and re-run from the top      | per update                                            | work around each patch: measure before, animate after ([FLIP](#nested-generator-a-repeatable-lifecycle)) |
+| `yield* helper(args)`                                 | re-fires the last render function it yielded          | inline in the body's one run                          | one lifecycle shared by components, with arguments ([mixin](#mixin-via-yield))                           |
+
+Nesting goes one level deep in every form ([see nested generator](#nested-generator-a-repeatable-lifecycle)).
 
 - yielding a template ``yield html`...` `` directly will not re-render it again. It can be dynamic but will not update
 - most parts of the component can be dynamic
@@ -171,30 +215,44 @@ customElements.define(
   - attributes (names, values, parts of those)
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = {
+	label: String,
+	href: String,
+	size: [String, "md"],
+} satisfies Schema;
 
 customElements.define(
 	"ui-badge",
-	component(function* (host) {
-		const { label, href, size } = props(host, {
-			label: String,
-			href: String,
-			size: [String, "md"],
-		});
-		yield html`<a class="badge ${size}" href=${href}>${label}</a>`;
-	}),
+	component(
+		function* ({ label, href, size }) {
+			// a plain yielded template never re-renders, so seeds are all it needs
+			yield html`<a class="badge ${size}" href=${href}>${label}</a>`;
+		},
+		{ props },
+	),
 );
 ```
 
-- yielding it as a render function ``yield (host) => html`...` `` will recall the function and the dynamic values again
-- the function has to return the template, everything else is up to the author
+- yielding it as a render function ``yield ({ host }) => html`...` `` will recall the function and the dynamic values again
+- whatever the function returns is committed as content, by the same rules as a `${…}` hole: a
+  template renders, `null` / `undefined` / `true` / `false` render nothing, an array renders a list, and an
+  object, `Date`, plain function or symbol throws. Returning nothing warns: a block-bodied arrow needs a
+  `return`
+- returning a **generator function** picks which body runs (`() => (isEditing ? editorBody : readOnlyBody)`).
+  Each branch has its own setup, `yield` and cleanup, the old branch's cleanup runs before the new
+  branch's setup, and even the same branch is torn down and re-run on every update
+- returning a **promise** renders its resolved value once it settles; nothing paints while it is pending, and
+  an `update()` in between re-calls the function, so the newest call wins. A rejection from the current
+  call ends the component and is not thrown into the generator, so catch inside the render function
 
 ```typescript
 import { component, html } from "grundlage";
 
 customElements.define(
 	"disclosure-widget",
-	component(function* (host) {
+	component(function* ({ host }) {
 		let isOpen = false;
 		const toggle = () => {
 			isOpen = !isOpen;
@@ -216,25 +274,42 @@ customElements.define(
 
 - a dynamic attribute whose value is `false`, `null`, or `undefined` is **removed** → that's exactly
   right for `hidden`, and wrong for an `aria-*` state, where `"false"` has to reach the DOM as literal
-  text. Bind the string for those.
+  text. Bind the string for those. `true` is written as `"true"`
+- a non-stringable value (object, array, function) is assigned as a **property** instead, which is how data
+  reaches a nested custom element. A name the child **declares** always goes through that prop's accessor,
+  so `null` / `undefined` write the child's fallback back
+- those rules hold for a value that is exactly one hole. A value with anything else in it
+  (`class="card ${extra}"`) is composed to a string and always set: `null` / `undefined` add `""`, `false`
+  adds `"false"`
+- live state (`value` and `checked` on inputs, `selected` on options) is written as the attribute on the
+  first commit and as the property after that, so `form.reset()` returns to the first rendered value and a
+  state change replaces what the user typed. `<select value=${…}>` warns and selects nothing: bind
+  `selected` on each option
 - the tag name and raw text slots (style / script / textarea) are their own binding forms:
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
 const SECTION_CSS = "h2, h3 { margin-block: 0 }";
 
+const props = { level: [Number, 2] } satisfies Schema;
+
 customElements.define(
 	"section-block",
-	component(function* (host) {
-		const { level } = props(host, { level: [Number, 2] });
-		yield html`
+	component(
+		function* ({ level }) {
+			yield html`
             <h${level}>section title</h${level}> <!-- dynamic tag -->
             <style>${SECTION_CSS}</style>        <!-- raw slot -->
         `;
-	}),
+		},
+		{ props },
+	),
 );
 ```
+
+A dynamic tag that composes to a different name swaps the element: attributes are copied, children moved
+and focus restored, but a component in that position is torn down and mounted again.
 
 ### composition
 
@@ -247,20 +322,22 @@ customElements.define(
 A template is a plain value. It can be passed around, returned from a helper, or dropped into another template.
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
 
 const statusBadge = (status) =>
 	html`<em class="badge badge--${status}">${status}</em>`;
 
+const props = { reference: String, status: String } satisfies Schema;
+
 customElements.define(
 	"order-row",
-	component(function* (host) {
-		const { reference, status } = props(host, {
-			reference: String,
-			status: String,
-		});
-		yield () => html`<p>${reference} ${statusBadge(status)}</p>`;
-	}),
+	component(
+		function* () {
+			yield ({ reference, status }) =>
+				html`<p>${reference} ${statusBadge(status)}</p>`;
+		},
+		{ props },
+	),
 );
 ```
 
@@ -277,7 +354,7 @@ import { html } from "grundlage";
 
 // captureRects and playFlip are user-land helpers and excluded for readability
 export const flipList = (items, onShuffle) =>
-	function* (host) {
+	function* ({ host }) {
 		const first = captureRects(host); // before the yield: old positions, read from the live DOM
 		yield () => html`
 			<button onClick=${onShuffle}>shuffle</button>
@@ -298,7 +375,7 @@ import { flipList } from "./flip-list.js";
 
 customElements.define(
 	"shuffle-list",
-	component(function* (host) {
+	component(function* ({ host }) {
 		let items = loadItems();
 		const shuffleItems = () => {
 			items = [...items].sort(() => Math.random() - 0.5);
@@ -310,6 +387,10 @@ customElements.define(
 );
 ```
 
+Nesting goes one level deep: an inner generator that yields or returns another generator function throws
+into its parent. A body that installs an inner generator and then paints its own content takes the shadow
+root back for good: the inner one is torn down and its pending async work never lands.
+
 #### mixin via yield*
 
 `yield*` is plain JavaScript delegation: the inner generator's yields surface as this generator's
@@ -319,15 +400,19 @@ shares setup and first render, and it takes arguments:
 
 ```typescript
 // user-card.ts, a self-contained component: its own loading → loaded lifecycle
-import { html, props } from "grundlage";
+import { html, type BaseComponent } from "grundlage";
 
-export async function* userCard(
-	host,
-	userId = props(host, { userid: String }).userid,
-) {
+// a mixin declares the shape it reads, never a schema: schemas belong to elements, and this one is
+// handed whichever element mounted it
+type UserCardInput = {
+	host: BaseComponent;
+	readonly userId: string | undefined;
+};
+
+export async function* userCard(input: UserCardInput) {
 	yield () => html`<p aria-busy="true">loading…</p>`; // first paint
 
-	const user = await fetchUser(userId);
+	const user = await fetchUser(input.userId);
 
 	yield () => html`
 		<article>
@@ -339,29 +424,60 @@ export async function* userCard(
 ```
 
 ```typescript
-import { component, props } from "grundlage";
+import { component, type Schema } from "grundlage";
 import { userCard } from "./user-card.js";
 
-// as its own element
-customElements.define("user-card", component(userCard));
+const userCardProps = { userId: String } satisfies Schema;
+const userPanelProps = { activeUserId: String } satisfies Schema;
+
+// as its own element. The registration site decides the attribute names
+customElements.define(
+	"user-card",
+	component(userCard, { props: userCardProps }),
+);
 
 // …or mixed into a parent:
 customElements.define(
 	"user-panel",
-	component(async function* (host) {
-		const { activeuserid } = props(host, { activeuserid: String }); // outer runs once
-		yield* userCard(host, activeuserid); // becomes this body's loading → loaded run
-	}),
+	component(
+		async function* (componentProps) {
+			// becomes this body's loading → loaded run, under the parent's own prop name
+			yield* userCard({
+				host: componentProps.host,
+				get userId() {
+					return componentProps.activeUserId;
+				},
+			});
+		},
+		{ props: userPanelProps },
+	),
 );
 ```
 
 The two `yield`s inside `userCard` are self-driven. The async generator walks loading → loaded on
 its own, no `host.update()` involved.
 
+Registering the mixin directly hands it the props object itself, so `input.userId` stays live the way
+it does anywhere else. Renaming a prop across the boundary is where that breaks: the object literal at
+the `yield*` is built once, so a plain `userId: componentProps.activeUserId` freezes the value at
+delegation. The getter above is what keeps the rename live, and it is worth reaching for whenever the
+mixin paints the renamed prop rather than only seeding from it.
+
+Borrowing `ComponentProps<typeof userCardProps>` for the parameter looks tighter and does not compile:
+that type carries `host: BaseComponent & DeclaredProps<S>`, which claims the host has a `userId`
+accessor. `user-panel` has an `activeUserId` one instead. Declaring the shape is not a shortcut around
+the schema, it is the honest description of what a mixin gets.
+
+A mixin that annotates its own return type spells it `AsyncGenerator<YieldableValue>` (or
+`Generator<YieldableValue>`), not bare `AsyncGenerator`: `yield*` hands the inner yield type straight
+to the outer generator, and a bare one erases it to `unknown`. Inference gets this right on its own,
+as above.
+
 The same generator could also be dropped in with no arguments at all: `yield userCard` is a generator function,
-so it installs as a nested lifecycle and reads the parent's own `userid` attribute. The difference here is the
-lifecycle. As `yield*` it runs once (and remembers only the renderables); as `yield` it is the renderable and re-runs
-every update.
+so it installs as a nested lifecycle and receives the parent's own props object. That only works when the parent
+declares the name the mixin reads: `user-panel` declares `activeUserId`, so `input.userId` would read `undefined`.
+The other difference is the lifecycle. As `yield*` it runs once (and remembers only the renderables); as `yield` it
+is the renderable and re-runs every update.
 
 ### host template
 
@@ -370,34 +486,41 @@ children become the shadow DOM, and its attributes are applied to the custom ele
 
 - every attribute form works: static · dynamic · mixed · boolean · spread · event handler
 - attributes dropped by a later render are removed from the host
+- binding one of the component's own declared props is a write: a new value re-renders once, so the
+  paint shows it in the same frame. A value derived from that prop itself (`count=${count + 1}`)
+  never settles and ends in an error
 - must be the outermost node with no top-level siblings, otherwise it is parsed as an ordinary element
 - a `<template>` carrying attributes in a nested position (content hole, list row) throws
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { variant: [String, "default"] } satisfies Schema;
 
 customElements.define(
 	"pinnable-card",
-	component(function* (host) {
-		const { variant } = props(host, { variant: [String, "default"] });
-		let isPinned = false;
-		const togglePin = () => {
-			isPinned = !isPinned;
-			host.update();
-		};
+	component(
+		function* ({ host }) {
+			let isPinned = false;
+			const togglePin = () => {
+				isPinned = !isPinned;
+				host.update();
+			};
 
-		yield () => html`
-			<template
-				role="article"
-				class="card card--${variant}"
-				aria-pressed=${isPinned ? "true" : "false"}
-				inert=${isPinned}
-				onClick=${togglePin}
-			>
-				<slot></slot>
-			</template>
-		`;
-	}),
+			yield ({ variant }) => html`
+				<template
+					role="article"
+					class="card card--${variant}"
+					aria-pressed=${isPinned ? "true" : "false"}
+					inert=${isPinned}
+					onClick=${togglePin}
+				>
+					<slot></slot>
+				</template>
+			`;
+		},
+		{ props },
+	),
 );
 ```
 
@@ -428,7 +551,7 @@ import { component, html } from "grundlage";
 
 customElements.define(
 	"search-box",
-	component(function* (host) {
+	component(function* ({ host }) {
 		let query = "";
 		const onInput = (event) => {
 			query = event.target.value;
@@ -450,7 +573,7 @@ import { component, html } from "grundlage";
 
 customElements.define(
 	"color-swatch",
-	component(function* (host) {
+	component(function* ({ host }) {
 		const select = (value) =>
 			host.dispatchEvent(
 				new CustomEvent("swatch-select", {
@@ -469,7 +592,7 @@ import { component, html } from "grundlage";
 
 customElements.define(
 	"swatch-picker",
-	component(function* (host) {
+	component(function* ({ host }) {
 		let color = "#000";
 		const pick = (event) => {
 			color = event.detail;
@@ -484,7 +607,10 @@ customElements.define(
 ```
 
 A custom listener needs the `on-` prefix because otherwise `onSwatchSelect` would resolve to a non-existent
-`onswatchselect` property (and never fire).
+`onswatchselect` property (and never fire, the console warns about it).
+
+The event name can hold a hole itself (`on${eventName}=${handler}`) and is resolved on every render. A
+quoted string (`onclick="…"`) is never a binding.
 
 Global events are not bound in markup, they are registered manually.
 
@@ -493,7 +619,7 @@ import { component, html } from "grundlage";
 
 customElements.define(
 	"escape-dialog",
-	component(function* (host) {
+	component(function* ({ host }) {
 		let isOpen = true;
 		const close = () => {
 			isOpen = false;
@@ -518,35 +644,39 @@ customElements.define(
 - an error is just another branch, renders a fallback instead of throwing
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { items: [(incoming: unknown) => incoming, []] } satisfies Schema;
 
 customElements.define(
 	"accordion-list",
-	component(function* (host) {
-		const { items } = props(host, { items: [Array, []] });
-		let expandedId = null;
-		const toggle = (id) => {
-			expandedId = expandedId === id ? null : id;
-			host.update();
-		};
-		yield () => html`
-			<ul>
-				${items.map(
-					(item) => html`
-						<li>
-							<button
-								onClick=${() => toggle(item.id)}
-								aria-expanded=${expandedId === item.id}
-							>
-								${item.label}
-							</button>
-							${expandedId === item.id ? html`<p>${item.details}</p>` : null}
-						</li>
-					`,
-				)}
-			</ul>
-		`;
-	}),
+	component(
+		function* ({ host }) {
+			let expandedId = null;
+			const toggle = (id) => {
+				expandedId = expandedId === id ? null : id;
+				host.update();
+			};
+			yield ({ items }) => html`
+				<ul>
+					${items.map(
+						(item) => html`
+							<li>
+								<button
+									onClick=${() => toggle(item.id)}
+									aria-expanded=${expandedId === item.id}
+								>
+									${item.label}
+								</button>
+								${expandedId === item.id ? html`<p>${item.details}</p>` : null}
+							</li>
+						`,
+					)}
+				</ul>
+			`;
+		},
+		{ props },
+	),
 );
 ```
 
@@ -560,55 +690,63 @@ templates the old subtree is torn down and the new one mounted, which resets foc
 state inside it.
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { readonly: [Boolean, false] } satisfies Schema;
 
 customElements.define(
 	"text-block",
-	component(function* (host) {
-		const { readonly } = props(host, { readonly: [Boolean, false] });
+	component(
+		function* ({ host, readonly }) {
+			// a setup-time branch is the one place that wants the seed
+			if (readonly) {
+				yield () => html`<pre>${host.textContent}</pre>`;
+				return;
+			}
 
-		if (readonly) {
-			yield () => html`<pre>${host.textContent}</pre>`;
-			return;
-		}
-
-		let draft = "";
-		const onInput = (event) => {
-			draft = event.target.value;
-			host.update();
-		};
-		yield () => html`
-			<textarea onInput=${onInput}></textarea>
-			<p>${draft.length} characters</p>
-		`;
-	}),
+			let draft = "";
+			const onInput = (event) => {
+				draft = event.target.value;
+				host.update();
+			};
+			yield () => html`
+				<textarea onInput=${onInput}></textarea>
+				<p>${draft.length} characters</p>
+			`;
+		},
+		{ props },
+	),
 );
 ```
 
 Errors work the same way. The failure is held in state and rendered as a branch. Throwing is reserved for what a
-component cannot recover from, because it replaces the whole shadow tree with [`#fail`](#errors):
+component cannot recover from, because it ends the component and empties its shadow tree ([see errors](#errors)):
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { src: [String, ""] } satisfies Schema;
 
 customElements.define(
 	"safe-image",
-	component(function* (host) {
-		const { src } = props(host, { src: [String, ""] });
-		let error = src ? null : new Error("missing src");
+	component(
+		function* ({ host, src: initialSrc }) {
+			let error = initialSrc ? null : new Error("missing src");
 
-		yield () =>
-			error
-				? html`<p role="alert">${error.message}</p>`
-				: html`<img
-						src=${src}
-						alt=""
-						onError=${() => {
-							error = new Error("failed to load");
-							host.update();
-						}}
-					/>`;
-	}),
+			yield ({ src }) =>
+				error
+					? html`<p role="alert">${error.message}</p>`
+					: html`<img
+							src=${src}
+							alt=""
+							onError=${() => {
+								error = new Error("failed to load");
+								host.update();
+							}}
+						/>`;
+		},
+		{ props },
+	),
 );
 ```
 
@@ -627,7 +765,7 @@ import { component, html } from "grundlage";
 
 customElements.define(
 	"todo-list",
-	component(function* (host) {
+	component(function* ({ host }) {
 		let todos = [
 			{ id: 1, text: "walk the dog", done: false },
 			{ id: 2, text: "write docs", done: true },
@@ -663,7 +801,7 @@ import { component, html } from "grundlage";
 
 customElements.define(
 	"score-board",
-	component(function* (host) {
+	component(function* ({ host }) {
 		let players = loadPlayers(); // [{ id, name, score }, …]
 		const bump = (id) => {
 			const player = players.find((entry) => entry.id === id);
@@ -693,16 +831,24 @@ customElements.define(
 The key is the **first dynamic comment** in the row template, wherever it sits. Only the expressions count, so the
 content around can be anything: `<!--${player.id}-->`, `<!-- id: ${player.id} -->` and `<!-- key: ${player.id} -->`.
 
+A matched row with the same template is patched. A keyed row can also be matched across a template change:
+it keeps its place in the list but is rebuilt with new nodes, so no DOM state carries over. An unkeyed row only
+ever matches its own template.
+
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { tags: [(incoming: unknown) => incoming, []] } satisfies Schema; // [{ id, label }, …]
 
 customElements.define(
 	"tag-line",
-	component(function* (host) {
-		const { tags } = props(host, { tags: [Array, []] }); // [{ id, label }, …]
-		yield () =>
-			html`<p>${tags.map((tag) => html`<!--${tag.id}-->${tag.label}, `)}</p>`;
-	}),
+	component(
+		function* () {
+			yield ({ tags }) =>
+				html`<p>${tags.map((tag) => html`<!--${tag.id}-->${tag.label}, `)}</p>`;
+		},
+		{ props },
+	),
 );
 ```
 
@@ -712,25 +858,52 @@ The generator itself can be async, so `await` works inside the main function bod
 and returns its resolved value.
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { symbol: String } satisfies Schema;
 
 customElements.define(
 	"latest-price",
-	component(async function* (host) {
-		const { symbol } = props(host, { symbol: String });
+	component(
+		async function* (componentProps) {
+			yield ({ symbol }) => html`<p aria-busy="true">loading ${symbol}…</p>`; // SSR serializes this first paint
 
-		yield () => html`<p aria-busy="true">loading ${symbol}…</p>`; // SSR serializes this first paint
+			const price = await fetchPrice(componentProps.symbol); // rejection throws here, wrap it in try/catch to handle it
 
-		const price = await fetchPrice(symbol); // rejection throws here, wrap it in try/catch to handle it
-
-		yield () => html`<output>${symbol} ${price}</output>`; // client resumes and swaps it in
-	}),
+			yield ({ symbol }) => html`<output>${symbol} ${price}</output>`; // client resumes and swaps it in
+		},
+		{ props },
+	),
 );
 ```
 
 The server serializes the first yield (the loading view) and the client resumes from there, so the
 `await` runs on the client. This loads once and cannot retry. For a fetch that should run again, the
 data is better kept in a variable and re-rendered with `update()`.
+
+#### async generator or yielded promise
+
+Both spellings wait. They cost different things, and neither cost is obvious from the call site.
+
+An **async generator** pays one tick up front. Its first `next()` returns a promise, so even the
+placeholder above is a microtask away and the shadow root is empty until that promise settles. The
+frame boundary absorbs it: nothing paints in between, so there is no flash to see. What it buys is
+`await`, which keeps its type.
+
+A **yielded promise** in a sync generator paints its placeholder in the same task and waits after
+that. What it costs is the type: `const price = yield fetchPrice(symbol)` is `any`. A `yield`
+resumes with a settled promise, an echoed value or nothing, and one generator has one resume type
+for all of its yields, so there is nothing narrower to give it. Annotate the receiving variable when
+the value matters.
+
+```typescript
+const price: Price = yield fetchPrice(symbol); // sync generator, paints first, types by hand
+const price = await fetchPrice(symbol); //         async generator, types itself, one empty tick
+```
+
+So: a page root is an async generator. Nothing is waiting on its first tick and the types are worth
+having. A nested component is a sync generator that yields its promises, because that is where the
+empty tick is not free.
 
 ### form components
 
@@ -742,16 +915,15 @@ data is better kept in a variable and re-rendered with `update()`.
 - react to them declaratively with `on-form-*` on the host `<template>`, or imperatively with `host.addEventListener`
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { name: String, value: [String, ""] } satisfies Schema;
 
 customElements.define(
 	"text-field",
 	component(
-		function* (host) {
-			const { name, value: initial } = props(host, {
-				name: String,
-				value: [String, ""],
-			});
+		function* ({ host, value: initial }) {
+			// `initial` is deliberately a seed: the input is uncontrolled after the first paint
 			let value = initial;
 			let isDisabled = false;
 
@@ -779,7 +951,7 @@ customElements.define(
 
 			publish(); // seed the form value before the first paint
 
-			yield () => html`
+			yield ({ name }) => html`
 				<template on-form-reset=${onReset} on-form-disabled=${onDisabled}>
 					<input
 						name=${name}
@@ -791,7 +963,7 @@ customElements.define(
 				</template>
 			`;
 		},
-		{ formAssociated: true },
+		{ formAssociated: true, props },
 	),
 );
 ```
@@ -806,28 +978,32 @@ customElements.define(
 - each instance owns a private sheet; `getHTML` serializes the last text write, not later `setProperty` updates
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { accent: [String, "rebeccapurple"] } satisfies Schema;
 
 customElements.define(
 	"progress-bar",
-	component(function* (host) {
-		const { accent } = props(host, { accent: [String, "rebeccapurple"] });
-		let progress = 0;
-		const advance = () => {
-			progress = Math.min(progress + 5, 100);
-			host.update();
-		};
-		yield () => html`
-			<style>
-				.bar {
-					width: ${progress}%;
-					background: ${accent};
-					transition: width 120ms ease-out;
-				}
-			</style>
-			<div class="bar" onClick=${advance}></div>
-		`;
-	}),
+	component(
+		function* ({ host }) {
+			let progress = 0;
+			const advance = () => {
+				progress = Math.min(progress + 5, 100);
+				host.update();
+			};
+			yield ({ accent }) => html`
+				<style>
+					.bar {
+						width: ${progress}%;
+						background: ${accent};
+						transition: width 120ms ease-out;
+					}
+				</style>
+				<div class="bar" onClick=${advance}></div>
+			`;
+		},
+		{ props },
+	),
 );
 ```
 
@@ -836,17 +1012,21 @@ browser reparses it. A whole-sheet hole and any **structural** hole (selector, p
 prelude) end up here:
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { theme: [String, "light"] } satisfies Schema;
 
 customElements.define(
 	"themed-panel",
-	component(function* (host) {
-		const { theme } = props(host, { theme: [String, "light"] });
-		yield () =>
-			html`<style>
-				${themeSheet(theme)}
-			</style>`; // whole sheet is a hole → text path
-	}),
+	component(
+		function* () {
+			yield ({ theme }) =>
+				html`<style>
+					${themeSheet(theme)}
+				</style>`; // whole sheet is a hole → text path
+		},
+		{ props },
+	),
 );
 ```
 
@@ -857,18 +1037,23 @@ customElements.define(
 - never hang methods/state off `host` at runtime ([see antipatterns](#antipatterns))
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, type Schema } from "grundlage";
 
-class TokenField extends component(function* (host) {
-	// …generator body: reads props, yields the render…
-}) {
-	get value() {
-		// has access to this.update() if needed
-		return this.getAttribute("value") ?? "";
+const props = { tokens: [asTokenList, []] } satisfies Schema;
+
+class TokenField extends component(
+	function* () {
+		// …generator body: reads its props, yields the render…
+	},
+	{ props },
+) {
+	get count() {
+		// declared props are accessors on the class, so a subclass reads them off `this`
+		return this.tokens.length;
 	}
 
 	clear() {
-		this.removeAttribute("value");
+		this.tokens = []; // through the accessor: parsed, reflected, scheduled
 	}
 }
 
@@ -883,103 +1068,299 @@ customElements.define("token-field", TokenField);
 | `serializable`   | `true`   | `false`          | the shadow root serializes with `getHTML`, required for SSR output and hydration   |
 | `clonable`       | `true`   | `false`          | the shadow tree is copied on `cloneNode`, so cloned hosts keep their content       |
 | `delegatesFocus` | `true`   | `false`          | focusing the host (click or `.focus()`) moves focus to the first focusable inside  |
-| `formAssociated` | `false`  | —                | opt into form participation ([see components → form components](#form-components)) |
+| `formAssociated` | `false`  | n/a              | opt into form participation ([see components → form components](#form-components)) |
+| `props`          | `{}`     | n/a              | the input schema: observed attributes, accessors and types ([see props](#props))   |
 
 Any other `ShadowRootInit` field works too, e.g. `slotAssignment: "manual"`.
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const props = { label: String } satisfies Schema;
 
 customElements.define(
 	"secure-badge",
 	component(
-		function* (host) {
-			const { label } = props(host, { label: String });
+		function* () {
 			// no host.shadowRoot here, outside code reaches the root via host.internals.shadowRoot
-			yield () => html`<span>${label}</span>`;
+			yield ({ label }) => html`<span>${label}</span>`;
 		},
-		{ mode: "closed" },
+		{ mode: "closed", props },
 	),
 );
 ```
 
 ## host api
 
-The element passed into the generator (`host`) is a `BaseComponent`. That is a normal `HTMLElement`
-plus `update()`, `setProp()` and `internals`.
+The generator receives one object: `host` plus every declared prop. `host` is a `BaseComponent`:
+a normal `HTMLElement` plus `update()`, `setProp()` and `internals`.
+
+That object **is** the element's prop store, not a copy of it, so it is live: a read after an
+`await` sees what the element holds at that moment. Destructuring takes a snapshot, and that is the
+language's rule rather than the library's:
+
+```typescript
+element.setAttribute("userid", "8");
+componentProps.userid; // "8", read now
+componentProps.host.userid = "9"; // parse → reflect → update()
+const frozen = { ...componentProps }; // a snapshot
+```
+
+Writing goes through `host`, and the type layer says so: the props half is handed out **readonly**.
+Assigning to it directly would move a value that nothing parsed, reflected or scheduled on, so the
+component silently stops repainting. `componentProps.host.userid = "9"` is the same spelling
+outside code uses (`element.userid = "9"`).
+
+Where you destructure decides what you get. The generator body runs once, so
+`function* ({ label })` is a **seed**: right for an initial value or a mount-time branch, wrong for
+anything that should track later writes. The render function runs per update, so
+`` yield ({ label }) => html`…` `` is **live**, as is reading `componentProps.label` off the object
+at any point. Examples in this README destructure in the render function by default, and in the
+generator body only where the value is meant to be frozen.
 
 ### update()
 
-The explicit re-render trigger, next to an attribute change on the host. It re-fires the last yielded renderable and
+The explicit re-render trigger, next to a declared-attribute change and a declared-prop assignment. It re-fires the last yielded renderable and
 resolves once that is in the DOM (see
-[lifecycle → mount & update](#mount--update)). Before the first render it's a no-op, and calls that land during an
-in-flight pass coalesce onto it.
+[lifecycle → mount & update](#mount--update)). Until the generator yields its first renderable it's a no-op; once
+it has, a call re-renders even while that first async render is still pending. Calls that land during an in-flight
+pass coalesce onto it. A disconnected host queues nothing and resolves immediately.
+
+On the server, a re-render asked for during the paint (a host binding writing an own prop, a synchronous
+`update()` or prop assignment inside the render) runs before the server run ends, so the markup shows the
+settled value. Once the run has ended, `update()` is a no-op.
 
 ### setProp(name, value, oldValue?)
 
-Outside code uses `setProp` to hand a value to a mounted component. A stringable value
-(string, number, bigint, boolean) is written as an **attribute**, anything else (object, array) is set as a
-**property**. The component re-renders afterwards, and `props` reads the value back with types:
+Outside code uses `setProp` to hand a value to a mounted component. A **declared** name is assigned
+through that prop's own accessor, so it runs the prop's function, reflects and schedules, and
+`null` or `undefined` is the absence that writes the fallback back. An undeclared name resolves the
+way a dynamic attribute does: a stringable value is written as an **attribute**, anything else as a
+**property**.
 
 ```typescript
 const cell = document.querySelector("price-cell") as BaseComponent;
-cell.setProp("currency", "EUR"); // stringable → attribute
-cell.setProp("quote", { bid: 1.08, ask: 1.09 }); // complex → property
+cell.setProp("currency", "EUR"); // parsed by String, reflected as currency="EUR"
+cell.setProp("quote", { bid: 1.08, ask: 1.09 }); // parsed by asQuote, no attribute half
+cell.setProp("quote", null); // absence → back to the fallback
 ```
 
 ```typescript
-import { component, html, props } from "grundlage";
+import { component, html, type Schema } from "grundlage";
+
+const asQuote = (incoming: unknown) =>
+	typeof incoming === "object" && incoming !== null ? incoming : undefined;
+
+const props = {
+	currency: [String, "USD"],
+	quote: [asQuote, { bid: 0, ask: 0 }],
+} satisfies Schema;
 
 customElements.define(
 	"price-cell",
-	component(function* (host) {
-		yield () => {
-			// read inside the render function, so each setProp is picked up
-			const { currency, quote } = props(host, {
-				currency: [String, "USD"],
-				quote: [Object, { bid: 0, ask: 0 }],
-			});
-			return html`<output>${quote.bid} ${currency}</output>`;
-		};
-	}),
+	component(
+		function* () {
+			yield (componentProps) => {
+				// destructured per call, so each setProp is picked up on the next render
+				const { currency, quote } = componentProps;
+				return html`<output>${quote.bid} ${currency}</output>`;
+			};
+		},
+		{ props },
+	),
 );
 ```
 
 A framework binding a custom element usually calls `setProp` on its own; `oldValue` lets it detach a
-previously-set property or event listener. Note where `props` is called: setup runs once, so a value
-destructured there is frozen at mount and a later `setProp` re-renders with the old value.
+previously-set event listener. A `setProp` only reaches the screen if the render function reads the
+prop when it runs. A value destructured in the generator body is frozen at mount
+([see host api](#host-api)).
 
-## helpers
+## props
 
-### props
+Inputs are declared once, in `component(gen, { props })`. The schema fixes the observed attributes and
+installs one accessor per prop on the element class; the generator, its render functions and any inner
+generator all receive the same object.
 
-`props(host, schema)` is a convenience helper that reads inputs with types, whether they arrived as attributes (strings)
-or
-properties. Each schema entry says how to read one name:
+The schema is a plain object. Hoisting it above `customElements.define` puts the element's inputs in
+one place, and gives you something to export when two elements share a shape. Every example below is
+written that way, and every one of them ends in `satisfies Schema`.
 
-- `Constructor` required; throws if neither an attribute nor a property supplies it (`Boolean` is the exception:
-  absent reads as `false`)
-- `[Constructor]` optional; `undefined` when absent
-- `[Constructor, fallback]` optional with a default
-- only `String`, `Number`, `BigInt` and `Boolean` look at the attribute and coerce it; every other constructor
-  (`Array`, `Object`, `Function`, a class) is read from the property and only types the result
+That is not decoration. Written inline, `component(gen, { props: { count: [Number, 0] } })` gets its
+contextual type from the parameter and checks out. Hoisted, `[Number, 0]` has nothing to be contextual
+against and widens to `(NumberConstructor | number)[]`, which is not an entry. `satisfies Schema`
+supplies the missing context and keeps the literal type the prop inference needs, so hoist and
+`satisfies` travel together.
+
+An entry is a **function** taking whatever arrived and returning the value, or `undefined` to refuse
+it. `String`, `Number`, `BigInt` and `Boolean` are shorthands for the four shipped functions, and
+`[entry, fallback]` supplies what the function is called with when nothing was supplied.
 
 ```typescript
-import { component, html, props } from "grundlage";
+{
+	label: String,              // string | undefined
+	count: [Number, 0],         // number
+	disabled: Boolean,          // boolean, absence is one of its two states
+	items: [asTagList, []],     // Array<string>
+	quote: asQuote,             // Quote | undefined
+}
+```
+
+That is the whole schema. There is no required shape, no optional shape and no type guard. A prop is
+its function, and the function is the only place a value is parsed or validated:
+
+```typescript
+const asTagList = (incoming: unknown) =>
+	typeof incoming === "string" ? incoming.split(" ") : incoming;
+```
+
+The `unknown` there is not optional either. Inside a schema, `(incoming) => …` is an implicit `any`:
+an entry may be a function or one of four constructors, all five are callable, so there is no single
+signature to hand the parameter.
+
+A **string** means the value came from markup and needs parsing; anything else came from JS and is
+already itself. One function serves the attribute and the property mode, so `<x-el items="a b">` and `el.items = ["a","b"]`
+land on the same value.
+
+```typescript
+import { component, html, type Schema } from "grundlage";
+
+const props = {
+	label: [String, "untitled"],
+	count: [Number, 0],
+	disabled: Boolean,
+	items: [asTagList, []],
+} satisfies Schema;
 
 customElements.define(
 	"labeled-count",
-	component(function* (host) {
-		const { label, count, disabled, items } = props(host, {
-			label: String, // required
-			count: [Number, 0], // default 0
-			disabled: Boolean, // present attribute → true
-			items: [Array], // optional, property channel
-		});
-		yield () => html`<p aria-disabled=${disabled}>${label}: ${count}</p>`;
-	}),
+	component(
+		function* () {
+			yield ({ label, count, disabled }) =>
+				html`<p aria-disabled=${disabled}>${label}: ${count}</p>`;
+		},
+		{ props },
+	),
 );
 ```
+
+### one store, five rules
+
+Every prop has one slot on the element, and both modes write it.
+
+1. **One value per prop.** Last write wins, whichever mode it came from; nothing is compared
+   across modes. On an upgrade the platform fixes that order: the constructor fills in the absent
+   values, the attribute reactions deliver the markup, and `connectedCallback` replays whatever JS
+   assigned before the class existed, so markup loses to a property assignment.
+2. **Every incoming value runs through the prop's function**: markup, an assignment, a parent's
+   binding, `setProp`, the fallback at construction.
+3. **A refusal is ignored.** The function returning `undefined` means "not a value I accept": the
+   previous value stays, the console warns, and nothing throws or re-renders.
+4. **Absence is a write of the fallback.** `removeAttribute`, `el.x = undefined`, `el.x = null` and
+   element construction are one code path, so nothing is required and no read fails. The fallback is
+   not _restored_: the function is asked the same question and gives the same answer.
+5. **A property assignment reflects**, when the value it settled on has a string spelling. An
+   attribute arriving from markup does not: `count="007"` stays as written while `el.count` reads `7`.
+
+```typescript
+el.count = "7"; // parsed to 7, written as count="7", one update
+el.count = 7; // the same value, no DOM write, no update
+el.count = "nope"; // refused: still 7, count="7" untouched, one console warning
+el.count = undefined; // absence → the fallback, reflected
+```
+
+### names and reflection
+
+Attribute names are the lowercased prop name: `userId: String` observes `userid`, and `<my-el
+userId="5">`, `<my-el userid="5">` and `setAttribute("userId", …)` all land on it. Every prop observes
+one, whatever its function. A prop the attribute cannot carry never has one in practice.
+
+Prop names must match `/^[a-z][a-zA-Z0-9_-]*$/`, and two props differing only in case throw at define
+time. Every declared prop becomes an accessor on the element class, so a name already on the prototype
+chain (`title`, `id`, `lang`, `hidden`, `update`, `setProp`, `internals`) throws at define time, as
+does `host`, which the props object reserves, and any name starting with `on-`, which markup reads as a
+custom event binding. Rename the prop.
+
+A name that merely starts with `on` is fine. A binding asks whether the target declares the name
+before it asks whether it looks like an event handler, so `once: String` is set as a prop rather than
+bound as a listener for a `ce` event.
+
+Reflection writes the value's own spelling: a string as itself, a number or bigint through
+`String(value)`, `true` as `""`. A value with no spelling (an object, `undefined`) takes a stale
+attribute **off**, and touches nothing when there was none, so an object-valued prop never writes to
+the DOM at all.
+
+### booleans
+
+An HTML boolean attribute has two states and `[Boolean, true]` needs three, so the third one goes into
+the attribute value:
+
+| declaration        | absent  | `x` / `x=""` / `x="true"` | `x="false"` |
+| ------------------ | ------- | ------------------------- | ----------- |
+| `Boolean`          | `false` | `true`                    | `false`     |
+| `[Boolean, false]` | `false` | `true`                    | `false`     |
+| `[Boolean, true]`  | `true`  | `true`                    | `false`     |
+
+Writing `true` writes `""`. Writing `false` removes the attribute where absence already means `false`,
+and writes `"false"` where it does not, so `:host([disabled])` stays exact.
+
+### fallbacks
+
+A fallback belongs to the element that holds it, and it is written through the prop's own function at
+construction, so what the generator reads has already been parsed.
+
+- **copied** with `structuredClone`, deeply: any object-shaped value, so an array, a plain object, a
+  `Map`, a `Set`, a `Date`, and any nested object inside them.
+- **shared**: primitives, functions and `Template`s. A template is already shared by every render of
+  its literal, and copying one would cost each element a parse-cache miss.
+
+```typescript
+{
+	tags:   [asTagList, []],                                 // copied per element
+	footer: [asHtml, html`<footer>made with <3</footer>`],    // shared
+	onSave: [asCallback, () => {}],                           // shared, a function is a value here
+}
+```
+
+A fallback `structuredClone` cannot reproduce (a class instance, an object holding a function)
+throws at define time and names the remedy: put the default **inside** the function, where it runs
+once per element.
+
+```typescript
+{
+	selection: (incoming: unknown) => incoming ?? new SelectionRange(0, 0);
+}
+```
+
+So does a fallback the prop's own function refuses (`[asNonEmptyList, []]`); the check calls the
+function once, before any element exists. The fallback itself is **not** type-checked against the
+entry. The type layer cannot see inside a function, and a define-time throw is clearer than the
+compile error a correlated type would produce.
+
+What the types do read is the shape: a bare entry is `T | undefined`, `[entry, fallback]` is `T`, and
+a bare `Boolean` is `boolean`. The visible fallback is the only way to promise a value.
+
+### props(element, schema)
+
+The same schema read once, imperatively, from a plain `HTMLElement` that never went through
+`component`, or for reading something deliberately left unobserved. It returns a snapshot, so it is the
+reduced spelling, not the primary one. The schema is normalized once per schema object, so hoist it
+rather than writing it inline at the call. An own
+property under the prop name wins over the attribute (case intact); with neither, the prop's function
+answers absence.
+
+```typescript
+import { props as readProps, type Schema } from "grundlage";
+
+const figureProps = { label: [String, ""] } satisfies Schema;
+
+const { label } = readProps(document.querySelector("figure"), figureProps);
+```
+
+The rename is not required, but the export and the conventional name for a schema object collide, so
+a module doing both has to give one of them another name.
+
+## helpers
 
 ### load
 
@@ -993,7 +1374,7 @@ import { component, html, load } from "grundlage";
 
 customElements.define(
 	"user-name",
-	component(function* (host) {
+	component(function* ({ host }) {
 		const user = yield load(host, () =>
 			fetch("/api/user").then((response) => response.json()),
 		);
@@ -1002,12 +1383,12 @@ customElements.define(
 );
 ```
 
-`options` is `{ key?, skipSsr? }`, or a bare string as shorthand for the key:
+`options` is `{ key?, skipSSR? }`, or a bare string as shorthand for the key:
 
 - `key`: a stable identity for the replay. Unkeyed replay is **positional** (first payload to first
   `load`), so a conditional or reordered `load` can hand the wrong data to the wrong call; a key pins
   each payload to its call. Grundlage warns when a payload goes unclaimed on hydration.
-- `skipSsr`: nothing is serialized for replay. The fetcher still runs on the server, and the client always fetches.
+- `skipSSR`: nothing is serialized for replay. The fetcher still runs on the server, and the client always fetches.
 
 ## tools
 
@@ -1082,7 +1463,7 @@ component sitting in that light DOM is rendered along with its parent, sentinel 
 | option                | default            | effect                                                                               |
 | --------------------- | ------------------ | ------------------------------------------------------------------------------------ |
 | `include`             | every source file  | globs (relative to the Vite root) of the modules to import for component definitions |
-| `exclude`             | —                  | globs added to the built-in skip list                                                |
+| `exclude`             | n/a                | globs added to the built-in skip list                                                |
 | `componentLoader`     | `"project-config"` | `"isolated"` loads component modules without re-running the project's `vite.config`  |
 | `sentinelAttribute`   | `"ssr"`            | the marker attribute that opts an element in                                         |
 | `firstYieldTimeoutMs` | `5000`             | how long to wait for the first paint before giving up and leaving it for the client  |
@@ -1102,5 +1483,17 @@ Things the mental model makes tempting that tend to backfire:
 - **mutating a class instance or `Date` and expecting a render**: change detection hashes plain data, but
   reference-typed values are compared by identity, so an in-place mutation reads as unchanged. Replace the reference or
   pass plain data.
+- **mutating a prop in place** (`el.items.push(x)`): assignment re-renders, mutation does not. Reassign or call
+  `host.update()`. `el.items = el.items` is enough, since a value that could have been mutated behind
+  its reference is never called unchanged.
+- **writing to the props object** (`componentProps.count = 5`): that object is the store, so the write would
+  land without being parsed, reflected or scheduled on. It is typed readonly for that reason;
+  `componentProps.host.count = 5` is the spelling that does all three.
+- **reading attributes directly** (`host.getAttribute("count")`): they are strings, they skip the parsing,
+  defaults and refusal the schema gives, and an undeclared attribute does not re-render at all.
+- **destructuring props in the generator body and expecting them to update**: the body runs once, so those
+  values are seeds. Destructure the render function's parameter, or read off the object, for live values.
+- **writing `<!--^.^ …-->` or `<!--*.*-->` comments in a template**: those prefixes are the internal markers, and a
+  collision silently misaligns hydration.
 - **`while (true)` in the generator**: it runs once to completion so this would create an infinite loop; per-frame work
   is what `update()` is for.

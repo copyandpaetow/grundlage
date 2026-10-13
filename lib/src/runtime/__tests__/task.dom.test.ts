@@ -1,170 +1,237 @@
-import { describe, expect, test } from "vitest";
-import { html, TemplateValue } from "../../template";
-import {
-	nextOperation as step,
-	OPERATION,
-	ROLE,
-	STEP_OUTCOME,
-	StepOutcome,
-	Task,
-	TASK_STATE,
-} from "../task";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { component, html } from "../../index";
+import { cancelTaskAndRunCleanup, createRenderTask } from "../task";
+import { RenderRun } from "../driver";
 
-/*
-the reducer's synchronous core in isolation: step(task, incomingOutcome) -> Operation, driven purely by
-task.state. these pin the dispatch, the role split (outer installs / inner hits the depth limit, outer
-fails / inner bubbles), and the cleanup capture — all without a DOM, a timer, or a coroutine. supersession
-is not the reducer's job (it lives in the shell's slot identity), so it is not tested here. the async
-orchestration (drive, the flush, SSR) is exercised end-to-end by
-tests/integration. depth-2 is a recursion in the shell, not a state here, so there is no inner-nesting
-machine to test: the inner simply yields a generator function and the table routes it to the parent.
-*/
+//what the driver sends back into a generator for each thing it yields or returns, driven through the
+//public component() surface
 
-const template = (): TemplateValue => html`<p>x</p>`;
+let counter = 0;
+const uniqueTag = () => `test-task-${counter++}-${Date.now()}`;
+const sleep = (duration = 0) =>
+	new Promise((resolve) => setTimeout(resolve, duration));
 
-const makeTask = (overrides: Partial<Task> = {}): Task => ({
-	generator: (function* () {})(),
-	role: ROLE.OUTER,
-	state: TASK_STATE.DRIVING,
-	cleanup: null,
-	...overrides,
+const mount = (constructor: CustomElementConstructor): HTMLElement => {
+	const tag = uniqueTag();
+	customElements.define(tag, constructor);
+	const element = document.createElement(tag);
+	document.body.appendChild(element);
+	return element;
+};
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	document.body.replaceChildren();
 });
 
-const yielded = (payload: unknown): StepOutcome => ({
-	kind: STEP_OUTCOME.YIELDED,
-	payload,
-});
-
-describe("step: dispatch while driving", () => {
-	test("a template paints", () => {
-		const value = template();
-		const operation = step(makeTask(), yielded(value));
-		expect(operation.kind).toBe(OPERATION.PAINT);
-		expect(operation.payload).toBe(value);
-	});
-
-	test("a render function paints from it", () => {
-		const renderFunction = () => template();
-		const operation = step(makeTask(), yielded(renderFunction));
-		expect(operation.kind).toBe(OPERATION.PAINT_FROM);
-		expect(operation.payload).toBe(renderFunction);
-	});
-
-	test("an outer generator function installs an inner", () => {
-		const generator = function* () {};
-		const operation = step(makeTask({ role: ROLE.OUTER }), yielded(generator));
-		expect(operation.kind).toBe(OPERATION.INSTALL);
-		expect(operation.payload).toBe(generator);
-	});
-
-	test("an inner generator function is the one depth-limit error — it bubbles to the parent", () => {
-		const task = makeTask({ role: ROLE.INNER });
-		const operation = step(
-			task,
-			yielded(function* () {}),
+describe("the yield position", () => {
+	test("a yielded promise resumes the generator with its value", async () => {
+		const element = mount(
+			component(function* () {
+				const value = yield Promise.resolve("resolved");
+				yield html`<p>${String(value)}</p>`;
+			}),
 		);
-		expect(operation.kind).toBe(OPERATION.THROW_TO_PARENT);
-		expect(String((operation as { payload: unknown }).payload)).toContain(
-			"Inner generators cannot yield generator functions",
+		await sleep();
+		expect(element.shadowRoot?.textContent).toBe("resolved");
+	});
+
+	test("a rejected yielded promise is thrown at its yield", async () => {
+		const element = mount(
+			component(function* () {
+				try {
+					yield Promise.reject(new Error("rejected"));
+				} catch (error) {
+					yield html`<p>${(error as Error).message}</p>`;
+				}
+			}),
 		);
-		expect(task.state).toBe(TASK_STATE.FAILED);
+		await sleep();
+		expect(element.shadowRoot?.textContent).toBe("rejected");
 	});
 
-	test("a yielded promise suspends and AWAITs", () => {
-		const task = makeTask();
-		const promise = Promise.resolve("x");
-		const operation = step(task, yielded(promise));
-		expect(operation.kind).toBe(OPERATION.AWAIT);
-		expect(operation.payload).toBe(promise);
-		expect(task.state).toBe(TASK_STATE.SUSPENDED);
+	//a yield inside finally survives return(), so the torn-down generator can still be stepped: only
+	//the permit stops the late promise from doing it
+	test.each([
+		["resolves", (settle: PromiseWithResolvers<unknown>) => settle.resolve(1)],
+		[
+			"rejects",
+			(settle: PromiseWithResolvers<unknown>) =>
+				settle.reject(new Error("late")),
+		],
+	] as const)(
+		"a yielded promise that %s after removal does not step the generator again",
+		async (_label, finish) => {
+			const settle = Promise.withResolvers<unknown>();
+			let stepCountAfterRemoval = 0;
+			const element = mount(
+				component(function* () {
+					try {
+						yield settle.promise;
+					} finally {
+						try {
+							yield "held open by the finally";
+						} catch {
+							/* a late rejection would be thrown here */
+						}
+						stepCountAfterRemoval++;
+					}
+				}),
+			);
+			element.remove();
+			await sleep();
+			finish(settle);
+			await sleep();
+			expect(stepCountAfterRemoval).toBe(0);
+		},
+	);
+
+	test.each([
+		["a number", 42],
+		["an array", [html`<i>a</i>`, html`<i>b</i>`]],
+	] as const)("%s is echoed back, not painted", async (_label, value) => {
+		let echoed: unknown;
+		const element = mount(
+			component(function* () {
+				echoed = yield value;
+				yield html`<p>done</p>`;
+			}),
+		);
+		await sleep();
+		expect(echoed).toBe(value);
+		expect(element.shadowRoot?.textContent).toBe("done");
 	});
 
-	test("a plain value resumes the coroutine", () => {
-		const operation = step(makeTask(), yielded(42));
-		expect(operation.kind).toBe(OPERATION.RESUME);
-		expect(operation.payload).toBe(42);
+	test("a renderable yield evaluates to the host", async () => {
+		let yieldedBack: unknown;
+		const element = mount(
+			component(function* () {
+				yieldedBack = yield () => html`<p>x</p>`;
+			}),
+		);
+		await sleep();
+		expect(yieldedBack).toBe(element);
 	});
 });
 
-describe("step: completion and cleanup", () => {
-	test("a function return is captured as cleanup; the task is done", () => {
-		const cleanup = () => {};
-		const task = makeTask();
-		const operation = step(task, {
-			kind: STEP_OUTCOME.RETURNED,
-			payload: cleanup,
-		});
-		expect(operation.kind).toBe(OPERATION.COMPLETED);
-		expect(task.cleanup).toBe(cleanup);
-		expect(task.state).toBe(TASK_STATE.DONE);
+describe("the return position of a render function", () => {
+	test.each([
+		["a string", "hello", "hello"],
+		["an array", [html`<i>a</i>`, html`<i>b</i>`], "ab"],
+	] as const)("%s paints as content", async (_label, produced, text) => {
+		const element = mount(
+			component(function* () {
+				yield () => produced;
+			}),
+		);
+		await sleep();
+		expect(element.shadowRoot?.textContent).toBe(text);
 	});
 
-	test("a non-function return captures no cleanup", () => {
-		const task = makeTask();
-		step(task, { kind: STEP_OUTCOME.RETURNED, payload: undefined });
+	test("undefined paints nothing and warns once about the missing return", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const element = mount(
+			component(function* () {
+				yield () => undefined;
+			}),
+		);
+		await sleep();
+		expect(element.shadowRoot?.textContent).toBe("");
+		expect(warn).toHaveBeenCalledOnce();
+		expect(warn.mock.calls[0][0]).toContain("explicit return");
+	});
+
+	test.each([
+		["a plain object", { a: 1 }, "cannot be rendered"],
+		["a Map", new Map(), "cannot be rendered"],
+		["a symbol", Symbol("x"), "cannot be rendered"],
+		["a Date", new Date(), "cannot be rendered"],
+		["a plain function", () => {}, "needs the *"],
+	] as const)(
+		"%s ends the component with a message naming the fix",
+		async (_label, produced, message) => {
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			const element = mount(
+				component(function* () {
+					yield () => produced;
+				}),
+			);
+			await sleep();
+			expect(element.shadowRoot?.textContent).toContain(message);
+		},
+	);
+
+	test("a generator function installs that body", async () => {
+		const element = mount(
+			component(function* () {
+				yield () =>
+					function* () {
+						yield html`<p>branch</p>`;
+					};
+			}),
+		);
+		await sleep();
+		expect(element.shadowRoot?.textContent).toBe("branch");
+	});
+});
+
+describe("completion", () => {
+	test("a returned function is the cleanup and runs on removal", async () => {
+		const cleanup = vi.fn();
+		const element = mount(
+			component(function* () {
+				yield html`<p>x</p>`;
+				return cleanup;
+			}),
+		);
+		await sleep();
+		expect(cleanup).not.toHaveBeenCalled();
+		element.remove();
+		await sleep();
+		expect(cleanup).toHaveBeenCalledOnce();
+	});
+
+	test("an implicit return warns about nothing", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		mount(
+			component(function* () {
+				yield html`<p>x</p>`;
+			}),
+		);
+		await sleep();
+		expect(warn).not.toHaveBeenCalled();
+	});
+
+	test("a return that is neither a function nor undefined warns", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		mount(
+			//the type layer rejects this return, which is what the warning is for
+			component(function* () {
+				yield html`<p>x</p>`;
+				return 42 as unknown as void;
+			}),
+		);
+		await sleep();
+		expect(warn).toHaveBeenCalledOnce();
+		expect(warn.mock.calls[0][0]).toContain("cleanup function");
+	});
+});
+
+describe("cancelling a task", () => {
+	//the cancel has a sibling task to tear down and a paint to make after this, so a user cleanup
+	//that throws is reported rather than propagated
+	test("a cleanup that throws does not escape the cancel", () => {
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		//cancelling never reads the run
+		const task = createRenderTask({} as RenderRun, (function* () {})());
+		task.cleanup = () => {
+			throw new Error("cleanup-threw");
+		};
+
+		expect(() => cancelTaskAndRunCleanup(task)).not.toThrow();
 		expect(task.cleanup).toBe(null);
-	});
-});
-
-describe("step: error routing by role", () => {
-	test("an inner throw bubbles to the parent", () => {
-		const task = makeTask({ role: ROLE.INNER });
-		const error = new Error("inner-failed");
-		const operation = step(task, { kind: STEP_OUTCOME.THREW, payload: error });
-		expect(operation.kind).toBe(OPERATION.THROW_TO_PARENT);
-		expect(operation.payload).toBe(error);
-		expect(task.state).toBe(TASK_STATE.FAILED);
-	});
-
-	test("an outer throw is terminal", () => {
-		const task = makeTask({ role: ROLE.OUTER });
-		const operation = step(task, {
-			kind: STEP_OUTCOME.THREW,
-			payload: new Error("boom"),
-		});
-		expect(operation.kind).toBe(OPERATION.FAIL);
-		expect(task.state).toBe(TASK_STATE.FAILED);
-	});
-});
-
-describe("step: suspended resume", () => {
-	test("a settled promise resumes the suspended coroutine", () => {
-		const task = makeTask({ state: TASK_STATE.SUSPENDED, role: ROLE.INNER });
-		const operation = step(task, {
-			kind: STEP_OUTCOME.RESUMED,
-			payload: "resolved",
-		});
-		expect(operation.kind).toBe(OPERATION.RESUME);
-		expect(operation.payload).toBe("resolved");
-		expect(task.state).toBe(TASK_STATE.DRIVING);
-	});
-
-	test("a rejected await throws back into the coroutine so its try/catch can recover", () => {
-		const inner = makeTask({ state: TASK_STATE.SUSPENDED, role: ROLE.INNER });
-		const innerOperation = step(inner, {
-			kind: STEP_OUTCOME.THREW,
-			payload: 1,
-		});
-		expect(innerOperation.kind).toBe(OPERATION.THROW_INTO);
-		expect(innerOperation.payload).toBe(1);
-		expect(inner.state).toBe(TASK_STATE.DRIVING);
-
-		const outer = makeTask({ state: TASK_STATE.SUSPENDED, role: ROLE.OUTER });
-		const outerOperation = step(outer, {
-			kind: STEP_OUTCOME.THREW,
-			payload: 1,
-		});
-		expect(outerOperation.kind).toBe(OPERATION.THROW_INTO);
-		expect(outer.state).toBe(TASK_STATE.DRIVING);
-	});
-});
-
-describe("step: the reused operation cell", () => {
-	test("every step returns the same backing cell — write-once-read-once, zero per-yield allocation", () => {
-		const task = makeTask();
-		const first = step(task, yielded(1));
-		const second = step(task, yielded(2));
-		expect(second).toBe(first); //same object: the shell consumes each operation before the next step
-		expect(first.payload).toBe(2);
+		expect(consoleError).toHaveBeenCalledOnce();
 	});
 });

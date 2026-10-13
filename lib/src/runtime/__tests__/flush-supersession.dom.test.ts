@@ -1,17 +1,15 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../index";
 
-/*
-spec for the flush scheduler's supersession semantic. an update() that arrives while a previous render
-is still in flight (suspended mid-render on a yielded promise) must SUPERSEDE it — the newer render
-wins immediately and the stale one is abandoned — rather than DEFER (let the stale render finish, then
-re-run). these pin the behavior end-to-end through the public update() surface; the pure transition is
-in task.dom.test.
-
-supersession is by slot identity: a rerun swaps the inner slot (so an in-flight inner is abandoned) and
-never touches the outer slot (so a suspended outer survives to capture its cleanup). teardown nulls the
-slots before running finallys, so a cleanup that re-enters update() is a no-op.
-*/
+//the flush scheduler's supersession semantic. An update() arriving while a previous render is still
+//in flight, suspended mid-render on a yielded promise, supersedes it: the newer render wins
+//immediately and the stale one is abandoned, rather than deferring until the stale render finishes
+//and then re-running. These go end-to-end through the public update() surface; the pure transition
+//is in task.dom.test.ts.
+//
+//supersession is by slot identity: a rerun swaps the inner slot, so an in-flight inner is
+//abandoned, and never touches the outer slot, so a suspended outer survives to capture its cleanup.
+//Teardown nulls the slots before running finallys, so a cleanup that re-enters update() is a no-op.
 
 let counter = 0;
 const uniqueTag = () => `test-flush-${counter++}-${Date.now()}`;
@@ -68,7 +66,7 @@ describe("flush supersession", () => {
 		await sleep();
 		expect(element.shadowRoot?.textContent).toContain("second");
 
-		//releasing the original gate must NOT revive the superseded render
+		//releasing the original gate must not revive the superseded render
 		gate.resolve();
 		await sleep();
 		expect(tailRan).toEqual([]); //the stale tail never executed
@@ -132,7 +130,7 @@ describe("flush supersession", () => {
 		expect(element.shadowRoot?.textContent).toContain("body"); //inner painted, then parked
 
 		//supersede the parked inner; the superseding render completes synchronously. the root has no
-		//parent to settle it, so historically the DOM landed but this update() promise never resolved.
+		//parent to settle it, so historically the DOM landed but this update() promise never resolved
 		suspend = false;
 		const settled = element.update().then(() => "resolved");
 		const outcome = await Promise.race([

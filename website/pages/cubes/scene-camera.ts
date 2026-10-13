@@ -47,7 +47,7 @@ const clamp = (value: number, minimum: number, maximum: number): number =>
 
 customElements.define(
 	"scene-camera",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		const camera: CameraState = { x: 0, y: -160, z: 600, yaw: 0, pitch: 0 };
 		const pressedKeys = new Set<string>();
 		let animationFrame = 0;

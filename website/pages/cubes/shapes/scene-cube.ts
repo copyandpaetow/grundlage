@@ -10,7 +10,7 @@ import { HALF_UNIT, resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
 
 customElements.define(
 	"scene-cube",
-	component(function* (element) {
+	component(function* ({ host: element }) {
 		yield () => {
 			// The attribute → variable bridge: committed attributes in, concrete
 			// render variables out. CSS downstream reads only the resolved values.

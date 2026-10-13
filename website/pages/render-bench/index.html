@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - Render bench</title>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
+		<main>
+			<h1>render bench</h1>
+			<p>
+				Calls <code>patchInstance</code> directly on a mounted instance — no
+				driver, no microtask, no rAF, no paint. The unit is
+				<strong>one live-binding commit</strong>, which is where the commit-path
+				findings live. Frame-level cost belongs to <code>perf</code>, the same
+				split <code>parser bench</code> draws.
+			</p>
+			<p>
+				A pass never yields, so style recalc and layout land
+				<em>after</em> it has been timed. That is deliberate: a commit-path
+				change moves JS work, and recalc would bury it under a cost the change
+				cannot touch. These numbers are the JS half of a frame, not the frame.
+			</p>
+			<p>
+				Every lane runs twice, because <code>combinedPartsHash</code> runs
+				<em>before</em> <code>claimHashChange</code>. <em>unchanged</em> is what
+				a binding costs when nothing moved — the gate hash and nothing else,
+				which is the majority case in a real update. <em>changing</em> adds
+				<code>composeParts</code> and the write. A finding that only shows up in
+				one of the two is a finding about one of them.
+			</p>
+			<p>
+				The rows are not the point; the gaps between them are.
+				<code>staticNameAttribute</code> minus <code>content</code> on the
+				<em>unchanged</em> rows is P13's whole target: a text gate is one
+				<code>hashValue</code>, an attribute gate adds
+				<code>combinedPartsHash</code> over the name and one
+				<code>combineOrderedHash</code>, and nothing else separates them.
+				<code>composedNameAttribute</code> minus
+				<code>staticNameAttribute</code> puts one real hole in that same gate,
+				for scale.
+			</p>
+			<p>
+				<code>customElements.get</code> is timed on its own rather than
+				subtracted out of a lane, because subtracting it does not work: once an
+				anchor has a dash in its name Blink runs its own slower attribute path,
+				and no cache in this library removes that. The custom-element gap is
+				printed anyway and labelled for what it is. Note also that
+				<code>isDeclaredPropName</code> returns on
+				<code>localName.includes("-")</code> first, so a plain element never
+				reaches the registry, and that the gate closes before the write path
+				runs at all — an unchanged binding never looks anything up.
+			</p>
+			<p>
+				<code>B/commit</code> is heap growth over a pass, a lower bound — a
+				minor collection inside the pass hides some of it. Read it by
+				comparison, not absolutely: equal growth on
+				<code>staticNameAttribute</code> and
+				<code>composedNameAttribute</code> means composing a hole-free name
+				allocates nothing, which is the claim that
+				<code>result += part</code> over one string part quietly rests on.
+			</p>
+			<p>
+				Run it under 20× CPU throttle in DevTools; that is the old-device
+				approximation the measuring contract assumes. Chrome needs
+				<code>--enable-precise-memory-info</code> for the heap column to mean
+				anything. A row marked <strong>VOID</strong> is not evidence: the churn
+				axis did not behave, the passes did not agree, or calibration sized the
+				pass off a cold reading and left it too short to resolve. A gap printed
+				<em>under resolution</em> is not a small finding, it is no finding.
+			</p>
+			<render-bench passes="24"></render-bench>
+		</main>
+	</body>
+</html>

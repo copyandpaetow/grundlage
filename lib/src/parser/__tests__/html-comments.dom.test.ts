@@ -71,9 +71,7 @@ describe("html parser — comment bindings", () => {
 		const parsed = parse`<!-- ${a} and ${b} -->`;
 
 		expect(parsed.bindings).toHaveLength(0);
-		expect(
-			parsed.keyValueParts!.filter((part) => typeof part === "number"),
-		).toEqual([0, 1]);
+		expect(parsed.keyValueParts).toEqual([" ", 0, " and ", 1, " "]);
 	});
 
 	test("comment binding parts do not include delimiters", () => {

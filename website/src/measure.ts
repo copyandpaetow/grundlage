@@ -1,18 +1,26 @@
 // The executable form of the "Measuring" contract in lib/CONVENTIONS.md.
 //
 // One shared way to measure, so a "win" is never an artifact. Every probe
-// reports the same three numbers per operation/frame:
+// reports the same four numbers per operation/frame:
 //   1. DOM mutation count   — a MutationObserver tally (the direct read of enemy #1)
-//   2. wall-clock ms         — start -> mutate -> double-rAF, so paint is included
-//   3. memory / heap delta   — best-effort, the coarse read of enemy #2
+//   2. applied ms            — start -> the render's own promise settles, so the DOM writes are
+//                              done and nothing has waited on a frame yet. This is the only
+//                              number here that resolves a change smaller than a frame.
+//   3. painted frames        — start -> double-rAF, divided by the refresh interval. A rAF gate
+//                              lands on a frame boundary, so as milliseconds it is quantised and
+//                              a percentage against it is noise; as a frame count it answers the
+//                              one question it can: did the work fit.
+//   4. memory / heap delta   — best-effort, the coarse read of enemy #2
 //
 // Framework-agnostic on purpose: it knows nothing about html`` or update(). A
 // probe passes an `apply` that does the work whose cost is measured (including
 // whatever triggers the render); the harness times it and counts what hit the DOM.
 //
-// CPU throttle (our 20x old-device approximation) is a DevTools setting and must
-// be enabled there; this module assumes it. Heap numbers need Chrome started with
-// --enable-precise-memory-info to be byte-accurate; otherwise they round coarsely.
+// Measure unthrottled and scale the workload instead. DevTools CPU throttling slows main-thread
+// JS, style and layout but not raster, memory bandwidth or GC, so it quietly reweights the mix
+// away from enemy #1. Run it as a separate pass answering one question — does a frame still fit —
+// never as the baseline a percentage is taken against. Heap numbers need Chrome started with
+// --enable-precise-memory-info to be byte-accurate; otherwise they round to zero.
 
 // --- primitives ----------------------------------------------------------
 
@@ -83,19 +91,22 @@ export interface Operation {
 	label: string;
 	/** Bring state to the op's starting point. Not timed. */
 	prepare?: () => void | Promise<void>;
-	/** The work being measured, including whatever triggers the render. */
+	//an apply that triggers a render must return that render's promise: without it `applied ms`
+	//stops before the first DOM write and only the frame-quantised number carries any signal
 	apply: () => void | Promise<void>;
 }
 
 export interface OperationResult {
 	label: string;
 	samples: number;
-	medianMs: number;
-	minMs: number;
-	maxMs: number;
+	minAppliedMs: number;
+	medianAppliedMs: number;
+	medianPaintedFrames: number;
 	medianMutations: number;
 	heapDeltaMb: number | null;
 }
+
+const FRAME_BUDGET_MS = 1000 / 60;
 
 export interface MeasureOptions {
 	samples?: number;
@@ -111,7 +122,8 @@ export const measureOperation = async (
 	const sampleCount = options.samples ?? 10;
 	const warmupCount = options.warmup ?? 1;
 	const counter = observeMutations(root);
-	const msSamples: number[] = [];
+	const appliedMsSamples: number[] = [];
+	const paintedMsSamples: number[] = [];
 	const mutationSamples: number[] = [];
 
 	const heapStart = readHeapMb();
@@ -122,12 +134,14 @@ export const measureOperation = async (
 		counter.reset();
 		const start = performance.now();
 		await operation.apply();
+		const appliedMs = performance.now() - start;
 		await waitForPaint();
-		const elapsed = performance.now() - start;
+		const paintedMs = performance.now() - start;
 		const mutations = counter.read();
 
 		if (run >= warmupCount) {
-			msSamples.push(elapsed);
+			appliedMsSamples.push(appliedMs);
+			paintedMsSamples.push(paintedMs);
 			mutationSamples.push(mutations);
 		}
 	}
@@ -137,9 +151,11 @@ export const measureOperation = async (
 	return {
 		label: operation.label,
 		samples: sampleCount,
-		medianMs: median(msSamples),
-		minMs: Math.min(...msSamples),
-		maxMs: Math.max(...msSamples),
+		//the fastest sample is the one least contaminated by GC and background work; a median over
+		//a busy machine reports the machine
+		minAppliedMs: Math.min(...appliedMsSamples),
+		medianAppliedMs: median(appliedMsSamples),
+		medianPaintedFrames: Math.round(median(paintedMsSamples) / FRAME_BUDGET_MS),
 		medianMutations: median(mutationSamples),
 		heapDeltaMb:
 			heapStart !== null && heapEnd !== null ? heapEnd - heapStart : null,

@@ -73,6 +73,34 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
+	test("a nullish hole in a multi-part attribute writes nothing, not its spelling", async () => {
+		const tag = uniqueTag();
+		let second: string | null | undefined = null;
+
+		const MyElement = component(function* () {
+			yield () => html` <div class="a ${second}"></div>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const div = element.shadowRoot?.querySelector("div");
+		expect(div?.getAttribute("class")).toBe("a ");
+
+		second = "b";
+		await element.update();
+		await sleep();
+		expect(div?.getAttribute("class")).toBe("a b");
+
+		second = undefined;
+		await element.update();
+		await sleep();
+		expect(div?.getAttribute("class")).toBe("a ");
+
+		cleanup(element);
+	});
+
 	test("toggles a boolean attribute", async () => {
 		const tag = uniqueTag();
 		let disabled = true;
@@ -138,6 +166,27 @@ describe("attribute updates", () => {
 
 		element.shadowRoot!.querySelector("button")!.click();
 		expect(clicks).toEqual(["hit"]);
+
+		cleanup(element);
+	});
+
+	test("a composed event attribute is written as inline handler text", async () => {
+		const tag = uniqueTag();
+		let argument = 1;
+
+		const MyElement = component(function* () {
+			yield () => html`<button onclick="report(${argument})">click</button>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+		const button = element.shadowRoot!.querySelector("button")!;
+		expect(button.getAttribute("onclick")).toBe("report(1)");
+
+		argument = 2;
+		await element.update();
+		await sleep();
+		expect(button.getAttribute("onclick")).toBe("report(2)");
 
 		cleanup(element);
 	});
@@ -247,7 +296,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("writes a bigint to the attribute channel, like a number", async () => {
+	test("writes a bigint to the attribute mode, like a number", async () => {
 		const tag = uniqueTag();
 		let value: unknown = 9007199254740993n;
 
@@ -389,7 +438,7 @@ describe("attribute updates", () => {
 		await sleep();
 
 		btn.click();
-		// Should still be just one click since listener was removed
+		//should still be just one click since listener was removed
 		expect(clicks).toEqual(["clicked"]);
 
 		cleanup(element);
@@ -400,11 +449,17 @@ describe("attribute updates", () => {
 		const events: string[] = [];
 
 		const MyElement = component(function* () {
+			//the button mounts under the real pointer, so chromium dispatches a trusted mouseenter of
+			//its own before this test dispatches anything
+			const onClick = (event: Event) => {
+				if (!event.isTrusted) events.push("click");
+			};
+			const onMouseEnter = (event: Event) => {
+				if (!event.isTrusted) events.push("enter");
+			};
+
 			yield () =>
-				html`<button
-					onclick="${() => events.push("click")}"
-					onmouseenter="${() => events.push("enter")}"
-				>
+				html`<button onclick="${onClick}" onmouseenter="${onMouseEnter}">
 					btn
 				</button>`;
 		});
@@ -713,9 +768,9 @@ describe("attribute updates", () => {
 	});
 
 	test("keeps an unchanged spread listener attached without re-binding it across renders", async () => {
-		// the spread diff skips entries whose value reference is unchanged, so a
-		// stable handler is neither detached nor reattached on update — only the
-		// changed sibling attribute is touched.
+		//the spread diff skips entries whose value reference is unchanged, so a
+		//stable handler is neither detached nor reattached on update — only the
+		//changed sibling attribute is touched
 		const tag = uniqueTag();
 		const handler = () => {};
 		let attrs: Record<string, unknown> = { class: "a", onclick: handler };
@@ -972,7 +1027,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("dynamic event-name attribute binds the handler as an IDL property", async () => {
+	test("dynamic event-name attribute binds the handler as a listener", async () => {
 		const tag = uniqueTag();
 		const events: string[] = [];
 		let eventName = "onclick";
@@ -987,10 +1042,9 @@ describe("attribute updates", () => {
 		await sleep();
 
 		const btn = element.shadowRoot?.querySelector("button")!;
-		// A fully-dynamic attribute name with a function value lowers to a
-		// single-value attribute; a function is assigned as an IDL property (not
-		// via addEventListener), so the native onclick fires.
-		expect((btn as unknown as { onclick: unknown }).onclick).toBe(handler);
+		//a composed name resolves the same way a literal one does, so the handler
+		//is a listener rather than an IDL property
+		expect((btn as unknown as { onclick: unknown }).onclick).toBe(null);
 		btn.click();
 		expect(events).toEqual(["click"]);
 
@@ -999,12 +1053,37 @@ describe("attribute updates", () => {
 		await element.update();
 		await sleep();
 
-		// The new name binds the new handler as its own property.
-		expect((btn as unknown as { ondblclick: unknown }).ondblclick).toBe(
-			handler,
-		);
+		//renaming releases the old listener and binds the new one
+		btn.click();
 		btn.dispatchEvent(new MouseEvent("dblclick"));
-		expect(events).toContain("dblclick");
+		expect(events).toEqual(["click", "dblclick"]);
+
+		cleanup(element);
+	});
+
+	test("a renamed event binding leaves another binding's listener on the new name alone", async () => {
+		const tag = uniqueTag();
+		const events: string[] = [];
+		const shared = () => events.push("shared");
+		let eventName = "ondblclick";
+		let handler: () => number = shared;
+
+		const MyElement = component(function* () {
+			yield () =>
+				html`<button onclick=${shared} ${eventName}=${handler}>btn</button>`;
+		});
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		eventName = "onclick";
+		handler = () => events.push("renamed");
+		await element.update();
+		await sleep();
+		events.length = 0;
+
+		element.shadowRoot!.querySelector("button")!.click();
+		expect(events).toEqual(["shared", "renamed"]);
 
 		cleanup(element);
 	});
@@ -1060,10 +1139,10 @@ describe("attribute updates", () => {
 	});
 
 	test("expandable expression resolves a primitive string to a boolean attribute", async () => {
-		// The expandable path has three shapes: array, plain object, and a single
-		// primitive string. The string case is the fallback in updateExpandable /
-		// removeExpandable. `<button ${name}>` where `name` is just `"disabled"` should
-		// land as a boolean attribute, and renaming should remove the old one.
+		//the expandable path has three shapes: array, plain object, and a single
+		//primitive string. The string case is the fallback in updateExpandable /
+		//removeExpandable. `<button ${name}>` where `name` is just `"disabled"` should
+		//land as a boolean attribute, and renaming should remove the old one
 		const tag = uniqueTag();
 		let attribute: string = "disabled";
 
@@ -1090,9 +1169,8 @@ describe("attribute updates", () => {
 	});
 
 	test("expandable switches from primitive string to array and back", async () => {
-		// A regression guard for the expandable dispatcher: the string fallback
-		// must hand off to the array branch (and vice versa) without leaving the
-		// previous attribute(s) behind.
+		//the expandable dispatcher's string fallback hands off to the array branch and back without
+		//leaving the previous attributes behind
 		const tag = uniqueTag();
 		let attributes: string | Array<string> = "disabled";
 
@@ -1127,10 +1205,10 @@ describe("attribute updates", () => {
 	});
 
 	test("boolean attribute with multi-part dynamic key", async () => {
-		// updateAttribute's DYNAMIC_NAME_BOOLEAN shape (updateDynamicNameBoolean):
-		// the binding has multiple key fragments and no
-		// value half. `<div data-${suffix}>` with no `="..."`. The old key must
-		// be removed when the suffix flips.
+		//updateAttribute's DYNAMIC_NAME_BOOLEAN shape (updateDynamicNameBoolean):
+		//the binding has multiple key fragments and no
+		//value half. `<div data-${suffix}>` with no `="..."`. The old key must
+		//be removed when the suffix flips
 		const tag = uniqueTag();
 		let suffix = "ready";
 
@@ -1152,6 +1230,65 @@ describe("attribute updates", () => {
 
 		expect(div.hasAttribute("data-ready")).toBe(false);
 		expect(div.hasAttribute("data-open")).toBe(true);
+
+		cleanup(element);
+	});
+
+	test("a hole inside a native event name binds the event it composes to", async () => {
+		const tag = uniqueTag();
+		const events: string[] = [];
+		let eventName = "click";
+		const handler = () => events.push(eventName);
+
+		const MyElement = component(function* () {
+			yield () => html`<button on${eventName}=${handler}>btn</button>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const btn = element.shadowRoot?.querySelector("button")!;
+		expect(btn.hasAttribute("onclick")).toBe(false);
+		btn.click();
+		expect(events).toEqual(["click"]);
+
+		eventName = "dblclick";
+		await element.update();
+		await sleep();
+
+		btn.click();
+		btn.dispatchEvent(new MouseEvent("dblclick"));
+		expect(events).toEqual(["click", "dblclick"]);
+
+		cleanup(element);
+	});
+
+	test("a hole inside a custom event name binds the hyphenated event verbatim", async () => {
+		const tag = uniqueTag();
+		const received: string[] = [];
+		let eventSuffix = "first";
+		const handler = (event: Event) => received.push(event.type);
+
+		const MyElement = component(function* () {
+			yield () => html`<span on-${eventSuffix}=${handler}>x</span>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const span = element.shadowRoot?.querySelector("span")!;
+		span.dispatchEvent(new CustomEvent("first"));
+		expect(received).toEqual(["first"]);
+
+		eventSuffix = "second";
+		await element.update();
+		await sleep();
+
+		span.dispatchEvent(new CustomEvent("first"));
+		span.dispatchEvent(new CustomEvent("second"));
+		expect(received).toEqual(["first", "second"]);
 
 		cleanup(element);
 	});

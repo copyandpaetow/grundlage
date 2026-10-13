@@ -1,35 +1,20 @@
-import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
-import { CommentStaticBinding } from "../../parser/types";
+import { combinedPartsHash, composeParts } from "../compose";
 import { CommentLiveBinding } from "./types";
-
-const commentGateHash = (
-	staticBinding: CommentStaticBinding,
-	values: Array<unknown>,
-): number => combinedPartsHash(staticBinding.parts, values);
+import { assertDuringDevelopment } from "../../utils/diagnostics";
 
 export const commitComment = (
 	liveBinding: CommentLiveBinding,
 	values: Array<unknown>,
 ): void => {
 	const { parts } = liveBinding.staticBinding;
-	if (
-		!hasHashChanged(
-			liveBinding,
-			commentGateHash(liveBinding.staticBinding, values),
-		)
-	)
-		return;
+	const hash = combinedPartsHash(parts, values);
+	if (hash === liveBinding.lastValueHash) return;
+	liveBinding.lastValueHash = hash;
 	const composed = composeParts(parts, values);
-	const payload = liveBinding.markerComment.nextSibling as Comment;
-	if (payload.data !== composed) payload.data = composed;
-};
-
-export const hydrateComment = (
-	liveBinding: CommentLiveBinding,
-	values: Array<unknown>,
-): void => {
-	liveBinding.lastValueHash = commentGateHash(
-		liveBinding.staticBinding,
-		values,
+	const payload = liveBinding.openMarker.nextSibling;
+	assertDuringDevelopment(
+		payload instanceof Comment,
+		"a comment binding's payload comment follows its marker",
 	);
+	if (payload.data !== composed) payload.data = composed;
 };

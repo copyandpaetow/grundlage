@@ -1,89 +1,79 @@
-import { BINDING } from "../../parser/constants";
-import { TagStaticBinding } from "../../parser/types";
-import { combinedPartsHash, composeParts, hasHashChanged } from "../compose";
-import { resolveTargetElement } from "../dom";
-import { reapplyOnSwap } from "./dispatch";
+import { combinedPartsHash, composeParts } from "../compose";
+import { elementAfterMarker } from "../markers";
 import {
-	DynamicAttributeLiveBinding,
+	FOREIGN_CONTENT_ROOT_TAGS,
+	HTML_NAMESPACE,
+	warnWhenParsingWouldSplitParagraph,
+} from "../parse-context";
+import { libraryMessage } from "../../utils/diagnostics";
+import { isSingleHoleValue } from "./attribute";
+import { reapplyValueOnSwap } from "./attribute-apply";
+import {
+	isAttributeBinding,
+	isDynamicAttributeBinding,
 	LiveBinding,
-	NamedDynamicLiveBinding,
-	SingleValueAttributeLiveBinding,
 	TagLiveBinding,
 } from "./types";
 
-const shouldReapplyOnSwap = (
-	liveBinding: LiveBinding,
-): liveBinding is
-	| SingleValueAttributeLiveBinding
-	| DynamicAttributeLiveBinding
-	| NamedDynamicLiveBinding =>
-	liveBinding.staticBinding.type === BINDING.SINGLE_VALUE_ATTRIBUTE ||
-	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE ||
-	liveBinding.staticBinding.type === BINDING.NAMED_DYNAMIC;
-
-const swapElement = (
-	element: Element,
-	newTag: string,
-	siblings: Array<LiveBinding>,
+export const commitTag = (
+	liveBinding: TagLiveBinding,
 	values: Array<unknown>,
+	siblings: ReadonlyArray<LiveBinding | undefined>,
 ): void => {
-	const carried: Array<
-		| SingleValueAttributeLiveBinding
-		| DynamicAttributeLiveBinding
-		| NamedDynamicLiveBinding
-	> = [];
-	for (let index = 0; index < siblings.length; index++) {
-		const sibling = siblings[index];
-		if (
-			sibling !== undefined &&
-			shouldReapplyOnSwap(sibling) &&
-			resolveTargetElement(sibling) === element
-		)
-			carried.push(sibling);
-	}
+	const { parts } = liveBinding.staticBinding;
+	const hash = combinedPartsHash(parts, values);
+	if (hash === liveBinding.lastValueHash) return;
+	liveBinding.lastValueHash = hash;
+	const element = elementAfterMarker(liveBinding.openMarker);
+	const newTag = composeParts(parts, values);
+	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
+	const switchesIntoForeignContent =
+		FOREIGN_CONTENT_ROOT_TAGS.has(newTag.toLowerCase()) &&
+		element.namespaceURI === HTML_NAMESPACE;
+	if (switchesIntoForeignContent)
+		throw new Error(
+			libraryMessage(
+				`a dynamic tag cannot become <${newTag}>: the markup inside it was already parsed as HTML. Write <${newTag}> statically and keep the dynamic tag inside it.`,
+			),
+		);
 
 	const focusRoot = element.getRootNode() as ShadowRoot | Document;
 	const focusedNode = focusRoot.activeElement as HTMLElement | null;
 	const focusElement =
 		focusedNode && element.contains(focusedNode) ? focusedNode : null;
 
-	const newElement = document.createElement(newTag);
+	//the placeholder was parsed in the namespace of its position, which an SVG or MathML tag needs
+	const newElement = document.createElementNS(element.namespaceURI, newTag);
+	warnWhenParsingWouldSplitParagraph(newTag, element.parentNode);
 	for (let index = 0; index < element.attributes.length; index++) {
 		const attribute = element.attributes[index];
 		newElement.setAttribute(attribute.name, attribute.value);
 	}
 	while (element.firstChild) newElement.appendChild(element.firstChild);
+
+	for (let index = 0; index < siblings.length; index++) {
+		const sibling = siblings[index];
+		const isAnchoredToSwappedElement =
+			sibling !== undefined &&
+			(isAttributeBinding(sibling) || isDynamicAttributeBinding(sibling)) &&
+			sibling.anchor === element;
+		if (!isAnchoredToSwappedElement) continue;
+		sibling.anchor = newElement;
+		//a composed value is a string, so the attribute copy above already carries it
+		const isSingleHoleAttribute =
+			isAttributeBinding(sibling) &&
+			isSingleHoleValue(sibling.staticBinding.valueParts);
+		if (isSingleHoleAttribute)
+			reapplyValueOnSwap(
+				newElement,
+				sibling.lastComposedName,
+				sibling.lastValue,
+			);
+		else if (isDynamicAttributeBinding(sibling))
+			for (const [name, entry] of sibling.appliedAttributes)
+				reapplyValueOnSwap(newElement, name, entry.value);
+	}
+
 	element.replaceWith(newElement);
 	focusElement?.focus();
-
-	for (let index = 0; index < carried.length; index++)
-		reapplyOnSwap(carried[index], newElement, values);
-};
-
-const tagGateHash = (
-	staticBinding: TagStaticBinding,
-	values: Array<unknown>,
-): number => combinedPartsHash(staticBinding.parts, values);
-
-export const commitTag = (
-	liveBinding: TagLiveBinding,
-	values: Array<unknown>,
-	siblings: Array<LiveBinding>,
-): void => {
-	const { parts } = liveBinding.staticBinding;
-	if (
-		!hasHashChanged(liveBinding, tagGateHash(liveBinding.staticBinding, values))
-	)
-		return;
-	const element = liveBinding.markerComment.nextElementSibling!;
-	const newTag = composeParts(parts, values);
-	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
-	swapElement(element, newTag, siblings, values);
-};
-
-export const hydrateTag = (
-	liveBinding: TagLiveBinding,
-	values: Array<unknown>,
-): void => {
-	liveBinding.lastValueHash = tagGateHash(liveBinding.staticBinding, values);
 };

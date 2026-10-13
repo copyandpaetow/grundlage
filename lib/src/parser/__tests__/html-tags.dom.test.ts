@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING } from "../constants";
+import { BINDING, DYNAMIC_TAG_PLACEHOLDER } from "../constants";
 import {
-	SingleValueAttributeStaticBinding,
+	AttributeStaticBinding,
 	StaticBinding,
 	TagStaticBinding,
 } from "../types";
@@ -11,7 +11,7 @@ import {
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
 
-const tagBindings = (bindings: Array<StaticBinding>) =>
+const tagBindings = (bindings: ReadonlyArray<StaticBinding>) =>
 	bindings.filter((b) => b.type === BINDING.TAG);
 
 describe("html parser — tag bindings", () => {
@@ -79,8 +79,8 @@ describe("html parser — tag bindings", () => {
 		const tagBinding = parsed.bindings[0] as TagStaticBinding;
 		expect(tagBinding.type).toBe(BINDING.TAG);
 
-		const attrBinding = parsed.bindings[1] as SingleValueAttributeStaticBinding;
-		expect(attrBinding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const attrBinding = parsed.bindings[1] as AttributeStaticBinding;
+		expect(attrBinding.type).toBe(BINDING.ATTRIBUTE);
 		expect(attrBinding.nameParts).toEqual(["class"]);
 	});
 
@@ -93,8 +93,8 @@ describe("html parser — tag bindings", () => {
 
 		const tagBinding = parsed.bindings[0] as TagStaticBinding;
 		expect(tagBinding.type).toBe(BINDING.TAG);
-		expect(parsed.bindings[1].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
-		expect(parsed.bindings[2].type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		expect(parsed.bindings[1].type).toBe(BINDING.ATTRIBUTE);
+		expect(parsed.bindings[2].type).toBe(BINDING.ATTRIBUTE);
 	});
 
 	test("dynamic tag with boolean (spread) attribute", () => {
@@ -139,17 +139,17 @@ describe("html parser — tag bindings", () => {
 
 	test("dynamic open paired with static close throws", () => {
 		const tag = "div";
-		expect(() => parse`<${tag}>content</div>`).toThrow(/Asymmetric tag/);
+		expect(() => parse`<${tag}>content</div>`).toThrow(/asymmetric tag/);
 	});
 
 	test("static open paired with dynamic close throws", () => {
 		const tag = "div";
-		expect(() => parse`<div>content</${tag}>`).toThrow(/Asymmetric tag/);
+		expect(() => parse`<div>content</${tag}>`).toThrow(/asymmetric tag/);
 	});
 
 	test("dynamic close with no matching dynamic open throws", () => {
 		const tag = "div";
-		expect(() => parse`</${tag}>`).toThrow(/Asymmetric tag/);
+		expect(() => parse`</${tag}>`).toThrow(/asymmetric tag/);
 	});
 
 	test("nested dynamic + static stays balanced", () => {
@@ -210,8 +210,8 @@ describe("html parser — tag bindings", () => {
 		const span = fragment.querySelector("span")!;
 		expect(div.contains(span)).toBe(false);
 
-		const attrBinding = parsed.bindings[0] as SingleValueAttributeStaticBinding;
-		expect(attrBinding.type).toBe(BINDING.SINGLE_VALUE_ATTRIBUTE);
+		const attrBinding = parsed.bindings[0] as AttributeStaticBinding;
+		expect(attrBinding.type).toBe(BINDING.ATTRIBUTE);
 		expect(attrBinding.nameParts).toEqual(["class"]);
 	});
 
@@ -219,7 +219,7 @@ describe("html parser — tag bindings", () => {
 		const tag = "br";
 		const parsed = parse`<${tag} /><span>after</span>`;
 		const fragment = buildFragment(parsed.htmlWithMarkers);
-		const placeholder = fragment.querySelector("div")!;
+		const placeholder = fragment.querySelector(DYNAMIC_TAG_PLACEHOLDER)!;
 		const span = fragment.querySelector("span")!;
 		expect(placeholder).not.toBeNull();
 		expect(span).not.toBeNull();
