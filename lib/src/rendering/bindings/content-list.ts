@@ -325,7 +325,10 @@ const placeRows = (
 				if (isPatchableInPlace(row.instance, parsed))
 					patchInstance(row.instance, value.values);
 				else {
-					const fragment = cloneTemplateFragment(parsed);
+					const fragment = cloneTemplateFragment(
+						parsed,
+						row.tailMarker.parentNode,
+					);
 					const instance = mountInstance(fragment, value, parsed, moveState);
 					clearRange(row.startNode, row.tailMarker);
 					row.startNode = fragment.firstChild ?? row.tailMarker;
@@ -355,7 +358,7 @@ const mountRowAfter = (
 ): ListItem => {
 	const value = coerceToTemplate(rawValue);
 	const parsed = parseNestedTemplate(value);
-	const fragment = cloneTemplateFragment(parsed);
+	const fragment = cloneTemplateFragment(parsed, after.parentNode);
 	const instance = mountInstance(fragment, value, parsed, moveState);
 	const tailMarker = document.createComment(MARKUP.LIST_MARKER_DATA);
 	const startNode = fragment.firstChild ?? tailMarker;

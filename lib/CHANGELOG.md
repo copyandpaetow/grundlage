@@ -32,6 +32,10 @@
   and the error text, so an app can render its own fallback.
 - **Development build.** Warnings ship only in `dist/development/`, selected by the `development`
   export condition. The default build strips them (1,061 bytes minified).
+- **A block element inside `<p>` warns.** The DOM accepts a `<div>` or `<h2>` inside a `<p>`, the
+  HTML parser closes the `<p>` before it, so server-rendered markup hydrated into a different tree
+  than the client rendered. A dynamic tag or a nested template that puts one there now warns in the
+  development build, unless a `<button>`, `<table>` or similar ends the paragraph's scope first.
 
 ### Changed
 
@@ -56,8 +60,34 @@
 - **A return that is neither a function nor `undefined` warns.** The runtime drops it — the return
   position is the cleanup function — and the drop used to be silent for anyone not running the types.
 
+- **`/>` after an unquoted attribute value ends the tag.** HTML reads the slash into the value, so
+  `<rect width=${w}/>` set `width="2/"`. The slash now closes the element, the way SVG markup
+  means it. A slash followed by anything else stays in the value: `href=${base}/intro` is
+  unchanged, `href=${base}/>` no longer appends the `/`.
+
 ### Fixed
 
+- **A custom property updated to a CSS-wide keyword takes its effect.** A style hole's update
+  passed the whitespace after the colon into `setProperty`, and a custom property keeps it:
+  `--x: ${"initial"}` stored the literal token `" initial"` instead of the keyword, so a `var()`
+  fallback never applied. The first render was unaffected, since it writes sheet text.
+- **A dynamic tag inside `<p>` no longer breaks the component.** Its placeholder was a `<div>`,
+  which closes an open `<p>`, so even `<p>…<${"span"}>…</${"span"}></p>` failed with an invariant
+  error and an empty shadow root. The placeholder is now an unknown hyphenated element, which the
+  parser leaves inside the paragraph.
+- **A dynamic tag the HTML parser relocates ends the component with a remedy.** `<${"tr"}>` inside
+  `<tbody>` was moved in front of the table, which rendered an empty element there and a row the
+  browser invented. Any dynamic tag that no longer sits where it was written is now a fatal error
+  naming the fix: write that tag statically.
+- **Templates inside `<svg>` and `<math>` mount in their namespace.** A nested template or list row
+  was parsed as HTML, so ``<svg>${rows.map((row) => html`<circle …>`)}</svg>`` mounted invisible
+  HTML `<circle>` elements. A template is now parsed in the namespace of the position it mounts into,
+  and `<foreignObject>` or `<mi>` switch back to HTML as the parser does.
+- **A dynamic tag inside `<svg>` or `<math>` keeps its namespace and case.** `<${"linearGradient"}>`
+  created an HTML `<lineargradient>`. A dynamic tag that would become `<svg>` or `<math>` inside
+  HTML throws instead, since its children were already parsed as HTML: write that tag statically.
+- **A hole inside `<![CDATA[…]]>` ends the component with a remedy.** The parser reads CDATA in SVG
+  as text, which swallowed the hole's markers and failed with an invariant error.
 - **Hashing an object no longer keeps its property names forever.** A module-level cache retained
   every distinct key ever hashed, so an object keyed by ids grew memory once per row for the life
   of the page.

@@ -423,6 +423,42 @@ describe("raw content updates", () => {
 		},
 	);
 
+	test.skipIf(!resolvesComputedColors)(
+		"a custom property updated to a css-wide keyword takes its normal effect",
+		async () => {
+			const tag = uniqueTag();
+			let width = "45px";
+
+			const MyElement = component(function* () {
+				yield () =>
+					html`<style>
+							p {
+								--width: ${width};
+								width: var(--width, 7px);
+							}
+						</style>
+						<p>text</p>`;
+			});
+
+			customElements.define(tag, MyElement);
+			const element = mount(tag) as InstanceType<typeof MyElement>;
+			await sleep();
+			const paragraph = element.shadowRoot!.querySelector("p")!;
+			expect(getComputedStyle(paragraph).width).toBe("45px");
+
+			//the update goes through setProperty, which would read " initial" as a literal token
+			for (const keyword of ["initial", "inherit", "unset"]) {
+				width = "45px";
+				await element.update();
+				width = keyword;
+				await element.update();
+				expect(getComputedStyle(paragraph).width).toBe("7px");
+			}
+
+			cleanup(element);
+		},
+	);
+
 	test("nested template hole populates .content as markup, not light children", async () => {
 		const tag = uniqueTag();
 		let label = "first";

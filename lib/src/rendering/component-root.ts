@@ -92,7 +92,7 @@ const mountOrPatchRoot = (
 		patchInstance(current, value.values);
 		return current;
 	}
-	const fragment = cloneTemplateFragment(parsed);
+	const fragment = cloneTemplateFragment(parsed, root.shadowRoot);
 	const instance = mountInstance(
 		fragment,
 		value,

@@ -34,7 +34,7 @@ const mountTemplateValue = (
 	moveStateValue: StyleSheetMoveState,
 ) => {
 	const parsed = getParsedTemplate(value.__templateStrings);
-	const fragment = cloneTemplateFragment(parsed);
+	const fragment = cloneTemplateFragment(parsed, null);
 	const instance = mountInstance(fragment, value, parsed, moveStateValue);
 	return { instance, fragment };
 };

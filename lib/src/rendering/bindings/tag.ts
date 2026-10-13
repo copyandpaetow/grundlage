@@ -1,5 +1,11 @@
 import { combinedPartsHash, composeParts } from "../compose";
 import { elementAfterMarker } from "../markers";
+import {
+	FOREIGN_CONTENT_ROOT_TAGS,
+	HTML_NAMESPACE,
+	warnWhenParsingWouldSplitParagraph,
+} from "../parse-context";
+import { libraryMessage } from "../../utils/diagnostics";
 import { isSingleHoleValue } from "./attribute";
 import { reapplyValueOnSwap } from "./attribute-apply";
 import {
@@ -21,13 +27,24 @@ export const commitTag = (
 	const element = elementAfterMarker(liveBinding.openMarker);
 	const newTag = composeParts(parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
+	const switchesIntoForeignContent =
+		FOREIGN_CONTENT_ROOT_TAGS.has(newTag.toLowerCase()) &&
+		element.namespaceURI === HTML_NAMESPACE;
+	if (switchesIntoForeignContent)
+		throw new Error(
+			libraryMessage(
+				`a dynamic tag cannot become <${newTag}>: the markup inside it was already parsed as HTML. Write <${newTag}> statically and keep the dynamic tag inside it.`,
+			),
+		);
 
 	const focusRoot = element.getRootNode() as ShadowRoot | Document;
 	const focusedNode = focusRoot.activeElement as HTMLElement | null;
 	const focusElement =
 		focusedNode && element.contains(focusedNode) ? focusedNode : null;
 
-	const newElement = document.createElement(newTag);
+	//the placeholder was parsed in the namespace of its position, which an SVG or MathML tag needs
+	const newElement = document.createElementNS(element.namespaceURI, newTag);
+	warnWhenParsingWouldSplitParagraph(newTag, element.parentNode);
 	for (let index = 0; index < element.attributes.length; index++) {
 		const attribute = element.attributes[index];
 		newElement.setAttribute(attribute.name, attribute.value);

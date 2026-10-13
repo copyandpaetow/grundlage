@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { html } from "../../template";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING } from "../constants";
+import { BINDING, DYNAMIC_TAG_PLACEHOLDER } from "../constants";
 import { AttributeStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
@@ -222,13 +222,15 @@ describe("html parser — fragment structure", () => {
 		expect(ps.length).toBe(3);
 	});
 
-	test("dynamic tag uses placeholder div in fragment", () => {
+	test("dynamic tag uses the placeholder element in fragment", () => {
 		const tag = "section";
 		const parsed = parse`
             <${tag}>content</${tag}>`;
 
-		const div = buildFragment(parsed.htmlWithMarkers).querySelector("div");
-		expect(div).not.toBeNull();
+		const placeholder = buildFragment(parsed.htmlWithMarkers).querySelector(
+			DYNAMIC_TAG_PLACEHOLDER,
+		);
+		expect(placeholder).not.toBeNull();
 	});
 
 	test("static attributes are present in fragment", () => {

@@ -18,7 +18,7 @@ describe("dynamic declarations", () => {
 				rulePath: [0],
 				propertyName: "color",
 				priority: "",
-				valueParts: [" ", 0],
+				valueParts: [0],
 			},
 		]);
 		expect(plan.ruleCountChecks).toEqual([
@@ -39,7 +39,7 @@ describe("dynamic declarations", () => {
 				rulePath: [0],
 				propertyName: "transform",
 				priority: "",
-				valueParts: [" rotate(", 0, "deg) translateX(", 1, "px)"],
+				valueParts: ["rotate(", 0, "deg) translateX(", 1, "px)"],
 			},
 		]);
 	});
@@ -321,6 +321,31 @@ describe("at-rules", () => {
 	});
 });
 
+describe("value edge whitespace", () => {
+	test("whitespace around the value is trimmed, inside it is kept", () => {
+		const plan = compileOrThrow([
+			"div{--offset:\n\t ",
+			0,
+			"px  ",
+			1,
+			"px \t\n}",
+		]);
+		expect(plan.dynamicDeclarations).toEqual([
+			{
+				rulePath: [0],
+				propertyName: "--offset",
+				priority: "",
+				valueParts: [0, "px  ", 1, "px"],
+			},
+		]);
+	});
+
+	test("only CSS whitespace is trimmed, a no-break space is value text", () => {
+		const plan = compileOrThrow(["div{content: ", 0, "}"]);
+		expect(plan.dynamicDeclarations[0].valueParts).toEqual([" ", 0]);
+	});
+});
+
 describe("!important", () => {
 	test("a static trailing !important becomes the priority argument", () => {
 		const plan = compileOrThrow(["div{color:", 0, " !important}"]);
@@ -329,7 +354,7 @@ describe("!important", () => {
 				rulePath: [0],
 				propertyName: "color",
 				priority: "important",
-				valueParts: [0, " "],
+				valueParts: [0],
 			},
 		]);
 	});

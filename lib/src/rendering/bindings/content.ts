@@ -123,7 +123,10 @@ export const commitContent = (
 				patchInstance(content.instance, template.values);
 				break;
 			}
-			const fragment = cloneTemplateFragment(parsed);
+			const fragment = cloneTemplateFragment(
+				parsed,
+				liveBinding.openMarker.parentNode,
+			);
 			const instance = mountInstance(fragment, template, parsed, moveState);
 			clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
 			liveBinding.openMarker.after(fragment);

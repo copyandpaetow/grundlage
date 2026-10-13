@@ -1,6 +1,7 @@
 import { stringListHash } from "../utils/hashing";
 import {
 	BINDING,
+	DYNAMIC_TAG_PLACEHOLDER,
 	NO_KEY,
 	OPEN_CONSTRUCT,
 	STYLE_SHEET_NOT_COMPILED,
@@ -23,7 +24,6 @@ import {
 
 type StateKind = ValueOf<typeof STATE>;
 
-const PLACEHOLDER_TAG = "div";
 const TEMPLATE_TAG = "template";
 const SCRIPT_TAG = "script";
 const TEXTAREA_TAG = "textarea";
@@ -320,8 +320,8 @@ const completeTag = (parser: ParserState) => {
 	if (isTopLevelSibling) parser.hasSeenTopLevelSibling = true;
 
 	if (hasOpenConstruct(parser)) {
-		parser.currentTagName = PLACEHOLDER_TAG;
-		parser.elementMarkup += PLACEHOLDER_TAG;
+		parser.currentTagName = DYNAMIC_TAG_PLACEHOLDER;
+		parser.elementMarkup += DYNAMIC_TAG_PLACEHOLDER;
 		parser.resultMarkup += openMarkerComment(parser);
 		parser.bindings.push({
 			type: BINDING.TAG,
@@ -380,7 +380,7 @@ const completeEndTag = (parser: ParserState) => {
 				"asymmetric tag: a static end tag cannot pair with a dynamic <${...}> open tag. Make the close dynamic too.",
 			),
 		);
-	if (isDynamicClose) parser.endTagMarkup = PLACEHOLDER_TAG;
+	if (isDynamicClose) parser.endTagMarkup = DYNAMIC_TAG_PLACEHOLDER;
 	parser.resultMarkup +=
 		MARKUP.END_TAG_OPEN + parser.endTagMarkup + MARKUP.TAG_CLOSE;
 	parser.endTagMarkup = "";
@@ -741,6 +741,15 @@ const scanAttributeValue = (parser: ParserState, code: number) => {
 		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
 		parser.splitIndex = parser.characterIndex;
 		parser.characterIndex--;
+		return;
+	}
+	//HTML reads the slash of `width=2/>` into the value; SVG markup means the self-closing end
+	const startsSelfClosingEnd =
+		code === CHARACTER_CODE.SLASH &&
+		parser.activeString.charCodeAt(parser.characterIndex + 1) ===
+			CHARACTER_CODE.GREATER_THAN;
+	if (startsSelfClosingEnd) {
+		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
 		return;
 	}
 	if (code !== CHARACTER_CODE.GREATER_THAN) return;

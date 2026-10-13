@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING } from "../constants";
+import { BINDING, DYNAMIC_TAG_PLACEHOLDER } from "../constants";
 import {
 	AttributeStaticBinding,
 	StaticBinding,
@@ -219,7 +219,7 @@ describe("html parser — tag bindings", () => {
 		const tag = "br";
 		const parsed = parse`<${tag} /><span>after</span>`;
 		const fragment = buildFragment(parsed.htmlWithMarkers);
-		const placeholder = fragment.querySelector("div")!;
+		const placeholder = fragment.querySelector(DYNAMIC_TAG_PLACEHOLDER)!;
 		const span = fragment.querySelector("span")!;
 		expect(placeholder).not.toBeNull();
 		expect(span).not.toBeNull();

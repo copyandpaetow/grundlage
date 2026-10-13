@@ -328,6 +328,28 @@ const splitTrailingImportantPriority = (
 	return "important";
 };
 
+const LEADING_CSS_WHITESPACE = /^[ \t\n\r\f]+/;
+const TRAILING_CSS_WHITESPACE = /[ \t\n\r\f]+$/;
+
+//setProperty keeps edge whitespace in a custom property's value, and " inherit" there is the
+//literal token, not the keyword. Runs after the !important split, which leaves a trailing space
+const trimValueEdgeWhitespace = (parser: CSSParserState): void => {
+	const valueParts = parser.valueBuffer;
+	const firstPart = valueParts[0];
+	if (typeof firstPart === "string") {
+		const trimmedFirstPart = firstPart.replace(LEADING_CSS_WHITESPACE, "");
+		if (trimmedFirstPart === "") valueParts.shift();
+		else valueParts[0] = trimmedFirstPart;
+	}
+	const lastIndex = valueParts.length - 1;
+	const lastPart = valueParts[lastIndex];
+	if (typeof lastPart === "string") {
+		const trimmedLastPart = lastPart.replace(TRAILING_CSS_WHITESPACE, "");
+		if (trimmedLastPart === "") valueParts.pop();
+		else valueParts[lastIndex] = trimmedLastPart;
+	}
+};
+
 const isHole = (part: Part): part is number => typeof part === "number";
 
 const completeDeclaration = (parser: CSSParserState): boolean => {
@@ -364,6 +386,7 @@ const completeDeclaration = (parser: CSSParserState): boolean => {
 	if (!claimHoledProperty(frame, propertyName)) return false;
 	const priority = splitTrailingImportantPriority(parser);
 	if (priority === UNSUPPORTED_PRIORITY) return false;
+	trimValueEdgeWhitespace(parser);
 	parser.dynamicDeclarations.push({
 		rulePath:
 			frame.openRunIndex === NO_OPEN_RUN

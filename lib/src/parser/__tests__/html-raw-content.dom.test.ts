@@ -173,7 +173,7 @@ describe("html parser — css plan attachment", () => {
 				rulePath: [0],
 				propertyName: "color",
 				priority: "",
-				valueParts: [" ", 0],
+				valueParts: [0],
 			},
 		]);
 		//the sheet text is composed with literal values at first commit — the cached
@@ -247,7 +247,7 @@ describe("html parser — css plan attachment", () => {
 				rulePath: [0],
 				propertyName: "color",
 				priority: "",
-				valueParts: [" ", 0],
+				valueParts: [0],
 			},
 		]);
 		expect(dynamicDeclarationsOf(secondBinding)).toEqual([
@@ -255,7 +255,7 @@ describe("html parser — css plan attachment", () => {
 				rulePath: [0],
 				propertyName: "width",
 				priority: "",
-				valueParts: [" ", 1],
+				valueParts: [1],
 			},
 		]);
 	});

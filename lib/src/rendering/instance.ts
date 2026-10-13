@@ -20,7 +20,15 @@ import {
 } from "./bindings/types";
 import { CONTENT_KIND } from "./constants";
 import { buildFragment } from "./dom";
-import { nextOpenMarker, scanToClose } from "./markers";
+import {
+	ensureFragmentKeptEveryBinding,
+	nextOpenMarker,
+	scanToClose,
+} from "./markers";
+import {
+	parseContextOfChildren,
+	warnWhenParsingWouldSplitParagraph,
+} from "./parse-context";
 import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 
 //liveBindings[0..hostBindingCount) are host bindings, owned by their element: only it knows a
@@ -143,18 +151,31 @@ const bindFreshClone = (
 
 //lives as long as the parse cache entry: every later mount of the template clones it instead of
 //parsing markup again, and the parser cannot build it because it also runs where there is no DOM
-const fragmentCloneSourceByParsedTemplate = new WeakMap<
+const fragmentCloneSourcesByParsedTemplate = new WeakMap<
 	ParsedTemplate,
-	DocumentFragment
+	Array<DocumentFragment | undefined>
 >();
 
 export const cloneTemplateFragment = (
 	parsed: ParsedTemplate,
+	insertionParent: Node | null,
 ): DocumentFragment => {
-	let cloneSource = fragmentCloneSourceByParsedTemplate.get(parsed);
+	const parseContext = parseContextOfChildren(insertionParent);
+	let cloneSources = fragmentCloneSourcesByParsedTemplate.get(parsed);
+	if (cloneSources === undefined) {
+		cloneSources = [];
+		fragmentCloneSourcesByParsedTemplate.set(parsed, cloneSources);
+	}
+	let cloneSource = cloneSources[parseContext];
 	if (cloneSource === undefined) {
-		cloneSource = buildFragment(parsed.htmlWithMarkers);
-		fragmentCloneSourceByParsedTemplate.set(parsed, cloneSource);
+		cloneSource = buildFragment(parsed.htmlWithMarkers, parseContext);
+		ensureFragmentKeptEveryBinding(
+			cloneSource,
+			parsed.bindings.length - parsed.hostBindingCount,
+		);
+		for (const element of cloneSource.children)
+			warnWhenParsingWouldSplitParagraph(element.localName, insertionParent);
+		cloneSources[parseContext] = cloneSource;
 	}
 	//cloneNode is typed as Node; a fragment's clone is a fragment
 	return cloneSource.cloneNode(true) as DocumentFragment;
