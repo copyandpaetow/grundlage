@@ -31,7 +31,9 @@ export const everyEntryShape = component(
 			Promise<void>
 		> = true;
 		void [one, two, three, four, notAny, hostIsTheElement];
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	{
 		props: {
@@ -50,7 +52,9 @@ export const fallbackSubtractsUndefined = component(
 		//@ts-expect-error the fallback took `| undefined` off
 		const widened: Exact<typeof header, Template | undefined> = true;
 		void [narrowed, widened];
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	{ props: { header: [asTemplate, {} as Template] } },
 );
@@ -65,7 +69,9 @@ export const writingGoesThroughHost = component(
 		const hostCarriesTheProps: Exact<typeof componentProps.host.start, number> =
 			true;
 		void hostCarriesTheProps;
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	{ props: { start: [Number, 0] } },
 );
@@ -76,7 +82,9 @@ export const wrongUse = component(
 		//@ts-expect-error start is a number
 		const wrong: string = start;
 		void wrong;
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	{ props: { start: [Number, 0] } },
 );
@@ -86,7 +94,9 @@ export const undeclaredKey = component(
 	//@ts-expect-error `missing` is not in the schema
 	function* ({ missing }) {
 		void missing;
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	{ props: { start: [Number, 0] } },
 );
@@ -95,13 +105,17 @@ export const undeclaredKey = component(
 export const noOptions = component(function* (componentProps) {
 	const onlyHost: Exact<keyof typeof componentProps, "host"> = true;
 	void onlyHost;
-	yield () => html`<p>x</p>`;
+	yield function* () {
+		yield html`<p>x</p>`;
+	};
 });
 
 //a function taking a narrower parameter cannot be asked what an attribute holds
 export const narrowParameter = component(
 	function* () {
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	//@ts-expect-error every incoming value arrives as unknown
 	{ props: { variant: (incoming: string) => incoming } },
@@ -110,7 +124,9 @@ export const narrowParameter = component(
 //an entry that is not callable at all
 export const notAFunction = component(
 	function* () {
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	//@ts-expect-error a schema entry is a token or a function
 	{ props: { variant: "solid" } },
@@ -121,7 +137,9 @@ export const predicateEntry = component(
 	function* ({ variant }) {
 		const exact: Exact<typeof variant, boolean | undefined> = true;
 		void exact;
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	{ props: { variant: (incoming: unknown) => typeof incoming === "string" } },
 );
@@ -133,7 +151,9 @@ export const fallbackIsNotTypeChecked = component(
 		const stillItsOwnType: Exact<typeof label, string> = true;
 		const guardedType: Exact<typeof variant, Variant> = true;
 		void [stillItsOwnType, guardedType];
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	{ props: { label: [String, []], variant: [asVariant, "nope"] } },
 );
@@ -153,7 +173,9 @@ export const lightIsAMode: Exact<
 //which is itself an error — so the one shape this must never accept cannot slip through
 export const focusIsShadowOnly = component(
 	function* () {
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	//@ts-expect-error delegatesFocus is shadow-only
 	{ mode: "light", delegatesFocus: true },
@@ -161,7 +183,9 @@ export const focusIsShadowOnly = component(
 
 export const shadowStillTakesFocus = component(
 	function* () {
-		yield () => html`<p>x</p>`;
+		yield function* () {
+			yield html`<p>x</p>`;
+		};
 	},
 	{ mode: "open", delegatesFocus: true },
 );

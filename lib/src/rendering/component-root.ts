@@ -13,8 +13,8 @@ import {
 	AttributeStaticBinding,
 	DynamicAttributeStaticBinding,
 } from "../parser/types";
-import { flushHostPayload, warnOnUnclaimedSSRPayloads } from "../load";
-import { coerceToTemplate, TemplateValue } from "../template";
+import { warnOnUnclaimedSSRPayloads } from "../load";
+import { TemplateValue } from "../template";
 import { ComponentErrorEvent } from "../runtime/component-error-event";
 import {
 	HYDRATION_MISMATCH,
@@ -40,7 +40,7 @@ export interface ComponentRoot {
 
 const HYDRATION_PENDING: unique symbol = Symbol("hydration pending");
 
-export const renderedInstanceOf = (root: ComponentRoot): Instance | null =>
+export const paintedInstanceOf = (root: ComponentRoot): Instance | null =>
 	root.instance === HYDRATION_PENDING ? null : root.instance;
 
 export const createComponentRoot = (
@@ -55,7 +55,7 @@ export const createComponentRoot = (
 });
 
 const revertAllHostBindings = (root: ComponentRoot): void => {
-	const instance = renderedInstanceOf(root);
+	const instance = paintedInstanceOf(root);
 	if (instance === null) return;
 	const liveBindings = instance.liveBindings;
 	for (let index = 0; index < instance.parsed.hostBindingCount; index++)
@@ -106,11 +106,8 @@ const mountOrPatchRoot = (
 
 export const paintComponentRoot = (
 	root: ComponentRoot,
-	value: unknown,
-	wasMountedOnServer: boolean,
+	templateValue: TemplateValue,
 ): void => {
-	const templateValue = coerceToTemplate(value);
-
 	const current = root.instance;
 	if (current === HYDRATION_PENDING) {
 		//cleared before the attempt, not after: a throw an outer generator catches paints again, and
@@ -135,9 +132,6 @@ export const paintComponentRoot = (
 		}
 		releaseDeferredChildren(root.shadowRoot);
 	} else root.instance = mountOrPatchRoot(root, current, templateValue);
-	//latched by the driver rather than a fresh isServer(): the global is mutable and the paint must
-	//agree with the driver that scheduled it
-	if (wasMountedOnServer) flushHostPayload(root.host);
 };
 
 export const displayFatalErrorInRoot = (
@@ -152,9 +146,6 @@ export const displayFatalErrorInRoot = (
 		new ComponentErrorEvent(error, host.localName),
 	);
 	if (isHandledByApp) return;
-	console.error(
-		libraryMessage(`<${host.localName}> stopped rendering.`),
-		error,
-	);
+	console.error(libraryMessage(`<${host.localName}> stopped running.`), error);
 	root.shadowRoot.textContent = `${error}`;
 };

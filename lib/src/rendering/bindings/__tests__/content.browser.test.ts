@@ -23,7 +23,9 @@ describe("content updates", () => {
 		let text = "before";
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${text}</p>`;
+			yield function* () {
+				yield html`<p>${text}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -45,12 +47,14 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders a nested template and updates it in-place", async () => {
+	test("paints a nested template and updates it in-place", async () => {
 		const tag = uniqueTag();
 		let inner = "child-v1";
 
 		const MyElement = component(function* () {
-			yield () => html` <div>${html`<span>${inner}</span>`}</div>`;
+			yield function* () {
+				yield html` <div>${html`<span>${inner}</span>`}</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -70,15 +74,16 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders and updates a list", async () => {
+	test("paints and updates a list", async () => {
 		const tag = uniqueTag();
 		let items = ["a", "b", "c"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html` <ul>
+			yield function* () {
+				yield html` <ul>
 					${items.map((i) => html` <li>${i}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -104,12 +109,14 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders null as empty text", async () => {
+	test("paints null as empty text", async () => {
 		const tag = uniqueTag();
 		let value: unknown = null;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -122,12 +129,14 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders undefined as empty text", async () => {
+	test("paints undefined as empty text", async () => {
 		const tag = uniqueTag();
 		let value: unknown = undefined;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -140,12 +149,14 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders false as empty text", async () => {
+	test("paints false as empty text", async () => {
 		const tag = uniqueTag();
 		let value: unknown = false;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -158,11 +169,13 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders true as empty text", async () => {
+	test("paints true as empty text", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${true}</p>`;
+			yield function* () {
+				yield html`<p>${true}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -180,7 +193,9 @@ describe("content updates", () => {
 		let isVisible = false;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${isVisible && html`<span>shown</span>`}</p>`;
+			yield function* () {
+				yield html`<p>${isVisible && html`<span>shown</span>`}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -207,11 +222,13 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders a number as text", async () => {
+	test("paints a number as text", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${42}</p>`;
+			yield function* () {
+				yield html`<p>${42}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -224,11 +241,13 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders zero as text", async () => {
+	test("paints zero as text", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${0}</p>`;
+			yield function* () {
+				yield html`<p>${0}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -241,12 +260,14 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders a bigint as text", async () => {
+	test("paints a bigint as text", async () => {
 		const tag = uniqueTag();
 		let value: unknown = 0n;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -270,10 +291,11 @@ describe("content updates", () => {
 		let useTemplate = false;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					${useTemplate ? html`<span>nested</span>` : "plain text"}
 				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -301,10 +323,11 @@ describe("content updates", () => {
 		let useTemplate = true;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					${useTemplate ? html`<span>nested</span>` : "plain text"}
 				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -332,12 +355,13 @@ describe("content updates", () => {
 		let useArray = false;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					${
 						useArray ? ["a", "b"].map((i) => html`<span>${i}</span>`) : "single"
 					}
 				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -362,12 +386,13 @@ describe("content updates", () => {
 		let useArray = true;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					${
 						useArray ? ["a", "b"].map((i) => html`<span>${i}</span>`) : "single"
 					}
 				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -388,12 +413,14 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders an empty array without error", async () => {
+	test("paints an empty array without error", async () => {
 		const tag = uniqueTag();
 		let items: string[] = [];
 
 		const MyElement = component(function* () {
-			yield () => html`<div>${items.map((i) => html`<span>${i}</span>`)}</div>`;
+			yield function* () {
+				yield html`<div>${items.map((i) => html`<span>${i}</span>`)}</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -417,13 +444,16 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders deeply nested templates", async () => {
+	test("paints deeply nested templates", async () => {
 		const tag = uniqueTag();
 		let inner = "deep";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>${html`<section>${html`<p>${inner}</p>`}</section>`}</div>`;
+			yield function* () {
+				yield html`<div>
+					${html`<section>${html`<p>${inner}</p>`}</section>`}
+				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -454,10 +484,11 @@ describe("content updates", () => {
 		];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((i) => html`<li>${i.text}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -490,8 +521,9 @@ describe("content updates", () => {
 		let items = ["x"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html` <div>${items.map((i) => html`<span>${i}</span>`)}</div>`;
+			yield function* () {
+				yield html` <div>${items.map((i) => html`<span>${i}</span>`)}</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -521,10 +553,11 @@ describe("content updates", () => {
 		let items = ["alpha", "beta", "gamma"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -552,10 +585,11 @@ describe("content updates", () => {
 		let items = ["one", "two", "three"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -581,10 +615,11 @@ describe("content updates", () => {
 		let items = ["a", "c"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -615,10 +650,11 @@ describe("content updates", () => {
 		let items = ["a", "b", "c"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -650,10 +686,11 @@ describe("content updates", () => {
 		let items = ["tail"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -682,10 +719,11 @@ describe("content updates", () => {
 		let items = ["alpha", "beta", "gamma"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li><input data-name="${item}" /></li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -712,7 +750,9 @@ describe("content updates", () => {
 		let value = 1.5;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -740,15 +780,15 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("batches rapid updates into a single render and reflects the final value", async () => {
+	test("batches rapid updates into a single paint and reflects the final value", async () => {
 		const tag = uniqueTag();
 		let value = 0;
-		let renderCount = 0;
+		let runCount = 0;
 
 		const MyElement = component(function* () {
-			yield () => {
-				renderCount++;
-				return html`<p>${value}</p>`;
+			yield function* () {
+				runCount++;
+				yield html`<p>${value}</p>`;
 			};
 		});
 
@@ -760,7 +800,7 @@ describe("content updates", () => {
 		const textNode = paragraph.childNodes[1];
 		expect(paragraph.textContent).toContain("0");
 
-		const baselineRenderCount = renderCount;
+		const baselineRunCount = runCount;
 
 		for (let index = 1; index <= 25; index++) {
 			value = index;
@@ -771,7 +811,7 @@ describe("content updates", () => {
 
 		expect(paragraph.textContent).toContain("25");
 		expect(paragraph.childNodes[1]).toBe(textNode);
-		expect(renderCount - baselineRenderCount).toBe(1);
+		expect(runCount - baselineRunCount).toBe(1);
 
 		value = 26;
 		element.update();
@@ -782,7 +822,7 @@ describe("content updates", () => {
 		await sleep();
 
 		expect(paragraph.textContent).toContain("28");
-		expect(renderCount - baselineRenderCount).toBe(2);
+		expect(runCount - baselineRunCount).toBe(2);
 
 		cleanup(element);
 	});
@@ -792,13 +832,14 @@ describe("content updates", () => {
 		let items = [10, 20, 30, 40];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map(
 						(value) =>
 							html`<li><span>${value}</span><em>${value * 2}</em></li>`,
 					)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -841,10 +882,11 @@ describe("content updates", () => {
 		let items = ["alpha", "beta"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((value) => html`<li>${value}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -876,10 +918,11 @@ describe("content updates", () => {
 		let items = ["a", "c"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((value) => html`<li>${value}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -913,13 +956,14 @@ describe("content updates", () => {
 		];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map(
 						(item) =>
 							html`<li style="width:${item.width}px">${item.label}</li>`,
 					)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -955,8 +999,8 @@ describe("content updates", () => {
 		];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${groups.map(
 						(group) =>
 							html`<li>
@@ -967,6 +1011,7 @@ describe("content updates", () => {
 							</li>`,
 					)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1046,10 +1091,11 @@ describe("content updates", () => {
 		let items = ["a", "a", "b"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1096,10 +1142,11 @@ describe("content updates", () => {
 		let items: Array<string> = ["a", "b", "c"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1136,10 +1183,11 @@ describe("content updates", () => {
 		let items = ["a", "b"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1172,14 +1220,15 @@ describe("content updates", () => {
 		];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((entry) =>
 						entry.kind === "item"
 							? html`<li>${entry.value}</li>`
 							: html`<hr data-label="${entry.value}" />`,
 					)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1225,10 +1274,11 @@ describe("content updates", () => {
 		let items = ["a", "b", "c", "d"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1258,10 +1308,11 @@ describe("content updates", () => {
 		let items = ["a", "b", "c", "d"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1291,10 +1342,11 @@ describe("content updates", () => {
 		let items = ["a", "x", "y", "z", "d"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1330,19 +1382,20 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("re-renders an identical list without disturbing DOM identity", async () => {
+	test("paints an identical list again without disturbing DOM identity", async () => {
 		const tag = uniqueTag();
-		//new array reference each render, identical hash-per-item contents.
-		//the binding still dirties (array path in update()), so renderList
+		//new array reference each paint, identical hash-per-item contents.
+		//the binding still dirties (array path in update()), so commitList
 		//runs; head peel should consume everything with zero DOM work and no
 		//middle bookkeeping
 		let items = ["a", "b", "c"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1369,10 +1422,11 @@ describe("content updates", () => {
 		let items = ["a", "b"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1403,10 +1457,11 @@ describe("content updates", () => {
 		let items = ["d", "e"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1439,10 +1494,11 @@ describe("content updates", () => {
 		let items = ["a", "b", "c", "d", "e"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1469,15 +1525,16 @@ describe("content updates", () => {
 
 	test("wraps primitive list items in templates without forcing the caller to call html`` themselves", async () => {
 		//a non-template row is lifted into a template of its own, so a caller mapping straight to
-		//strings or numbers still renders, and changing one primitive updates only its own text
+		//strings or numbers still paints, and changing one primitive updates only its own text
 		const tag = uniqueTag();
 		let items: Array<string | number> = ["alpha", 2, "gamma"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1498,9 +1555,9 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("re-renders a list mutated in place on the same array reference", async () => {
-		//a held array mutated in place (push / index assignment) and re-rendered
-		//without allocating a fresh array: renderList diffs the live array against
+	test("updates a list mutated in place on the same array reference", async () => {
+		//a held array mutated in place (push / index assignment) and painted again
+		//without allocating a fresh array: commitList diffs the live array against
 		//its own snapshot, so the mutation is seen even though the binding's value
 		//is `=== ` its prior value. The user's array is never rewritten into
 		//HTMLTemplates as a side channel
@@ -1508,17 +1565,18 @@ describe("content updates", () => {
 		const items: Array<string> = ["a", "b", "c"];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		//bare primitive items render as adjacent text nodes with no separator
+		//bare primitive items paint as adjacent text nodes with no separator
 		const text = () =>
 			element.shadowRoot!.textContent!.replace(/\s+/g, "").trim();
 		expect(text()).toBe("abc");
@@ -1542,7 +1600,7 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("static HTML comments in the template survive a render pass", async () => {
+	test("static HTML comments in the template survive a paint", async () => {
 		//only a comment carrying the binding-marker prefix is a marker. An author's own comment
 		//counted as one would shift every binding index after it and the content binding below
 		//would lose its anchors
@@ -1550,7 +1608,9 @@ describe("content updates", () => {
 		let label = "first";
 
 		const MyElement = component(function* () {
-			yield () => html`<section><!-- author note -->${label}</section>`;
+			yield function* () {
+				yield html`<section><!-- author note -->${label}</section>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1580,8 +1640,8 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders and updates a dynamic HTML comment binding", async () => {
-		//a comment interpolating an expression renders as a real comment node between its markers
+	test("paints and updates a dynamic HTML comment binding", async () => {
+		//a comment interpolating an expression paints as a real comment node between its markers
 		//and is recreated on update. The leading comment is the list key, stripped at parse time,
 		//so only a later dynamic comment reaches the DOM
 		const tag = uniqueTag();
@@ -1589,9 +1649,10 @@ describe("content updates", () => {
 		let note = "first";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<!--${key}-->
+			yield function* () {
+				yield html`<!--${key}-->
 					<section><!-- ${note} --></section>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1604,7 +1665,7 @@ describe("content updates", () => {
 				.map((node) => (node as Comment).data);
 
 		const section = element.shadowRoot!.querySelector("section")!;
-		//the rendered comment carries the interpolated value; the bracketing
+		//the painted comment carries the interpolated value; the bracketing
 		//marker comments carry the binding identifier, never the user value
 		expect(commentText(section)).toContain(" first ");
 
@@ -1621,15 +1682,16 @@ describe("content updates", () => {
 	test("a tight <!--${x}--> stays a comment node and never leaks visible text", async () => {
 		//whitespace must not flip the semantics: `<!--${x}-->` is the same comment
 		//binding as `<!-- ${x} -->`, so the value lands in comment data, not as
-		//rendered content in the section
+		//painted content in the section
 		const tag = uniqueTag();
 		const key = "note";
 		let note = "hidden";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<!--${key}-->
+			yield function* () {
+				yield html`<!--${key}-->
 					<section><!--${note}--></section>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1660,16 +1722,17 @@ describe("content updates", () => {
 
 	test("updates one expression in a multi-expression comment binding", async () => {
 		//`<!-- ${a} and ${b} -->` folds both expressions into a single comment
-		//binding; changing one must re-render the comment with both current values
+		//binding; changing one must update the comment with both current values
 		const tag = uniqueTag();
 		const key = "pair";
 		let left = "a";
 		let right = "b";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<!--${key}-->
+			yield function* () {
+				yield html`<!--${key}-->
 					<section><!-- ${left} and ${right} --></section>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../index";
 
-//the flush scheduler's supersession semantic. An update() arriving while a previous render is still
-//in flight, suspended mid-render on a yielded promise, supersedes it: the newer render wins
-//immediately and the stale one is abandoned, rather than deferring until the stale render finishes
+//the flush scheduler's supersession semantic. An update() arriving while a previous run is still
+//in flight, parked mid-run on a yielded promise, supersedes it: the newer run wins
+//immediately and the stale one is abandoned, rather than deferring until the stale run finishes
 //and then re-running. These go end-to-end through the public update() surface; the pure transition
-//is in task.dom.test.ts.
+//is in run.dom.test.ts.
 //
 //supersession is by slot identity: a rerun swaps the inner slot, so an in-flight inner is
 //abandoned, and never touches the outer slot, so a suspended outer survives to capture its cleanup.
@@ -27,9 +27,9 @@ const mount = (constructor: CustomElementConstructor): HTMLElement => {
 type Updatable = HTMLElement & { update(): Promise<void> };
 
 describe("flush supersession", () => {
-	test("an update during a suspended async render wins immediately and abandons the stale render's tail", async () => {
+	test("an update during a parked run wins immediately and abandons the stale run's tail", async () => {
 		let value = "init";
-		let suspendThisRender = false;
+		let parkThisRun = false;
 		const gate = Promise.withResolvers<void>();
 		const tailRan: string[] = [];
 
@@ -37,11 +37,11 @@ describe("flush supersession", () => {
 			component(function* () {
 				yield function* current() {
 					const snapshot = value;
-					yield () => html`<p>${snapshot}</p>`;
-					if (suspendThisRender) {
-						yield gate.promise; //suspend mid-render
-						tailRan.push(snapshot); //a superseded render must never reach here
-						yield () => html`<p>tail-${snapshot}</p>`;
+					yield html`<p>${snapshot}</p>`;
+					if (parkThisRun) {
+						yield gate.promise; //park mid-run
+						tailRan.push(snapshot); //a superseded run must never reach here
+						yield html`<p>tail-${snapshot}</p>`;
 					}
 				};
 			}),
@@ -50,23 +50,23 @@ describe("flush supersession", () => {
 		await sleep();
 		expect(element.shadowRoot?.textContent).toContain("init");
 
-		//first update renders "first", then parks mid-render on the gate
+		//first update paints "first", then parks mid-run on the gate
 		value = "first";
-		suspendThisRender = true;
+		parkThisRun = true;
 		element.update();
 		await sleep();
 		expect(element.shadowRoot?.textContent).toContain("first");
 		expect(tailRan).toEqual([]); //still parked
 
 		//a second update arrives while "first" is still suspended: it must take effect immediately,
-		//not wait for the stale render to drain
+		//not wait for the stale run to drain
 		value = "second";
-		suspendThisRender = false; //the superseding render completes synchronously
+		parkThisRun = false; //the superseding run completes synchronously
 		element.update();
 		await sleep();
 		expect(element.shadowRoot?.textContent).toContain("second");
 
-		//releasing the original gate must not revive the superseded render
+		//releasing the original gate must not revive the superseded run
 		gate.resolve();
 		await sleep();
 		expect(tailRan).toEqual([]); //the stale tail never executed
@@ -83,8 +83,8 @@ describe("flush supersession", () => {
 		const element = mount(
 			component(function* () {
 				yield function* () {
-					//inner / current renderer
-					yield () => html`<p>${value}</p>`;
+					//the current update generator
+					yield html`<p>${value}</p>`;
 				};
 				yield outerGate.promise; //outer suspends AFTER installing the inner
 				return () => {
@@ -112,7 +112,7 @@ describe("flush supersession", () => {
 		expect(outerCleanupRan).toBe(true);
 	});
 
-	test("await update() resolves when it supersedes an in-flight async render", async () => {
+	test("await update() resolves when it supersedes a parked run", async () => {
 		let suspend = true;
 		const gate = Promise.withResolvers<void>();
 
@@ -120,8 +120,8 @@ describe("flush supersession", () => {
 			component(function* () {
 				yield function* current() {
 					const willSuspend = suspend;
-					yield () => html`<p>body</p>`;
-					if (willSuspend) yield gate.promise; //park the initial render mid-flight
+					yield html`<p>body</p>`;
+					if (willSuspend) yield gate.promise; //park the initial run mid-flight
 				};
 			}),
 		) as Updatable;
@@ -129,7 +129,7 @@ describe("flush supersession", () => {
 		await sleep();
 		expect(element.shadowRoot?.textContent).toContain("body"); //inner painted, then parked
 
-		//supersede the parked inner; the superseding render completes synchronously. the root has no
+		//supersede the parked inner; the superseding run completes synchronously. the root has no
 		//parent to settle it, so historically the DOM landed but this update() promise never resolved
 		suspend = false;
 		const settled = element.update().then(() => "resolved");
@@ -139,7 +139,7 @@ describe("flush supersession", () => {
 		]);
 		expect(outcome).toBe("resolved");
 
-		gate.resolve(); //releasing the abandoned render must not revive it
+		gate.resolve(); //releasing the abandoned run must not revive it
 		await sleep();
 		expect(element.shadowRoot?.textContent).toContain("body");
 
@@ -147,14 +147,14 @@ describe("flush supersession", () => {
 	});
 
 	test("a cleanup that calls update() during disconnect does not repaint", async () => {
-		let renders = 0;
+		let runs = 0;
 		let cleanupRan = false;
 
 		const element = mount(
 			component(function* () {
-				yield () => {
-					renders++;
-					return html`<p>live</p>`;
+				yield function* () {
+					runs++;
+					yield html`<p>live</p>`;
 				};
 				return () => {
 					cleanupRan = true;
@@ -164,11 +164,11 @@ describe("flush supersession", () => {
 		) as Updatable;
 
 		await sleep();
-		expect(renders).toBe(1);
+		expect(runs).toBe(1);
 
 		element.remove();
 		await sleep();
 		expect(cleanupRan).toBe(true);
-		expect(renders).toBe(1); //the slots were nulled before the cleanup ran, so update() no-ops
+		expect(runs).toBe(1); //the slots were nulled before the cleanup ran, so update() no-ops
 	});
 });

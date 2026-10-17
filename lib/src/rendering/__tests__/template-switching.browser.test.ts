@@ -23,8 +23,9 @@ describe("template switching", () => {
 		let showFirst = true;
 
 		const MyElement = component(function* () {
-			yield () =>
-				showFirst ? html` <div>first</div>` : html`<span>second</span>`;
+			yield function* () {
+				yield showFirst ? html` <div>first</div>` : html`<span>second</span>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -51,8 +52,11 @@ describe("template switching", () => {
 		let mode: "a" | "b" = "a";
 
 		const MyElement = component(function* () {
-			yield () =>
-				mode === "a" ? html`<div>mode-a</div>` : html`<span>mode-b</span>`;
+			yield function* () {
+				yield mode === "a"
+					? html`<div>mode-a</div>`
+					: html`<span>mode-b</span>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -92,12 +96,13 @@ describe("template switching", () => {
 		let isOpen = true;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					<em>before</em>
 					${isOpen ? html`<p>open</p>` : html`<span>closed</span>`}
 					<em>after</em>
 				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -134,7 +139,9 @@ describe("template switching", () => {
 		let cls = "one";
 
 		const MyElement = component(function* () {
-			yield () => html`<p class="${cls}">${text}</p>`;
+			yield function* () {
+				yield html`<p class="${cls}">${text}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -163,17 +170,21 @@ describe("template switching", () => {
 		let view: "list" | "detail" | "empty" = "empty";
 
 		const MyElement = component(function* () {
-			yield () => {
-				if (view === "list")
-					return html`<ul>
+			yield function* () {
+				if (view === "list") {
+					yield html`<ul>
 						<li>item</li>
 					</ul>`;
-				if (view === "detail")
-					return html`<article>
+					return;
+				}
+				if (view === "detail") {
+					yield html`<article>
 						<h2>Title</h2>
 						<p>Body</p>
 					</article>`;
-				return html`<p>No content</p>`;
+					return;
+				}
+				yield html`<p>No content</p>`;
 			};
 		});
 
@@ -212,14 +223,15 @@ describe("template switching", () => {
 		let dynamic = true;
 
 		const MyElement = component(function* () {
-			yield () =>
-				dynamic
+			yield function* () {
+				yield dynamic
 					? html`<header>head</header>
 							<main>content-a</main>
 							<footer>foot</footer>`
 					: html`<header>head</header>
 							<main>content-b</main>
 							<footer>foot</footer>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);

@@ -101,7 +101,7 @@ export const nextListTail = (
 
 export const warnOnRejectedServerRange = (): void =>
 	warnDuringDevelopment(
-		"hydration mismatch: the server's markup does not match this render. Render the same first template on the server and the client.",
+		"hydration mismatch: the server's markup does not match this template. Yield the same first template on the server and the client.",
 	);
 
 export const clearRange = (

@@ -19,11 +19,13 @@ describe("component lifecycle", () => {
 		element.remove();
 	};
 
-	test("mounts and renders into shadow DOM", async () => {
+	test("mounts and paints into shadow DOM", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield () => html`<p>hello</p>`;
+			yield function* () {
+				yield html`<p>hello</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -38,12 +40,14 @@ describe("component lifecycle", () => {
 		cleanup(element);
 	});
 
-	test("update() re-renders with new state", async () => {
+	test("update() paints the new state", async () => {
 		const tag = uniqueTag();
 		let count = 0;
 
 		const Counter = component(function* () {
-			yield () => html`<span>${count}</span>`;
+			yield function* () {
+				yield html`<span>${count}</span>`;
+			};
 		});
 
 		customElements.define(tag, Counter);
@@ -66,7 +70,9 @@ describe("component lifecycle", () => {
 		let cleaned = false;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>temp</p>`;
+			yield function* () {
+				yield html`<p>temp</p>`;
+			};
 			return () => {
 				cleaned = true;
 			};
@@ -88,7 +94,9 @@ describe("component lifecycle", () => {
 		let cleaned = false;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>movable</p>`;
+			yield function* () {
+				yield html`<p>movable</p>`;
+			};
 			return () => {
 				cleaned = true;
 			};
@@ -110,12 +118,14 @@ describe("component lifecycle", () => {
 		newParent.remove();
 	});
 
-	test("moving element preserves render state", async () => {
+	test("moving element preserves painted state", async () => {
 		const tag = uniqueTag();
 		let count = 0;
 
 		const Counter = component(function* () {
-			yield () => html`<span>${count}</span>`;
+			yield function* () {
+				yield html`<span>${count}</span>`;
+			};
 		});
 
 		customElements.define(tag, Counter);
@@ -158,13 +168,14 @@ describe("component lifecycle", () => {
 		cleanup(element);
 	});
 
-	test("attribute mutation triggers re-render", async () => {
+	test("attribute mutation triggers an update", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(
 			function* ({ host: el }) {
-				yield () =>
-					html`<span>${el.getAttribute("data-label") ?? "none"}</span>`;
+				yield function* () {
+					yield html`<span>${el.getAttribute("data-label") ?? "none"}</span>`;
+				};
 			},
 			{ props: { "data-label": String } },
 		);
@@ -192,12 +203,13 @@ describe("component lifecycle", () => {
 		let useList = false;
 
 		const MyElement = component(function* () {
-			yield () =>
-				useList
+			yield function* () {
+				yield useList
 					? html`<ul>
 							<li>item</li>
 						</ul>`
 					: html`<p>paragraph</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -223,7 +235,9 @@ describe("component lifecycle", () => {
 		let count = 0;
 
 		const MyElement = component(function* () {
-			yield () => html`<span>${count}</span>`;
+			yield function* () {
+				yield html`<span>${count}</span>`;
+			};
 			return () => {};
 		});
 
@@ -234,23 +248,28 @@ describe("component lifecycle", () => {
 		cleanup(element);
 		await sleep();
 
-		//after cleanup, update should be a no-op (render is nulled for errored components,
-		//but for disconnected ones the render still exists — update just runs silently)
+		//after cleanup, update should be a no-op: a disconnected host queues nothing and resolves at once
 		count = 99;
 		await element.update();
 		await sleep();
 
-		//the element still has its last rendered state
+		//the element still shows its last painted state
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("0");
 	});
 
-	test("multiple sync yields replace render functions in sequence", async () => {
+	test("multiple sync yields replace update generators in sequence", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield () => html`<p>first</p>`;
-			yield () => html`<p>second</p>`;
-			yield () => html`<p>third</p>`;
+			yield function* () {
+				yield html`<p>first</p>`;
+			};
+			yield function* () {
+				yield html`<p>second</p>`;
+			};
+			yield function* () {
+				yield html`<p>third</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -267,7 +286,7 @@ describe("component lifecycle", () => {
 		let receivedHost: HTMLElement | null = null;
 
 		const MyElement = component(function* () {
-			const host = yield () => html`<p>hello</p>`;
+			const host = yield html`<p>hello</p>`;
 			receivedHost = host as HTMLElement;
 		});
 
@@ -280,43 +299,42 @@ describe("component lifecycle", () => {
 		cleanup(element);
 	});
 
-	test("update() coalesces rapid calls into a single re-render", async () => {
+	test("update() coalesces rapid calls into a single update", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 
 		const ComponentClass = component(function* () {
-			yield () => {
-				renderCount++;
-				return html`<span>${renderCount}</span>`;
+			yield function* () {
+				runCount++;
+				yield html`<span>${runCount}</span>`;
 			};
 		});
 		customElements.define(tag, ComponentClass);
 
 		const element = mount(tag) as InstanceType<typeof ComponentClass>;
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
-		//three sync update() calls should batch into one re-render via the
-		//`await Promise.resolve()` in update(): the first transitions IDLE → SCHEDULED
-		//and the next two short-circuit on the SCHEDULED guard
+		//three sync update() calls batch into one update: the first queues the runner and schedules a
+		//pass, the next two find it already queued and share its promise
 		const first = element.update();
 		const second = element.update();
 		const third = element.update();
 		await Promise.all([first, second, third]);
 		await sleep();
 
-		expect(renderCount).toBe(2);
+		expect(runCount).toBe(2);
 		cleanup(element);
 	});
 
-	test("update() is a no-op for a static (non-renderer) yield", async () => {
+	test("update() is a no-op for a static template yield", async () => {
 		const tag = uniqueTag();
 		let timesGeneratorRan = 0;
 
 		const ComponentClass = component(function* () {
 			timesGeneratorRan++;
-			//a bare HTMLTemplate yield installs a TEMPLATE_SOURCE_TYPE.STATIC source —
-			//update() should do nothing for it (no re-render, no generator restart)
+			//a template yielded by the body leaves no update generator, so update() does nothing for it
+			//(no run, no generator restart)
 			yield html`<p>static-content</p>`;
 		});
 		customElements.define(tag, ComponentClass);
@@ -344,7 +362,9 @@ describe("component lifecycle", () => {
 
 		const MyElement = component(
 			function* () {
-				yield () => html`<p>closed</p>`;
+				yield function* () {
+					yield html`<p>closed</p>`;
+				};
 			},
 			{ mode: "closed", delegatesFocus: false },
 		);
@@ -372,17 +392,19 @@ describe.skipIf("happyDOM" in globalThis)(
 		const sleep = (duration = 0) =>
 			new Promise((resolve) => setTimeout(resolve, duration));
 
-		test("element created and inserted before define is upgraded and renders", async () => {
+		test("element created and inserted before define is upgraded and paints", async () => {
 			const tag = uniqueTag();
 
 			const element = document.createElement(tag);
 			document.body.appendChild(element);
 
-			//before upgrade: no shadowRoot, no rendered content
+			//before upgrade: no shadowRoot, no painted content
 			expect(element.shadowRoot).toBeNull();
 
 			const MyElement = component(function* () {
-				yield () => html`<p>upgraded</p>`;
+				yield function* () {
+					yield html`<p>upgraded</p>`;
+				};
 			});
 			customElements.define(tag, MyElement);
 
@@ -395,24 +417,24 @@ describe.skipIf("happyDOM" in globalThis)(
 			element.remove();
 		});
 
-		test("attributes set before upgrade are visible to the generator on first render", async () => {
+		test("attributes set before upgrade are visible to the generator on its first run", async () => {
 			//attributeChangedCallback replays every pre-existing attribute during upgrade, before
-			//connectedCallback — update()'s early return absorbs those, so the first render is the
+			//connectedCallback — update()'s early return absorbs those, so the first run is the
 			//one that reads them and there is exactly one of it
 			const tag = uniqueTag();
-			let renderCount = 0;
+			let runCount = 0;
 
 			const element = document.createElement(tag);
 			element.setAttribute("data-label", "pre-define");
 			document.body.appendChild(element);
 
 			const MyElement = component(
-				//the count sits in the render function, not the body: an absorbed replay would re-call
+				//the count sits in the update generator, not the body: an absorbed replay would re-run
 				//this one, where the body runs once per mount whether the early return holds or not
 				function* (componentProps) {
-					yield () => {
-						renderCount++;
-						return html`<span>${componentProps["data-label"] ?? "none"}</span>`;
+					yield function* () {
+						runCount++;
+						yield html`<span>${componentProps["data-label"] ?? "none"}</span>`;
 					};
 				},
 				{ props: { "data-label": String } },
@@ -424,14 +446,14 @@ describe.skipIf("happyDOM" in globalThis)(
 			expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
 				"pre-define",
 			);
-			expect(renderCount).toBe(1);
+			expect(runCount).toBe(1);
 
 			element.remove();
 		});
 
 		test("update() called before define is a no-op and does not throw post-upgrade", async () => {
 			//a method called before the class is defined does not exist yet and the call is ignored
-			//quietly; the upgrade that follows still renders fresh
+			//quietly; the upgrade that follows still paints fresh
 			const tag = uniqueTag();
 
 			const element = document.createElement(tag) as HTMLElement & {
@@ -443,7 +465,9 @@ describe.skipIf("happyDOM" in globalThis)(
 			expect(element.update).toBeUndefined();
 
 			const MyElement = component(function* () {
-				yield () => html`<p>after</p>`;
+				yield function* () {
+					yield html`<p>after</p>`;
+				};
 			});
 			customElements.define(tag, MyElement);
 
@@ -462,7 +486,7 @@ describe.skipIf("happyDOM" in globalThis)(
 describe("MutationObserver and update() interleaving", () => {
 	//the first update() opens a flush and any update() arriving while it is open only flags dirty and
 	//rides the same promise. What these pin is the two arriving in one task: a setAttribute on the
-	//host inside an open flush lands no extra render, because the MutationObserver callback's
+	//host inside an open flush lands no extra update, because the MutationObserver callback's
 	//update() rides that flush
 	let tagId = 0;
 	const uniqueTag = () => `test-observer-race-${tagId++}-${Date.now()}`;
@@ -476,19 +500,17 @@ describe("MutationObserver and update() interleaving", () => {
 		return element;
 	};
 
-	test("setAttribute fired while a sync update() is mid-flight does not double-render", async () => {
+	test("setAttribute fired while a sync update() is mid-flight does not update twice", async () => {
 		//a same-tick setAttribute queued right before update(): its MutationObserver callback fires
-		//while the flush is open, flags dirty and rides it, so the mutation lands no duplicate render
+		//while the flush is open, flags dirty and rides it, so the mutation lands no second update
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 
 		const MyElement = component(
 			function* ({ host }) {
-				yield () => {
-					renderCount++;
-					return html`<span
-						>${host.getAttribute("data-label") ?? "none"}</span
-					>`;
+				yield function* () {
+					runCount++;
+					yield html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
 				};
 			},
 			{ props: { "data-label": String } },
@@ -497,7 +519,7 @@ describe("MutationObserver and update() interleaving", () => {
 
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		//both lines are synchronous: the MutationObserver microtask queues, then update() opens the
 		//flush in the same task
@@ -505,11 +527,9 @@ describe("MutationObserver and update() interleaving", () => {
 		element.update();
 		await sleep(50);
 
-		//one extra render is accepted: both update() calls resolve to the single open flush, the second
-		//only flags dirty, and the loop clears dirty at the top of the iteration that renders the
-		//already-mutated DOM
-		//either ordering yields a single re-render, not two
-		expect(renderCount).toBe(2);
+		//one extra run is accepted: the attribute write and update() queue the same runner once, so one
+		//pass paints the already-mutated DOM, in either order
+		expect(runCount).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
 			"racy",
 		);
@@ -517,19 +537,17 @@ describe("MutationObserver and update() interleaving", () => {
 		element.remove();
 	});
 
-	test("setAttribute outside any active render still triggers exactly one re-render", async () => {
-		//the lower bound: a mutation arriving with the renderer idle produces exactly one re-render,
+	test("setAttribute outside any run still triggers exactly one update", async () => {
+		//the lower bound: a mutation arriving with the runner idle produces exactly one update,
 		//neither zero nor several. With the test above it pins both ends of coalescing
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 
 		const MyElement = component(
 			function* ({ host }) {
-				yield () => {
-					renderCount++;
-					return html`<span
-						>${host.getAttribute("data-label") ?? "none"}</span
-					>`;
+				yield function* () {
+					runCount++;
+					yield html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
 				};
 			},
 			{ props: { "data-label": String } },
@@ -538,12 +556,12 @@ describe("MutationObserver and update() interleaving", () => {
 
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		element.setAttribute("data-label", "settled");
 		await sleep(50);
 
-		expect(renderCount).toBe(2);
+		expect(runCount).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
 			"settled",
 		);

@@ -29,7 +29,7 @@ describe("assertDuringDevelopment", () => {
 	});
 });
 
-describe("an invariant error thrown inside a render", () => {
+describe("an invariant error thrown inside a run", () => {
 	const mountBrokenComponent = () => {
 		let caughtByTheGenerator = false;
 		const fatalErrorEvents = vi.fn();
@@ -39,9 +39,9 @@ describe("an invariant error thrown inside a render", () => {
 			component(function* () {
 				try {
 					yield function* () {
-						yield () => {
+						{
 							throw new InvariantError("library bug");
-						};
+						}
 					};
 				} catch {
 					caughtByTheGenerator = true;

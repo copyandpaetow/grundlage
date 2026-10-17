@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { component } from "../../../index";
+import { component, html } from "../../../index";
 import {
 	applyAttributeValue,
 	isAwaitingDefinition,
@@ -51,7 +51,9 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 		"swap-carried-el",
 		component(
 			function* () {
-				yield () => null;
+				yield function* () {
+					yield html``;
+				};
 			},
 			//`once` guards the event sniff: a declared name starting with "on" must not be read
 			//as a listener

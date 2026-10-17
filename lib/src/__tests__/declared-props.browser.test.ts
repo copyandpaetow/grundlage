@@ -40,14 +40,17 @@ const writeProp = (
 };
 
 describe("props the attribute cannot carry", () => {
-	test("assigning through the accessor parses and re-renders", async () => {
+	test("assigning through the accessor parses and triggers an update", async () => {
 		const tag = uniqueTag();
 		customElements.define(
 			tag,
 			component(
 				function* ({ host }) {
-					yield () =>
-						html`<p>${(readProp(host, "tags") as Array<string>).join()}</p>`;
+					yield function* () {
+						yield html`<p>
+							${(readProp(host, "tags") as Array<string>).join()}
+						</p>`;
+					};
 				},
 				{ props: { tags: [asList, ["a"]] } },
 			),
@@ -69,7 +72,9 @@ describe("props the attribute cannot carry", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { tags: [asList, ["a"]] } },
 			),
@@ -93,7 +98,9 @@ describe("props the attribute cannot carry", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { count: [Number, 0] } },
 			),
@@ -123,7 +130,9 @@ describe("props the attribute cannot carry", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { tags: [asList, ["default"]] } },
 			),
@@ -143,7 +152,9 @@ describe("props the attribute cannot carry", () => {
 			tag,
 			component(
 				function* ({ host }) {
-					yield () => html`<p>${String(readProp(host, "tags"))}</p>`;
+					yield function* () {
+						yield html`<p>${String(readProp(host, "tags"))}</p>`;
+					};
 				},
 				{ props: { tags: asList } },
 			),
@@ -162,7 +173,9 @@ describe("fallbacks", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { tags: [asList, []] } },
 			),
@@ -185,7 +198,9 @@ describe("fallbacks", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { tags: [parse, ["seed"]] } },
 			),
@@ -205,7 +220,9 @@ describe("fallbacks", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { onSelect: [asCallback, noop] } },
 			),
@@ -222,7 +239,9 @@ describe("fallbacks", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { openedAt: (incoming: unknown) => incoming ?? new Date() } },
 			),
@@ -243,7 +262,9 @@ describe("define-time checks", () => {
 		expect(() =>
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { title: String } },
 			),
@@ -254,7 +275,9 @@ describe("define-time checks", () => {
 		expect(() =>
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { host: String } },
 			),
@@ -265,7 +288,9 @@ describe("define-time checks", () => {
 		expect(() =>
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { userId: String, userid: String } },
 			),
@@ -276,7 +301,9 @@ describe("define-time checks", () => {
 		expect(() =>
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { tags: [asList, "nope"] } },
 			),
@@ -290,7 +317,9 @@ describe("define-time checks", () => {
 		expect(() =>
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{
 					props: {
@@ -303,13 +332,15 @@ describe("define-time checks", () => {
 });
 
 describe("mount", () => {
-	test("markup is read before the first render, without a seeding pass", async () => {
+	test("markup is read before the first paint, without a seeding pass", async () => {
 		const tag = uniqueTag();
 		customElements.define(
 			tag,
 			component(
 				function* ({ host }) {
-					yield () => html`<p>${readProp(host, "label")}</p>`;
+					yield function* () {
+						yield html`<p>${readProp(host, "label")}</p>`;
+					};
 				},
 				{ props: { label: [String, "anon"] } },
 			),
@@ -336,8 +367,11 @@ describe("mount", () => {
 				tag,
 				component(
 					function* ({ host }) {
-						yield () =>
-							html`<p>${(readProp(host, "tags") as Array<string>).join()}</p>`;
+						yield function* () {
+							yield html`<p>
+								${(readProp(host, "tags") as Array<string>).join()}
+							</p>`;
+						};
 					},
 					{ props: { tags: parse } },
 				),
@@ -364,7 +398,9 @@ describe("mount", () => {
 				tag,
 				component(
 					function* () {
-						yield () => html`<p>painted</p>`;
+						yield function* () {
+							yield html`<p>painted</p>`;
+						};
 					},
 					{
 						props: {
@@ -390,12 +426,12 @@ describe("mount", () => {
 
 	test("a subclass may observe an attribute the schema does not declare", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 		const Base = component(
 			function* () {
-				yield () => {
-					renderCount++;
-					return html`<p>x</p>`;
+				yield function* () {
+					runCount++;
+					yield html`<p>x</p>`;
 				};
 			},
 			{ props: { label: [String, "anon"] } },
@@ -410,7 +446,7 @@ describe("mount", () => {
 		customElements.define(tag, Extended);
 		const element = mount(tag);
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		//without the prop lookup's own guard the callback resolves undefined, which throws out of
 		//setAttribute rather than failing an assertion
@@ -422,12 +458,12 @@ describe("mount", () => {
 		window.removeEventListener("error", recordUncaught);
 
 		expect(uncaught).toEqual([]);
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 		expect(element.getAttribute("data-extra")).toBe("1");
 
 		element.setAttribute("label", "ada");
 		await sleep();
-		expect(renderCount).toBe(2);
+		expect(runCount).toBe(2);
 		element.remove();
 	});
 });
@@ -443,7 +479,9 @@ describe.skipIf(!isRealBrowser)(
 				"route-child-boolean",
 				component(
 					function* ({ host }) {
-						yield () => html`<p>${String(readProp(host, "closable"))}</p>`;
+						yield function* () {
+							yield html`<p>${String(readProp(host, "closable"))}</p>`;
+						};
 					},
 					{ props: { closable: [Boolean, true] } },
 				),
@@ -452,8 +490,11 @@ describe.skipIf(!isRealBrowser)(
 			customElements.define(
 				parentTag,
 				component(function* () {
-					yield () =>
-						html`<route-child-boolean closable=${false}></route-child-boolean>`;
+					yield function* () {
+						yield html`<route-child-boolean
+							closable=${false}
+						></route-child-boolean>`;
+					};
 				}),
 			);
 			const parent = mount(parentTag);
@@ -472,7 +513,9 @@ describe.skipIf(!isRealBrowser)(
 				"route-child-refusing",
 				component(
 					function* ({ host }) {
-						yield () => html`<p>${String(readProp(host, "tags"))}</p>`;
+						yield function* () {
+							yield html`<p>${String(readProp(host, "tags"))}</p>`;
+						};
 					},
 					{ props: { tags: asList } },
 				),
@@ -481,8 +524,11 @@ describe.skipIf(!isRealBrowser)(
 			customElements.define(
 				parentTag,
 				component(function* () {
-					yield () =>
-						html`<route-child-refusing tags=${"oops"}></route-child-refusing>`;
+					yield function* () {
+						yield html`<route-child-refusing
+							tags=${"oops"}
+						></route-child-refusing>`;
+					};
 				}),
 			);
 			const parent = mount(parentTag);
@@ -502,8 +548,11 @@ describe.skipIf(!isRealBrowser)(
 				"route-child-cleared",
 				component(
 					function* ({ host }) {
-						yield () =>
-							html`<p>${(readProp(host, "tags") as Array<string>).join()}</p>`;
+						yield function* () {
+							yield html`<p>
+								${(readProp(host, "tags") as Array<string>).join()}
+							</p>`;
+						};
 					},
 					{ props: { tags: [asList, ["default"]] } },
 				),
@@ -513,8 +562,11 @@ describe.skipIf(!isRealBrowser)(
 			customElements.define(
 				parentTag,
 				component(function* () {
-					yield () =>
-						html`<route-child-cleared tags=${tags}></route-child-cleared>`;
+					yield function* () {
+						yield html`<route-child-cleared
+							tags=${tags}
+						></route-child-cleared>`;
+					};
 				}),
 			);
 			const parent = mount(parentTag);
@@ -535,7 +587,9 @@ describe.skipIf(!isRealBrowser)(
 			customElements.define(
 				parentTag,
 				component(function* () {
-					yield () => html`<route-child-late slug=${"ada"}></route-child-late>`;
+					yield function* () {
+						yield html`<route-child-late slug=${"ada"}></route-child-late>`;
+					};
 				}),
 			);
 			const parent = mount(parentTag);
@@ -545,7 +599,9 @@ describe.skipIf(!isRealBrowser)(
 				"route-child-late",
 				component(
 					function* ({ host }) {
-						yield () => html`<p>${readProp(host, "slug")}</p>`;
+						yield function* () {
+							yield html`<p>${readProp(host, "slug")}</p>`;
+						};
 					},
 					{ props: { slug: [asSlug, "anon"] } },
 				),
@@ -562,10 +618,11 @@ describe.skipIf(!isRealBrowser)(
 			customElements.define(
 				parentTag,
 				component(function* () {
-					yield () =>
-						html`<route-child-late-boolean
+					yield function* () {
+						yield html`<route-child-late-boolean
 							closable=${false}
 						></route-child-late-boolean>`;
+					};
 				}),
 			);
 			const parent = mount(parentTag);
@@ -575,7 +632,9 @@ describe.skipIf(!isRealBrowser)(
 				"route-child-late-boolean",
 				component(
 					function* ({ host }) {
-						yield () => html`<p>${String(readProp(host, "closable"))}</p>`;
+						yield function* () {
+							yield html`<p>${String(readProp(host, "closable"))}</p>`;
+						};
 					},
 					{ props: { closable: [Boolean, true] } },
 				),

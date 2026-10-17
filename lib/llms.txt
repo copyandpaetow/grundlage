@@ -5,17 +5,29 @@ Server-rendered and hydrated on the client. `npm install grundlage`.
 
 ## Mental model
 
-A component is a generator function passed to `component`. It runs ONCE when the element
-mounts and runs to completion (never `while (true)`): setup code runs, then something
-renderable is yielded (a render function, an `html` template, or an inner generator). The
-generator's ONE argument is a props object carrying `host` plus every prop declared in
-`component(gen, { props })`; a `yield` of a renderable evaluates back to the host element.
-A returned function is the cleanup. There are no signals and no hooks. A re-render happens
-on `host.update()`, on `host.setProp(…)`, on assigning a declared prop to a NEW value, and
-when a DECLARED attribute on the host element changes. An undeclared attribute (`class`,
-`style`, `data-*`) does not re-render. A render BINDING the host's own declared prop to a new
-value re-renders too (see Host attributes). State declared before the `yield` survives updates
-because the yielded render function closes over it; the generator body itself does not re-run.
+A component is a generator function passed to `component`, the component BODY. It runs ONCE
+when the element mounts and runs to completion (never `while (true)`). It yields exactly three
+kinds of value:
+
+- an `html` TEMPLATE paints once and stays until the next template or update generator
+  replaces it;
+- an UPDATE GENERATOR, `yield function* view() { … }`, runs now and again on every update,
+  and the previous run is torn down before the next one starts. `view` is only a name for the
+  reader, not a keyword: any name, or none (`yield function* () { … }`), behaves the same;
+- a PROMISE waits: the `yield` evaluates to its value, and a rejection throws at the `yield`.
+
+Anything else throws, `async` included: there is no `async function*`, no arrow render function
+and no `await`. The body's ONE argument is a props object carrying `host` plus every prop
+declared in `component(gen, { props })`, and an update generator receives the same object. A
+`yield` of a template evaluates back to the host element. A `yield` of an update generator WAITS
+until a run of it finishes and evaluates to what that run returned. A returned function is the
+cleanup. There are no signals and no hooks. An update happens on `host.update()`, on
+`host.setProp(…)`, on assigning a declared prop to a NEW value, and when a DECLARED attribute on
+the host element changes. An undeclared attribute (`class`, `style`, `data-*`) does not trigger
+an update. A template BINDING the host's own declared prop to a new value triggers one too (see
+Host attributes). An update re-runs the update generator; the component body itself does not
+re-run, so state declared in the body survives updates because the update generator closes over
+it.
 
 ## Complete example
 
@@ -34,46 +46,58 @@ customElements.define(
 
 			const increment = () => {
 				count += 1;
-				host.update(); // re-calls the yielded render function below; count is still here
+				host.update(); // re-runs the update generator below; count is still here
 			};
 
-			// destructured in the render function, so `label` is LIVE, re-read every update
-			yield ({ label }) =>
-				html`<button onClick=${increment}>${label}: ${count}</button>`;
+			// destructured in the update generator, so `label` is LIVE, re-read every update
+			yield function* view({ label }) {
+				yield html`<button onClick=${increment}>${label}: ${count}</button>`;
+			};
 		},
 		{ props },
 	),
 );
 ```
 
+Waiting inside an update generator paints a placeholder first, and an update while it waits
+starts over:
+
+```javascript
+yield function* view({ userId }) {
+	yield html`<p>Loading…</p>`;
+	const user = yield fetchUser(userId);
+	yield html`<p>${user.name}</p>`;
+};
+```
+
 ## API
 
 `component(generator, options?) => CustomElementConstructor`
   Register the return value with `customElements.define`. The first argument MUST be a
-  generator function (`function*` or `async function*`). A plain or arrow function throws
-  a `TypeError` at definition time, not at mount. `options` extends `ShadowRootInit`; the
+  generator function (`function*`). A plain, arrow or `async` function throws a
+  `TypeError` at definition time, not at mount. `options` extends `ShadowRootInit`; the
   defaults are `{ mode: "open", clonable: true, delegatesFocus: true, serializable: true }`
   and any option passed overrides its default. `options.props` is the SCHEMA (see below):
   it fixes the observed attributes and installs one accessor per prop on the element class.
   `formAssociated: true` swaps the base class for the form-associated one. `{ mode: "closed" }`
   still hydrates and replays `load` data: the closed root is reached through
   `attachInternals().shadowRoot` instead of `host.shadowRoot`, so server output is reused
-  rather than re-rendered. The return value is a class. `class extends component(fn) {}` is
+  rather than painted again. The return value is a class. `class extends component(fn) {}` is
   the extension point for methods, getters and static fields; nothing is assigned to `host`
   at runtime.
 
 `options.props`, the schema
   `{ propName: entry }`, where an entry is a FUNCTION taking whatever arrived and returning
-  the value, or `undefined` to REFUSE it: `(incoming) => incoming instanceof Quote ?
-  incoming : undefined`. `String`, `Number`, `BigInt` and `Boolean` are shorthands for the
+  the value, or `undefined` to REFUSE it:
+  `(incoming) => incoming instanceof Quote ? incoming : undefined`. `String`, `Number`, `BigInt` and `Boolean` are shorthands for the
   four shipped functions. `[entry, fallback]` supplies what the function is called with when
   nothing was supplied. That is the whole schema. There is no separate optional or required
   shape, and no type guard: a prop is its function.
 
-  The function is the ONE place a value is parsed or validated, and it serves the attribute and the property mode.
-  A string means the value came from markup and needs parsing; anything else came from JS and
-  is already itself: `(incoming) => typeof incoming === "string" ? incoming.split(" ") :
-  incoming`.
+  The function is the ONE place a value is parsed or validated, and it serves the attribute
+  and the property mode. A string means the value came from markup and needs parsing; anything
+  else came from JS and is already itself:
+  `(incoming) => typeof incoming === "string" ? incoming.split(" ") : incoming`.
 
   Five rules cover the whole model:
 
@@ -82,7 +106,7 @@ customElements.define(
   2. EVERY INCOMING VALUE runs through the prop's function: markup, a property assignment, a
      parent's binding, `setProp`, the fallback at construction.
   3. A REFUSAL IS IGNORED. The previous value stays and the console warns; nothing throws and
-     nothing re-renders.
+     nothing updates.
   4. ABSENCE IS A WRITE OF THE FALLBACK. `removeAttribute`, `el.x = undefined`, `el.x = null`
      and element construction are one code path, so NOTHING is required and no read fails.
      The fallback is not restored: the function is asked the same question and gives the same
@@ -122,7 +146,7 @@ customElements.define(
 
 `` html`...` `` => `Template` (opaque)
   Tagged template literal. Each distinct literal is parsed once and cached (keyed by its
-  strings array); later renders only touch dynamic parts. Yield it, or embed it inside
+  strings array); later paints only touch dynamic parts. Yield it, or embed it inside
   another `html` template.
 
 `props(element, schema) => typed object`
@@ -137,7 +161,7 @@ customElements.define(
   schema name, so a module using both renames one (`import { props as readProps }`).
 
 `load(host, fetcher, options?) => Promise<Value>`
-  Data needed before the first render. On the server the fetcher runs and the result is
+  Data needed before the first paint. On the server the fetcher runs and the result is
   serialized into the markup as a `<script type="application/json" data-ssr>`; on the client
   that payload is replayed once during hydration (the script is consumed) and every later
   call runs the fetcher normally. `options` is `{ key?, skipSSR? }`, or a string shorthand
@@ -147,12 +171,12 @@ customElements.define(
   pins each payload to its call, and unclaimed payloads warn on hydration.
 
 `host.update() => Promise<void>`
-  The re-render trigger. See Rules for what it re-fires and when it resolves. On the server
-  a re-render asked for during the paint (a host binding writing an own prop, a synchronous
-  `update()` or prop assignment inside the render) runs before the run ends, so the markup
-  shows the settled value; once the run has ended, it is a no-op. On a DISCONNECTED host it is a
-  no-op too: it queues nothing and resolves immediately, and a removal settles an `update()`
-  that was already pending.
+  The update trigger. See Rules for what it re-fires and when it resolves. On the server an
+  update asked for during the paint (a host binding writing an own prop, a synchronous
+  `update()` or prop assignment inside the update generator) runs before the run ends, so the
+  markup shows the settled value; once the run has ended, it is a no-op. On a DISCONNECTED host
+  it is a no-op too: it queues nothing and resolves immediately, and a removal settles an
+  `update()` that was already pending.
 
 `host.setProp(name, value, oldValue?) => void`
   Imperative counterpart to a markup binding, for a framework/interop driver feeding props
@@ -189,33 +213,35 @@ comment        <!-- note ${value} -->               // second and later dynamic 
 
 ## Host attributes
 
-If the OUTERMOST node of a render output is a `<template>` and it has no top-level siblings,
+If the OUTERMOST node of a yielded template is a `<template>` and it has no top-level siblings,
 the wrapper is unwrapped: its children become the shadow DOM and its attributes are applied
 to the host element. This is how a component sets its own `class`/`id`/`role`/handlers from
 the inside.
 
 ```javascript
-yield () => html`<template class="card" role="${role}" on-form-reset=${reset}>…</template>`;
+yield function* view({ role }) {
+	yield html`<template class="card" role="${role}" on-form-reset=${reset}>…</template>`;
+};
 ```
 
 - Static, dynamic, boolean, multi-part attributes and spreads all work and update between
-  renders.
+  paints.
 - Event handlers bind here too (e.g. `on-form-*` for form components).
-- Attributes dropped by a later render are reverted on the host.
-- A host binding that writes one of the host's OWN declared props is a write like any other:
-  it runs the prop's function, reflects, and re-renders when the value changed, at mount, at
-  hydration and on every patch alike. The next render binds the same value, the change gate
+- Attributes dropped by a later paint are reverted on the host.
+- A host binding that writes one of the host's OWN declared props is a write like any other: it
+  runs the prop's function, reflects, and updates when the value changed, at mount, at
+  hydration and on every patch alike. The next paint binds the same value, the change gate
   skips it, and the component settles, so `<template theme=${x}>` with `componentProps.theme`
-  painted inside shows `x` in the same frame, at the cost of one extra render call. A binding
-  derived from the prop itself (`` html`<template count=${componentProps.count + 1}>…` ``)
-  never settles: it is the render loop below and ends in a visible error. Derive the bound
-  value from something the render does not write (a local, another prop).
+  painted inside shows `x` in the same frame, at the cost of one extra update generator run. A
+  binding derived from the prop itself (`` html`<template count=${componentProps.count + 1}>…`
+  ``) never settles: it is the update loop below and ends in a visible error. Derive the bound
+  value from something the paint does not write (a local, another prop).
 - A `<template>` WITH attributes in a nested position (content hole, list row) throws. A
   `<template>` that has top-level siblings is parsed as an ordinary element instead.
 
 ## Lists and keys
 
-An array in a content hole renders one row per entry. Rows are matched by the row template's
+An array in a content hole paints one row per entry. Rows are matched by the row template's
 identity and a content hash, which covers most reorders and edits without extra work. For
 explicit identity, put a dynamic comment in the row: the FIRST dynamic comment of a template
 is consumed as its key, never reaches the DOM, and binds that row's DOM (focus, scroll,
@@ -223,127 +249,158 @@ input state) to the value. Text around the expression is fine, it is constant ac
 rows of one template, so only the expression tells rows apart: `<!--${id}-->` and
 `<!-- key: ${id} -->` work the same way.
 
-A row matched to the previous render is PATCHED when its template is the same literal. A
+A row matched to the previous paint is PATCHED when its template is the same literal. A
 KEYED row can also be matched ACROSS a template change, since the key is its whole identity
 then: that row is rebuilt in place, keeping its position in the list, with new nodes and no
 DOM state carried over. An unkeyed row is only ever matched to its own template.
 
-Row values: string / number / bigint render as text (`""`, `0`, `NaN` included); `null`,
-`undefined`, `true`, `false` render nothing but still occupy a row; a nested array renders
-recursively; anything else (plain object, `Date`, function, symbol) throws.
+An ITERATOR paints the same as the array it yields: a generator object,
+``items.values().map((item) => html`<li>${item}</li>`)``, `map.values()`. It is read once, at
+the paint that holds it, so build it inside the update generator: an iterator kept across
+paints is used up and paints an empty list the second time. A `Map` or a `Set` itself is not
+an iterator.
+
+Row values: string / number / bigint paint as text (`""`, `0`, `NaN` included); `null`,
+`undefined`, `true`, `false` paint nothing but still occupy a row; a nested array or iterator
+paints recursively; anything else (plain object, `Date`, function, symbol) throws.
 
 ## Rules (get these right)
 
-- The generator runs ONCE per mount and runs to completion, no `while (true)`. State
-  declared before the `yield` persists across re-renders (the yielded render function closes
-  over it), so mutable state belongs there rather than being re-derived.
+- The component body runs ONCE per mount and runs to completion, no `while (true)`. State
+  declared in the body persists across updates (the update generator closes over it), so
+  mutable state belongs there rather than being re-derived.
 - Don't hang state or methods on `host` (`host.query = …`, `host.close = () => …`). The host
   is not an instance bag. Keep state in generator-local variables, communicate outward by
   dispatching events and inward by reading attributes/props. Real methods come from extending
   the returned class (`class extends component(fn) {}`); a property assigned at runtime only
   exists once `connectedCallback` has run.
-- Re-renders are triggered by `host.update()`, by `host.setProp(…)`, by assigning a declared
+- Updates are triggered by `host.update()`, by `host.setProp(…)`, by assigning a declared
   prop a value it did not already hold (`el.items = […]`, `el.label = "x"`), and by a change
   to a DECLARED attribute. A write the prop's function refuses, and a re-write of the same
   primitive, schedule nothing. A component's own host binding writing one of its own props
   schedules like any other write (Host attributes). Undeclared attributes are not observed at
   all. There is no other reactivity.
-- `update()` re-fires whatever was yielded LAST: a render function is re-called, an inner
-  generator is torn down (its cleanup runs) and re-run from the top, and an `html` template
-  yielded plainly from the component body never re-renders. After that yield `update()` is
-  a no-op, as it is until the body reaches its FIRST renderable. The boundary is that yield,
-  not the paint: an `update()` while a first async render is still pending DOES re-call the
-  render function. The generator body itself never re-runs. A render
-  function that returns a generator function is re-called too, and the branch it picks is torn
-  down and re-installed. A component body that yields an inner generator and THEN paints its
-  own content takes the shadow root back for good: the abandoned body is torn down at that
-  paint, its pending async work can no longer land, and `update()` will not bring it back.
-- `await host.update()` resolves once the DOM has been patched, in a microtask, not after
-  the browser paints, there is no rAF in the path. For an async inner generator it resolves
-  only when that generator's whole run completes, so the awaited state is the settled UI.
-  Concurrent `update()` calls coalesce onto the pending pass and share its promise.
-- Code that runs straight after a `yield` of a renderable sees THIS component's own DOM, never
-  the re-render of a child it just wrote to. The queued children render once no generator is
-  left on the stack, and nothing that code can do brings that forward: it holds on a mount as
-  on an update, for a child the paint just created as for one that was already there, after an
-  inner generator's install (`yield innerBody` resumes with that run's queue still waiting),
+- `update()` re-runs the update generator the component body yielded LAST: its current run is
+  torn down (its `finally` and cleanup run) and the function runs again from the top, in a new
+  run. While the body has not yet reached its first update generator, and after the body yields
+  a template instead, `update()` is a no-op that resolves at once. The body itself never
+  re-runs. A template the body yields after an update generator tears it down and takes the
+  shadow root back for good, and a second update generator the body yields replaces the first.
+- `await host.update()` resolves once the run it started has run to its END, in a microtask, not
+  after the browser paints; there is no rAF in the path. So the awaited state is the settled UI,
+  placeholder and all waiting included. An update generator that waits on a promise that never
+  settles keeps that `update()` pending until a later run ends, the body yields a template over
+  it, or the host is removed. Concurrent `update()` calls coalesce onto the pending pass and
+  share its promise.
+- Code that runs straight after a `yield` of a template or an update generator sees THIS
+  component's own DOM, never the update of a child it just wrote to. The queued children
+  update once no generator is left on the stack, and nothing that code can do brings that
+  forward: it holds on a mount as on an update, for a child the paint just created as for one
+  that was already there, after an update generator whose first run finished without waiting,
   and around a component this code MOUNTS itself, which runs its own generator on the spot and
-  still leaves the queue alone. One more `yield` (of anything, a bare `Promise.resolve()`
-  included) parks the generator and lets that queue drain, so the code after it does see the
+  still leaves the queue alone. One more `yield` of a promise (a bare `Promise.resolve()` is
+  enough) parks the generator and lets that queue drain, so the code after it does see the
   children. Never branch on which of the two it is. On HYDRATION the read is misleading rather
   than empty: a child's shadow root already holds the SERVER's markup, so code that measures a
-  child there gets an answer, and that answer is not evidence the client render has happened.
+  child there gets an answer, and that answer is not evidence the client paint has happened.
 - Ordering exists only between a component and the one it waits for, and there are exactly two
-  reasons to wait. CAUSAL: a component written into during another component's paint renders
+  reasons to wait. CAUSAL: a component written into during another component's paint updates
   after that writer, and goes on waiting for it even if something else updates it in the same
   tick. STRUCTURAL: with no writer, a component waits for every component ABOVE it that is
-  also waiting to render, where above means the component whose SHADOW TREE contains this one
+  also waiting to update, where above means the component whose SHADOW TREE contains this one
   (found by climbing `getRootNode().host`, through foreign shadow roots as well). So a parent
-  always renders before its children, each once, whichever end of the tree the change entered
-  from. It is NOT document order: two components with neither edge render in the order they
+  always updates before its children, each once, whichever end of the tree the change entered
+  from. It is NOT document order: two components with neither edge update in the order they
   were DIRTIED. That covers two unrelated roots, two components in the same shadow tree, and a
   component SLOTTED into another's light DOM, which has no edge to the component it is slotted
   into, only to whatever shadow tree holds them both. A loop (two components each writing a
-  value that re-renders the other, or a render writing its own prop a new value every time) is
+  value that updates the other, or a paint writing its own prop a new value every time) is
   capped and ends in the same visible error an uncaught error gives.
-- A `yield` of a renderable (`html` template, render function, inner generator) evaluates to
-  the host element: ``const host = yield () => html`…` ``. A yielded promise evaluates to its
-  resolved value (`const data = yield fetch(...)`); any other value is echoed back. Render
-  functions and inner generators receive the same props object the component body did.
-- A yielded FUNCTION is always a render function: the yield position decides that, not what
-  the function returns. Whatever it returns is committed as CONTENT, under the same rules as a
-  content hole below: a template renders, `null`/`undefined`/`true`/`false` render nothing,
-  strings/numbers/bigints render as text, an array renders as a list, and an object, a `Date`,
-  a plain function or a symbol THROWS. So `` () => isOpen && html`…` `` clears the UI when
-  `isOpen` goes false, and `` () => items.map(…) `` renders a list. The same values mean the
-  same things at the root as they do in `${…}`. Returning nothing renders nothing and warns on
-  the console: an arrow function with a block body needs an explicit `return`.
-- Two return values escape the content rules. A render function may return a GENERATOR
-  FUNCTION to choose which BODY runs (`` () => (isEditing ? editorBody : readOnlyBody) ``),
-  and each branch is a full component body with its own setup, `yield` and cleanup, sharing the
-  one shadow root. Switching branches runs the old branch's cleanup BEFORE the new branch's
-  setup. Staying on the same branch still tears it down and re-runs it on every `update()`, so
-  state that must survive belongs in the component body, not the branch. Returning content
-  instead (`` () => (isOpen ? panelBody : null) ``) ends the branch: it is torn down as the
-  content paints, so a `null` branch really is empty, not a body left running behind blank
-  output. Missing the `*` is the mistake to watch for: a plain function is not a body and
-  throws with that remedy.
-- A render function may also return a PROMISE, on the client and on the server: the resolved
-  value re-enters the same rulebook, so `` async () => html`…` `` renders once it settles and
-  `` async () => someBody `` installs that body. Nothing is painted while it is pending, and
-  `update()` re-calls the render function rather than waiting: the superseded call's result is
-  discarded when it settles, however late, so the newest call always wins. A REJECTED render
-  promise from a superseded call is discarded with it; a rejection from the current call is
-  FATAL and is NOT thrown into the generator that yielded the render function, so a `try/catch`
-  around that `yield` will not see it, so catch inside the render function. An INNER
-  generator's render function is the one exception in reach: its rejection ends that inner
-  generator, so the outer's `try/catch` around `yield innerBody` does see it.
-- An inner generator may not introduce another generator function: one level of nesting only,
-  whether it yields one or returns one from its render function; the attempt throws into the
-  parent. So a delegated body may not delegate again.
-- A returned function is the cleanup: it runs on disconnect, before an inner generator is
-  re-run, and when the component body paints content over a running inner generator.
+- A `yield` of a template evaluates to the host element: ``const host = yield html`…` ``. The
+  host is also on the props object, `function* ({ host })`. A yielded promise evaluates to its resolved value
+  (`const data = yield fetch(...)`) and a rejected one throws at that `yield`. Any other value
+  (a plain or arrow function, an `async` function, a string, an array, a thenable that is not a
+  `Promise`) throws, naming the three. Yield each promise instead of awaiting it.
+- A run of an update generator runs to completion like the component body: it may paint several
+  templates in a row (a placeholder, then the result) and wait on promises between them. An
+  update while a run waits does not wait for it: the old run is torn down and a new run starts,
+  so the newest run always wins and a late result from a superseded run never lands.
+- The component body stays parked at the `yield` of an update generator until a run of it
+  FINISHES, waits included, and then continues with what that run returned. If an update
+  restarts it first, the body waits for the new run. After that the body runs on while the
+  update generator stays the thing `update()` re-runs, until the body yields another update
+  generator or a template. So an update generator can be a step the body waits on:
+
+  ```js
+  const answered = Promise.withResolvers();
+  const answer = yield function* question() {
+  	yield html`<button onClick=${() => answered.resolve("yes")}>yes</button>`;
+  	return yield answered.promise;
+  };
+  yield html`<p>you said ${answer}</p>`;
+  ```
+
+  Create the promise in the body, as here: each run is a new call, so a promise created inside
+  the update generator would be a new one per update. An update generator that waits forever
+  holds the body forever.
+- An update generator may not yield another update generator: one level of nesting only. The
+  attempt is an error OF the update generator that made it, which its own `try/catch` around
+  that yield does not catch. Split a large update generator with `yield*` into plain helper
+  generators instead.
+- The body CAN branch: it yields whichever update generator or template fits,
+  `yield isEditing ? editor : preview`. It runs once, so the choice is made once per mount. A
+  choice that changes per update belongs inside one update generator, as a conditional template.
+- A returned function is the cleanup: it runs on disconnect, before an update generator is
+  re-run, and when the component body paints a template over a running update generator.
   `disconnectedCallback` waits a microtask and re-checks `isConnected`, so moving an element
-  inside the DOM does NOT tear the component down. The return position holds the cleanup and
-  nothing else: a return that is neither a function nor `undefined` is dropped with a warning.
+  inside the DOM does NOT tear the component down. In the component body the return position
+  holds the cleanup and nothing else: a return that is neither a function nor `undefined` is
+  dropped with a warning. In an update generator, a returned function is that run's cleanup and
+  the body's `yield` of it evaluates to `undefined`; any other returned value is what that
+  `yield` evaluates to. Only the run the body waited on delivers its value; later runs' values
+  are dropped.
+- A generator torn down while it waits runs its `finally` block, and a `finally` may yield
+  PROMISES: the teardown is driven to the end of the block. A new run taking the generator's
+  place cuts it off with a warning: a re-mount, or for an update generator the next update,
+  which starts at once, so an update generator's waiting `finally` in practice only completes on
+  removal. A `finally` that yields a template or an update generator has nothing to paint into:
+  that is reported through `reportError` and ends the teardown.
+- On the SERVER a component runs until its first paint: yielded promises before it are awaited,
+  and the code after that paint does not run there.
 - An uncaught error empties the shadow tree and dispatches `grundlage-error`
   (`ComponentErrorEvent`: `error`, `tagName`; bubbles, composed, cancelable). Unless a listener
   calls `preventDefault()`, the console logs an error naming the tag and the shadow tree shows the
-  error text. An error from an inner generator is thrown INTO the outer generator at its
-  `yield`, so a `try/catch` there handles it; otherwise it reaches that root handler.
+  error text. A `try/catch` catches what plain JavaScript lets it catch, nothing more:
+  - A paint error (a wrong value in a hole) is thrown at the `yield html` that painted it, in
+    the body or in an update generator. Holes before the failing one are already written, so a
+    `catch` that paints nothing leaves a half-updated template; paint a fallback.
+  - An error an update generator's run does not catch is thrown at the body's `yield` of it
+    while the body still waits there (until the first run finishes), so a `try/catch` around
+    that `yield` covers the first run, waits included.
+  - After that the body has moved past that `yield` and cannot take the error back, so an
+    uncaught error in a later run ends the component. An update generator that must survive an
+    error on update catches it inside itself, which works on every run:
+
+    ```js
+    yield function* view() {
+    	try { yield html`${formatChart(data)}`; }
+    	catch { yield html`<p>chart unavailable</p>`; }
+    };
+    ```
 - Warnings exist only in the development build, which bundlers pick through the `development`
   export condition. An exception a cleanup throws goes to `reportError`, not the console.
-- In a CONTENT hole `null`, `undefined`, `false` and `true` render nothing, since a boolean is a
-  condition result, not a value. Numbers, bigints and strings always render, `0`, `0n`,
+- In a CONTENT hole `null`, `undefined`, `false` and `true` paint nothing, since a boolean is a
+  condition result, not a value. Numbers, bigints and strings always paint, `0`, `0n`,
   `NaN` and `""` included. So ``${isOpen && html`…`}`` is safe, but ``${items.length &&
   html`…`}`` writes the text `"0"` on an empty list; use a ternary for any non-boolean guard.
-  An object, a function, a `Date` or a symbol in a content hole THROWS.
+  An array or an ITERATOR paints as a list (see Lists and keys). An object, a function, a
+  `Date`, a symbol, a `Map` or a `Set` in a content hole THROWS.
 - In an ATTRIBUTE hole on an UNDECLARED name, `false`, `null` and `undefined` REMOVE the
   attribute and `true` sets it to `"true"`; a non-stringable value (object, array, function)
   is assigned as a PROPERTY instead, which is how data reaches a nested custom element.
   A name the target element DECLARES skips all of that and is assigned through that prop's
   accessor, whatever the value: `null` and `undefined` are the absence that writes the child's
-  fallback back, and a value the child's function refuses warns from the PARENT's render frame
+  fallback back, and a value the child's function refuses warns from the PARENT's paint
   and leaves the child's previous value standing. Where the child's definition has not loaded
   yet, nothing knows the name is declared: a stringable value rides the attribute the prop
   observes, anything else lands as an own property, and both reach the store at upgrade.
@@ -360,11 +417,11 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   (mount, server render, hydration) and as the PROPERTY on every later one. A `<textarea>` keeps
   its default in its TEXT, so its first commit writes the text instead. The attribute is the
   platform's default (`defaultValue`, `defaultChecked`), so `form.reset()` returns to the first
-  rendered value and `value !== defaultValue` still detects edits; the property is what is shown,
+  painted value and `value !== defaultValue` still detects edits; the property is what is shown,
   so a state change replaces what the user typed. `null`, `undefined` and `false` empty what is
   shown (`""` or `false`) and leave the default. The change gate still compares against the last
-  RENDER, not the field: an unrelated re-render leaves typed text alone, and writing the value the
-  last render already had writes nothing, so keep state in sync from `onInput` if a reset to that
+  PAINT, not the field: an unrelated update leaves typed text alone, and writing the value the
+  last paint already had writes nothing, so keep state in sync from `onInput` if a reset to that
   same value must land. Custom elements keep the ordinary attribute rules for these names. A
   composed value (`value="a ${b}"`) stays an attribute write. `<select>` has no value attribute:
   bind `selected` on each `<option>` instead (`<select value=${…}>` warns and selects nothing).
@@ -381,8 +438,8 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   while `on-*` is refused at define time because markup has already claimed it. Custom events
   need the `on-` prefix (`on-swatch-select=${handler}`) and keep their hyphenated name
   verbatim. The name may itself hold a hole (`on${eventName}=${handler}`), which is resolved
-  from what it composes to on every render. A quoted string (`onclick="…"`) is never a binding.
-- Components render into SHADOW DOM by default. Light-DOM selectors won't reach inside.
+  from what it composes to on every paint. A quoted string (`onclick="…"`) is never a binding.
+- Components paint into SHADOW DOM by default. Light-DOM selectors won't reach inside.
 - Don't write literal `<!--^.^ …-->` or `<!--*.*-->` comments in template HTML: those
   prefixes are the internal markers and a collision silently misaligns hydration.
 - Change detection is HASH-BASED for strings, numbers, bigints, booleans, plain objects,
@@ -390,10 +447,10 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   graphs are walked to a depth of 64). Class instances, `Date`, typed arrays and functions
   are compared by REFERENCE identity, so mutating one in place reads as unchanged and is
   skipped. Pass plain data, or replace the reference to signal a change. A declared prop is
-  the one place that does not skip: `el.items.push(x)` alone does not re-render, but
+  the one place that does not skip: `el.items.push(x)` alone does not trigger an update, but
   `el.items = el.items` does, because a value that could have been mutated behind its
   reference is never called unchanged.
-  It lands on the next render from any cause, where these hashes pick the new contents up.
+  It lands on the next paint from any cause, where these hashes pick the new contents up.
 - A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the mounted (and
   server-rendered) sheet text carries the real literal values, and every later update is a
   `setProperty` on this element's OWN CSSOM sheet, never a reparse, never a write to the
@@ -406,40 +463,45 @@ recursively; anything else (plain object, `Date`, function, symbol) throws.
   `!important` is preserved as CSSOM priority, a CSS-wide keyword
   (`inherit`/`initial`/`unset`/`revert`) takes its normal effect, and serialized output
   (`getHTML`) reflects the last full-text write, not later CSSOM updates.
-- Declare inputs in `component(gen, { props })` and read them off the object the generator
-  and render functions receive. Don't read attributes directly: they're strings, they skip
+- Declare inputs in `component(gen, { props })` and read them off the object the component body
+  and its update generators receive. Don't read attributes directly: they're strings, they skip
   the parsing, defaults and refusal the schema gives, and an undeclared attribute does not
-  re-render.
-- The props object IS the store, so it is live rather than a snapshot: a value read after an
-  `await` is current rather than the one the render started with. WHERE YOU DESTRUCTURE
-  therefore decides what you get, and this is the most common mistake. The generator body
-  runs ONCE, so `function* ({ label })` freezes `label` at mount. That is right for an initial
-  value or a mount-time branch, WRONG for anything a render function paints. The render
-  function runs per update, so `` yield ({ label }) => html`…` `` is live, and so is reading
-  `componentProps.label` off the object. `{ ...componentProps }` is how you take a
-  deliberate snapshot, by the language's own rule. The object is handed out READONLY: writing
-  to it would move a value nothing parsed, reflected or scheduled on.
-  `componentProps.host.count = 5` is the spelling that does all three, and it is the same one
-  an outside caller uses (`element.count = 5`).
+  trigger an update.
+- The props object IS the store, so it is live rather than a snapshot: a value read after a
+  yielded promise settles is current rather than the one the run started with. WHERE YOU
+  DESTRUCTURE therefore decides what you get, and this is the most common mistake. The component
+  body runs ONCE, so `component(function* ({ label }) …)` freezes `label` at mount. That is
+  right for an initial value or a mount-time branch, WRONG for anything an update generator
+  paints. An update generator runs per update, so `yield function* view({ label }) …` is live,
+  and so is reading `componentProps.label` off the object. `{ ...componentProps }` is how you
+  take a deliberate snapshot, by the language's own rule. The object is handed out READONLY:
+  writing to it would move a value nothing parsed, reflected or scheduled on.
+  `componentProps.host.count = 5` is the spelling that does all three, and it is the same one an
+  outside caller uses (`element.count = 5`).
 - `load` replays SSR data on hydration; don't add a fetch-once cache around it.
-- Waiting comes in two spellings with opposite costs. An `async function*` pays one tick: its
-  first `next()` returns a promise, so the shadow root is empty until that settles (the frame
-  boundary absorbs it, nothing flashes), and in exchange `await` keeps its type. A `yield` of
-  a promise from a sync `function*` paints its placeholder in the same task, but evaluates to
-  `any`: one generator has one resume type for all of its yields. Page roots are async
-  generators; nested components are sync generators that yield their promises, because that is
-  where the empty tick is not free.
+- TypeScript only: a yielded promise evaluates to `any`, because one generator has one resume
+  type for all of its yields. Annotate the binding, `const user: User = yield fetchUser(id)`,
+  or delegate to a typed helper whose `yield*` returns `T`:
+
+  ```typescript
+  function* awaited<T>(promise: Promise<T>): Generator<Promise<T>, T, T> {
+  	return yield promise;
+  }
+  const user = yield* awaited(fetchUser(id)); // User
+  ```
 - TypeScript only: a schema hoisted out of the `component(…)` call needs `satisfies Schema`.
   Inline, `{ count: [Number, 0] }` is contextually typed; hoisted, `[Number, 0]` widens to
   `(NumberConstructor | number)[]` and stops being a valid entry. A function entry also needs
   its parameter annotated, `[(incoming: unknown) => …, fallback]`, because an entry may be a
-  function or one of four constructors and all five are callable. A `yield*` helper typed by
-  hand annotates as `Generator<YieldableValue>`, not bare `Generator`, and takes the SHAPE it
-  reads (`{ host: BaseComponent; readonly userId: string | undefined }`), never
-  `ComponentProps<typeof someSchema>`: that type claims the host carries those accessors, and a
-  delegating parent's host carries its own instead. The generator's return position is
-  `Cleanup | void` (`Cleanup` is exported), so a wrong return is a compile error, not a
-  silent drop.
+  function or one of four constructors and all five are callable. An update generator or
+  `yield*` helper typed by hand annotates as `Generator<YieldableValue>`, not bare `Generator`,
+  and takes the SHAPE it reads (`{ host: BaseComponent; readonly userId: string | undefined }`),
+  never `ComponentProps<typeof someSchema>`: that type claims the host carries those accessors,
+  and a delegating parent's host carries its own instead. The component generator's return
+  position is `Cleanup | void` (`Cleanup` is exported), so a wrong return is a compile error,
+  not a silent drop. An update generator's return position is `unknown` (the exported
+  `UpdateGenerator` type), since it returns a value to the body; its `yield` in the body
+  evaluates to `any`, like a promise's.
 - Form components: `component(gen, { formAssociated: true })` re-dispatches the four form
   callbacks as host events `form-associated` `{form}`, `form-disabled` `{disabled}`,
   `form-reset` (no detail) and `form-state-restore` `{state, mode}`, bindable declaratively

@@ -127,7 +127,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 	const card = () =>
 		component(
 			function* (props) {
-				yield () => html`<article><header>${props.heading}</header></article>`;
+				yield function* () {
+					yield html`<article><header>${props.heading}</header></article>`;
+				};
 			},
 			light({ heading: Slot }),
 		);
@@ -135,7 +137,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 	const cardWithFallback = () =>
 		component(
 			function* (props) {
-				yield () => html`<article><header>${props.heading}</header></article>`;
+				yield function* () {
+					yield html`<article><header>${props.heading}</header></article>`;
+				};
 			},
 			light({ heading: [Slot, html`<h2>Untitled</h2>`] }),
 		);
@@ -184,7 +188,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				const makeComponent = () =>
 					component(
 						function* (props) {
-							yield () => html`<article>${props.body}</article>`;
+							yield function* () {
+								yield html`<article>${props.body}</article>`;
+							};
 						},
 						light({ body: DefaultSlot }),
 					);
@@ -238,7 +244,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 		);
 
 		test.skipIf(!ships)(
-			"a declared slot with no pair is silent absence, and the fallback renders",
+			"a declared slot with no pair is silent absence, and the fallback paints",
 			async () => {
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
@@ -360,7 +366,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				const makeComponent = () =>
 					component(
 						function* (props) {
-							yield () => html`<article>${props["sub-title"]}</article>`;
+							yield function* () {
+								yield html`<article>${props["sub-title"]}</article>`;
+							};
 						},
 						light({ "sub-title": Slot }),
 					);
@@ -425,7 +433,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				const makeComponent = () =>
 					component(
 						function* (props) {
-							yield () => html`<article>${props.heading}</article>`;
+							yield function* () {
+								yield html`<article>${props.heading}</article>`;
+							};
 						},
 						{ props: { heading: Slot } } as ComponentOptions,
 					);
@@ -451,7 +461,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 		);
 	});
 
-	describe("across the boundary — a parent's content inside a child's render", () => {
+	describe("across the boundary — a parent's content inside a child's paint", () => {
 		//literal child tags throughout: a template's strings array is the parse-cache key, and a
 		//closing tag cannot hold a hole at all. One definition serves both the server render and the
 		//hydration, which is also what a real page has
@@ -466,7 +476,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 					"light-ordering-inner",
 					component(
 						function* (props) {
-							yield () => html`<section><b>badge</b>${props.heading}</section>`;
+							yield function* () {
+								yield html`<section><b>badge</b>${props.heading}</section>`;
+							};
 						},
 						light({ heading: [Slot, html`<h2>Untitled</h2>`] }),
 					),
@@ -474,12 +486,13 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				const serialized = await serverRender(
 					"light-ordering-outer",
 					component(function* () {
-						yield () =>
-							html`<article>
+						yield function* () {
+							yield html`<article>
 								<light-ordering-inner>
 									<h2 slot="heading">${name}</h2>
 								</light-ordering-inner>
 							</article>`;
+						};
 					}, light()),
 				);
 
@@ -502,13 +515,15 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 		);
 
 		test.skipIf(!ships)(
-			"R23 — the child re-rendering leaves the parent's nodes alone",
+			"R23 — the child updating leaves the parent's nodes alone",
 			async () => {
 				customElements.define(
 					"light-ownership-inner",
 					component(
 						function* (props) {
-							yield () => html`<section><b>badge</b>${props.heading}</section>`;
+							yield function* () {
+								yield html`<section><b>badge</b>${props.heading}</section>`;
+							};
 						},
 						light({ heading: [Slot, html`<h2>Untitled</h2>`] }),
 					),
@@ -516,12 +531,13 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				const serialized = await serverRender(
 					"light-ownership-outer",
 					component(function* () {
-						yield () =>
-							html`<article>
+						yield function* () {
+							yield html`<article>
 								<light-ownership-inner>
 									<h2 slot="heading">Ada</h2>
 								</light-ownership-inner>
 							</article>`;
+						};
 					}, light()),
 				);
 
@@ -548,7 +564,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 					"light-forward-inner",
 					component(
 						function* (props) {
-							yield () => html`<section>${props.heading}</section>`;
+							yield function* () {
+								yield html`<section>${props.heading}</section>`;
+							};
 						},
 						light({ heading: [Slot, html`<h2>Inner fallback</h2>`] }),
 					),
@@ -557,12 +575,13 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 					"light-forward-outer",
 					component(
 						function* (props) {
-							yield () =>
-								html`<article>
+							yield function* () {
+								yield html`<article>
 									<light-forward-inner
 										heading=${props.heading}
 									></light-forward-inner>
 								</article>`;
+							};
 						},
 						light({ heading: Slot }),
 					),
@@ -576,7 +595,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				expect(heading.textContent).toBe("Ada");
 				expect(readProp(outer, "heading")).toEqual([heading]);
 
-				//the failure this pins is silent until the second render: an outer that lost the nodes
+				//the failure this pins is silent until the second paint: an outer that lost the nodes
 				//lets the inner's own fallback paint over them
 				await (outer as HTMLElement & { update(): Promise<void> }).update();
 				await sleep();
@@ -593,16 +612,19 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				customElements.define(
 					"light-discard-inner",
 					component(function* () {
-						yield () => html`<section><b>badge</b></section>`;
+						yield function* () {
+							yield html`<section><b>badge</b></section>`;
+						};
 					}, light()),
 				);
 				const Outer = component(function* () {
-					yield () =>
-						html`<article data-from-the-server="">
+					yield function* () {
+						yield html`<article data-from-the-server="">
 							<light-discard-inner>
 								<p slot="note">1843</p>
 							</light-discard-inner>
 						</article>`;
+					};
 				}, light());
 
 				const [serialized, serverMessages] = await silenced(() =>
@@ -641,7 +663,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 			async () => {
 				const makeComponent = () =>
 					component(function* () {
-						yield () => html`<article>painted</article>`;
+						yield function* () {
+							yield html`<article>painted</article>`;
+						};
 					}, light());
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
@@ -675,7 +699,9 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				const serialized = await serverRender(
 					serverTag,
 					component(function* () {
-						yield () => html`<article>Ada</article>`;
+						yield function* () {
+							yield html`<article>Ada</article>`;
+						};
 					}, light()),
 				);
 

@@ -32,7 +32,7 @@ import {
 import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 
 //liveBindings[0..hostBindingCount) are host bindings, owned by their element: only it knows a
-//write to its own declared prop is output, not a reason to render. A nested template has none
+//write to its own declared prop is output, not a reason to update. A nested template has none
 export const patchInstance = (
 	instance: Instance,
 	values: Array<unknown>,
@@ -91,7 +91,7 @@ export const parseNestedTemplate = (value: TemplateValue): ParsedTemplate => {
 	if (parsed.hostBindingCount > 0)
 		throw new Error(
 			libraryMessage(
-				"`<template>` with attributes is only valid at the top level of a component's render output, not inside ${...} content, a list item, or any nested template position. Move the attributes to the outermost <template>.",
+				"`<template>` with attributes is only valid at the top level of the template a component yields, not inside ${...} content, a list item, or any nested template position. Move the attributes to the outermost <template>.",
 			),
 		);
 	return parsed;

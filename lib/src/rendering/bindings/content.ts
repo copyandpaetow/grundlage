@@ -72,6 +72,20 @@ const createContentState = (
 	}
 };
 
+//an iterator is used up by reading it, so it is read once into the values; a hydration that falls
+//back to a commit reads the hole a second time
+const readContentValue = (
+	liveBinding: ContentLiveBinding,
+	values: Array<unknown>,
+): unknown => {
+	const valueIndex = liveBinding.staticBinding.valueIndex;
+	const value = values[valueIndex];
+	if (!(value instanceof Iterator)) return value;
+	const items = Array.from(value);
+	values[valueIndex] = items;
+	return items;
+};
+
 const coerceToText = (value: unknown): string => {
 	const isAbsentContent =
 		value === null || value === undefined || typeof value === "boolean";
@@ -104,7 +118,7 @@ export const commitContent = (
 	values: Array<unknown>,
 	moveState: StyleSheetMoveState,
 ): void => {
-	const value = values[liveBinding.staticBinding.valueIndex];
+	const value = readContentValue(liveBinding, values);
 	const contentKind = contentKindOf(value);
 	let content = liveBinding.content;
 	if (content.kind !== contentKind) {
@@ -160,7 +174,7 @@ export const hydrateContent = (
 	moveState: StyleSheetMoveState,
 	walker: TreeWalker,
 ): void => {
-	const value = values[liveBinding.staticBinding.valueIndex];
+	const value = readContentValue(liveBinding, values);
 	const kind = contentKindOf(value);
 	const content = createContentState(kind);
 	liveBinding.content = content;

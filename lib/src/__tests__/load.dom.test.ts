@@ -41,15 +41,15 @@ describe("client replay reads scripts from the host's shadow root", () => {
 		expect(host.shadowRoot!.querySelector("script[data-ssr]")).toBeNull();
 	});
 
-	test("a script the component rendered itself is not a payload", async () => {
+	test("a script the component painted itself is not a payload", async () => {
 		const host = createHostWithShadow();
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const wrapper = document.createElement("div");
-		const rendered = document.createElement("script");
-		rendered.setAttribute("type", "application/json");
-		rendered.setAttribute("data-ssr", "");
-		rendered.textContent = JSON.stringify("the component's own data");
-		wrapper.appendChild(rendered);
+		const ownScript = document.createElement("script");
+		ownScript.setAttribute("type", "application/json");
+		ownScript.setAttribute("data-ssr", "");
+		ownScript.textContent = JSON.stringify("the component's own data");
+		wrapper.appendChild(ownScript);
 		host.shadowRoot!.append(wrapper);
 
 		const fetcher = vi.fn(() => Promise.resolve("fetched"));
@@ -58,7 +58,7 @@ describe("client replay reads scripts from the host's shadow root", () => {
 
 		expect(value).toBe("fetched");
 		expect(fetcher).toHaveBeenCalledTimes(1);
-		expect(wrapper.querySelector("script[data-ssr]")).toBe(rendered);
+		expect(wrapper.querySelector("script[data-ssr]")).toBe(ownScript);
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();
 	});

@@ -126,6 +126,6 @@ export const warnWhenParsingWouldSplitParagraph = (
 	if (!TAGS_THAT_CLOSE_PARAGRAPH.has(tagName.toLowerCase())) return;
 	if (!hasParagraphInButtonScope(parent)) return;
 	warnDuringDevelopment(
-		`<${tagName}> inside <p> renders on the client, but the HTML parser closes the <p> before it, so server-rendered markup hydrates into a different tree. Swap the <p> for a <div>, or move <${tagName}> out of it.`,
+		`<${tagName}> inside <p> paints on the client, but the HTML parser closes the <p> before it, so server-rendered markup hydrates into a different tree. Swap the <p> for a <div>, or move <${tagName}> out of it.`,
 	);
 };

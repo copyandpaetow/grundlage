@@ -7,7 +7,7 @@ performance deviation carries a measurement.
 
 Read top to bottom. A lower rule never overrides a higher one.
 
-1. **Correctness gates everything.** A wrong render or a silently missed change is broken at any
+1. **Correctness gates everything.** A wrong paint or a silently missed change is broken at any
    speed.
 2. **Simplicity and consistency are the fabric.** Without a proven reason to deviate, this guide is
    what the code is.
@@ -23,7 +23,7 @@ Read top to bottom. A lower rule never overrides a higher one.
 - **Change detection notices in-place mutation.** A value mutated in place (same reference, new
   contents) is a change. Equality never reports "unchanged" for something that changed. A hash is
   treated as collision-free.
-- **Allocation causes GC pauses.** Allocate at setup, not per frame. Never keep a render's
+- **Allocation causes GC pauses.** Allocate at setup, not per frame. Never keep a paint's
   transient values past the frame that produced them.
 - **Everything else is the JIT's job**: hidden classes, monomorphic shapes, memory layout, loop
   style. Write the clearest version.
@@ -44,7 +44,7 @@ Read top to bottom. A lower rule never overrides a higher one.
    _Exception:_ the platform demands a class (a custom element).
 2. **Description data is readonly, live data is mutable.** Description data is built once and
    shared (a parsed template, a normalized schema). Its types are `readonly`, and nothing freezes
-   it at runtime. Live data (per-element render state, per-binding state, reused buffers) is written
+   it at runtime. Live data (per-element runner state, per-binding state, reused buffers) is written
    in place.
 3. **The parent writes.** A leaf computes and returns; it never assigns a field. A helper that
    would have to hand back several values is inlined into its parent, into more than one parent if
@@ -125,7 +125,7 @@ Read top to bottom. A lower rule never overrides a higher one.
   its fallback, so no prop read fails.
 - **Every error message names the fix.** "A block body needs an explicit return", not "unexpected
   undefined". Messages go through one helper that adds the library prefix.
-- **Errors travel one channel.** An error inside a render goes to the nearest generator that can
+- **Errors travel one channel.** An error inside a paint goes to the nearest generator that can
   catch it at its `yield`; one that no generator can take ends the component through the one fatal
   path, which dispatches the public error event. `try`/`catch` only at the boundaries that feed it.
   A deliberate swallow is `catch { /* why */ }`. An exception from user cleanup code goes to
@@ -164,12 +164,12 @@ Read top to bottom. A lower rule never overrides a higher one.
 
 ### Verbs on the write path
 
-| verb      | the function                                                                                                                |
-| --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `mount…`  | creates the nodes for something that does not exist yet                                                                     |
-| `patch…`  | reuses the nodes of an existing thing of the same shape; the alternative to `mount`                                         |
-| `commit…` | takes the render's values and owns the change gate (one hash, or one per key or index), or routes them to functions that do |
-| `apply…`  | performs the platform write, with no gate and no decision whether it is needed                                              |
+| verb      | the function                                                                                                               |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `mount…`  | creates the nodes for something that does not exist yet                                                                    |
+| `patch…`  | reuses the nodes of an existing thing of the same shape; the alternative to `mount`                                        |
+| `commit…` | takes the paint's values and owns the change gate (one hash, or one per key or index), or routes them to functions that do |
+| `apply…`  | performs the platform write, with no gate and no decision whether it is needed                                             |
 
 ## Modules and types
 

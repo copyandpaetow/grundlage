@@ -27,14 +27,15 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 	const define = (read: () => Array<Row>) => {
 		const tag = uniqueTag();
 		const Element = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${read().map(
 						(row) =>
 							html`<!--${row.id}-->
 								<li>${row.text}</li>`,
 					)}
 				</ul>`;
+			};
 		});
 		customElements.define(tag, Element);
 		return tag;
@@ -112,8 +113,8 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 		];
 		const tag = uniqueTag();
 		const Element = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((row) =>
 						row.isEditing
 							? html`<!--${row.id}-->
@@ -122,6 +123,7 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 									<li>${row.text}</li>`,
 					)}
 				</ul>`;
+			};
 		});
 		customElements.define(tag, Element);
 		const element = mount(tag);
@@ -192,12 +194,13 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 				customElements.define(
 					tag,
 					component(function* () {
-						yield () =>
-							html`<ul>
+						yield function* () {
+							yield html`<ul>
 								${[1, id, 2].map((rowId) =>
 									rowId === editedId ? editRow(rowId) : viewRow(rowId),
 								)}
 							</ul>`;
+						};
 					}),
 				);
 				const element = mount(tag);

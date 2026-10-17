@@ -1,13 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { isGeneratorFunction } from "../task";
+import { isGeneratorFunction } from "../run";
 
 describe("isGeneratorFunction", () => {
 	test("returns true for a sync generator function", () => {
 		expect(isGeneratorFunction(function* () {})).toBe(true);
 	});
 
-	test("returns true for an async generator function", () => {
-		expect(isGeneratorFunction(async function* () {})).toBe(true);
+	test("returns false for an async generator function", () => {
+		expect(isGeneratorFunction(async function* () {})).toBe(false);
 	});
 
 	test("returns false for a plain function", () => {

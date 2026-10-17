@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { html, component, ComponentErrorEvent } from "../../index";
+import {
+	html,
+	component,
+	ComponentErrorEvent,
+	type Template,
+} from "../../index";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const MATHML_NAMESPACE = "http://www.w3.org/1998/Math/MathML";
@@ -15,12 +20,14 @@ const sleep = (duration = 0) =>
 let tagId = 0;
 const uniqueTag = () => `test-foreign-${tagId++}-${Date.now()}`;
 
-const mount = async (renderTemplate: () => unknown) => {
+const mount = async (buildTemplate: () => Template) => {
 	const tag = uniqueTag();
 	customElements.define(
 		tag,
 		component(function* () {
-			yield renderTemplate;
+			yield function* () {
+				yield buildTemplate();
+			};
 		}),
 	);
 	const element = document.createElement(tag);
@@ -113,7 +120,7 @@ describe("svg and mathml namespaces", () => {
 		expect(String(errors[0])).toMatch(/cannot become <svg>/);
 	});
 
-	test("a dynamic tag that becomes <svg> inside svg renders", async () => {
+	test("a dynamic tag that becomes <svg> inside svg paints", async () => {
 		const tag = "svg";
 		const { shadowRoot, errors } = await mount(
 			() => html`<svg><${tag} id="inner"></${tag}></svg>`,

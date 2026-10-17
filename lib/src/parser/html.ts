@@ -891,7 +891,7 @@ const parse = (
 };
 
 //a tagged template hands back the same strings array every time it runs, so one parse serves every
-//render of that template for as long as the page holds it
+//paint of that template for as long as the page holds it
 const parseCache = new WeakMap<TemplateStringsArray, ParsedTemplate>();
 
 export const getParsedTemplate = (

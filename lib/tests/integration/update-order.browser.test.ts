@@ -7,13 +7,13 @@ import {
 	type Template,
 } from "../../src/index";
 
-//How renders line up across components, however they start: a parent renders before its children
-//and each renders once, a frame never shows a value a queued render is about to replace, nothing
+//How updates line up across components, however they start: a parent updates before its children
+//and each updates once, a frame never shows a value a queued update is about to replace, nothing
 //waits on async work it does not own, and the order modules load in changes none of it. Chromium
 //only, because a nested component never paints under happy-dom.
 
 describe.skipIf("happyDOM" in globalThis)(
-	"render order across components",
+	"update order across components",
 	() => {
 		const sleep = (duration = 0) =>
 			new Promise((resolve) => setTimeout(resolve, duration));
@@ -24,13 +24,13 @@ describe.skipIf("happyDOM" in globalThis)(
 				promise.then(() => true),
 				sleep(duration).then(() => false),
 			]);
-		//formatting breaks long templates across lines, which puts whitespace into the rendered text
+		//formatting breaks long templates across lines, which puts whitespace into the painted text
 		const visibleText = (node: Node | null) =>
 			node?.textContent?.replace(/\s+/g, " ").trim();
 
 		let tagId = 0;
 		const uniqueTag = (role: string) =>
-			`render-order-${role}-${tagId++}-${Date.now()}`;
+			`update-order-${role}-${tagId++}-${Date.now()}`;
 
 		const trackedElements: Array<HTMLElement> = [];
 		const track = <TrackedElement extends HTMLElement>(
@@ -85,34 +85,40 @@ describe.skipIf("happyDOM" in globalThis)(
 			};
 		};
 
-		describe("a parent renders before its children, and each renders once", () => {
+		describe("a parent updates before its children, and each updates once", () => {
 			//no await anywhere: a mount that finished a tick later would let a parent and a child that
-			//were dirtied in one task render in the order they were dirtied rather than top down
+			//were dirtied in one task update in the order they were dirtied rather than top down
 			test("a three-deep mount finishes inside the append that started it", () => {
 				const leafTag = uniqueTag("leaf");
 				const middleTag = uniqueTag("middle");
 				const rootTag = uniqueTag("root");
-				const renders: Array<string> = [];
+				const runs: Array<string> = [];
 
 				customElements.define(
 					leafTag,
 					component(function* () {
-						renders.push("leaf");
-						yield () => html`<b>a leaf</b>`;
+						runs.push("leaf");
+						yield function* () {
+							yield html`<b>a leaf</b>`;
+						};
 					}),
 				);
 				customElements.define(
 					middleTag,
 					component(function* () {
-						renders.push("middle");
-						yield () => html`<${leafTag}></${leafTag}>`;
+						runs.push("middle");
+						yield function* () {
+							yield html`<${leafTag}></${leafTag}>`;
+						};
 					}),
 				);
 				customElements.define(
 					rootTag,
 					component(function* () {
-						renders.push("root");
-						yield () => html`<${middleTag}></${middleTag}>`;
+						runs.push("root");
+						yield function* () {
+							yield html`<${middleTag}></${middleTag}>`;
+						};
 					}),
 				);
 
@@ -121,11 +127,11 @@ describe.skipIf("happyDOM" in globalThis)(
 					?.querySelector(middleTag)
 					?.shadowRoot?.querySelector(leafTag);
 
-				expect(renders).toEqual(["root", "middle", "leaf"]);
+				expect(runs).toEqual(["root", "middle", "leaf"]);
 				expect(visibleText(leaf?.shadowRoot ?? null)).toBe("a leaf");
 			});
 
-			test("a store update that reaches a child first renders the child once, after its parent", async () => {
+			test("a store update that reaches a child first updates the child once, after its parent", async () => {
 				const cardTag = uniqueTag("card");
 				const pageTag = uniqueTag("page");
 				const store = createStore({ ids: ["a", "b"] });
@@ -142,10 +148,9 @@ describe.skipIf("happyDOM" in globalThis)(
 								cardSetups.push(
 									`selected=${componentProps.selected} ids=${store.state.ids.join("")}`,
 								);
-								yield () =>
-									html`<ul>
-										${store.state.ids.map((id) => html`<li>${id}</li>`)}
-									</ul>`;
+								yield html`<ul>
+									${store.state.ids.map((id) => html`<li>${id}</li>`)}
+								</ul>`;
 							};
 							return unsubscribe;
 						},
@@ -156,8 +161,9 @@ describe.skipIf("happyDOM" in globalThis)(
 				customElements.define(
 					pageTag,
 					component(function* ({ host }) {
-						yield () =>
-							html`<${cardTag} selected=${store.state.ids.at(-1)}></${cardTag}>`;
+						yield function* () {
+							yield html`<${cardTag} selected=${store.state.ids.at(-1)}></${cardTag}>`;
+						};
 						return store.subscribe(() => host.update());
 					}),
 				);
@@ -171,7 +177,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(cardSetups).toEqual(["selected=b ids=ab", "selected=c ids=abc"]);
 			});
 
-			test("a host binding that writes its host's own prop renders the host once more and settles, on mount and on update", async () => {
+			test("a host binding that writes its host's own prop updates the host once more and settles, on mount and on update", async () => {
 				const tag = uniqueTag("user-panel");
 				const fetchedUserIds: Array<string | undefined> = [];
 				const fetchUser = async (userId: string | undefined) => {
@@ -179,21 +185,22 @@ describe.skipIf("happyDOM" in globalThis)(
 					await sleep(5);
 					return { name: `user ${userId}` };
 				};
-				let renderCount = 0;
+				let runCount = 0;
 				const UserPanel = component(
 					function* (componentProps) {
 						let loadCount = 0;
 						let loadedUserId: string | undefined | null = null;
 						let loadedUserName = "";
-						yield async () => {
-							renderCount++;
+						yield function* () {
+							runCount++;
 							const userId = componentProps.userId;
 							if (userId !== loadedUserId) {
-								loadedUserName = (await fetchUser(userId)).name;
+								const user: { name: string } = yield fetchUser(userId);
+								loadedUserName = user.name;
 								loadedUserId = userId;
 								loadCount++;
 							}
-							return html`<template loadCount=${loadCount}
+							yield html`<template loadCount=${loadCount}
 								><p>${loadedUserName}</p></template
 							>`;
 						};
@@ -210,34 +217,34 @@ describe.skipIf("happyDOM" in globalThis)(
 				await sleep(50);
 				expect(fetchedUserIds).toEqual(["7"]);
 				expect(userPanel.loadCount).toBe(1);
-				expect(renderCount).toBe(2);
+				expect(runCount).toBe(2);
 
 				userPanel.userId = "8";
 				await sleep(50);
 				expect(fetchedUserIds).toEqual(["7", "8"]);
 				expect(userPanel.loadCount).toBe(2);
-				expect(renderCount).toBe(4);
+				expect(runCount).toBe(4);
 				expect(visibleText(userPanel.shadowRoot)).toBe("user 8");
 			});
 		});
 
-		describe("renders converge before the frame, or fail visibly", () => {
-			test("a render that assigns its own prop a new value every time ends in a visible error", async () => {
+		describe("updates converge before the frame, or fail visibly", () => {
+			test("an update generator that assigns its own prop a new value every time ends in a visible error", async () => {
 				const tag = uniqueTag("runaway-label");
-				//without a render limit this loop runs through microtasks and freezes the browser the tests run in
-				const renderCountAtWhichTheTestEndsTheLoop = 1_000;
-				let renderCount = 0;
+				//without an update limit this loop runs through microtasks and freezes the browser the tests run in
+				const runCountAtWhichTheTestEndsTheLoop = 1_000;
+				let runCount = 0;
 				customElements.define(
 					tag,
 					component(
 						function* (componentProps) {
-							yield () => {
-								renderCount++;
+							yield function* () {
+								runCount++;
 								const hasTheTestEndedTheLoop =
-									renderCount >= renderCountAtWhichTheTestEndsTheLoop;
+									runCount >= runCountAtWhichTheTestEndsTheLoop;
 								if (!hasTheTestEndedTheLoop)
 									componentProps.host.label = `${componentProps.label}!`;
-								return html`<p>${componentProps.label}</p>`;
+								yield html`<p>${componentProps.label}</p>`;
 							};
 						},
 						{ props: { label: [String, ""] } },
@@ -255,23 +262,23 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(element.shadowRoot!.textContent).toContain("grundlage");
 			});
 
-			test("a render that starts assigning its own prop a new value on update ends in a visible error too", async () => {
+			test("an update generator that starts assigning its own prop a new value on update ends in a visible error too", async () => {
 				const tag = uniqueTag("runaway-width");
-				//without a render limit this loop runs through microtasks and freezes the browser the tests run in
-				const renderCountAtWhichTheTestEndsTheLoop = 1_000;
-				let renderCount = 0;
+				//without an update limit this loop runs through microtasks and freezes the browser the tests run in
+				const runCountAtWhichTheTestEndsTheLoop = 1_000;
+				let runCount = 0;
 				const SizedBox = component(
 					function* (componentProps) {
-						yield () => {
-							renderCount++;
+						yield function* () {
+							runCount++;
 							const width = componentProps.width;
 							const hasTheTestEndedTheLoop =
-								renderCount >= renderCountAtWhichTheTestEndsTheLoop;
+								runCount >= runCountAtWhichTheTestEndsTheLoop;
 							const shouldAssignAnotherWidth =
 								width !== "" && !hasTheTestEndedTheLoop;
 							if (shouldAssignAnotherWidth)
 								componentProps.host.width = `${width}px`;
-							return html`<p>${width}</p>`;
+							yield html`<p>${width}</p>`;
 						};
 					},
 					{ props: { width: [String, ""] } },
@@ -295,21 +302,21 @@ describe.skipIf("happyDOM" in globalThis)(
 
 			test("a host binding that writes its own prop a new value every time ends in a visible error", async () => {
 				const tag = uniqueTag("runaway-host-value");
-				//without a render limit this loop runs through microtasks and freezes the browser the tests run in
-				const renderCountAtWhichTheTestEndsTheLoop = 1_000;
-				let renderCount = 0;
+				//without an update limit this loop runs through microtasks and freezes the browser the tests run in
+				const runCountAtWhichTheTestEndsTheLoop = 1_000;
+				let runCount = 0;
 				customElements.define(
 					tag,
 					component(
 						function* (componentProps) {
-							yield () => {
-								renderCount++;
+							yield function* () {
+								runCount++;
 								const hasTheTestEndedTheLoop =
-									renderCount >= renderCountAtWhichTheTestEndsTheLoop;
+									runCount >= runCountAtWhichTheTestEndsTheLoop;
 								const nextValue = hasTheTestEndedTheLoop
 									? componentProps.value
 									: componentProps.value + 1;
-								return html`<template value=${nextValue}
+								yield html`<template value=${nextValue}
 									><p>${componentProps.value}</p></template
 								>`;
 							};
@@ -329,7 +336,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(element.shadowRoot!.textContent).toContain("grundlage");
 			});
 
-			test("a write into a component that rendered earlier lands before the frame, without writing any text twice", async () => {
+			test("a write into a component that painted earlier lands before the frame, without writing any text twice", async () => {
 				const writtenHeaderTag = uniqueTag("written-header");
 				const readingHeaderTag = uniqueTag("reading-header");
 				const checkoutTag = uniqueTag("checkout");
@@ -343,24 +350,26 @@ describe.skipIf("happyDOM" in globalThis)(
 						const unsubscribe = store.subscribe(() =>
 							componentProps.host.update(),
 						);
-						yield () =>
-							html`<p>
+						yield function* () {
+							yield html`<p>
 								${store.state.userName}, ${componentProps.cartCount} items
 							</p>`;
+						};
 						return unsubscribe;
 					},
 					{ props: { cartCount: [Number, 0] } },
 				);
 				customElements.define(writtenHeaderTag, WrittenHeader);
-				//renders once per publish, so its mutation count is what a single render writes
+				//updates once per publish, so its mutation count is what a single paint writes
 				customElements.define(
 					readingHeaderTag,
 					component(function* ({ host }) {
 						const unsubscribe = store.subscribe(() => host.update());
-						yield () =>
-							html`<p>
+						yield function* () {
+							yield html`<p>
 								${store.state.userName}, ${store.state.cartItems.length} items
 							</p>`;
+						};
 						return unsubscribe;
 					}),
 				);
@@ -368,9 +377,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					checkoutTag,
 					component(function* ({ host }) {
 						const unsubscribe = store.subscribe(() => host.update());
-						yield () => {
+						yield function* () {
 							writtenHeader.cartCount = store.state.cartItems.length;
-							return html`<ul>
+							yield html`<ul>
 								${store.state.cartItems.map((item) => html`<li>${item}</li>`)}
 							</ul>`;
 						};
@@ -397,20 +406,21 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(mutationsInWrittenHeader()).toBe(mutationsInReadingHeader());
 			});
 
-			test("children that make their ancestor re-render during its paint settle before the frame", async () => {
+			test("children that make their ancestor update during its paint settle before the frame", async () => {
 				const tabListTag = uniqueTag("tab-list");
 				const tabGroupTag = uniqueTag("tab-group");
 				const tabItemTag = uniqueTag("tab-item");
 				const toastHostTag = uniqueTag("toast-host");
-				let toastHostRenders = 0;
+				let toastHostRuns = 0;
 
 				const TabList = component(
 					function* (componentProps) {
 						componentProps.host.addEventListener("tab-register", () => {
 							componentProps.host.tabCount += 1;
 						});
-						yield () =>
-							html`<p>${componentProps.tabCount} tabs</p><${tabGroupTag}></${tabGroupTag}>`;
+						yield function* () {
+							yield html`<p>${componentProps.tabCount} tabs</p><${tabGroupTag}></${tabGroupTag}>`;
+						};
 					},
 					{ props: { tabCount: [Number, 0] } },
 				);
@@ -418,8 +428,9 @@ describe.skipIf("happyDOM" in globalThis)(
 				customElements.define(
 					tabGroupTag,
 					component(function* () {
-						yield () =>
-							html`<${tabItemTag}></${tabItemTag}><${tabItemTag}></${tabItemTag}>`;
+						yield function* () {
+							yield html`<${tabItemTag}></${tabItemTag}><${tabItemTag}></${tabItemTag}>`;
+						};
 					}),
 				);
 				customElements.define(
@@ -431,7 +442,9 @@ describe.skipIf("happyDOM" in globalThis)(
 								composed: true,
 							}),
 						);
-						yield () => html`<button>tab</button>`;
+						yield function* () {
+							yield html`<button>tab</button>`;
+						};
 					}),
 				);
 				customElements.define(
@@ -439,9 +452,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					component(function* ({ host }) {
 						const refresh = () => host.update();
 						document.addEventListener("tab-register", refresh);
-						yield () => {
-							toastHostRenders++;
-							return html`<output></output>`;
+						yield function* () {
+							toastHostRuns++;
+							yield html`<output></output>`;
 						};
 						return () => document.removeEventListener("tab-register", refresh);
 					}),
@@ -454,7 +467,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(visibleText(tabList.shadowRoot!.querySelector("p"))).toBe(
 					"2 tabs",
 				);
-				expect(toastHostRenders).toBe(2);
+				expect(toastHostRuns).toBe(2);
 				expect(await settlesWithin(tabList.update(), 100)).toBe(true);
 			});
 
@@ -462,7 +475,7 @@ describe.skipIf("happyDOM" in globalThis)(
 			//exact edge back to the writer. The code after the inner generator's yield runs once that
 			//paint has restored the painter, which is where a second update() can erase that edge
 			test("a component written into during a paint still waits for that writer when it updates itself too", async () => {
-				const renderLog: Array<string> = [];
+				const runLog: Array<string> = [];
 				const writerTag = uniqueTag("writer");
 				const writtenTag = uniqueTag("written");
 				const notifierTag = uniqueTag("notifier");
@@ -480,9 +493,9 @@ describe.skipIf("happyDOM" in globalThis)(
 				customElements.define(
 					writtenTag,
 					component(function* () {
-						yield () => {
-							renderLog.push("written");
-							return html`<b>written</b>`;
+						yield function* () {
+							runLog.push("written");
+							yield html`<b>written</b>`;
 						};
 					}),
 				);
@@ -494,10 +507,10 @@ describe.skipIf("happyDOM" in globalThis)(
 						//an inner generator, so the code after its yield runs again on every update()
 						yield function* () {
 							pass++;
-							yield () => {
-								renderLog.push(`writer ${pass}`);
-								return html`<${notifierTag} pass=${pass}></${notifierTag}>`;
-							};
+							{
+								runLog.push(`writer ${pass}`);
+								yield html`<${notifierTag} pass=${pass}></${notifierTag}>`;
+							}
 							if (pass !== 2) return;
 							host.update();
 							written!.update();
@@ -508,19 +521,19 @@ describe.skipIf("happyDOM" in globalThis)(
 				const writer = mount<BaseComponent>(writerTag);
 				written = mount<BaseComponent>(writtenTag);
 				await sleep(50);
-				renderLog.length = 0;
+				runLog.length = 0;
 
 				writer.update();
 				await nextFrame();
 
-				//the writer is queued and is about to write into it again, so one render is the whole
+				//the writer is queued and is about to write into it again, so one update is the whole
 				//point of the edge
-				expect(renderLog).toEqual(["writer 2", "writer 3", "written"]);
+				expect(runLog).toEqual(["writer 2", "writer 3", "written"]);
 			});
 		});
 
 		describe("nothing waits on async work it does not own", () => {
-			test("await update() covers the synchronous renders below the component at any depth", async () => {
+			test("await update() covers the synchronous updates below the component at any depth", async () => {
 				const leafTag = uniqueTag("leaf");
 				const middleTag = uniqueTag("middle");
 				const rootTag = uniqueTag("root");
@@ -530,7 +543,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					leafTag,
 					component(
 						function* (componentProps) {
-							yield () => html`<i>${componentProps.label}</i>`;
+							yield function* () {
+								yield html`<i>${componentProps.label}</i>`;
+							};
 						},
 						{ props: { label: String } },
 					),
@@ -539,14 +554,17 @@ describe.skipIf("happyDOM" in globalThis)(
 					middleTag,
 					component(
 						function* (componentProps) {
-							yield () =>
-								html`<${leafTag} label=${componentProps.label}></${leafTag}>`;
+							yield function* () {
+								yield html`<${leafTag} label=${componentProps.label}></${leafTag}>`;
+							};
 						},
 						{ props: { label: String } },
 					),
 				);
 				const Root = component(function* () {
-					yield () => html`<${middleTag} label=${label}></${middleTag}>`;
+					yield function* () {
+						yield html`<${middleTag} label=${label}></${middleTag}>`;
+					};
 				});
 				customElements.define(rootTag, Root);
 
@@ -565,7 +583,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(leafText()).toBe("two");
 			});
 
-			test("children keep rendering while their parent's async render is pending", async () => {
+			test("children keep updating while their parent's update waits on a promise", async () => {
 				const rowTag = uniqueTag("result-row");
 				const resultsTag = uniqueTag("search-results");
 				const store = createStore({ query: "ad" });
@@ -589,10 +607,11 @@ describe.skipIf("happyDOM" in globalThis)(
 							const unsubscribe = store.subscribe(() =>
 								componentProps.host.update(),
 							);
-							yield () =>
-								html`<li>
+							yield function* () {
+								yield html`<li>
 									${componentProps.personName} matches ${store.state.query}
 								</li>`;
+							};
 							return unsubscribe;
 						},
 						{ props: { personName: String } },
@@ -602,9 +621,11 @@ describe.skipIf("happyDOM" in globalThis)(
 					resultsTag,
 					component(function* ({ host }) {
 						const unsubscribe = store.subscribe(() => host.update());
-						yield async () => {
-							const matches = await searchPeople(store.state.query);
-							return html`<ul>
+						yield function* () {
+							const matches: Array<string> = yield searchPeople(
+								store.state.query,
+							);
+							yield html`<ul>
 								${matches.map((personName) => html`<${rowTag} personName=${personName}></${rowTag}>`)}
 							</ul>`;
 						};
@@ -639,28 +660,28 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(rowTexts(results)).toEqual(["Ada matches ada"]);
 			});
 
-			test("a child's async render can await its parent's update", async () => {
+			test("a child's update generator can wait for its parent's update", async () => {
 				const listTag = uniqueTag("row-list");
 				const rowTag = uniqueTag("list-row");
-				let listRenders = 0;
+				let listRuns = 0;
 
 				customElements.define(
 					listTag,
 					component(function* () {
-						yield () => {
-							listRenders++;
-							return html`<${rowTag}></${rowTag}>`;
+						yield function* () {
+							listRuns++;
+							yield html`<${rowTag}></${rowTag}>`;
 						};
 					}),
 				);
 				customElements.define(
 					rowTag,
 					component(function* ({ host }) {
-						yield async () => {
+						yield function* () {
 							const list = (host.getRootNode() as ShadowRoot)
 								.host as BaseComponent;
-							await list.update();
-							return html`<span>row</span>`;
+							yield list.update();
+							yield html`<span>row</span>`;
 						};
 					}),
 				);
@@ -671,10 +692,10 @@ describe.skipIf("happyDOM" in globalThis)(
 				expect(
 					visibleText(list.shadowRoot!.querySelector(rowTag)!.shadowRoot),
 				).toBe("row");
-				expect(listRenders).toBe(2);
+				expect(listRuns).toBe(2);
 			});
 
-			test("a parent's code after its yield can resolve what its child's async render awaits", async () => {
+			test("a parent's code after its yield can resolve what its child's update generator waits for", async () => {
 				const pageTag = uniqueTag("chart-page");
 				const viewTag = uniqueTag("chart-view");
 
@@ -682,9 +703,10 @@ describe.skipIf("happyDOM" in globalThis)(
 					viewTag,
 					component(
 						function* (componentProps) {
-							yield async () => {
-								const points = await componentProps.source;
-								return html`<p>${points?.length} points</p>`;
+							yield function* () {
+								if (componentProps.source === undefined) return;
+								const points: Array<number> = yield componentProps.source;
+								yield html`<p>${points?.length} points</p>`;
 							};
 						},
 						{
@@ -701,8 +723,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					pageTag,
 					component(function* () {
 						const sourceReady = Promise.withResolvers<Array<number>>();
-						yield () =>
-							html`<${viewTag} source=${sourceReady.promise}></${viewTag}>`;
+						yield function* () {
+							yield html`<${viewTag} source=${sourceReady.promise}></${viewTag}>`;
+						};
 						sourceReady.resolve([1, 2, 3]);
 					}),
 				);
@@ -715,20 +738,20 @@ describe.skipIf("happyDOM" in globalThis)(
 				).toBe("3 points");
 			});
 
-			test("an async child written by two components renders once, and the second writer's await does not wait for it", async () => {
+			test("an async child written by two components updates once, and the second writer's await does not wait for it", async () => {
 				const pageTag = uniqueTag("editor-page");
 				const sliderTag = uniqueTag("zoom-slider");
 				const previewTag = uniqueTag("preview-pane");
 				const store = createStore({ documentText: "hello", zoomLevel: 1 });
-				const previewRenderCalls: Array<string> = [];
+				const previewRuns: Array<string> = [];
 
 				const PreviewPane = component(
 					function* (componentProps) {
-						yield async () => {
+						yield function* () {
 							const { documentText, zoomLevel } = componentProps;
-							previewRenderCalls.push(`${documentText} at ${zoomLevel}`);
-							await sleep(20);
-							return html`<p>${documentText} at ${zoomLevel}</p>`;
+							previewRuns.push(`${documentText} at ${zoomLevel}`);
+							yield sleep(20);
+							yield html`<p>${documentText} at ${zoomLevel}</p>`;
 						};
 					},
 					{ props: { documentText: [String, ""], zoomLevel: [Number, 1] } },
@@ -736,12 +759,12 @@ describe.skipIf("happyDOM" in globalThis)(
 				customElements.define(previewTag, PreviewPane);
 				const ZoomSlider = component(function* ({ host }) {
 					const unsubscribe = store.subscribe(() => host.update());
-					yield () => {
+					yield function* () {
 						const preview = (host.getRootNode() as ShadowRoot).querySelector(
 							previewTag,
 						) as InstanceType<typeof PreviewPane>;
 						preview.zoomLevel = store.state.zoomLevel;
-						return html`<input type="range" value=${store.state.zoomLevel} />`;
+						yield html`<input type="range" value=${store.state.zoomLevel} />`;
 					};
 					return unsubscribe;
 				});
@@ -750,8 +773,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					pageTag,
 					component(function* ({ host }) {
 						const unsubscribe = store.subscribe(() => host.update());
-						yield () =>
-							html`<${sliderTag}></${sliderTag}><${previewTag} documentText=${store.state.documentText}></${previewTag}>`;
+						yield function* () {
+							yield html`<${sliderTag}></${sliderTag}><${previewTag} documentText=${store.state.documentText}></${previewTag}>`;
+						};
 						return unsubscribe;
 					}),
 				);
@@ -764,18 +788,18 @@ describe.skipIf("happyDOM" in globalThis)(
 				const previewText = () =>
 					visibleText(page.shadowRoot!.querySelector(previewTag)!.shadowRoot);
 				expect(previewText()).toBe("hello at 1");
-				previewRenderCalls.length = 0;
+				previewRuns.length = 0;
 
 				store.publish({ documentText: "hello world", zoomLevel: 2 });
 				await slider.update();
 				expect(previewText()).toBe("hello at 1");
 
 				await sleep(50);
-				expect(previewRenderCalls).toEqual(["hello world at 2"]);
+				expect(previewRuns).toEqual(["hello world at 2"]);
 				expect(previewText()).toBe("hello world at 2");
 			});
 
-			test("a parent's await covers its child's synchronous render but not the child's async load", async () => {
+			test("a parent's await covers its child's synchronous update but not the child's async load", async () => {
 				const profileTag = uniqueTag("user-profile");
 				const pageTag = uniqueTag("profile-page");
 				const fetchUser = async (userId: number) => {
@@ -787,11 +811,11 @@ describe.skipIf("happyDOM" in globalThis)(
 					function* (componentProps) {
 						yield function* () {
 							const userId = componentProps.userId;
-							yield () => html`<p>loading…</p>`;
+							yield html`<p>loading…</p>`;
 							const user = (yield load(componentProps.host, () =>
 								fetchUser(userId),
 							)) as { name: string };
-							yield () => html`<h2>${user.name}</h2>`;
+							yield html`<h2>${user.name}</h2>`;
 						};
 					},
 					{ props: { userId: [Number, 0] } },
@@ -799,8 +823,9 @@ describe.skipIf("happyDOM" in globalThis)(
 				customElements.define(profileTag, UserProfile);
 				let selectedUserId = 7;
 				const ProfilePage = component(function* () {
-					yield () =>
-						html`<${profileTag} userId=${selectedUserId}></${profileTag}>`;
+					yield function* () {
+						yield html`<${profileTag} userId=${selectedUserId}></${profileTag}>`;
+					};
 				});
 				customElements.define(pageTag, ProfilePage);
 
@@ -864,22 +889,22 @@ describe.skipIf("happyDOM" in globalThis)(
 				return track(element);
 			};
 
-			const userNameComponent = (renderLog: Array<string>) =>
+			const userNameComponent = (runLog: Array<string>) =>
 				component(
 					function* (componentProps) {
-						yield () => {
-							renderLog.push("name");
-							return html`<b>${componentProps.displayName}</b>`;
+						yield function* () {
+							runLog.push("name");
+							yield html`<b>${componentProps.displayName}</b>`;
 						};
 					},
 					{ props: { displayName: String } },
 				);
-			const userAvatarComponent = (renderLog: Array<string>) =>
+			const userAvatarComponent = (runLog: Array<string>) =>
 				component(
 					function* (componentProps) {
-						yield () => {
-							renderLog.push("avatar");
-							return html`<img alt=${componentProps.user?.name} />`;
+						yield function* () {
+							runLog.push("avatar");
+							yield html`<img alt=${componentProps.user?.name} />`;
 						};
 					},
 					{
@@ -891,45 +916,45 @@ describe.skipIf("happyDOM" in globalThis)(
 						},
 					},
 				);
-			const userBadgeComponent = (renderLog: Array<string>) =>
+			const userBadgeComponent = (runLog: Array<string>) =>
 				component(function* () {
-					yield () => {
-						renderLog.push("badge");
-						return html`<i>badge</i>`;
+					yield function* () {
+						runLog.push("badge");
+						yield html`<i>badge</i>`;
 					};
 				});
 			const userPageComponent = (
-				renderLog: Array<string>,
-				renderChildren: (user: User) => Template,
+				runLog: Array<string>,
+				childrenTemplate: (user: User) => Template,
 			) =>
 				component(function* () {
 					const user = { name: "Ada" };
-					yield () => {
-						renderLog.push("page");
-						return renderChildren(user);
+					yield function* () {
+						runLog.push("page");
+						yield html`${childrenTemplate(user)}`;
 					};
 				});
 
 			let userPageServerMarkup: Promise<string> | null = null;
 			const renderUserPageOnServer = () =>
 				(userPageServerMarkup ??= renderOnServer("order-server-page", () => {
-					const serverRenderLog: Array<string> = [];
+					const serverRunLog: Array<string> = [];
 					customElements.define(
 						"order-server-name",
-						userNameComponent(serverRenderLog),
+						userNameComponent(serverRunLog),
 					);
 					customElements.define(
 						"order-server-avatar",
-						userAvatarComponent(serverRenderLog),
+						userAvatarComponent(serverRunLog),
 					);
 					customElements.define(
 						"order-server-badge",
-						userBadgeComponent(serverRenderLog),
+						userBadgeComponent(serverRunLog),
 					);
 					customElements.define(
 						"order-server-page",
 						userPageComponent(
-							serverRenderLog,
+							serverRunLog,
 							(user) =>
 								html`<order-server-name
 										displayName=${user.name}
@@ -945,7 +970,7 @@ describe.skipIf("happyDOM" in globalThis)(
 					loadOrder: "the children before their page",
 					tagPrefix: "order-children-first",
 					definitionOrder: ["name", "avatar", "badge", "page"] as Array<Role>,
-					renderChildren: (user: User) =>
+					childrenTemplate: (user: User) =>
 						html`<order-children-first-name
 								displayName=${user.name}
 							></order-children-first-name
@@ -958,7 +983,7 @@ describe.skipIf("happyDOM" in globalThis)(
 					loadOrder: "the page before its children",
 					tagPrefix: "order-page-first",
 					definitionOrder: ["page", "name", "avatar", "badge"] as Array<Role>,
-					renderChildren: (user: User) =>
+					childrenTemplate: (user: User) =>
 						html`<order-page-first-name
 								displayName=${user.name}
 							></order-page-first-name
@@ -966,14 +991,14 @@ describe.skipIf("happyDOM" in globalThis)(
 							><order-page-first-badge></order-page-first-badge>`,
 				},
 			])(
-				"a hydrated page renders before its children when they update together, loading $loadOrder",
-				async ({ tagPrefix, definitionOrder, renderChildren }) => {
-					const renderLog: Array<string> = [];
+				"a hydrated page updates before its children when they update together, loading $loadOrder",
+				async ({ tagPrefix, definitionOrder, childrenTemplate }) => {
+					const runLog: Array<string> = [];
 					const definitions: Record<Role, CustomElementConstructor> = {
-						name: userNameComponent(renderLog),
-						avatar: userAvatarComponent(renderLog),
-						badge: userBadgeComponent(renderLog),
-						page: userPageComponent(renderLog, renderChildren),
+						name: userNameComponent(runLog),
+						avatar: userAvatarComponent(runLog),
+						badge: userBadgeComponent(runLog),
+						page: userPageComponent(runLog, childrenTemplate),
 					};
 					const serverMarkup = await renderUserPageOnServer();
 					const page = parseBeforeAnyDefinition(
@@ -990,14 +1015,14 @@ describe.skipIf("happyDOM" in globalThis)(
 						expect(page.shadowRoot!.children[index]).toBe(child),
 					);
 
-					renderLog.length = 0;
+					runLog.length = 0;
 					for (const child of serverRenderedChildren as Array<BaseComponent>)
 						child.update();
 					await page.update();
 					await sleep();
 
-					expect(renderLog[0]).toBe("page");
-					expect(renderLog.toSorted()).toEqual([
+					expect(runLog[0]).toBe("page");
+					expect(runLog.toSorted()).toEqual([
 						"avatar",
 						"badge",
 						"name",
@@ -1014,14 +1039,19 @@ describe.skipIf("happyDOM" in globalThis)(
 								componentProps.host.dispatchEvent(
 									new CustomEvent("buy", { bubbles: true, composed: true }),
 								);
-							yield () =>
-								html`<button onClick=${buy}>Buy ${componentProps.sku}</button>`;
+							yield function* () {
+								yield html`<button onClick=${buy}>
+									Buy ${componentProps.sku}
+								</button>`;
+							};
 						},
 						{ props: { sku: String } },
 					);
-				const productPageComponent = (renderContent: () => Template) =>
+				const productPageComponent = (contentTemplate: () => Template) =>
 					component(function* () {
-						yield () => renderContent();
+						yield function* () {
+							yield html`${contentTemplate()}`;
+						};
 					});
 				const sku = "42";
 
@@ -1065,7 +1095,7 @@ describe.skipIf("happyDOM" in globalThis)(
 
 			//hydration is the one path where the DOM a post-paint read answers with was written by the
 			//server. It is still the same rule as an update, where the read answers with the text from
-			//before: what it may never show is the render this paint just asked for
+			//before: what it may never show is the update this paint just asked for
 			test("post-paint code during hydration reads the server's DOM, and never runs on the server at all", async () => {
 				const defineHydrationPair = (
 					prefix: string,
@@ -1076,7 +1106,9 @@ describe.skipIf("happyDOM" in globalThis)(
 						`${prefix}-label`,
 						component(
 							function* (componentProps) {
-								yield () => html`<b>${componentProps.text}</b>`;
+								yield function* () {
+									yield html`<b>${componentProps.text}</b>`;
+								};
 							},
 							{ props: { text: [String, ""] } },
 						),
@@ -1155,12 +1187,12 @@ describe.skipIf("happyDOM" in globalThis)(
 			};
 
 			//every level is dirtied in one pass and every level has to wait for the one above it, so the
-			//number of times a run is passed over is its own depth. Only a render may count as one
-			test("a chain deeper than the render limit renders top down, once per component", async () => {
+			//number of times a run is passed over is its own depth. Only an update may count as one
+			test("a chain deeper than the update limit updates top down, once per component", async () => {
 				const depth = 140;
 				const tag = uniqueTag("deep-chain");
 				const store = createStorePublishingDeepestFirst({ label: "before" });
-				const renderedLevels: Array<number> = [];
+				const updatedLevels: Array<number> = [];
 
 				customElements.define(
 					tag,
@@ -1170,9 +1202,9 @@ describe.skipIf("happyDOM" in globalThis)(
 								componentProps.host.update(),
 							);
 							const level = componentProps.level;
-							yield () => {
-								renderedLevels.push(level);
-								return level < depth
+							yield function* () {
+								updatedLevels.push(level);
+								yield level < depth
 									? html`<${tag} level=${level + 1}></${tag}>`
 									: html`<b>${store.state.label}</b>`;
 							};
@@ -1186,13 +1218,13 @@ describe.skipIf("happyDOM" in globalThis)(
 				await sleep(100);
 				while (deepest.shadowRoot!.querySelector(tag))
 					deepest = deepest.shadowRoot!.querySelector(tag)!;
-				renderedLevels.length = 0;
+				updatedLevels.length = 0;
 
 				store.publish({ label: "after" });
 				await nextFrame();
 
 				expect(visibleText(deepest.shadowRoot)).toBe("after");
-				expect(renderedLevels).toEqual(
+				expect(updatedLevels).toEqual(
 					Array.from({ length: depth + 1 }, (_, level) => level),
 				);
 			});
@@ -1224,8 +1256,9 @@ describe.skipIf("happyDOM" in globalThis)(
 						tag,
 						component(
 							function* (componentProps) {
-								yield () =>
-									html`<${relayTag} partner=${partnerName} carried=${{ count: componentProps.count }}></${relayTag}>`;
+								yield function* () {
+									yield html`<${relayTag} partner=${partnerName} carried=${{ count: componentProps.count }}></${relayTag}>`;
+								};
 							},
 							{ props: { count: [Number, 0] } },
 						),
@@ -1253,9 +1286,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					.join(" ");
 				expect(shownText).toContain("grundlage");
 				expect(left.isConnected && right.isConnected).toBe(true);
-				//a ring of writers trips the runaway limit, not the sweep: one of the two keeps rendering,
-				//so the pass never goes all the way round without a render
-				expect(shownText).toContain("rendered too often");
+				//a ring of writers trips the runaway limit, not the sweep: one of the two keeps updating,
+				//so the pass never goes all the way round without an update
+				expect(shownText).toContain("updated too often");
 				expect(shownText).not.toContain("waiting for each other");
 			});
 
@@ -1315,21 +1348,23 @@ describe.skipIf("happyDOM" in globalThis)(
 				const childTag = uniqueTag("child");
 				const pageTag = uniqueTag("page");
 				const bystanderTag = uniqueTag("bystander");
-				const bystanderRenders: Array<string> = [];
+				const bystanderRuns: Array<string> = [];
 				let thePageShouldFail = false;
 
 				customElements.define(
 					childTag,
 					component(function* () {
-						yield () => html`<b>a child</b>`;
+						yield function* () {
+							yield html`<b>a child</b>`;
+						};
 					}),
 				);
 				customElements.define(
 					pageTag,
 					component(function* () {
-						yield () => {
+						yield function* () {
 							if (thePageShouldFail) throw new Error("the page failed");
-							return html`<${childTag}></${childTag}>`;
+							yield html`<${childTag}></${childTag}>`;
 						};
 					}),
 				);
@@ -1337,9 +1372,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					bystanderTag,
 					component(
 						function* (componentProps) {
-							yield () => {
-								bystanderRenders.push(componentProps.label);
-								return html`<b>${componentProps.label}</b>`;
+							yield function* () {
+								bystanderRuns.push(componentProps.label);
+								yield html`<b>${componentProps.label}</b>`;
 							};
 						},
 						{ props: { label: [String, "first"] } },
@@ -1352,13 +1387,13 @@ describe.skipIf("happyDOM" in globalThis)(
 				);
 				await sleep(50);
 				const child = page.shadowRoot!.querySelector(childTag) as BaseComponent;
-				bystanderRenders.length = 0;
+				bystanderRuns.length = 0;
 				thePageShouldFail = true;
 
 				const consoleError = vi
 					.spyOn(console, "error")
 					.mockImplementation(() => {});
-				//the child is queued first and has to wait for the page, which never renders again
+				//the child is queued first and has to wait for the page, which never updates again
 				const childSettled = child.update();
 				page.update();
 				bystander.label = "second";
@@ -1367,7 +1402,7 @@ describe.skipIf("happyDOM" in globalThis)(
 
 				expect(visibleText(page.shadowRoot)).toContain("the page failed");
 				expect(await settlesWithin(childSettled, 200)).toBe(true);
-				expect(bystanderRenders).toEqual(["second"]);
+				expect(bystanderRuns).toEqual(["second"]);
 			});
 
 			//a ring, not a loop: the child's paint dirties the parent, so the parent waits on the child,
@@ -1390,7 +1425,7 @@ describe.skipIf("happyDOM" in globalThis)(
 					},
 				);
 
-				const rerenderOnRegistration = (host: BaseComponent) =>
+				const updateOnRegistration = (host: BaseComponent) =>
 					host.addEventListener("registered", () => {
 						host.update();
 					});
@@ -1398,15 +1433,19 @@ describe.skipIf("happyDOM" in globalThis)(
 				customElements.define(
 					childTag,
 					component(function* ({ host }) {
-						rerenderOnRegistration(host);
-						yield () => html`<${registrarTag}></${registrarTag}>`;
+						updateOnRegistration(host);
+						yield function* () {
+							yield html`<${registrarTag}></${registrarTag}>`;
+						};
 					}),
 				);
 				customElements.define(
 					parentTag,
 					component(function* ({ host }) {
-						rerenderOnRegistration(host);
-						yield () => html`<${childTag}></${childTag}>`;
+						updateOnRegistration(host);
+						yield function* () {
+							yield html`<${childTag}></${childTag}>`;
+						};
 					}),
 				);
 
@@ -1437,12 +1476,12 @@ describe.skipIf("happyDOM" in globalThis)(
 
 			//the leaf's nearest component is the layout, which nothing dirties, so the run it has to wait
 			//for is two levels up
-			test("a grandchild renders once when the component between it and the store does not subscribe", async () => {
+			test("a grandchild updates once when the component between it and the store does not subscribe", async () => {
 				const leafTag = uniqueTag("leaf");
 				const layoutTag = uniqueTag("layout");
 				const pageTag = uniqueTag("page");
 				const store = createStorePublishingDeepestFirst({ heading: "before" });
-				const leafRenders: Array<string> = [];
+				const leafRuns: Array<string> = [];
 
 				customElements.define(
 					leafTag,
@@ -1451,9 +1490,9 @@ describe.skipIf("happyDOM" in globalThis)(
 							const unsubscribe = store.subscribe(() =>
 								componentProps.host.update(),
 							);
-							yield () => {
-								leafRenders.push(componentProps.heading);
-								return html`<b>${componentProps.heading}</b>`;
+							yield function* () {
+								leafRuns.push(componentProps.heading);
+								yield html`<b>${componentProps.heading}</b>`;
 							};
 							return unsubscribe;
 						},
@@ -1464,8 +1503,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					layoutTag,
 					component(
 						function* (componentProps) {
-							yield () =>
-								html`<${leafTag} heading=${componentProps.heading}></${leafTag}>`;
+							yield function* () {
+								yield html`<${leafTag} heading=${componentProps.heading}></${leafTag}>`;
+							};
 						},
 						{ props: { heading: [String, ""] } },
 					),
@@ -1476,8 +1516,9 @@ describe.skipIf("happyDOM" in globalThis)(
 						const unsubscribe = store.subscribe(() =>
 							componentProps.host.update(),
 						);
-						yield () =>
-							html`<${layoutTag} heading=${store.state.heading}></${layoutTag}>`;
+						yield function* () {
+							yield html`<${layoutTag} heading=${store.state.heading}></${layoutTag}>`;
+						};
 						return unsubscribe;
 					}),
 				);
@@ -1487,11 +1528,11 @@ describe.skipIf("happyDOM" in globalThis)(
 				const leaf = page
 					.shadowRoot!.querySelector(layoutTag)!
 					.shadowRoot!.querySelector(leafTag)!;
-				leafRenders.length = 0;
+				leafRuns.length = 0;
 
 				store.publish({ heading: "after" });
 				await nextFrame();
-				expect(leafRenders).toEqual(["after"]);
+				expect(leafRuns).toEqual(["after"]);
 				expect(visibleText(leaf.shadowRoot)).toBe("after");
 			});
 		});
@@ -1511,18 +1552,16 @@ describe.skipIf("happyDOM" in globalThis)(
 
 		const defineLabelledChild = (
 			childTag: string,
-			theChildRendersAsync: boolean,
+			childWaitsBeforePainting: boolean,
 		) =>
 			customElements.define(
 				childTag,
 				component(
 					function* (componentProps) {
-						yield theChildRendersAsync
-							? async () => {
-									await sleep();
-									return html`<b>${componentProps.label}</b>`;
-								}
-							: () => html`<b>${componentProps.label}</b>`;
+						yield function* () {
+							if (childWaitsBeforePainting) yield sleep();
+							yield html`<b>${componentProps.label}</b>`;
+						};
 					},
 					{ props: { label: [String, ""] } },
 				),
@@ -1560,24 +1599,6 @@ describe.skipIf("happyDOM" in globalThis)(
 					),
 			},
 			{
-				shape: "a render function yielded from the body",
-				readsAgainOnUpdate: false,
-				defineParent: (parentTag, childTag, readsAfterThePaint) =>
-					customElements.define(
-						parentTag,
-						component(
-							function* (componentProps) {
-								yield () =>
-									html`<${childTag} label=${componentProps.label}></${childTag}>`;
-								readsAfterThePaint.push(
-									sawTheLabelItJustWrote(childTag, componentProps),
-								);
-							},
-							{ props: { label: [String, "first"] } },
-						),
-					),
-			},
-			{
 				shape: "an inner generator, reading after its own yield",
 				readsAgainOnUpdate: true,
 				defineParent: (parentTag, childTag, readsAfterThePaint) =>
@@ -1591,62 +1612,6 @@ describe.skipIf("happyDOM" in globalThis)(
 										sawTheLabelItJustWrote(childTag, componentProps),
 									);
 								};
-							},
-							{ props: { label: [String, "first"] } },
-						),
-					),
-			},
-			{
-				shape: "an async inner generator, reading after its own yield",
-				readsAgainOnUpdate: true,
-				defineParent: (parentTag, childTag, readsAfterThePaint) =>
-					customElements.define(
-						parentTag,
-						component(
-							function* (componentProps) {
-								yield async function* () {
-									yield html`<${childTag} label=${componentProps.label}></${childTag}>`;
-									readsAfterThePaint.push(
-										sawTheLabelItJustWrote(childTag, componentProps),
-									);
-								};
-							},
-							{ props: { label: [String, "first"] } },
-						),
-					),
-			},
-			{
-				shape: "an async component body",
-				readsAgainOnUpdate: false,
-				defineParent: (parentTag, childTag, readsAfterThePaint) =>
-					customElements.define(
-						parentTag,
-						component(
-							async function* (componentProps) {
-								yield html`<${childTag} label=${componentProps.label}></${childTag}>`;
-								readsAfterThePaint.push(
-									sawTheLabelItJustWrote(childTag, componentProps),
-								);
-							},
-							{ props: { label: [String, "first"] } },
-						),
-					),
-			},
-			{
-				shape: "a render function that returns an inner generator",
-				readsAgainOnUpdate: true,
-				defineParent: (parentTag, childTag, readsAfterThePaint) =>
-					customElements.define(
-						parentTag,
-						component(
-							function* (componentProps) {
-								yield () =>
-									function* () {
-										yield html`<${childTag} label=${componentProps.label}></${childTag}>`;
-										readsAfterThePaint.push(
-											sawTheLabelItJustWrote(childTag, componentProps),
-										);
-									};
 							},
 							{ props: { label: [String, "first"] } },
 						),
@@ -1671,36 +1636,16 @@ describe.skipIf("happyDOM" in globalThis)(
 						),
 					),
 			},
-			{
-				shape: "an inner generator that parked, read after it",
-				readsAgainOnUpdate: false,
-				defineParent: (parentTag, childTag, readsAfterThePaint) =>
-					customElements.define(
-						parentTag,
-						component(
-							function* (componentProps) {
-								yield function* () {
-									yield html`<${childTag} label=${componentProps.label}></${childTag}>`;
-									yield Promise.resolve();
-								};
-								readsAfterThePaint.push(
-									sawTheLabelItJustWrote(childTag, componentProps),
-								);
-							},
-							{ props: { label: [String, "first"] } },
-						),
-					),
-			},
 		];
 
 		test.each(parentShapes)(
 			"post-paint code does not see the child it just wrote, from $shape",
 			async ({ readsAgainOnUpdate, defineParent }) => {
-				for (const theChildRendersAsync of [false, true]) {
+				for (const childWaitsBeforePainting of [false, true]) {
 					const childTag = uniqueTag("child");
 					const parentTag = uniqueTag("parent");
 					const readsAfterThePaint: Array<boolean> = [];
-					defineLabelledChild(childTag, theChildRendersAsync);
+					defineLabelledChild(childTag, childWaitsBeforePainting);
 					defineParent(parentTag, childTag, readsAfterThePaint);
 
 					const parent = mount<HTMLElement & { label: string }>(parentTag);
@@ -1708,8 +1653,8 @@ describe.skipIf("happyDOM" in globalThis)(
 					parent.label = "second";
 					await sleep(50);
 
-					expect({ theChildRendersAsync, readsAfterThePaint }).toEqual({
-						theChildRendersAsync,
+					expect({ childWaitsBeforePainting, readsAfterThePaint }).toEqual({
+						childWaitsBeforePainting,
 						readsAfterThePaint: readsAgainOnUpdate ? [false, false] : [false],
 					});
 				}
@@ -1764,7 +1709,9 @@ describe.skipIf("happyDOM" in globalThis)(
 			customElements.define(
 				otherComponentTag,
 				component(function* () {
-					yield () => html`<i>other</i>`;
+					yield function* () {
+						yield html`<i>other</i>`;
+					};
 				}),
 			);
 
@@ -1802,8 +1749,9 @@ describe.skipIf("happyDOM" in globalThis)(
 				wrapperTag,
 				component(
 					function* (componentProps) {
-						yield () =>
-							html`<${nestedParentTag} label=${componentProps.label}></${nestedParentTag}>`;
+						yield function* () {
+							yield html`<${nestedParentTag} label=${componentProps.label}></${nestedParentTag}>`;
+						};
 					},
 					{ props: { label: [String, "first"] } },
 				),
@@ -1826,8 +1774,8 @@ describe.skipIf("happyDOM" in globalThis)(
 			},
 		);
 
-		//the case this whole render order came from: a list that keeps one row and adds two. Every
-		//row has to read as "has not rendered", the kept one by showing its old text and the new ones
+		//the case this whole update order came from: a list that keeps one row and adds two. Every
+		//row has to read as "has not painted", the kept one by showing its old text and the new ones
 		//by showing nothing
 		test("a list that takes more rows sees no row it just wrote, the row it kept as well as the rows it added", async () => {
 			const rowTag = uniqueTag("row");
@@ -1842,7 +1790,9 @@ describe.skipIf("happyDOM" in globalThis)(
 				rowTag,
 				component(
 					function* (componentProps) {
-						yield () => html`<b>${componentProps.entry}</b>`;
+						yield function* () {
+							yield html`<b>${componentProps.entry}</b>`;
+						};
 					},
 					{ props: { entry: [String, ""] } },
 				),
@@ -1870,7 +1820,6 @@ describe.skipIf("happyDOM" in globalThis)(
 			expect(rowTextsAfterThePaint).toEqual([[""], ["a", "", ""]]);
 			expect(rowTexts(list)).toEqual(["a", "b", "c"]);
 		});
-		//queued renders there. A yield lets the queue drain, on every path into a render
 
 		//"above" means "whose shadow tree contains this element", which is neither the document order
 		//nor the nesting a reader sees in the markup
@@ -1878,21 +1827,21 @@ describe.skipIf("happyDOM" in globalThis)(
 			const defineLoggingComponent = (
 				tag: string,
 				role: string,
-				renderLog: Array<string>,
-				renderContent: () => Template,
+				runLog: Array<string>,
+				contentTemplate: () => Template,
 			) =>
 				customElements.define(
 					tag,
 					component(function* () {
-						yield () => {
-							renderLog.push(role);
-							return renderContent();
+						yield function* () {
+							runLog.push(role);
+							yield html`${contentTemplate()}`;
 						};
 					}),
 				);
 
-			test("a slotted component does not wait for the component that slots it, and unrelated components render in the order they were dirtied", async () => {
-				const renderLog: Array<string> = [];
+			test("a slotted component does not wait for the component that slots it, and unrelated components update in the order they were dirtied", async () => {
+				const runLog: Array<string> = [];
 				const earlierTag = uniqueTag("earlier");
 				const laterTag = uniqueTag("later");
 				const frameTag = uniqueTag("frame");
@@ -1902,31 +1851,31 @@ describe.skipIf("happyDOM" in globalThis)(
 				defineLoggingComponent(
 					earlierTag,
 					"earlier",
-					renderLog,
+					runLog,
 					() => html`<b>earlier</b>`,
 				);
 				defineLoggingComponent(
 					laterTag,
 					"later",
-					renderLog,
+					runLog,
 					() => html`<b>later</b>`,
 				);
 				defineLoggingComponent(
 					shadowChildTag,
 					"shadow child",
-					renderLog,
+					runLog,
 					() => html`<b>in the shadow tree</b>`,
 				);
 				defineLoggingComponent(
 					slottedTag,
 					"slotted",
-					renderLog,
+					runLog,
 					() => html`<b>slotted</b>`,
 				);
 				defineLoggingComponent(
 					frameTag,
 					"frame",
-					renderLog,
+					runLog,
 					() => html`<slot></slot><${shadowChildTag}></${shadowChildTag}>`,
 				);
 
@@ -1941,7 +1890,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				const shadowChild = frame.shadowRoot!.querySelector(
 					shadowChildTag,
 				) as BaseComponent;
-				renderLog.length = 0;
+				runLog.length = 0;
 
 				later.update();
 				earlier.update();
@@ -1950,9 +1899,9 @@ describe.skipIf("happyDOM" in globalThis)(
 				frame.update();
 				await nextFrame();
 
-				//the slotted component sits inside the frame in the markup and still renders before it:
+				//the slotted component sits inside the frame in the markup and still updates before it:
 				//the frame's shadow tree does not contain it, so nothing about the frame can reach it
-				expect(renderLog).toEqual([
+				expect(runLog).toEqual([
 					"later",
 					"earlier",
 					"slotted",
@@ -1964,7 +1913,7 @@ describe.skipIf("happyDOM" in globalThis)(
 			//the shadow root directly above the leaf belongs to an element the library never registered,
 			//so the run it waits for is only found by climbing out of that root as well
 			test("a component inside a foreign shadow root waits for the component above that root", async () => {
-				const renderLog: Array<string> = [];
+				const runLog: Array<string> = [];
 				const outerTag = uniqueTag("outer");
 				const foreignTag = uniqueTag("foreign");
 				const leafTag = uniqueTag("leaf");
@@ -1983,13 +1932,13 @@ describe.skipIf("happyDOM" in globalThis)(
 				defineLoggingComponent(
 					leafTag,
 					"leaf",
-					renderLog,
+					runLog,
 					() => html`<b>leaf</b>`,
 				);
 				defineLoggingComponent(
 					outerTag,
 					"outer",
-					renderLog,
+					runLog,
 					() => html`<${foreignTag}></${foreignTag}>`,
 				);
 
@@ -1999,7 +1948,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				const leaf = foreign.shadowRoot!.querySelector(
 					leafTag,
 				) as BaseComponent;
-				renderLog.length = 0;
+				runLog.length = 0;
 
 				//dirtied leaf first and from outside any paint, so the causal edge is empty and the
 				//shadow trees are the only thing that can order these two
@@ -2007,22 +1956,22 @@ describe.skipIf("happyDOM" in globalThis)(
 				outer.update();
 				await nextFrame();
 
-				expect(renderLog).toEqual(["outer", "leaf"]);
+				expect(runLog).toEqual(["outer", "leaf"]);
 			});
 
-			test("a queued component moved into another shadow tree renders once, with the value it was given", async () => {
+			test("a queued component moved into another shadow tree updates once, with the value it was given", async () => {
 				const travellerTag = uniqueTag("traveller");
 				const departureTag = uniqueTag("departure");
 				const arrivalTag = uniqueTag("arrival");
-				const travellerRenders: Array<string> = [];
+				const travellerRuns: Array<string> = [];
 
 				customElements.define(
 					travellerTag,
 					component(
 						function* (componentProps) {
-							yield () => {
-								travellerRenders.push(componentProps.value);
-								return html`<b>${componentProps.value}</b>`;
+							yield function* () {
+								travellerRuns.push(componentProps.value);
+								yield html`<b>${componentProps.value}</b>`;
 							};
 						},
 						{ props: { value: [String, ""] } },
@@ -2031,14 +1980,17 @@ describe.skipIf("happyDOM" in globalThis)(
 				customElements.define(
 					departureTag,
 					component(function* () {
-						yield () =>
-							html`<div><${travellerTag} value="first"></${travellerTag}></div>`;
+						yield function* () {
+							yield html`<div><${travellerTag} value="first"></${travellerTag}></div>`;
+						};
 					}),
 				);
 				customElements.define(
 					arrivalTag,
 					component(function* () {
-						yield () => html`<div></div>`;
+						yield function* () {
+							yield html`<div></div>`;
+						};
 					}),
 				);
 
@@ -2048,30 +2000,30 @@ describe.skipIf("happyDOM" in globalThis)(
 				const traveller = departure.shadowRoot!.querySelector(
 					travellerTag,
 				) as BaseComponent & { value: string };
-				travellerRenders.length = 0;
+				travellerRuns.length = 0;
 
 				traveller.value = "second";
 				arrival.shadowRoot!.querySelector("div")!.append(traveller);
 				await nextFrame();
 
-				expect(travellerRenders).toEqual(["second"]);
+				expect(travellerRuns).toEqual(["second"]);
 				expect(visibleText(traveller.shadowRoot)).toBe("second");
 				expect(traveller.getRootNode()).toBe(arrival.shadowRoot);
 			});
 
 			//the phase is read at the drain and not at the enqueue, so a host that left the document in
-			//between is dropped rather than rendered into a detached root
-			test("a host removed before the pass reaches it does not render, and its update still settles", async () => {
+			//between is dropped rather than painted into a detached root
+			test("a host removed before the pass reaches it does not paint, and its update still settles", async () => {
 				const tag = uniqueTag("leaving");
-				const renders: Array<string> = [];
+				const runs: Array<string> = [];
 
 				customElements.define(
 					tag,
 					component(
 						function* (componentProps) {
-							yield () => {
-								renders.push(componentProps.label);
-								return html`<b>${componentProps.label}</b>`;
+							yield function* () {
+								runs.push(componentProps.label);
+								yield html`<b>${componentProps.label}</b>`;
 							};
 						},
 						{ props: { label: [String, "first"] } },
@@ -2080,33 +2032,35 @@ describe.skipIf("happyDOM" in globalThis)(
 
 				const element = mount<BaseComponent & { label: string }>(tag);
 				await sleep(50);
-				renders.length = 0;
+				runs.length = 0;
 
 				element.label = "second";
 				const settled = element.update();
 				element.remove();
 
 				expect(await settlesWithin(settled, 200)).toBe(true);
-				expect(renders).toEqual([]);
+				expect(runs).toEqual([]);
 			});
 
 			//the other phase a run can be dropped in at the drain: it was queued while it was ready to
 			//start, and the mark its parent owes it arrived before the pass got to it
-			test("a child marked after it connected is dropped from the pass, and renders when the mark comes off", async () => {
+			test("a child marked after it connected is dropped from the pass, and runs when the mark comes off", async () => {
 				const parentTag = uniqueTag("owing");
 				const childTag = uniqueTag("owed");
-				const renders: Array<string> = [];
+				const runs: Array<string> = [];
 
 				defineLoggingComponent(
 					childTag,
 					"child",
-					renders,
+					runs,
 					() => html`<b>child</b>`,
 				);
 				customElements.define(
 					parentTag,
 					component(function* ({ host }) {
-						yield () => html`<${childTag}></${childTag}>`;
+						yield function* () {
+							yield html`<${childTag}></${childTag}>`;
+						};
 						//the child connected during that paint and is queued, and this code runs before the
 						//generator leaves the stack, so the mark beats the pass
 						host
@@ -2119,18 +2073,46 @@ describe.skipIf("happyDOM" in globalThis)(
 				await sleep(50);
 				const child = parent.shadowRoot!.querySelector(childTag)!;
 
-				expect(renders).toEqual([]);
+				expect(runs).toEqual([]);
 
 				child.removeAttribute("defer-hydration");
 				await sleep(50);
 
-				expect(renders).toEqual(["child"]);
+				expect(runs).toEqual(["child"]);
 			});
 
-			//a template yielded straight from the component body leaves nothing in the rerender slot, so
+			//the move mounts the child on the spot, and the START its parent's paint queued must not run
+			//it a second time
+			test("a child moved straight after the paint that queued it runs its update generator once", async () => {
+				const parentTag = uniqueTag("mover");
+				const childTag = uniqueTag("moved");
+				const runs: Array<string> = [];
+
+				defineLoggingComponent(
+					childTag,
+					"child",
+					runs,
+					() => html`<b>child</b>`,
+				);
+				customElements.define(
+					parentTag,
+					component(function* ({ host }) {
+						yield html`<div><${childTag}></${childTag}></div><section></section>`;
+						const child = host.shadowRoot!.querySelector(childTag)!;
+						host.shadowRoot!.querySelector("section")!.append(child);
+					}),
+				);
+
+				mount<BaseComponent>(parentTag);
+				await sleep(50);
+
+				expect(runs).toEqual(["child"]);
+			});
+
+			//a template yielded straight from the component body leaves no current update generator, so
 			//update() has nothing to re-fire and no reason to take a place in the queue
 			test("a component with nothing to rerun does not delay a component inside it", async () => {
-				const renderLog: Array<string> = [];
+				const runLog: Array<string> = [];
 				const holderTag = uniqueTag("holder");
 				const insideTag = uniqueTag("inside");
 				const besideTag = uniqueTag("beside");
@@ -2138,13 +2120,13 @@ describe.skipIf("happyDOM" in globalThis)(
 				defineLoggingComponent(
 					insideTag,
 					"inside",
-					renderLog,
+					runLog,
 					() => html`<b>inside</b>`,
 				);
 				defineLoggingComponent(
 					besideTag,
 					"beside",
-					renderLog,
+					runLog,
 					() => html`<b>beside</b>`,
 				);
 				customElements.define(
@@ -2160,7 +2142,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				const inside = holder.shadowRoot!.querySelector(
 					insideTag,
 				) as BaseComponent;
-				renderLog.length = 0;
+				runLog.length = 0;
 
 				inside.update();
 				beside.update();
@@ -2168,10 +2150,10 @@ describe.skipIf("happyDOM" in globalThis)(
 				await nextFrame();
 
 				//dirtied first and never blocked: a queued holder would have passed it over for a trip
-				expect(renderLog).toEqual(["inside", "beside"]);
+				expect(runLog).toEqual(["inside", "beside"]);
 			});
 		});
-		describe("post-paint code reads the same DOM however the render started", () => {
+		describe("post-paint code reads the same DOM however the run started", () => {
 			const mountParentWritingAChild = (parksAfterThePaint: boolean) => {
 				const childTag = uniqueTag("child");
 				const parentTag = uniqueTag("parent");
@@ -2181,7 +2163,9 @@ describe.skipIf("happyDOM" in globalThis)(
 					childTag,
 					component(
 						function* (componentProps) {
-							yield () => html`<b>${componentProps.label}</b>`;
+							yield function* () {
+								yield html`<b>${componentProps.label}</b>`;
+							};
 						},
 						{ props: { label: [String, ""] } },
 					),
@@ -2220,7 +2204,7 @@ describe.skipIf("happyDOM" in globalThis)(
 				return { onMount, onUpdate };
 			};
 
-			test("straight after the paint the child has not rendered yet, on a mount as on an update", async () => {
+			test("straight after the paint the child has not painted yet, on a mount as on an update", async () => {
 				expect(await readBothPaths(false)).toEqual({
 					onMount: false,
 					onUpdate: false,

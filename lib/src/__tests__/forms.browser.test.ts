@@ -34,7 +34,9 @@ describe("form-associated component in a live form", () => {
 				tag,
 				component(function* ({ host }) {
 					captured = host.internals;
-					yield () => html`<template><input /></template>`;
+					yield function* () {
+						yield html`<template><input /></template>`;
+					};
 				}, formOptions),
 			);
 
@@ -56,7 +58,9 @@ describe("form-associated component in a live form", () => {
 				tag,
 				component(function* ({ host }) {
 					host.internals?.setFormValue("ada");
-					yield () => html`<template><input /></template>`;
+					yield function* () {
+						yield html`<template><input /></template>`;
+					};
 				}, formOptions),
 			);
 
@@ -77,7 +81,9 @@ describe("form-associated component in a live form", () => {
 			customElements.define(
 				tag,
 				component(function* () {
-					yield () => html`<template><input /></template>`;
+					yield function* () {
+						yield html`<template><input /></template>`;
+					};
 				}, formOptions),
 			);
 
@@ -101,7 +107,9 @@ describe("form-associated component in a live form", () => {
 			customElements.define(
 				tag,
 				component(function* () {
-					yield () => html`<template><input /></template>`;
+					yield function* () {
+						yield html`<template><input /></template>`;
+					};
 				}, formOptions),
 			);
 

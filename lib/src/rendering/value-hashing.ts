@@ -35,7 +35,7 @@ const hashNumber = (numberValue: number): number => {
 	);
 };
 
-//program-wide identity registry: reference ids must stay stable across every render,
+//program-wide identity registry: reference ids must stay stable across every paint,
 //so the map and its counter outlive any single frame
 const references = new WeakMap<Object, number>();
 let counter = 0;
@@ -126,7 +126,7 @@ export const hashValue = (value: unknown, depth: number = 0): number => {
 		return hash;
 	}
 
-	//walking class instances, Date, typed arrays and null-prototype objects costs every render for
+	//walking class instances, Date, typed arrays and null-prototype objects costs every paint for
 	//values that are rarely mutated in place; an in-place change to one of them is not noticed
 	return referenceId(value);
 };

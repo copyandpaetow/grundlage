@@ -34,14 +34,16 @@ const closedRootOf = (host: HTMLElement): ShadowRoot =>
 
 describe("closed shadow root — hydration + load replay", () => {
 	test.skipIf(!canRun)(
-		"cold closed component renders into a fresh closed root, absent from host.shadowRoot",
+		"cold closed component paints into a fresh closed root, absent from host.shadowRoot",
 		async () => {
 			const tag = uniqueTag();
 			customElements.define(
 				tag,
 				component(
 					function* () {
-						yield () => html`<p>${"fresh"}</p>`;
+						yield function* () {
+							yield html`<p>${"fresh"}</p>`;
+						};
 					},
 					{ mode: "closed" },
 				),
@@ -59,7 +61,7 @@ describe("closed shadow root — hydration + load replay", () => {
 	);
 
 	test.skipIf(!canRun)(
-		"prerendered closed component hydrates the server DOM instead of re-rendering it",
+		"prerendered closed component hydrates the server DOM instead of painting it again",
 		async () => {
 			//the server node carries a static marker the client template never emits;
 			//it survives iff hydration reused the node rather than rebuilding from scratch.
@@ -72,7 +74,9 @@ describe("closed shadow root — hydration + load replay", () => {
 				tag,
 				component(
 					function* () {
-						yield () => html`<p>hi</p>`;
+						yield function* () {
+							yield html`<p>hi</p>`;
+						};
 					},
 					{ mode: "closed" },
 				),
@@ -107,7 +111,9 @@ describe("closed shadow root — hydration + load replay", () => {
 							fetched = true;
 							return "client-value";
 						});
-						yield () => html`<p>hi</p>`;
+						yield function* () {
+							yield html`<p>hi</p>`;
+						};
 					},
 					{ mode: "closed" },
 				),
@@ -139,7 +145,9 @@ describe("closed shadow root — hydration + load replay", () => {
 					function* ({ host }) {
 						firstRead = host.internals;
 						secondRead = host.internals;
-						yield () => html`<template><input /></template>`;
+						yield function* () {
+							yield html`<template><input /></template>`;
+						};
 					},
 					{ mode: "closed", formAssociated: true },
 				),

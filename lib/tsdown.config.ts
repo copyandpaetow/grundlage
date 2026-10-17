@@ -3,7 +3,7 @@ import { defineConfig } from "tsdown";
 const sharedOptions = {
 	entry: ["src/index.ts"],
 	format: ["esm"],
-	target: "es2024",
+	target: "es2025",
 	sourcemap: true,
 	deps: {
 		skipNodeModulesBundle: true,

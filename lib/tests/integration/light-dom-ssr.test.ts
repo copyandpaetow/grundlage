@@ -96,11 +96,13 @@ describe("the server signal is on in this process", () => {
 
 describe("§1.1 — the light-dom stamp", () => {
 	test.skipIf(!lightModeShips)(
-		"a light host renders into its own child list and attaches no shadow root",
+		"a light host paints into its own child list and attaches no shadow root",
 		async () => {
 			const element = await renderOnServer(
 				component(function* () {
-					yield () => html`<article>Ada</article>`;
+					yield function* () {
+						yield html`<article>Ada</article>`;
+					};
 				}, light()),
 			);
 
@@ -111,11 +113,13 @@ describe("§1.1 — the light-dom stamp", () => {
 	);
 
 	test.skipIf(!lightModeShips)(
-		"the library stamps light-dom itself, so a client-only render carries it too",
+		"the library stamps light-dom itself, so a client-only paint carries it too",
 		async () => {
 			const element = await renderOnServer(
 				component(function* () {
-					yield () => html`<article>Ada</article>`;
+					yield function* () {
+						yield html`<article>Ada</article>`;
+					};
 				}, light()),
 			);
 
@@ -127,7 +131,9 @@ describe("§1.1 — the light-dom stamp", () => {
 	test.skipIf(!lightModeShips)("a shadow host is not stamped", async () => {
 		const element = await renderOnServer(
 			component(function* () {
-				yield () => html`<article>Ada</article>`;
+				yield function* () {
+					yield html`<article>Ada</article>`;
+				};
 			}),
 		);
 
@@ -142,7 +148,9 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 			const element = await renderOnServer(
 				component(
 					function* (props) {
-						yield () => html`<article>${props.heading}</article>`;
+						yield function* () {
+							yield html`<article>${props.heading}</article>`;
+						};
 					},
 					light({ heading: Slot }),
 				),
@@ -163,7 +171,9 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 			const element = await renderOnServer(
 				component(
 					function* (props) {
-						yield () => html`<article>${props.body}</article>`;
+						yield function* () {
+							yield html`<article>${props.body}</article>`;
+						};
 					},
 					light({ body: DefaultSlot }),
 				),
@@ -183,8 +193,9 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 			const element = await renderOnServer(
 				component(
 					function* (props) {
-						yield () =>
-							html`<article>${props.heading}${props.footer}</article>`;
+						yield function* () {
+							yield html`<article>${props.heading}${props.footer}</article>`;
+						};
 					},
 					light({ heading: Slot, footer: Slot }),
 				),
@@ -204,7 +215,9 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 			const element = await renderOnServer(
 				component(
 					function* (props) {
-						yield () => html`<article>${props.heading}</article>`;
+						yield function* () {
+							yield html`<article>${props.heading}</article>`;
+						};
 					},
 					light({ heading: Slot }),
 				),
@@ -218,7 +231,9 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 		const element = await renderOnServer(
 			component(
 				function* (props) {
-					yield () => html`<article>${props.heading}</article>`;
+					yield function* () {
+						yield html`<article>${props.heading}</article>`;
+					};
 				},
 				{ props: { heading: Slot } } as ComponentOptions,
 			),
@@ -238,7 +253,9 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 			const define = () =>
 				component(
 					function* (props) {
-						yield () => html`<article>${props.heading}</article>`;
+						yield function* () {
+							yield html`<article>${props.heading}</article>`;
+						};
 					},
 					light({ heading: Slot }),
 				);
@@ -264,7 +281,9 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 				element = await renderOnServer(
 					component(
 						function* (props) {
-							yield () => html`<article>${props["sub-title"]}</article>`;
+							yield function* () {
+								yield html`<article>${props["sub-title"]}</article>`;
+							};
 						},
 						light({ "sub-title": Slot }),
 					),
@@ -284,7 +303,9 @@ describe("§4.6 / R24 — the discard warning, on the side that knows", () => {
 	const cardWithNoNoteSlot = () =>
 		component(
 			function* (props) {
-				yield () => html`<article>${props.heading}</article>`;
+				yield function* () {
+					yield html`<article>${props.heading}</article>`;
+				};
 			},
 			light({ heading: Slot }),
 		);
@@ -361,7 +382,9 @@ describe("§4.6 / R24 — the discard warning, on the side that knows", () => {
 				renderOnServer(
 					component(
 						function* (props) {
-							yield () => html`<article>${props.heading}</article>`;
+							yield function* () {
+								yield html`<article>${props.heading}</article>`;
+							};
 						},
 						{ props: { heading: Slot } } as ComponentOptions,
 					),
@@ -392,7 +415,7 @@ describe("§5.1 / R27 — what a server fatal leaves behind", () => {
 			expect(element.hasAttribute("component-error")).toBe(true);
 			expect(element.getAttribute("component-error")).toBe("");
 			expect(element.childNodes).toHaveLength(0);
-			expect(String(message)).toContain("fatal render error in");
+			expect(String(message)).toContain("stopped running.");
 			//an object, so devtools keeps the stack expandable
 			expect(thrown).toBeInstanceOf(Error);
 		},
@@ -406,13 +429,15 @@ describe("§5.1 / R27 — what a server fatal leaves behind", () => {
 				.mockImplementation(() => {});
 			const element = await renderOnServer(
 				component(function* () {
-					yield () => html`<article>painted</article>`;
+					yield function* () {
+						yield html`<article>painted</article>`;
+					};
 					throw new Error("too late");
 				}, light()),
 			);
 			consoleError.mockRestore();
 
-			//the server stops at the first renderable yield, so this fatal is unreachable on the
+			//the server stops at the first paint, so this fatal is unreachable on the
 			//server — the assertion is that the paint is what ships either way
 			expect(element.querySelector("article")?.textContent).toBe("painted");
 		},

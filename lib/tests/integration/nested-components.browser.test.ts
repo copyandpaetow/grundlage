@@ -21,20 +21,24 @@ const mount = (tag: string): HTMLElement => {
 };
 
 describe("nested components", () => {
-	test("renders a child custom element inside a parent shadow root", async () => {
+	test("paints a child custom element inside a parent shadow root", async () => {
 		const childTag = uniqueTag("child");
 		const parentTag = uniqueTag("parent");
 
 		customElements.define(
 			childTag,
 			component(function* () {
-				yield () => html`<span>child-content</span>`;
+				yield function* () {
+					yield html`<span>child-content</span>`;
+				};
 			}),
 		);
 		customElements.define(
 			parentTag,
 			component(function* () {
-				yield () => html`<section><${childTag}></${childTag}></section>`;
+				yield function* () {
+					yield html`<section><${childTag}></${childTag}></section>`;
+				};
 			}),
 		);
 
@@ -58,8 +62,11 @@ describe("nested components", () => {
 			childTag,
 			component(
 				function* ({ host: element }) {
-					yield () =>
-						html`<span>${element.getAttribute("label") ?? "empty"}</span>`;
+					yield function* () {
+						yield html`<span
+							>${element.getAttribute("label") ?? "empty"}</span
+						>`;
+					};
 				},
 				{ props: { label: String } },
 			),
@@ -67,7 +74,9 @@ describe("nested components", () => {
 
 		let label = "first";
 		const ParentClass = component(function* () {
-			yield () => html`<${childTag} label=${label}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} label=${label}></${childTag}>`;
+			};
 		});
 		customElements.define(parentTag, ParentClass);
 
@@ -96,16 +105,18 @@ describe("nested components", () => {
 		customElements.define(
 			childTag,
 			component(function* ({ host: element }) {
-				yield () => {
+				yield function* () {
 					const data = (element as Child).data;
-					return html`<span>${data ? data.value : "none"}</span>`;
+					yield html`<span>${data ? data.value : "none"}</span>`;
 				};
 			}),
 		);
 
 		let payload: { value: number } = { value: 1 };
 		const ParentClass = component(function* () {
-			yield () => html`<${childTag} data=${payload}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} data=${payload}></${childTag}>`;
+			};
 		});
 		customElements.define(parentTag, ParentClass);
 
@@ -142,7 +153,9 @@ describe("nested components", () => {
 						}),
 					);
 				};
-				yield () => html`<button onClick=${emit}>ping</button>`;
+				yield function* () {
+					yield html`<button onClick=${emit}>ping</button>`;
+				};
 			}),
 		);
 
@@ -151,7 +164,9 @@ describe("nested components", () => {
 			element.addEventListener("pinged", (event) => {
 				received.push((event as CustomEvent<number>).detail);
 			});
-			yield () => html`<div><${childTag}></${childTag}></div>`;
+			yield function* () {
+				yield html`<div><${childTag}></${childTag}></div>`;
+			};
 		});
 		customElements.define(parentTag, ParentClass);
 
@@ -168,7 +183,7 @@ describe("nested components", () => {
 		element.remove();
 	});
 
-	test("parent re-render preserves child element identity when structure is stable", async () => {
+	test("parent update preserves child element identity when structure is stable", async () => {
 		const childTag = uniqueTag("child-identity");
 		const parentTag = uniqueTag("parent-identity");
 
@@ -176,8 +191,9 @@ describe("nested components", () => {
 			childTag,
 			component(
 				function* ({ host: element }) {
-					yield () =>
-						html`<span>${element.getAttribute("label") ?? "none"}</span>`;
+					yield function* () {
+						yield html`<span>${element.getAttribute("label") ?? "none"}</span>`;
+					};
 				},
 				{ props: { label: String } },
 			),
@@ -185,7 +201,9 @@ describe("nested components", () => {
 
 		let label = "a";
 		const ParentClass = component(function* () {
-			yield () => html`<div><${childTag} label=${label}></${childTag}></div>`;
+			yield function* () {
+				yield html`<div><${childTag} label=${label}></${childTag}></div>`;
+			};
 		});
 		customElements.define(parentTag, ParentClass);
 
@@ -215,18 +233,21 @@ describe("nested components", () => {
 		customElements.define(
 			childTag,
 			component(function* ({ host: element }) {
-				yield () => html`<span>${element.getAttribute("value") ?? ""}</span>`;
+				yield function* () {
+					yield html`<span>${element.getAttribute("value") ?? ""}</span>`;
+				};
 			}),
 		);
 
 		let items = ["x", "y", "z"];
 		const ParentClass = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map(
 						(item) => html`<li><${childTag} value=${item}></${childTag}></li>`,
 					)}
 				</ul>`;
+			};
 		});
 		customElements.define(parentTag, ParentClass);
 
@@ -256,7 +277,7 @@ describe("nested components", () => {
 		element.remove();
 	});
 
-	test("three-level nesting renders all levels", async () => {
+	test("three-level nesting paints all levels", async () => {
 		const leafTag = uniqueTag("leaf");
 		const middleTag = uniqueTag("middle");
 		const rootTag = uniqueTag("root");
@@ -264,19 +285,25 @@ describe("nested components", () => {
 		customElements.define(
 			leafTag,
 			component(function* () {
-				yield () => html`<em>leaf</em>`;
+				yield function* () {
+					yield html`<em>leaf</em>`;
+				};
 			}),
 		);
 		customElements.define(
 			middleTag,
 			component(function* () {
-				yield () => html`<div><${leafTag}></${leafTag}></div>`;
+				yield function* () {
+					yield html`<div><${leafTag}></${leafTag}></div>`;
+				};
 			}),
 		);
 		customElements.define(
 			rootTag,
 			component(function* () {
-				yield () => html`<section><${middleTag}></${middleTag}></section>`;
+				yield function* () {
+					yield html`<section><${middleTag}></${middleTag}></section>`;
+				};
 			}),
 		);
 
@@ -298,7 +325,9 @@ describe("nested components", () => {
 		customElements.define(
 			childTag,
 			component(function* () {
-				yield () => html`<span>temp</span>`;
+				yield function* () {
+					yield html`<span>temp</span>`;
+				};
 				return () => {
 					cleanedChild = true;
 				};
@@ -307,7 +336,9 @@ describe("nested components", () => {
 		customElements.define(
 			parentTag,
 			component(function* () {
-				yield () => html`<${childTag}></${childTag}>`;
+				yield function* () {
+					yield html`<${childTag}></${childTag}>`;
+				};
 			}),
 		);
 
@@ -328,17 +359,20 @@ describe("nested components", () => {
 		customElements.define(
 			childTag,
 			component(function* () {
-				yield () => html`<span>${counterInternal}</span>`;
+				yield function* () {
+					yield html`<span>${counterInternal}</span>`;
+				};
 			}),
 		);
 
 		let parentLabel = "one";
 		const ParentClass = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					<h1>${parentLabel}</h1>
 					<${childTag}></${childTag}>
 				</div>`;
+			};
 		});
 		customElements.define(parentTag, ParentClass);
 
@@ -357,7 +391,7 @@ describe("nested components", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("h1")?.textContent).toBe("two");
-		//child should be the same element and retain its last-rendered state
+		//child should be the same element and retain its last painted state
 		const sameChild = element.shadowRoot?.querySelector(childTag);
 		expect(sameChild).toBe(child);
 		expect(sameChild?.shadowRoot?.querySelector("span")?.textContent).toBe("5");
@@ -396,15 +430,19 @@ describe("shared template generator functions", () => {
 		expect(hashValue(first)).not.toBe(hashValue(second));
 	});
 
-	test("two components using the same helper render consistently", async () => {
+	test("two components using the same helper paint consistently", async () => {
 		const tagA = uniqueTag("shared-a");
 		const tagB = uniqueTag("shared-b");
 
 		const ComponentA = component(function* () {
-			yield () => card("from-a", "body-a");
+			yield function* () {
+				yield html`${card("from-a", "body-a")}`;
+			};
 		});
 		const ComponentB = component(function* () {
-			yield () => card("from-b", "body-b");
+			yield function* () {
+				yield html`${card("from-b", "body-b")}`;
+			};
 		});
 		customElements.define(tagA, ComponentA);
 		customElements.define(tagB, ComponentB);
@@ -434,7 +472,9 @@ describe("shared template generator functions", () => {
 		];
 
 		const ComponentClass = component(function* () {
-			yield () => list(rows, (row) => card(row.title, row.body));
+			yield function* () {
+				yield html`${list(rows, (row) => card(row.title, row.body))}`;
+			};
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -472,7 +512,9 @@ describe("shared template generator functions", () => {
 			html`<section><strong>${label}</strong>${inner}</section>`;
 
 		const ComponentClass = component(function* () {
-			yield () => labeled("heading", card("title", "body"));
+			yield function* () {
+				yield html`${labeled("heading", card("title", "body"))}`;
+			};
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -501,7 +543,9 @@ describe("shared template generator functions", () => {
 		let state: "idle" | "loading" | "error" = "loading";
 		let message = "fetching";
 		const ComponentClass = component(function* () {
-			yield () => status(state, message);
+			yield function* () {
+				yield html`${status(state, message)}`;
+			};
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -539,13 +583,14 @@ describe("shared template generator functions", () => {
 		const tag = uniqueTag("shared-multi-site");
 
 		const ComponentClass = component(function* () {
-			yield () =>
-				html`<main>
+			yield function* () {
+				yield html`<main>
 					${card("first", "one")}${card("second", "two")}${card(
 						"third",
 						"three",
 					)}
 				</main>`;
+			};
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -573,19 +618,22 @@ describe("shared template generator functions", () => {
 		customElements.define(
 			childTag,
 			component(function* ({ host: element }) {
-				yield () =>
-					card(
+				yield function* () {
+					yield html`${card(
 						element.getAttribute("title") ?? "",
 						element.getAttribute("body") ?? "",
-					);
+					)}`;
+				};
 			}),
 		);
 
 		const ParentClass = component(function* () {
-			yield () => html`<div>
+			yield function* () {
+				yield html`<div>
 				${card("parent-card", "outer")}
 				<${childTag} title="child-card" body="inner"></${childTag}>
 			</div>`;
+			};
 		});
 		customElements.define(parentTag, ParentClass);
 
@@ -610,7 +658,9 @@ describe("shared generator functions", () => {
 		let mountCount = 0;
 		const counterGenerator: ComponentGenerator = function* () {
 			const id = ++mountCount;
-			yield () => html`<span>id-${id}</span>`;
+			yield function* () {
+				yield html`<span>id-${id}</span>`;
+			};
 		};
 
 		const firstTag = uniqueTag("shared-gen-a");
@@ -638,7 +688,9 @@ describe("shared generator functions", () => {
 				count++;
 				element.update();
 			});
-			yield () => html`<span>${count}</span>`;
+			yield function* () {
+				yield html`<span>${count}</span>`;
+			};
 		};
 		customElements.define(tag, component(stateGenerator));
 
@@ -666,7 +718,9 @@ describe("shared generator functions", () => {
 		const loadingThenData = function* () {
 			yield html`<p>loading</p>`;
 			const data: string = (yield Promise.resolve("ready")) as string;
-			yield () => html`<p>${data}</p>`;
+			yield function* () {
+				yield html`<p>${data}</p>`;
+			};
 		};
 
 		const tag = uniqueTag("delegated");
@@ -701,7 +755,9 @@ describe("shared generator functions", () => {
 			};
 
 		const body = function* () {
-			yield () => html`<p>wrapped</p>`;
+			yield function* () {
+				yield html`<p>wrapped</p>`;
+			};
 		};
 
 		const tag = uniqueTag("higher-order");
@@ -736,7 +792,9 @@ describe("shared generator functions", () => {
 				for (const step of loadSteps()) {
 					visited.push(step);
 				}
-				yield () => html`<p>${visited.join(",")}</p>`;
+				yield function* () {
+					yield html`<p>${visited.join(",")}</p>`;
+				};
 			}),
 		);
 
@@ -750,19 +808,21 @@ describe("shared generator functions", () => {
 		element.remove();
 	});
 
-	test("async sub-generator delegated with yield* sequences async work", async () => {
+	test("a sub-generator delegated with yield* sequences async work", async () => {
 		const loadInTwoStages: (
 			element: BaseComponent,
-		) => AsyncGenerator<YieldableValue> = async function* () {
+		) => Generator<YieldableValue> = function* () {
 			yield html`<p>stage-1</p>`;
-			await new Promise((resolve) => setTimeout(resolve, 10));
-			yield () => html`<p>stage-2</p>`;
+			yield new Promise((resolve) => setTimeout(resolve, 10));
+			yield function* () {
+				yield html`<p>stage-2</p>`;
+			};
 		};
 
 		const tag = uniqueTag("async-delegate");
 		customElements.define(
 			tag,
-			component(async function* ({ host: element }) {
+			component(function* ({ host: element }) {
 				yield* loadInTwoStages(element);
 			}),
 		);
@@ -784,7 +844,9 @@ describe("framework-parity patterns", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				yield () => html`<section><slot></slot></section>`;
+				yield function* () {
+					yield html`<section><slot></slot></section>`;
+				};
 			}),
 		);
 
@@ -807,11 +869,12 @@ describe("framework-parity patterns", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				yield () =>
-					html`<div>
+				yield function* () {
+					yield html`<div>
 						<header><slot name="title"></slot></header>
 						<main><slot></slot></main>
 					</div>`;
+				};
 			}),
 		);
 
@@ -837,7 +900,7 @@ describe("framework-parity patterns", () => {
 		element.remove();
 	});
 
-	test("two-way-style input binding: user input updates state and triggers re-render", async () => {
+	test("two-way-style input binding: user input updates state and triggers an update", async () => {
 		const tag = uniqueTag("two-way");
 		const ComponentClass = component(function* ({ host: element }) {
 			let value = "";
@@ -845,11 +908,12 @@ describe("framework-parity patterns", () => {
 				value = (event.target as HTMLInputElement).value;
 				element.update();
 			};
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					<input value=${value} onInput=${onInput} />
 					<output>${value}</output>
 				</div>`;
+			};
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -883,7 +947,9 @@ describe("framework-parity patterns", () => {
 					(event as CustomEvent<ThemeRequest>).detail.theme = "dark";
 					event.stopPropagation();
 				});
-				yield () => html`<div><slot></slot></div>`;
+				yield function* () {
+					yield html`<div><slot></slot></div>`;
+				};
 			}),
 		);
 
@@ -904,7 +970,9 @@ describe("framework-parity patterns", () => {
 					}),
 				);
 				const theme = request.theme ?? "light";
-				yield () => html`<span>theme:${theme}</span>`;
+				yield function* () {
+					yield html`<span>theme:${theme}</span>`;
+				};
 			}),
 		);
 
@@ -942,8 +1010,10 @@ describe("framework-parity patterns", () => {
 				missing: [String, "fallback"],
 			});
 			captured = resolved;
-			yield () =>
-				html`<p>${captured!.label}-${captured!.count}-${captured!.missing}</p>`;
+			yield function* () {
+				const { label, count, missing } = captured!;
+				yield html`<p>${label}-${count}-${missing}</p>`;
+			};
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -975,7 +1045,9 @@ describe("framework-parity patterns", () => {
 				count++;
 				element.update();
 			});
-			yield () => html`<span>${count}</span>`;
+			yield function* () {
+				yield html`<span>${count}</span>`;
+			};
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -999,16 +1071,17 @@ describe("framework-parity patterns", () => {
 		third.remove();
 	});
 
-	test("conditional rendering with null removes subtree without remounting siblings", async () => {
+	test("conditional paint with null removes subtree without remounting siblings", async () => {
 		const tag = uniqueTag("conditional-null");
 		let show = true;
 
 		const ComponentClass = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					<header>stable</header>
 					${show ? html`<aside>visible</aside>` : null}
 				</div>`;
+			};
 		});
 		customElements.define(tag, ComponentClass);
 
@@ -1036,23 +1109,23 @@ describe("framework-parity patterns", () => {
 		element.remove();
 	});
 
-	test("render-prop pattern: parent passes a row renderer to a list child", async () => {
+	test("render-prop pattern: parent passes a row template function to a list child", async () => {
 		//React's render-prop / Vue scoped-slot equivalent: the child consumes a
 		//template factory supplied by the parent through a property binding
-		type RowRenderer = (item: string) => Template;
+		type RowTemplate = (item: string) => Template;
 
 		const listTag = uniqueTag("renderprop-list");
 		customElements.define(
 			listTag,
 			component(function* ({ host: element }) {
-				yield () => {
+				yield function* () {
 					const rows =
 						(element as HTMLElement & { items?: string[] }).items ?? [];
-					const renderRow =
-						(element as HTMLElement & { row?: RowRenderer }).row ??
+					const rowTemplate =
+						(element as HTMLElement & { row?: RowTemplate }).row ??
 						((item) => html`<li>${item}</li>`);
-					return html`<ul>
-						${rows.map((item) => renderRow(item))}
+					yield html`<ul>
+						${rows.map((item) => rowTemplate(item))}
 					</ul>`;
 				};
 			}),
@@ -1063,21 +1136,23 @@ describe("framework-parity patterns", () => {
 			hostTag,
 			component(function* () {
 				const items = ["one", "two", "three"];
-				const row: RowRenderer = (item) =>
+				const row: RowTemplate = (item) =>
 					html`<li class="custom">item:${item}</li>`;
-				yield () => html`<${listTag} items=${items} row=${row}></${listTag}>`;
+				yield function* () {
+					yield html`<${listTag} items=${items} row=${row}></${listTag}>`;
+				};
 			}),
 		);
 
 		const element = mount(hostTag);
 		await sleep();
 
-		const renderedItems = element.shadowRoot
+		const paintedItems = element.shadowRoot
 			?.querySelector(listTag)
 			?.shadowRoot?.querySelectorAll("li.custom");
-		expect(renderedItems?.length).toBe(3);
-		expect(renderedItems?.[0].textContent).toBe("item:one");
-		expect(renderedItems?.[2].textContent).toBe("item:three");
+		expect(paintedItems?.length).toBe(3);
+		expect(paintedItems?.[0].textContent).toBe("item:one");
+		expect(paintedItems?.[2].textContent).toBe("item:three");
 
 		element.remove();
 	});
@@ -1089,10 +1164,11 @@ describe("framework-parity patterns", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				yield () =>
-					html`<section>
+				yield function* () {
+					yield html`<section>
 						<slot><em>nothing-here</em></slot>
 					</section>`;
+				};
 			}),
 		);
 
@@ -1133,14 +1209,16 @@ describe("framework-parity patterns", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				yield () => html`
-					<header>
-						<slot name="title"><h1>default-title</h1></slot>
-					</header>
-					<main>
-						<slot></slot>
-					</main>
-				`;
+				yield function* () {
+					yield html`
+						<header>
+							<slot name="title"><h1>default-title</h1></slot>
+						</header>
+						<main>
+							<slot></slot>
+						</main>
+					`;
+				};
 			}),
 		);
 
@@ -1169,12 +1247,14 @@ describe("framework-parity patterns", () => {
 		element.remove();
 	});
 
-	test("slot re-projects children added or removed after first render", async () => {
+	test("slot re-projects children added or removed after first paint", async () => {
 		const tag = uniqueTag("slot-reproject");
 		customElements.define(
 			tag,
 			component(function* () {
-				yield () => html`<section><slot></slot></section>`;
+				yield function* () {
+					yield html`<section><slot></slot></section>`;
+				};
 			}),
 		);
 
@@ -1206,7 +1286,7 @@ describe("framework-parity patterns", () => {
 	});
 
 	test.skipIf("happyDOM" in globalThis)(
-		"focus on nested child input survives parent re-render",
+		"focus on nested child input survives parent update",
 		async () => {
 			//guards against the parent's content-binding update dropping the
 			//child element (and therefore its focused descendant)
@@ -1214,15 +1294,18 @@ describe("framework-parity patterns", () => {
 			customElements.define(
 				childTag,
 				component(function* () {
-					yield () => html`<input type="text" />`;
+					yield function* () {
+						yield html`<input type="text" />`;
+					};
 				}),
 			);
 
 			const parentTag = uniqueTag("focus-parent");
 			let label = "one";
 			const ParentClass = component(function* () {
-				yield () =>
-					html`<div><h1>${label}</h1><${childTag}></${childTag}></div>`;
+				yield function* () {
+					yield html`<div><h1>${label}</h1><${childTag}></${childTag}></div>`;
+				};
 			});
 			customElements.define(parentTag, ParentClass);
 
@@ -1261,11 +1344,11 @@ describe("framework-parity patterns", () => {
 		customElements.define(
 			childTag,
 			component(function* () {
-				yield () => {
+				yield function* () {
 					if (shouldChildThrow) {
 						throw new Error("child-boom");
 					}
-					return html`<span>child-ok</span>`;
+					yield html`<span>child-ok</span>`;
 				};
 			}),
 		);
@@ -1273,31 +1356,32 @@ describe("framework-parity patterns", () => {
 		const parentTag = uniqueTag("err-parent");
 		let parentLabel = "alpha";
 		const ParentClass = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					<h1>${parentLabel}</h1>
 					<${childTag}></${childTag}>
 				</div>`;
+			};
 		});
 		customElements.define(parentTag, ParentClass);
 
 		const element = mount(parentTag) as InstanceType<typeof ParentClass>;
 		await sleep();
 
-		//parent rendered fine
+		//parent painted fine
 		expect(element.shadowRoot?.querySelector("h1")?.textContent).toBe("alpha");
 
 		//child's shadow shows the error (see handleError in index.ts)
 		const child = element.shadowRoot?.querySelector(childTag) as HTMLElement;
 		expect(child.shadowRoot?.textContent).toContain("child-boom");
 
-		//parent can still update; its own render is unaffected
+		//parent can still update; its own paint is unaffected
 		parentLabel = "beta";
 		await element.update();
 		await sleep();
 		expect(element.shadowRoot?.querySelector("h1")?.textContent).toBe("beta");
 
-		//child is permanently broken — handleError nulls #render, so update()
+		//child is permanently broken — the fatal error stopped its runner, so update()
 		//short-circuits. Even if the underlying throw condition is cleared,
 		//the child does not self-recover
 		shouldChildThrow = false;

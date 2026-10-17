@@ -25,7 +25,9 @@ describe("the object a component receives", () => {
 			component(
 				function* (componentProps) {
 					received = componentProps;
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { label: [String, "anon"] } },
 			),
@@ -48,7 +50,9 @@ describe("the object a component receives", () => {
 			component(
 				function* (received) {
 					componentProps = received;
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { userid: String } },
 			),
@@ -69,15 +73,15 @@ describe("the object a component receives", () => {
 		let componentProps: ComponentProps<{
 			userid: StringConstructor;
 		}> | null = null;
-		let renderCount = 0;
+		let runCount = 0;
 		customElements.define(
 			tag,
 			component(
 				function* (received) {
 					componentProps = received;
-					yield () => {
-						renderCount++;
-						return html`<p>x</p>`;
+					yield function* () {
+						runCount++;
+						yield html`<p>x</p>`;
 					};
 				},
 				{ props: { userid: String } },
@@ -87,13 +91,13 @@ describe("the object a component receives", () => {
 		element.setAttribute("userid", "7");
 		document.body.appendChild(element);
 		await sleep();
-		renderCount = 0;
+		runCount = 0;
 
 		componentProps!.host.userid = "9";
 		expect(componentProps!.userid).toBe("9");
 		expect(element.getAttribute("userid")).toBe("9");
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 		element.remove();
 	});
 
@@ -106,7 +110,9 @@ describe("the object a component receives", () => {
 			component(
 				function* (received) {
 					componentProps = received;
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { userid: String } },
 			),
@@ -133,7 +139,9 @@ describe("the object a component receives", () => {
 			tag,
 			component(function* (componentProps) {
 				received.push(componentProps);
-				yield () => html`<p>x</p>`;
+				yield function* () {
+					yield html`<p>x</p>`;
+				};
 			}),
 		);
 		const first = mount(tag);
@@ -154,7 +162,9 @@ describe("reflection", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				{ props: { open: Boolean, label: String } },
 			),
@@ -190,9 +200,9 @@ describe("one calling convention", () => {
 			component(
 				function* (componentProps) {
 					outer = componentProps;
-					yield function* (received: ComponentProps) {
+					yield function* (received) {
 						inner = received;
-						yield () => html`<p>inner</p>`;
+						yield html`<p>inner</p>`;
 					};
 				},
 				{ props: { label: [String, "x"] } },
@@ -214,7 +224,7 @@ describe("one calling convention", () => {
 			host: BaseComponent;
 			userId: string | undefined;
 		}) {
-			yield () => html`<p>${userId} on ${host.localName}</p>`;
+			yield html`<p>${userId} on ${host.localName}</p>`;
 		};
 
 		customElements.define(

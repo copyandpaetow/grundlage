@@ -39,18 +39,19 @@ describe("raw content updates", () => {
 	};
 	const resolvesComputedColors = detectComputedColorResolution();
 
-	test("renders dynamic content inside a style element", async () => {
+	test("paints dynamic content inside a style element", async () => {
 		const tag = uniqueTag();
 		let color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						p {
 							color: ${color};
 						}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -74,13 +75,14 @@ describe("raw content updates", () => {
 			let color = "red";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							p {
 								color: ${color};
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -105,13 +107,14 @@ describe("raw content updates", () => {
 		let color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						p {
 							color: ${color};
 						}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -137,12 +140,14 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders dynamic content inside a textarea element", async () => {
+	test("paints dynamic content inside a textarea element", async () => {
 		const tag = uniqueTag();
 		let content = "initial text";
 
 		const MyElement = component(function* () {
-			yield () => html`<textarea>${content}</textarea>`;
+			yield function* () {
+				yield html`<textarea>${content}</textarea>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -161,20 +166,21 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders multiple dynamic expressions in a style element", async () => {
+	test("paints multiple dynamic expressions in a style element", async () => {
 		const tag = uniqueTag();
 		let color = "red";
 		let size = "16px";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						p {
 							color: ${color};
 							font-size: ${size};
 						}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -202,10 +208,11 @@ describe("raw content updates", () => {
 		const injection = "<script>alert('xss')</script>";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 					${injection}
 				</style>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -226,11 +233,12 @@ describe("raw content updates", () => {
 		const css = "p { color: red; }";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						${css}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -253,12 +261,13 @@ describe("raw content updates", () => {
 		let size = 16;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 					p {
 						font-size: ${size}px;
 					}
 				</style>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -281,12 +290,12 @@ describe("raw content updates", () => {
 	test("a nested-template style does not re-trigger the host attribute observer", async () => {
 		const tag = uniqueTag();
 		const color = "red";
-		let renderCount = 0;
+		let runCount = 0;
 
 		const MyElement = component(function* () {
-			yield () => {
-				renderCount++;
-				return html`<div>
+			yield function* () {
+				runCount++;
+				yield html`<div>
 					${html`<style>
 							p {
 								color: ${color};
@@ -300,10 +309,10 @@ describe("raw content updates", () => {
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		//the css path never writes the host, so nothing may re-fire the attribute
-		//observer and grow the render count without bound
+		//observer and grow the run count without bound
 		await sleep(50);
 
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 		expect(element.getAttribute("style")).toBeNull();
 		const style = element.shadowRoot!.querySelector("style")!;
 		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
@@ -311,7 +320,7 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("one styled helper rendered twice in a component keeps both colors", async () => {
+	test("one styled helper painted twice in a component keeps both colors", async () => {
 		const tag = uniqueTag();
 		const badge = (color: string) =>
 			html`<style>
@@ -322,9 +331,10 @@ describe("raw content updates", () => {
 				<span class="b">x</span>`;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>${badge("red")}</div>
+			yield function* () {
+				yield html`<div>${badge("red")}</div>
 					<div>${badge("blue")}</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -355,8 +365,8 @@ describe("raw content updates", () => {
 		let color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<template style="outline: none"
+			yield function* () {
+				yield html`<template style="outline: none"
 					><div>
 						${html`<style>
 								p {
@@ -366,6 +376,7 @@ describe("raw content updates", () => {
 							<p>text</p>`}
 					</div></template
 				>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -398,13 +409,14 @@ describe("raw content updates", () => {
 			const backgroundValue = "inherit";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							p {
 								background-color: ${backgroundValue};
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -430,14 +442,15 @@ describe("raw content updates", () => {
 			let width = "45px";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							p {
 								--width: ${width};
 								width: var(--width, 7px);
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -464,10 +477,11 @@ describe("raw content updates", () => {
 		let label = "first";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					<template><p>${label}</p></template>
 				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -506,8 +520,8 @@ describe("raw content updates", () => {
 		const color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				showStyled
+			yield function* () {
+				yield showStyled
 					? html`<style>
 								p {
 									color: ${color};
@@ -515,6 +529,7 @@ describe("raw content updates", () => {
 							</style>
 							<p>x</p>`
 					: html`<div>plain</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -545,13 +560,14 @@ describe("raw content updates", () => {
 		let color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						p {
 							color: ${color};
 						}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -592,8 +608,8 @@ describe("raw content updates", () => {
 		];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map(
 						(row) =>
 							html`<li key="${row.id}">
@@ -606,6 +622,7 @@ describe("raw content updates", () => {
 							</li>`,
 					)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);

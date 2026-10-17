@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, component } from "../../../index";
+import { html, component, type Template } from "../../../index";
 
 //every row's text is distinct, so the content-hash pass matches each row to its previous self and
 //the rows re-inserted during an update are exactly the rows placement moved
@@ -9,12 +9,14 @@ describe("list placement moves the fewest rows", () => {
 	const inOrder = Array.from({ length: rowCount }, (_, index) => index);
 	const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-	const define = (template: () => unknown) => {
+	const define = (template: () => Template) => {
 		const tag = `test-list-placement-${tagId++}-${Date.now()}`;
 		customElements.define(
 			tag,
 			component(function* () {
-				yield template;
+				yield function* () {
+					yield template();
+				};
 			}),
 		);
 		const element = document.createElement(tag);

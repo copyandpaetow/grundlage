@@ -1,14 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../src/index";
 
-//update() resolves once the DOM reflects this call, coalescing with any concurrent update, across
-//synchronous and asynchronous renders. The two halves that matter: `await update()` waits for an
-//async render to actually land, with no trailing `await sleep()` crutch, and a mid-flight update
-//coalesces into a single deferred reflush rather than restarting the in-flight render.
+//update() resolves once the DOM reflects this call, coalescing with any concurrent update, whether
+//the run waits on a promise or not. The two halves that matter: `await update()` waits for a
+//waiting run to actually paint, with no trailing `await sleep()` crutch, and an update that
+//arrives while a run waits tears that run down and starts a fresh one.
 //
-//update() re-runs the current source, not the root, so a re-runnable source is what the root
-//yields: a render function is re-called, a generator function is restarted. The root itself runs
-//once per connection.
+//update() re-runs the update generator the body yielded last, never the body, which runs once
+//per connection.
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -31,10 +30,10 @@ describe("update() scheduling contract", () => {
 		//old machine resolved update() at the synchronous dispatch boundary — this would
 		//then observe the stale count without a trailing sleep
 		const Counter = component(function* () {
-			yield async function* () {
+			yield function* () {
 				const snapshot = count;
-				await sleep(10);
-				yield () => html`<span>${snapshot}</span>`;
+				yield sleep(10);
+				yield html`<span>${snapshot}</span>`;
 			};
 		});
 		customElements.define(tag, Counter);
@@ -51,30 +50,30 @@ describe("update() scheduling contract", () => {
 		element.remove();
 	});
 
-	test("a synchronous burst of update() calls coalesces into one re-render", async () => {
+	test("a synchronous burst of update() calls coalesces into one update", async () => {
 		const tag = uniqueTag();
-		let renders = 0;
+		let runs = 0;
 		let count = 0;
 
 		const Counter = component(function* () {
-			yield () => {
-				renders++;
-				return html`<span>${count}</span>`;
+			yield function* () {
+				runs++;
+				yield html`<span>${count}</span>`;
 			};
 		});
 		customElements.define(tag, Counter);
 
 		const element = mount(tag) as InstanceType<typeof Counter>;
 		await sleep();
-		expect(renders).toBe(1);
+		expect(runs).toBe(1);
 
 		count = 1;
 		element.update();
 		element.update();
 		await element.update();
 
-		//the mount render plus one for the three coalesced calls
-		expect(renders).toBe(2);
+		//the mount run plus one for the three coalesced calls
+		expect(runs).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("1");
 
 		element.remove();
@@ -82,79 +81,79 @@ describe("update() scheduling contract", () => {
 
 	test("coalesced callers share one promise and resolve together", async () => {
 		const tag = uniqueTag();
-		let renders = 0;
+		let runs = 0;
 
 		const Counter = component(function* () {
-			yield () => {
-				renders++;
-				return html`<span>${renders}</span>`;
+			yield function* () {
+				runs++;
+				yield html`<span>${runs}</span>`;
 			};
 		});
 		customElements.define(tag, Counter);
 
 		const element = mount(tag) as InstanceType<typeof Counter>;
 		await sleep();
-		expect(renders).toBe(1);
+		expect(runs).toBe(1);
 
 		await Promise.all([element.update(), element.update(), element.update()]);
 
-		expect(renders).toBe(2);
+		expect(runs).toBe(2);
 
 		element.remove();
 	});
 
 	test("an update() arriving mid-flight reflushes exactly once with a fresh pull", async () => {
 		const tag = uniqueTag();
-		let renders = 0;
+		let runs = 0;
 		let phase = "a";
 
 		const Component = component(function* () {
-			yield async function* () {
-				renders++;
+			yield function* () {
+				runs++;
 				const snapshot = phase;
-				await sleep(10);
-				yield () => html`<span>${snapshot}</span>`;
+				yield sleep(10);
+				yield html`<span>${snapshot}</span>`;
 			};
 		});
 		customElements.define(tag, Component);
 
 		const element = mount(tag) as InstanceType<typeof Component>;
 		await sleep(30);
-		expect(renders).toBe(1);
+		expect(runs).toBe(1);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("a");
 
 		phase = "b";
 		const first = element.update();
-		await sleep(); // let the restart begin and park at its await (RENDERING)
+		await sleep(); // let the restart begin and park at its yield
 		phase = "c";
-		const second = element.update(); // RENDERING -> sets dirty, does NOT restart
+		const second = element.update(); // mid-flight: tears the waiting run down and starts a fresh one
 
 		await Promise.all([first, second]);
 
-		//init(1) + restart(2) + one deferred reflush(3). not four — the mid-flight call
-		//did not spin up its own render
-		expect(renders).toBe(3);
+		//the mount (1) plus one run per update() call (2, 3): the mid-flight call tore the waiting
+		//run down instead of waiting for it
+		expect(runs).toBe(3);
 		//the reflush pulled fresh state, so the final value is the latest ("c"), not "b"
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("c");
 
 		element.remove();
 	});
 
-	test("a conditional render-time update reflushes once, then stops (no runaway loop)", async () => {
+	test("a conditional update() during a run re-runs once, then stops (no runaway loop)", async () => {
 		const tag = uniqueTag();
-		let renders = 0;
+		let runs = 0;
 		let triggerOnce = true;
 
 		//the host is closed over rather than taken as a parameter: a yield carries no contextual
-		//type, so a render function's own parameter list is untyped
+		//type, so an update generator's own parameter list is untyped
 		const Component = component(function* ({ host }) {
-			yield () => {
-				renders++;
+			yield function* () {
+				runs++;
 				if (triggerOnce) {
 					triggerOnce = false;
 					host.update();
 				}
-				return html`<span>${renders}</span>`;
+				yield html`<span>${runs}</span>`;
 			};
 		});
 		customElements.define(tag, Component);
@@ -162,60 +161,67 @@ describe("update() scheduling contract", () => {
 		const element = mount(tag) as InstanceType<typeof Component>;
 		await sleep();
 
-		//initial render triggered exactly one reflush; the second render's condition is
-		//false, so it terminates. dirty being a single bit bounds it to one reflush
-		expect(renders).toBe(2);
+		//the first run triggered exactly one more; the second run's condition is false, so it
+		//terminates. A runner is queued at most once, which bounds it to one more run
+		expect(runs).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("2");
 
 		element.remove();
 	});
 
-	test("a render-time update() resolves after its async reflush painted, not before", async () => {
+	test("an update() during a run resolves after its waiting re-run painted, not before", async () => {
 		//the outer's COMPLETED resolves the pending promise, so it has to defer to a pass queued
 		//during this one. a synchronous reflush hides the difference (its microtask is already
 		//ahead of the resolve in the queue); an async one does not — resolving at COMPLETED would
-		//unblock the caller on the first render's DOM, 20ms before the second one paints
+		//unblock the caller on the first run's DOM, 20ms before the second one paints
 		const tag = uniqueTag();
-		let renders = 0;
-		let promiseFromInsideTheRender: Promise<void> | null = null;
+		let runs = 0;
+		let promiseFromInsideTheRun: Promise<void> | null = null;
 
 		const Component = component(function* ({ host }) {
-			yield () => {
-				const mine = ++renders;
+			yield function* () {
+				const mine = ++runs;
 				if (mine === 1) {
-					promiseFromInsideTheRender = host.update();
-					return html`<span>${mine}</span>`;
+					promiseFromInsideTheRun = host.update();
+					yield html`<span>${mine}</span>`;
+					return;
 				}
-				return sleep(20).then(() => html`<span>${mine}</span>`);
+				yield sleep(20);
+				yield html`<span>${mine}</span>`;
 			};
 		});
 		customElements.define(tag, Component);
 
 		const element = mount(tag) as InstanceType<typeof Component>;
-		await promiseFromInsideTheRender!;
+		await promiseFromInsideTheRun!;
 
-		expect(renders).toBe(2);
+		expect(runs).toBe(2);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("2");
 
 		element.remove();
 	});
 
-	test("a render-time update() during a refire resolves after its async reflush painted, not before", async () => {
+	test("an update() during an update resolves after its waiting re-run painted, not before", async () => {
 		//the twin of the test above, on the other resolve site: a refire has no yield to resume,
-		//so the render lane's PAINT resolves the promise. it has to defer to the pass queued
+		//so the end of that run resolves the promise. it has to defer to the pass queued
 		//during it the same way COMPLETED does
 		const tag = uniqueTag();
-		let renders = 0;
+		let runs = 0;
 
 		const Component = component(function* ({ host }) {
-			yield () => {
-				const mine = ++renders;
+			yield function* () {
+				const mine = ++runs;
 				if (mine === 2) {
 					host.update();
-					return html`<span>${mine}</span>`;
+					yield html`<span>${mine}</span>`;
+					return;
 				}
-				if (mine === 3) return sleep(20).then(() => html`<span>${mine}</span>`);
-				return html`<span>${mine}</span>`;
+				if (mine === 3) {
+					yield sleep(20);
+					yield html`<span>${mine}</span>`;
+					return;
+				}
+				yield html`<span>${mine}</span>`;
 			};
 		});
 		customElements.define(tag, Component);
@@ -225,7 +231,7 @@ describe("update() scheduling contract", () => {
 
 		await element.update();
 
-		expect(renders).toBe(3);
+		expect(runs).toBe(3);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("3");
 
 		element.remove();
@@ -252,36 +258,36 @@ describe("update() scheduling contract", () => {
 
 	test("update() on a disconnected element resolves immediately", async () => {
 		const tag = uniqueTag();
-		let renders = 0;
+		let runs = 0;
 
 		const Component = component(function* () {
-			yield () => {
-				renders++;
-				return html`<span>x</span>`;
+			yield function* () {
+				runs++;
+				yield html`<span>x</span>`;
 			};
 		});
 		customElements.define(tag, Component);
 
 		const element = mount(tag) as InstanceType<typeof Component>;
 		await sleep();
-		expect(renders).toBe(1);
+		expect(runs).toBe(1);
 
 		element.remove();
-		await element.update(); // not connected: resolves, no re-render
-		expect(renders).toBe(1);
+		await element.update(); // not connected: resolves, no run
+		expect(runs).toBe(1);
 	});
 
-	test("an async render that throws still resolves update() and surfaces the error", async () => {
+	test("an update generator that throws after a wait still resolves update() and surfaces the error", async () => {
 		const tag = uniqueTag();
 		let shouldThrow = false;
 
 		const Component = component(function* () {
-			yield async function* () {
+			yield function* () {
 				if (shouldThrow) {
-					await sleep(10);
+					yield sleep(10);
 					throw new Error("async boom");
 				}
-				yield () => html`<span>ok</span>`;
+				yield html`<span>ok</span>`;
 			};
 		});
 		customElements.define(tag, Component);
@@ -291,34 +297,69 @@ describe("update() scheduling contract", () => {
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("ok");
 
 		shouldThrow = true;
-		//the flush must resolve (not hang) even though the render rejected
+		//the flush must resolve (not hang) even though the run threw
 		await element.update();
 		expect(element.shadowRoot?.textContent).toContain("async boom");
 
 		element.remove();
 	});
 
-	test("update() supersedes an in-flight render; the stale one cannot clobber it", async () => {
+	test("an update() queued by an update generator that throws settles at the body's catch, while the body still waits", async () => {
+		const tag = uniqueTag();
+		const fallbackText = Promise.withResolvers<string>();
+		const queuedUpdates: Array<Promise<void>> = [];
+
+		const Component = component(function* ({ host }) {
+			try {
+				yield function* () {
+					queuedUpdates.push(host.update());
+					throw new Error("view failed");
+				};
+			} catch {
+				const text = yield fallbackText.promise;
+				yield html`<p>${text}</p>`;
+			}
+		});
+		customElements.define(tag, Component);
+
+		const element = mount(tag);
+		let hasUpdateSettled = false;
+		void queuedUpdates[0].then(() => {
+			hasUpdateSettled = true;
+		});
+		await sleep();
+		expect(hasUpdateSettled).toBe(true);
+
+		fallbackText.resolve("fallback");
+		await sleep();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
+			"fallback",
+		);
+
+		element.remove();
+	});
+
+	test("update() supersedes a waiting run; the stale one cannot clobber it", async () => {
 		const tag = uniqueTag();
 		let value = "old";
 
 		const Component = component(function* () {
-			yield async function* () {
+			yield function* () {
 				const snapshot = value;
-				await sleep(20);
-				yield () => html`<span>${snapshot}</span>`;
+				yield sleep(20);
+				yield html`<span>${snapshot}</span>`;
 			};
 		});
 		customElements.define(tag, Component);
 
 		const element = mount(tag) as InstanceType<typeof Component>;
-		await sleep(); // mount's render is parked at its 20ms await, not yet landed
+		await sleep(); // the mount's run is parked at its 20ms yield, not yet painted
 
 		value = "new";
-		await element.update(); // cancels the in-flight mount render, restarts with "new"
+		await element.update(); // tears the waiting mount run down, restarts with "new"
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("new");
 
-		//the superseded render's await now fires; its yield must be contained
+		//the superseded run's promise now settles; its yield must be contained
 		await sleep(40);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("new");
 

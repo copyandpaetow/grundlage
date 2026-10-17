@@ -115,7 +115,7 @@ export const seedDeclarationValueHashes = (
 		);
 };
 
-//copies each hole's serialized value/priority off the orphaned pre-move sheet — no render
+//copies each hole's serialized value/priority off the orphaned pre-move sheet — no paint
 //values are on hand at move time to recompose from
 export const rebindStyleSheet = (liveBinding: RawContentLiveBinding): void => {
 	const lane = liveBinding.styleSheetLane;
@@ -129,7 +129,7 @@ export const rebindStyleSheet = (liveBinding: RawContentLiveBinding): void => {
 			? RULE_STRUCTURE_MISMATCH
 			: matchCompiledStyleSheet(lane.compiledStyleSheet, liveSheet);
 	if (matchedSheet === RULE_STRUCTURE_MISMATCH) {
-		//no values to rebuild with: demote and re-render onto the text lane
+		//no values to rebuild with: demote and paint again onto the text lane
 		liveBinding.styleSheetLane = TEXT_STYLE_SHEET_LANE;
 		liveBinding.lastValueHash = UNSET_HASH;
 		const componentShadowRoot = lane.styleElement.getRootNode();

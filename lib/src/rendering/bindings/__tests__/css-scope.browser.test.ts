@@ -70,8 +70,8 @@ describe("prelude-less @scope", () => {
 			const unscopedTag = uniqueTag();
 
 			const Scoped = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							@scope {
 								p {
 									color: rgb(255, 0, 0);
@@ -79,15 +79,17 @@ describe("prelude-less @scope", () => {
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 			const Unscoped = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							p {
 								color: rgb(255, 0, 0);
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 
 			customElements.define(scopedTag, Scoped);
@@ -112,7 +114,7 @@ describe("prelude-less @scope", () => {
 	);
 
 	//the scoping root of a prelude-less @scope is the parent element of the owning <style>, so a
-	//<style> nested below the top level of the render root scopes to that wrapper rather than to
+	//<style> nested below the top level of the component root scopes to that wrapper rather than to
 	//the component
 	test.skipIf(!resolvesScopedStyles)(
 		"scopes to the parent element of its own style element",
@@ -120,8 +122,8 @@ describe("prelude-less @scope", () => {
 			const tag = uniqueTag();
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`<div>
+				yield function* () {
+					yield html`<div>
 							<style>
 								@scope {
 									p {
@@ -132,6 +134,7 @@ describe("prelude-less @scope", () => {
 							<p id="inside">inside the wrapper</p>
 						</div>
 						<p id="outside">outside the wrapper</p>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -155,8 +158,8 @@ describe("prelude-less @scope", () => {
 			let color = "red";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							@scope {
 								p {
 									color: ${color};
@@ -164,6 +167,7 @@ describe("prelude-less @scope", () => {
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -201,8 +205,8 @@ describe("prelude-less @scope", () => {
 			let color = "rgb(255, 0, 0)";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							@scope {
 								p {
 									color: ${color};
@@ -210,6 +214,7 @@ describe("prelude-less @scope", () => {
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);

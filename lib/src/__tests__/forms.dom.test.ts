@@ -131,7 +131,9 @@ describe("component(..., { formAssociated }) parent selection", () => {
 	test("opting in inherits FormAssociatedBase and its static flag", () => {
 		const tag = uniqueTag("opt-in");
 		const Element = component(function* () {
-			yield () => html`<p>field</p>`;
+			yield function* () {
+				yield html`<p>field</p>`;
+			};
 		}, formOptions);
 		customElements.define(tag, Element);
 
@@ -146,7 +148,9 @@ describe("component(..., { formAssociated }) parent selection", () => {
 	test("the default component is a plain element, never form-associated", () => {
 		const tag = uniqueTag("plain");
 		const Element = component(function* () {
-			yield () => html`<p>field</p>`;
+			yield function* () {
+				yield html`<p>field</p>`;
+			};
 		});
 		customElements.define(tag, Element);
 
@@ -164,9 +168,9 @@ describe("component(..., { formAssociated }) parent selection", () => {
 		const tag = uniqueTag("form-field");
 		const onReset = vi.fn();
 		const Element = component(function* () {
-			yield () => html`
-				<template on-form-reset="${onReset}"><input /></template>
-			`;
+			yield function* () {
+				yield html` <template on-form-reset="${onReset}"><input /></template> `;
+			};
 		}, formOptions);
 		customElements.define(tag, Element);
 

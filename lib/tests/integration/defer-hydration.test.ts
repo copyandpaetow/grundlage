@@ -19,14 +19,15 @@ class Quote {
 	constructor(public text: string) {}
 }
 
-const childTagRenderingItsQuote = (): string => {
+const childTagPaintingItsQuote = (): string => {
 	const tag = uniqueTag("child");
 	customElements.define(
 		tag,
 		component(
 			function* (componentProps) {
-				yield () =>
-					html`<blockquote>${componentProps.quote?.text}</blockquote>`;
+				yield function* () {
+					yield html`<blockquote>${componentProps.quote?.text}</blockquote>`;
+				};
 			},
 			{
 				props: {
@@ -57,10 +58,12 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 	});
 
 	test("a declared prop the attribute cannot carry marks the child", async () => {
-		const childTag = childTagRenderingItsQuote();
+		const childTag = childTagPaintingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
 			const quote = new Quote("said out loud");
-			yield () => html`<${childTag} quote=${quote}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} quote=${quote}></${childTag}>`;
+			};
 		});
 
 		expect(
@@ -69,9 +72,11 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 	});
 
 	test("a declared prop with a string spelling rides its attribute and is not marked", async () => {
-		const childTag = childTagRenderingItsQuote();
+		const childTag = childTagPaintingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
-			yield () => html`<${childTag} quote=${"plain text"}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} quote=${"plain text"}></${childTag}>`;
+			};
 		});
 
 		expect(
@@ -80,9 +85,11 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 	});
 
 	test("an undeclared name taking the property mode marks the child", async () => {
-		const childTag = childTagRenderingItsQuote();
+		const childTag = childTagPaintingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
-			yield () => html`<${childTag} rows=${[1, 2, 3]}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} rows=${[1, 2, 3]}></${childTag}>`;
+			};
 		});
 
 		expect(
@@ -91,12 +98,14 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 	});
 
 	test("a spread carrying an object marks the child, a spread of strings does not", async () => {
-		const childTag = childTagRenderingItsQuote();
+		const childTag = childTagPaintingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
 				<${childTag} id="carried" ${{ rows: [1] }}></${childTag}>
 				<${childTag} id="spelled" ${{ title: "text" }}></${childTag}>
 			`;
+			};
 		});
 
 		expect(
@@ -119,7 +128,9 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 				function* (componentProps) {
 					childBodyRuns++;
 					quoteSeenByChild = componentProps.quote!.text;
-					yield () => html`<blockquote>${quoteSeenByChild}</blockquote>`;
+					yield function* () {
+						yield html`<blockquote>${quoteSeenByChild}</blockquote>`;
+					};
 				},
 				{
 					props: {
@@ -132,7 +143,9 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 
 		const shadowRoot = await renderOnServer(function* () {
 			const quote = new Quote("said out loud");
-			yield () => html`<${childTag} quote=${quote}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} quote=${quote}></${childTag}>`;
+			};
 		});
 
 		expect(

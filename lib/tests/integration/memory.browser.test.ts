@@ -37,10 +37,11 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 		let items = Array.from({ length: 50 }, (_, index) => `item-${index}`);
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((value) => html`<li>${value}</li>`)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -71,7 +72,9 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield () => html`<p>x</p>`;
+			yield function* () {
+				yield html`<p>x</p>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 
@@ -95,7 +98,9 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 		//the count stays small for speed; collecting only after the loop is what surfaces the leak
 		const tag = uniqueTag();
 		const MyElement = component(function* () {
-			yield () => html`<p>cycle</p>`;
+			yield function* () {
+				yield html`<p>cycle</p>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 

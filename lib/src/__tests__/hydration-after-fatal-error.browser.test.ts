@@ -30,17 +30,19 @@ describe("a fatal error before the first paint ends the pending hydration", () =
 			const tag = uniqueTag();
 			const host = prerenderOpen(tag, `<p>hi</p>`);
 
-			let renderCallCount = 0;
+			let runCount = 0;
 			customElements.define(
 				tag,
 				component(function* () {
-					renderCallCount++;
-					if (renderCallCount === 1) throw new Error("first render fails");
-					yield () => html`<p>${"recovered"}</p>`;
+					runCount++;
+					if (runCount === 1) throw new Error("first run fails");
+					yield function* () {
+						yield html`<p>${"recovered"}</p>`;
+					};
 				}),
 			);
 			customElements.upgrade(host);
-			expect(host.shadowRoot!.textContent).toContain("first render fails");
+			expect(host.shadowRoot!.textContent).toContain("first run fails");
 
 			//removal and re-insertion in one task is the way back from a fatal error
 			const parent = host.parentElement!;

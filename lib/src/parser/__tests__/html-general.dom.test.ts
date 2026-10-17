@@ -84,9 +84,9 @@ describe("html parser — template caching", () => {
 	});
 
 	test("cache returns the identical parsed reference for the same tagged literal", () => {
-		const render = (value: string) => parse`<div>${value}</div>`;
-		const first = render("a");
-		const second = render("b");
+		const parseWithValue = (value: string) => parse`<div>${value}</div>`;
+		const first = parseWithValue("a");
+		const second = parseWithValue("b");
 		expect(first).toBe(second);
 	});
 });
@@ -405,7 +405,7 @@ describe("html parser — mixed scenarios", () => {
 		expect(parsed.bindings.length).toBeGreaterThanOrEqual(4);
 	});
 
-	test("list rendering pattern", () => {
+	test("list template pattern", () => {
 		const items = ["a", "b", "c"];
 		const parsed = parse` <ul>
 			${items.map((i) => html` <li>${i}</li>`)}
@@ -415,7 +415,7 @@ describe("html parser — mixed scenarios", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("conditional rendering pattern", () => {
+	test("conditional template pattern", () => {
 		const show = true;
 		const parsed = parse` <div>${show ? html`<span>yes</span>` : null}</div>`;
 

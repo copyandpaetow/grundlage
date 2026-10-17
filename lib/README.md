@@ -31,7 +31,9 @@ customElements.define(
 			}, 1000);
 
 			// this runs on every update
-			yield () => html`<p>${seconds} seconds</p>`;
+			yield function* view() {
+				yield html`<p>${seconds} seconds</p>`;
+			};
 
 			// this runs on component disconnect
 			return () => {
@@ -50,13 +52,12 @@ customElements.define(
 The main idea here is that components (especially the async ones) are often procedural (from top to bottom as one
 lifecycle) but most frontend frameworks can't
 communicate that very well. For example an async component might start with a placeholder, then fetch something, and
-then render something based on the return value. Or a component requires a side effect in the beginning, renders
+then paint something based on the return value. Or a component requires a side effect in the beginning, paints
 something, and in the end needs to clean up that side effect.
 
-With generators that actually is possible as we can pause and resume. The library tries to render the function body to
-completion. When something is yielded, it will be returned to the next step of the generator. If it is something
-renderable it will get rendered.
-There are currently three different renderables: static templates, render functions, and nested generators.
+With generators that actually is possible as we can pause and resume. The library tries to run the function body to
+completion. A generator yields three kinds of value: a static template paints once, an update generator (a generator
+function) runs now and again on every update, and a promise is waited on and resumes the generator with its value.
 
 At the end of the generator can be a return function. That is a cleanup indicator and will run when the component itself
 gets cleaned up.
@@ -70,14 +71,14 @@ Besides the compiler approach, it requires a lot of domain specific language (DS
 well and usually bring their own footguns.
 To keep the library specific DSL to a minimum, we leave the control over updating with the user, enabling them for
 even finer grained performance.
-When the main generator function encounters something renderable, it renders and remembers it. Whenever the
-component gets updated, the last renderable will get rendered again.
+When the main generator function yields an update generator, it runs it and remembers it. Whenever the component gets
+updated, that update generator runs again.
 
 #### state survives updates
 
-Since only the renderables get re-rendered, the main function body stays intact as a closure for the lifetime of the
+Since only the update generator re-runs, the main function body stays intact as a closure for the lifetime of the
 component, which makes it the perfect place to store state. That way state can be normal JavaScript. A `let` that gets
-reassigned, a `Map/WeakMap` as a cache, nothing special here. State can also exist between renderables. There are no
+reassigned, a `Map/WeakMap` as a cache, nothing special here. State can also exist between yields. There are no
 rules here.
 
 #### SSR + declarative shadow DOM
@@ -87,7 +88,7 @@ can be done with the prerender plugin) on the server until the first DOM content
 by the plugin to the Declarative Shadow DOM (DSD). Styles and markup will get rendered when the HTML is first parsed
 like
 other HTML would.
-On the client the hydration needs to run the parser step again but doesn't re-render the component. It detects the
+On the client the hydration needs to run the parser step again but doesn't paint the component again. It detects the
 dynamic positions and moves on from here. While the hydration runs, the interactivity sadly is paused.
 
 There is a small helper to avoid re-fetching data when the component is transferred in its DSD form to the client.
@@ -96,28 +97,30 @@ There is a small helper to avoid re-fetching data when the component is transfer
 
 ### mount & update
 
-- component renders from top to bottom
+- the component body runs from top to bottom, once
 - stops at yields like any other generator
-  - yield a renderable (render fn / static template / inner generator) → renders and remembers
-  - yield something else → returns the value
-- update-calls re-render the last remembered renderable
-  - a render function is called again, an inner generator is torn down and re-run from the top
+  - ``yield html`…` `` paints once, and the `yield` evaluates to the host
+  - `yield function* view() { … }` runs the update generator, and the body waits until a run of it finishes
+  - `yield promise` waits, and the `yield` evaluates to the resolved value
+  - anything else throws
+- update-calls re-run the last yielded update generator: the previous run is torn down (its cleanup runs)
+  and the update generator runs again from the top
   - a plain `yield html` is remembered as static: after it, every `update()` is a no-op
-  - an `update()` while the body is awaiting re-renders whatever it yielded last, e.g. the loading view
-- a change to a DECLARED attribute re-renders as well, through `attributeChangedCallback`; an
+  - an `update()` while a run waits on a promise starts a new run, so the newest run wins
+- a change to a DECLARED attribute triggers an update as well, through `attributeChangedCallback`; an
   undeclared one (`class`, `style`, `data-*`) is not observed and does nothing
-- assigning a declared prop (`el.items = […]`) re-renders too: the accessor validates and schedules.
+- assigning a declared prop (`el.items = […]`) triggers an update too: the accessor validates and schedules.
   So do `host.setProp(…)` and a [host template](#host-template) binding that changes the component's
   own prop
-- the generator, its render functions and inner generators all receive the same props object
+- the generator and its update generators receive the same props object
   ([see host api](#host-api) for where to read them live)
-- update() can be awaited and resolves once the DOM is patched, after the renderable has fully settled
-- a parent renders before its children, each once; beyond that, components render in the order they
-  were updated, not in document order
-- code straight after a `yield` sees this component's own DOM, not the re-render of a child it just
-  wrote to; one more `yield` lets the queued children render first. Mount and update behave alike.
+- update() can be awaited and resolves once the DOM is patched
+- a parent updates before its children, each once; beyond that, components update in the order their
+  updates were requested, not in document order
+- code straight after a `yield` sees this component's own DOM, not the update of a child it just
+  wrote to; one more `yield` lets the queued children update first. Mount and update behave alike.
   On hydration a child's shadow root already holds the server's markup, so measuring it there is no
-  evidence the client render has happened
+  evidence the client paint has happened
 
 ```typescript
 import { component, html } from "grundlage";
@@ -125,21 +128,23 @@ import { component, html } from "grundlage";
 customElements.define(
 	"user-disclosure",
 	component(function* ({ host }) {
-		yield () => html`<p>loading…</p>`; // first render of a static template
+		yield html`<p>loading…</p>`; // a static template, painted once
 
 		const user = yield fetchUser(); // yield a promise → the const becomes its resolved value
 
 		let isExpanded = false;
 		const toggle = async () => {
 			isExpanded = !isExpanded;
-			await host.update(); // resolves once the re-render is in the DOM
+			await host.update(); // resolves once the update is in the DOM
 			host.scrollIntoView(); // safe now, DOM is current
 		};
 
-		yield () => html`
-			<button onClick=${toggle}>${user.name}</button>
-			${isExpanded ? html`<pre>${JSON.stringify(user, null, 2)}</pre>` : null}
-		`; // second render, replaces loading → will re-render on update calls
+		yield function* view() {
+			yield html`
+				<button onClick=${toggle}>${user.name}</button>
+				${isExpanded ? html`<pre>${JSON.stringify(user, null, 2)}</pre>` : null}
+			`;
+		}; // an update generator, replaces loading → runs again on update calls
 	}),
 );
 ```
@@ -147,10 +152,10 @@ customElements.define(
 ### cleanup
 
 - runs on the disconnectedCallback of the custom element (see the counter example in the [intro](#example))
-- an inner generator's cleanup also runs before every re-run of it, and when the body paints its own
-  content over it
+- an update generator's returned function is that run's cleanup: it runs before the next run, and when
+  the body paints a template over the update generator
 - disconnect is confirmed a microtask later, so moving an element inside the DOM keeps the component alive
-- the return position holds it and nothing else: returning any other value warns and drops it. In
+- the body's return position holds it and nothing else: returning any other value warns and drops it. In
   TypeScript that position is `Cleanup | void`, so the wrong return is a compile error instead
 
 ### errors
@@ -159,7 +164,11 @@ customElements.define(
   event (`ComponentErrorEvent` with `error` and `tagName`, bubbling and composed). Unless a listener calls
   `preventDefault()`, the console logs an error naming the tag and the shadow root shows the error text. The rest
   of the page is unaffected
-- an error from a nested generator is thrown into the main body at its `yield` first, so a try/catch there handles it
+- a paint error (a wrong value in a hole) is thrown at the `yield html` that painted it, in the body or in an update
+  generator. Holes before the failing one are already written, so paint a fallback in the `catch`
+- an error from an update generator's first run, waits included, is thrown at the body's `yield` of it, so a
+  try/catch there handles it. After that the body has moved on, so an error in a later run ends the component
+  unless the update generator catches it itself
 - an exception thrown by a cleanup goes to `reportError`
 - warnings exist only in the development build, which bundlers pick through the `development` export condition
 
@@ -181,7 +190,7 @@ customElements.define(
 				data = { error }; // handled locally, the component keeps running
 			}
 
-			yield () => html`<p>${data.error ? "failed" : data.title}</p>`;
+			yield html`<p>${data.error ? "failed" : data.title}</p>`;
 		},
 		{ props },
 	),
@@ -193,21 +202,25 @@ Inputs are declared in `component(gen, { props })` and arrive on the generator's
 
 ## components
 
-### rendering
+### painting
 
-Five ways to hand the component something to render, from least to most lifecycle:
+Three ways to hand the component something to paint, from least to most lifecycle:
 
-| spelling                                              | on `update()`                                         | setup and cleanup                                     | reach for it when                                                                                        |
-| ----------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| ``yield html`…` ``                                    | nothing, it never re-renders                          | the body's, once                                      | the markup only needs seeds (badge, static layout)                                                       |
-| ``yield () => html`…` ``                              | the function is called again                          | the body's, once                                      | anything that changes: the default                                                                       |
-| `yield () => (isEditing ? editorBody : readOnlyBody)` | called again; the chosen body is torn down and re-run | per branch: the old cleanup runs before the new setup | two shapes that each need their own setup                                                                |
-| `yield body` (a `function*`)                          | torn down (cleanup runs) and re-run from the top      | per update                                            | work around each patch: measure before, animate after ([FLIP](#nested-generator-a-repeatable-lifecycle)) |
-| `yield* helper(args)`                                 | re-fires the last render function it yielded          | inline in the body's one run                          | one lifecycle shared by components, with arguments ([mixin](#mixin-via-yield))                           |
+| spelling                       | on `update()`                                                      | setup and cleanup            | reach for it when                                                              |
+| ------------------------------ | ------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------ |
+| ``yield html`…` ``             | nothing, it never paints again                                     | the body's, once             | the markup only needs seeds (badge, static layout)                             |
+| `yield function* view() { … }` | the previous run is torn down, and the update generator runs again | per run                      | anything that changes: the default                                             |
+| `yield* helper(args)`          | re-runs the last update generator the helper yielded               | inline in the body's one run | one lifecycle shared by components, with arguments ([mixin](#mixin-via-yield)) |
 
-Nesting goes one level deep in every form ([see nested generator](#nested-generator-a-repeatable-lifecycle)).
+`view` is only a name for the reader, not a keyword: any name works, and so does none,
+`yield function* () { … }`. What makes it an update generator is the `function*`.
 
-- yielding a template ``yield html`...` `` directly will not re-render it again. It can be dynamic but will not update
+The body can branch, `yield isEditing ? editor : preview`, but it runs once, so that choice is made once per mount. A
+choice that changes per update belongs inside one update generator, as a conditional template. An update generator
+may not yield another update generator: nesting is one level deep
+([see update generators](#update-generator-a-repeatable-lifecycle)).
+
+- yielding a template ``yield html`...` `` directly paints it once. It can be dynamic but will not update
 - most parts of the component can be dynamic
   - content (raw values, nested templates, lists)
   - comments (from the second one on, the first dynamic comment is the row key, see [lists](#lists))
@@ -227,7 +240,7 @@ customElements.define(
 	"ui-badge",
 	component(
 		function* ({ label, href, size }) {
-			// a plain yielded template never re-renders, so seeds are all it needs
+			// a plain yielded template paints once, so seeds are all it needs
 			yield html`<a class="badge ${size}" href=${href}>${label}</a>`;
 		},
 		{ props },
@@ -235,17 +248,13 @@ customElements.define(
 );
 ```
 
-- yielding it as a render function ``yield ({ host }) => html`...` `` will recall the function and the dynamic values again
-- whatever the function returns is committed as content, by the same rules as a `${…}` hole: a
-  template renders, `null` / `undefined` / `true` / `false` render nothing, an array renders a list, and an
-  object, `Date`, plain function or symbol throws. Returning nothing warns: a block-bodied arrow needs a
-  `return`
-- returning a **generator function** picks which body runs (`() => (isEditing ? editorBody : readOnlyBody)`).
-  Each branch has its own setup, `yield` and cleanup, the old branch's cleanup runs before the new
-  branch's setup, and even the same branch is torn down and re-run on every update
-- returning a **promise** renders its resolved value once it settles; nothing paints while it is pending, and
-  an `update()` in between re-calls the function, so the newest call wins. A rejection from the current
-  call ends the component and is not thrown into the generator, so catch inside the render function
+- yielding an update generator ``yield function* view() { yield html`...` }`` runs it again on every update, so the
+  dynamic values are read again
+- an update generator runs to completion like the body: it may paint a placeholder, wait on a promise and paint the
+  result. An `update()` while it waits tears that run down and starts a new one, so the newest run wins and a late
+  result never lands
+- the body waits at the `yield` until a run of the update generator finishes, and the `yield` evaluates to what that
+  run returned. A returned function is that run's cleanup instead, and the `yield` evaluates to `undefined`
 
 ```typescript
 import { component, html } from "grundlage";
@@ -258,16 +267,16 @@ customElements.define(
 			isOpen = !isOpen;
 			host.update();
 		};
-		yield () => {
+		yield function* view() {
 			console.log("updated");
 
-			return html`
+			yield html`
 				<button onClick=${toggle} aria-expanded=${isOpen ? "true" : "false"}>
 					${isOpen ? "hide" : "show"}
 				</button>
 				<p hidden=${!isOpen}>details</p>
 			`;
-		}; // content and attributes both re-read each render
+		}; // content and attributes both re-read each run
 	}),
 );
 ```
@@ -282,7 +291,7 @@ customElements.define(
   (`class="card ${extra}"`) is composed to a string and always set: `null` / `undefined` add `""`, `false`
   adds `"false"`
 - live state (`value` and `checked` on inputs, `selected` on options) is written as the attribute on the
-  first commit and as the property after that, so `form.reset()` returns to the first rendered value and a
+  first commit and as the property after that, so `form.reset()` returns to the first painted value and a
   state change replaces what the user typed. `<select value=${…}>` warns and selects nothing: bind
   `selected` on each option
 - the tag name and raw text slots (style / script / textarea) are their own binding forms:
@@ -314,7 +323,7 @@ and focus restored, but a component in that position is torn down and mounted ag
 ### composition
 
 - html templates can be embedded in html templates → a template is just a value, so a helper can return one
-- `yield` a generator function → a nested lifecycle that **restarts on every update**
+- `yield` a generator function → an update generator, a lifecycle that **restarts on every update**
 - `yield*` a generator → a mixin that runs **once**, inline in this generator's single run
 
 #### html in html
@@ -333,33 +342,33 @@ customElements.define(
 	"order-row",
 	component(
 		function* () {
-			yield ({ reference, status }) =>
-				html`<p>${reference} ${statusBadge(status)}</p>`;
+			yield function* view({ reference, status }) {
+				yield html`<p>${reference} ${statusBadge(status)}</p>`;
+			};
 		},
 		{ props },
 	),
 );
 ```
 
-#### nested generator, a repeatable lifecycle
+#### update generator, a repeatable lifecycle
 
-A yielded generator function is installed as a child task with its own setup → yield →
-after-the-patch phases, and every parent `update()` tears it down (its returned cleanup runs) and
-runs it again from the top. A FLIP animation (First, Last, Invert, Play) needs exactly these phases: the old positions
-are read before the yield, and after the patch the elements are measured again, transformed back to their old spot, and
-animated home:
+Every run of an update generator has its own setup → yield → after-the-patch phases, and every `update()` tears the
+previous run down (its returned cleanup runs) and runs the update generator again from the top. A FLIP animation
+(First, Last, Invert, Play) needs exactly these phases: the old positions are read before the yield, and after the
+patch the elements are measured again, transformed back to their old spot, and animated home:
 
 ```typescript
 import { html } from "grundlage";
 
 // captureRects and playFlip are user-land helpers and excluded for readability
-export const flipList = (items, onShuffle) =>
-	function* ({ host }) {
+export const flipList = (readItems, onShuffle) =>
+	function* flip({ host }) {
 		const first = captureRects(host); // before the yield: old positions, read from the live DOM
-		yield () => html`
+		yield html`
 			<button onClick=${onShuffle}>shuffle</button>
 			<ul>
-				${items.map(
+				${readItems().map(
 					(item) => html`<li data-flip-id=${item.id}>${item.label}</li>`,
 				)}
 			</ul>
@@ -382,21 +391,38 @@ customElements.define(
 			host.update();
 		};
 
-		yield flipList(items, shuffleItems);
+		// a reader, not the array: the update generator runs per update and has to see the reassigned list
+		yield flipList(() => items, shuffleItems);
 	}),
 );
 ```
 
-Nesting goes one level deep: an inner generator that yields or returns another generator function throws
-into its parent. A body that installs an inner generator and then paints its own content takes the shadow
-root back for good: the inner one is torn down and its pending async work never lands.
+The body waits at the `yield` until a run finishes, so an update generator can also be a step the body waits on, and
+the `yield` evaluates to what that run returned:
+
+```typescript
+const answered = Promise.withResolvers();
+const answer = yield function* question() {
+	yield html`<button onClick=${() => answered.resolve("yes")}>yes</button>`;
+	return yield answered.promise;
+};
+yield html`<p>you said ${answer}</p>`;
+```
+
+The promise is created in the body: each run is a new call, so a promise created inside the update generator would be
+a new one per update. An update generator that waits forever holds the body forever.
+
+Nesting goes one level deep: an update generator that yields another one is an error of the first, and its own
+try/catch around that yield does not catch it. Split a large update generator with `yield*` into plain helper
+generators instead. A body that paints a template over an update generator takes the shadow root back for good: the
+update generator is torn down and its pending work never lands.
 
 #### mixin via yield*
 
 `yield*` is plain JavaScript delegation: the inner generator's yields surface as this generator's
-yields, so it becomes part of the **one** run of the outer body.
-`update()` re-fires whichever render function was yielded last, no matter which generator it came from. So `yield*`
-shares setup and first render, and it takes arguments:
+yields, so it becomes part of the **one** run of the outer body. `update()` re-runs whichever update generator was
+yielded last, no matter which generator it came from. So `yield*` shares setup and first paint, and it takes
+arguments:
 
 ```typescript
 // user-card.ts, a self-contained component: its own loading → loaded lifecycle
@@ -409,17 +435,19 @@ type UserCardInput = {
 	readonly userId: string | undefined;
 };
 
-export async function* userCard(input: UserCardInput) {
-	yield () => html`<p aria-busy="true">loading…</p>`; // first paint
+export function* userCard(input: UserCardInput) {
+	yield html`<p aria-busy="true">loading…</p>`; // first paint
 
-	const user = await fetchUser(input.userId);
+	const user: User = yield fetchUser(input.userId);
 
-	yield () => html`
-		<article>
-			<h3>${user.name}</h3>
-			<p>${user.email}</p>
-		</article>
-	`; // replaces loading once the fetch settles
+	yield function* view() {
+		yield html`
+			<article>
+				<h3>${user.name}</h3>
+				<p>${user.email}</p>
+			</article>
+		`;
+	}; // replaces loading once the fetch settles
 }
 ```
 
@@ -440,7 +468,7 @@ customElements.define(
 customElements.define(
 	"user-panel",
 	component(
-		async function* (componentProps) {
+		function* (componentProps) {
 			// becomes this body's loading → loaded run, under the parent's own prop name
 			yield* userCard({
 				host: componentProps.host,
@@ -454,8 +482,8 @@ customElements.define(
 );
 ```
 
-The two `yield`s inside `userCard` are self-driven. The async generator walks loading → loaded on
-its own, no `host.update()` involved.
+The yields inside `userCard` are self-driven. The generator walks loading → loaded on its own, no `host.update()`
+involved.
 
 Registering the mixin directly hands it the props object itself, so `input.userId` stays live the way
 it does anywhere else. Renaming a prop across the boundary is where that breaks: the object literal at
@@ -468,25 +496,21 @@ that type carries `host: BaseComponent & DeclaredProps<S>`, which claims the hos
 accessor. `user-panel` has an `activeUserId` one instead. Declaring the shape is not a shortcut around
 the schema, it is the honest description of what a mixin gets.
 
-A mixin that annotates its own return type spells it `AsyncGenerator<YieldableValue>` (or
-`Generator<YieldableValue>`), not bare `AsyncGenerator`: `yield*` hands the inner yield type straight
-to the outer generator, and a bare one erases it to `unknown`. Inference gets this right on its own,
-as above.
+A mixin that annotates its own return type spells it `Generator<YieldableValue>`, not bare `Generator`: `yield*` hands
+the inner yield type straight to the outer generator, and a bare one erases it to `unknown`. Inference gets this right
+on its own, as above.
 
-The same generator could also be dropped in with no arguments at all: `yield userCard` is a generator function,
-so it installs as a nested lifecycle and receives the parent's own props object. That only works when the parent
-declares the name the mixin reads: `user-panel` declares `activeUserId`, so `input.userId` would read `undefined`.
-The other difference is the lifecycle. As `yield*` it runs once (and remembers only the renderables); as `yield` it
-is the renderable and re-runs every update.
+`yield userCard` without the star would make the whole mixin an update generator, and that does not work here:
+`userCard` yields an update generator itself, and an update generator may not yield another.
 
 ### host template
 
-A library specific convenience: If the outermost element of a render output is a `<template>`, it is unwrapped. Its
+A library specific convenience: If the outermost element of a yielded template is a `<template>`, it is unwrapped. Its
 children become the shadow DOM, and its attributes are applied to the custom element.
 
 - every attribute form works: static · dynamic · mixed · boolean · spread · event handler
-- attributes dropped by a later render are removed from the host
-- binding one of the component's own declared props is a write: a new value re-renders once, so the
+- attributes dropped by a later paint are removed from the host
+- binding one of the component's own declared props is a write: a new value triggers one update, so the
   paint shows it in the same frame. A value derived from that prop itself (`count=${count + 1}`)
   never settles and ends in an error
 - must be the outermost node with no top-level siblings, otherwise it is parsed as an ordinary element
@@ -507,17 +531,19 @@ customElements.define(
 				host.update();
 			};
 
-			yield ({ variant }) => html`
-				<template
-					role="article"
-					class="card card--${variant}"
-					aria-pressed=${isPinned ? "true" : "false"}
-					inert=${isPinned}
-					onClick=${togglePin}
-				>
-					<slot></slot>
-				</template>
-			`;
+			yield function* view({ variant }) {
+				yield html`
+					<template
+						role="article"
+						class="card card--${variant}"
+						aria-pressed=${isPinned ? "true" : "false"}
+						inert=${isPinned}
+						onClick=${togglePin}
+					>
+						<slot></slot>
+					</template>
+				`;
+			};
 		},
 		{ props },
 	),
@@ -533,13 +559,15 @@ customElements.define(
 	"spread-card",
 	component(function* () {
 		const hostAttributes = { class: "card", role: "article", tabindex: "0" };
-		yield () => html`<template ${hostAttributes}><slot></slot></template>`;
+		yield function* view() {
+			yield html`<template ${hostAttributes}><slot></slot></template>`;
+		};
 	}),
 );
 ```
 
-Each root render reverts the previous host attributes before applying the new ones, so an attribute
-that is no longer rendered is removed.
+Each root paint reverts the previous host attributes before applying the new ones, so an attribute
+that is no longer painted is removed.
 
 ### events
 
@@ -557,10 +585,12 @@ customElements.define(
 			query = event.target.value;
 			host.update();
 		};
-		yield () => html`
-			<input onInput=${onInput} placeholder="search" />
-			<p>searching for ${query}</p>
-		`;
+		yield function* view() {
+			yield html`
+				<input onInput=${onInput} placeholder="search" />
+				<p>searching for ${query}</p>
+			`;
+		};
 	}),
 );
 ```
@@ -582,7 +612,9 @@ customElements.define(
 					composed: true,
 				}),
 			);
-		yield () => html`<button onClick=${() => select("#f00")}>red</button>`;
+		yield function* view() {
+			yield html`<button onClick=${() => select("#f00")}>red</button>`;
+		};
 	}),
 );
 ```
@@ -598,10 +630,12 @@ customElements.define(
 			color = event.detail;
 			host.update();
 		};
-		yield () => html`
-			<p style="color: ${color}">selected ${color}</p>
-			<color-swatch on-swatch-select=${pick}></color-swatch>
-		`;
+		yield function* view() {
+			yield html`
+				<p style="color: ${color}">selected ${color}</p>
+				<color-swatch on-swatch-select=${pick}></color-swatch>
+			`;
+		};
 	}),
 );
 ```
@@ -609,7 +643,7 @@ customElements.define(
 A custom listener needs the `on-` prefix because otherwise `onSwatchSelect` would resolve to a non-existent
 `onswatchselect` property (and never fire, the console warns about it).
 
-The event name can hold a hole itself (`on${eventName}=${handler}`) and is resolved on every render. A
+The event name can hold a hole itself (`on${eventName}=${handler}`) and is resolved on every paint. A
 quoted string (`onclick="…"`) is never a binding.
 
 Global events are not bound in markup, they are registered manually.
@@ -630,7 +664,9 @@ customElements.define(
 		};
 		document.addEventListener("keydown", onKeydown);
 
-		yield () => html`<dialog open=${isOpen}><slot></slot></dialog>`;
+		yield function* view() {
+			yield html`<dialog open=${isOpen}><slot></slot></dialog>`;
+		};
 
 		return () => document.removeEventListener("keydown", onKeydown); // acquire in setup, release here
 	}),
@@ -639,9 +675,9 @@ customElements.define(
 
 ### conditionals
 
-- inside a render function: a `? … : null` hole re-evaluates every update
+- inside an update generator: a `? … : null` hole re-evaluates every update
 - outside, in setup: branch once at mount when the two shapes need different setup
-- an error is just another branch, renders a fallback instead of throwing
+- an error is just another branch, paints a fallback instead of throwing
 
 ```typescript
 import { component, html, type Schema } from "grundlage";
@@ -657,32 +693,34 @@ customElements.define(
 				expandedId = expandedId === id ? null : id;
 				host.update();
 			};
-			yield ({ items }) => html`
-				<ul>
-					${items.map(
-						(item) => html`
-							<li>
-								<button
-									onClick=${() => toggle(item.id)}
-									aria-expanded=${expandedId === item.id}
-								>
-									${item.label}
-								</button>
-								${expandedId === item.id ? html`<p>${item.details}</p>` : null}
-							</li>
-						`,
-					)}
-				</ul>
-			`;
+			yield function* view({ items }) {
+				yield html`
+					<ul>
+						${items.map(
+							(item) => html`
+								<li>
+									<button
+										onClick=${() => toggle(item.id)}
+										aria-expanded=${expandedId === item.id}
+									>
+										${item.label}
+									</button>
+									${expandedId === item.id ? html`<p>${item.details}</p>` : null}
+								</li>
+							`,
+						)}
+					</ul>
+				`;
+			};
 		},
 		{ props },
 	),
 );
 ```
 
-`null`, `undefined`, `false` and `true` render nothing, while numbers, bigints and strings are always
-rendered, `0`, `0n` and `""` included. `&&` returns its left operand when that operand is falsy, so
-`${isOpen && html`…`}` renders nothing, but `${items.length && html`…`}` writes the text `"0"` on an
+`null`, `undefined`, `false` and `true` paint nothing, while numbers, bigints and strings are always
+painted, `0`, `0n` and `""` included. `&&` returns its left operand when that operand is falsy, so
+`${isOpen && html`…`}` paints nothing, but `${items.length && html`…`}` writes the text `"0"` on an
 empty list.
 
 When the two branches are the **same** template the hole patches in place; when they are **different**
@@ -700,7 +738,9 @@ customElements.define(
 		function* ({ host, readonly }) {
 			// a setup-time branch is the one place that wants the seed
 			if (readonly) {
-				yield () => html`<pre>${host.textContent}</pre>`;
+				yield function* view() {
+					yield html`<pre>${host.textContent}</pre>`;
+				};
 				return;
 			}
 
@@ -709,17 +749,19 @@ customElements.define(
 				draft = event.target.value;
 				host.update();
 			};
-			yield () => html`
-				<textarea onInput=${onInput}></textarea>
-				<p>${draft.length} characters</p>
-			`;
+			yield function* view() {
+				yield html`
+					<textarea onInput=${onInput}></textarea>
+					<p>${draft.length} characters</p>
+				`;
+			};
 		},
 		{ props },
 	),
 );
 ```
 
-Errors work the same way. The failure is held in state and rendered as a branch. Throwing is reserved for what a
+Errors work the same way. The failure is held in state and painted as a branch. Throwing is reserved for what a
 component cannot recover from, because it ends the component and empties its shadow tree ([see errors](#errors)):
 
 ```typescript
@@ -733,8 +775,8 @@ customElements.define(
 		function* ({ host, src: initialSrc }) {
 			let error = initialSrc ? null : new Error("missing src");
 
-			yield ({ src }) =>
-				error
+			yield function* view({ src }) {
+				yield error
 					? html`<p role="alert">${error.message}</p>`
 					: html`<img
 							src=${src}
@@ -744,6 +786,7 @@ customElements.define(
 								host.update();
 							}}
 						/>`;
+			};
 		},
 		{ props },
 	),
@@ -752,12 +795,12 @@ customElements.define(
 
 ### lists
 
-A list renders one row per array entry. Rows are matched by template identity and content, which covers most updates
+A list paints one row per array entry. Rows are matched by template identity and content, which covers most updates
 without extra work.
 
-- string / number / bigint → rendered as text (including `""`, `0`, `NaN`)
-- `null` / `undefined` / `true` / `false` → render nothing (still occupy a row)
-- nested array → the wrapper's content renders recursively
+- string / number / bigint → painted as text (including `""`, `0`, `NaN`)
+- `null` / `undefined` / `true` / `false` → paint nothing (still occupy a row)
+- nested array → the wrapper's content paints recursively
 - anything else (plain object, `Date`, function, symbol) → throws
 
 ```typescript
@@ -775,20 +818,22 @@ customElements.define(
 			todo.done = !todo.done; // mutating in place is possible
 			host.update();
 		};
-		yield () => html`
-			<ul>
-				${todos.map(
-					(todo) => html`
-						<li class=${todo.done ? "done" : ""}>
-							<button onClick=${() => toggle(todo.id)}>
-								${todo.done ? "✓" : "○"}
-							</button>
-							${todo.text}
-						</li>
-					`,
-				)}
-			</ul>
-		`;
+		yield function* view() {
+			yield html`
+				<ul>
+					${todos.map(
+						(todo) => html`
+							<li class=${todo.done ? "done" : ""}>
+								<button onClick=${() => toggle(todo.id)}>
+									${todo.done ? "✓" : "○"}
+								</button>
+								${todo.text}
+							</li>
+						`,
+					)}
+				</ul>
+			`;
+		};
 	}),
 );
 ```
@@ -809,21 +854,23 @@ customElements.define(
 			players.sort((a, b) => b.score - a.score); // re-sorts AND changes content
 			host.update();
 		};
-		yield () => html`
-			<ol>
-				${players.map(
-					(player) => html`
-						<!--${player.id}-->
-						<li>
-							<input placeholder="note" />
-							<!-- unsaved text stays with the player, not the rank -->
-							${player.name}: ${player.score}
-							<button onClick=${() => bump(player.id)}>+1</button>
-						</li>
-					`,
-				)}
-			</ol>
-		`;
+		yield function* view() {
+			yield html`
+				<ol>
+					${players.map(
+						(player) => html`
+							<!--${player.id}-->
+							<li>
+								<input placeholder="note" />
+								<!-- unsaved text stays with the player, not the rank -->
+								${player.name}: ${player.score}
+								<button onClick=${() => bump(player.id)}>+1</button>
+							</li>
+						`,
+					)}
+				</ol>
+			`;
+		};
 	}),
 );
 ```
@@ -844,8 +891,11 @@ customElements.define(
 	"tag-line",
 	component(
 		function* () {
-			yield ({ tags }) =>
-				html`<p>${tags.map((tag) => html`<!--${tag.id}-->${tag.label}, `)}</p>`;
+			yield function* view({ tags }) {
+				yield html`<p>
+					${tags.map((tag) => html`<!--${tag.id}-->${tag.label}, `)}
+				</p>`;
+			};
 		},
 		{ props },
 	),
@@ -854,8 +904,8 @@ customElements.define(
 
 ### async
 
-The generator itself can be async, so `await` works inside the main function body. A yielded promise is awaited as well
-and returns its resolved value.
+There is no `async function*` and no `await`: a yielded promise is the one way to wait. The `yield` evaluates to its
+resolved value, and a rejection throws at the `yield`, so a try/catch around it handles it.
 
 ```typescript
 import { component, html, type Schema } from "grundlage";
@@ -865,45 +915,34 @@ const props = { symbol: String } satisfies Schema;
 customElements.define(
 	"latest-price",
 	component(
-		async function* (componentProps) {
-			yield ({ symbol }) => html`<p aria-busy="true">loading ${symbol}…</p>`; // SSR serializes this first paint
+		function* ({ symbol }) {
+			yield html`<p aria-busy="true">loading ${symbol}…</p>`; // SSR serializes this first paint
 
-			const price = await fetchPrice(componentProps.symbol); // rejection throws here, wrap it in try/catch to handle it
+			const price: number = yield fetchPrice(symbol); // rejection throws here, wrap it in try/catch to handle it
 
-			yield ({ symbol }) => html`<output>${symbol} ${price}</output>`; // client resumes and swaps it in
+			yield function* view({ symbol }) {
+				yield html`<output>${symbol} ${price}</output>`;
+			}; // client resumes and swaps it in
 		},
 		{ props },
 	),
 );
 ```
 
-The server serializes the first yield (the loading view) and the client resumes from there, so the
-`await` runs on the client. This loads once and cannot retry. For a fetch that should run again, the
-data is better kept in a variable and re-rendered with `update()`.
-
-#### async generator or yielded promise
-
-Both spellings wait. They cost different things, and neither cost is obvious from the call site.
-
-An **async generator** pays one tick up front. Its first `next()` returns a promise, so even the
-placeholder above is a microtask away and the shadow root is empty until that promise settles. The
-frame boundary absorbs it: nothing paints in between, so there is no flash to see. What it buys is
-`await`, which keeps its type.
-
-A **yielded promise** in a sync generator paints its placeholder in the same task and waits after
-that. What it costs is the type: `const price = yield fetchPrice(symbol)` is `any`. A `yield`
-resumes with a settled promise, an echoed value or nothing, and one generator has one resume type
-for all of its yields, so there is nothing narrower to give it. Annotate the receiving variable when
-the value matters.
+The server serializes the first paint (the loading template) and the client resumes from there, so the fetch runs on
+the client. This loads once and cannot retry. For a fetch that should run again on every update, wait inside an update
+generator: an update while it waits starts a new run, so the newest result wins.
 
 ```typescript
-const price: Price = yield fetchPrice(symbol); // sync generator, paints first, types by hand
-const price = await fetchPrice(symbol); //         async generator, types itself, one empty tick
+yield function* view({ symbol }) {
+	yield html`<p aria-busy="true">loading ${symbol}…</p>`;
+	const price: number = yield fetchPrice(symbol);
+	yield html`<output>${symbol} ${price}</output>`;
+};
 ```
 
-So: a page root is an async generator. Nothing is waiting on its first tick and the types are worth
-having. A nested component is a sync generator that yields its promises, because that is where the
-empty tick is not free.
+A yielded promise costs the type: `const price = yield fetchPrice(symbol)` is `any`. One generator has one resume type
+for all of its yields, so there is nothing narrower to give it. Annotate the receiving variable when the value matters.
 
 ### form components
 
@@ -951,17 +990,19 @@ customElements.define(
 
 			publish(); // seed the form value before the first paint
 
-			yield ({ name }) => html`
-				<template on-form-reset=${onReset} on-form-disabled=${onDisabled}>
-					<input
-						name=${name}
-						value=${initial}
-						disabled=${isDisabled}
-						onInput=${onInput}
-						required
-					/>
-				</template>
-			`;
+			yield function* view({ name }) {
+				yield html`
+					<template on-form-reset=${onReset} on-form-disabled=${onDisabled}>
+						<input
+							name=${name}
+							value=${initial}
+							disabled=${isDisabled}
+							onInput=${onInput}
+							required
+						/>
+					</template>
+				`;
+			};
 		},
 		{ formAssociated: true, props },
 	),
@@ -991,16 +1032,18 @@ customElements.define(
 				progress = Math.min(progress + 5, 100);
 				host.update();
 			};
-			yield ({ accent }) => html`
-				<style>
-					.bar {
-						width: ${progress}%;
-						background: ${accent};
-						transition: width 120ms ease-out;
-					}
-				</style>
-				<div class="bar" onClick=${advance}></div>
-			`;
+			yield function* view({ accent }) {
+				yield html`
+					<style>
+						.bar {
+							width: ${progress}%;
+							background: ${accent};
+							transition: width 120ms ease-out;
+						}
+					</style>
+					<div class="bar" onClick=${advance}></div>
+				`;
+			};
 		},
 		{ props },
 	),
@@ -1020,10 +1063,11 @@ customElements.define(
 	"themed-panel",
 	component(
 		function* () {
-			yield ({ theme }) =>
-				html`<style>
+			yield function* view({ theme }) {
+				yield html`<style>
 					${themeSheet(theme)}
-				</style>`; // whole sheet is a hole → text path
+				</style>`;
+			}; // whole sheet is a hole → text path
 		},
 		{ props },
 	),
@@ -1043,7 +1087,7 @@ const props = { tokens: [asTokenList, []] } satisfies Schema;
 
 class TokenField extends component(
 	function* () {
-		// …generator body: reads its props, yields the render…
+		// …generator body: reads its props, yields a template…
 	},
 	{ props },
 ) {
@@ -1083,7 +1127,9 @@ customElements.define(
 	component(
 		function* () {
 			// no host.shadowRoot here, outside code reaches the root via host.internals.shadowRoot
-			yield ({ label }) => html`<span>${label}</span>`;
+			yield function* view({ label }) {
+				yield html`<span>${label}</span>`;
+			};
 		},
 		{ mode: "closed", props },
 	),
@@ -1111,23 +1157,23 @@ Assigning to it directly would move a value that nothing parsed, reflected or sc
 component silently stops repainting. `componentProps.host.userid = "9"` is the same spelling
 outside code uses (`element.userid = "9"`).
 
-Where you destructure decides what you get. The generator body runs once, so
-`function* ({ label })` is a **seed**: right for an initial value or a mount-time branch, wrong for
-anything that should track later writes. The render function runs per update, so
-`` yield ({ label }) => html`…` `` is **live**, as is reading `componentProps.label` off the object
-at any point. Examples in this README destructure in the render function by default, and in the
-generator body only where the value is meant to be frozen.
+Where you destructure decides what you get. The component body runs once, so
+`component(function* ({ label }) { … })` is a **seed**: right for an initial value or a mount-time branch, wrong for
+anything that should track later writes. An update generator runs per update, so
+`yield function* view({ label }) { … }` is **live**, as is reading `componentProps.label` off the object
+at any point. Examples in this README destructure in the update generator by default, and in the
+component body only where the value is meant to be frozen.
 
 ### update()
 
-The explicit re-render trigger, next to a declared-attribute change and a declared-prop assignment. It re-fires the last yielded renderable and
-resolves once that is in the DOM (see
-[lifecycle → mount & update](#mount--update)). Until the generator yields its first renderable it's a no-op; once
-it has, a call re-renders even while that first async render is still pending. Calls that land during an in-flight
-pass coalesce onto it. A disconnected host queues nothing and resolves immediately.
+The explicit update trigger, next to a declared-attribute change and a declared-prop assignment. It re-runs the last
+yielded update generator and resolves once that is in the DOM (see [lifecycle → mount & update](#mount--update)).
+Without an update generator it's a no-op. A call while a run waits on a promise tears that run down and starts a new
+one. Calls that land during an in-flight pass coalesce onto it. A disconnected host queues nothing and resolves
+immediately.
 
-On the server, a re-render asked for during the paint (a host binding writing an own prop, a synchronous
-`update()` or prop assignment inside the render) runs before the server run ends, so the markup shows the
+On the server, an update asked for during the paint (a host binding writing an own prop, a synchronous
+`update()` or prop assignment inside the update generator) runs before the server run ends, so the markup shows the
 settled value. Once the run has ended, `update()` is a no-op.
 
 ### setProp(name, value, oldValue?)
@@ -1160,10 +1206,10 @@ customElements.define(
 	"price-cell",
 	component(
 		function* () {
-			yield (componentProps) => {
-				// destructured per call, so each setProp is picked up on the next render
+			yield function* view(componentProps) {
+				// destructured per run, so each setProp is picked up on the next update
 				const { currency, quote } = componentProps;
-				return html`<output>${quote.bid} ${currency}</output>`;
+				yield html`<output>${quote.bid} ${currency}</output>`;
 			};
 		},
 		{ props },
@@ -1172,15 +1218,15 @@ customElements.define(
 ```
 
 A framework binding a custom element usually calls `setProp` on its own; `oldValue` lets it detach a
-previously-set event listener. A `setProp` only reaches the screen if the render function reads the
+previously-set event listener. A `setProp` only reaches the screen if an update generator reads the
 prop when it runs. A value destructured in the generator body is frozen at mount
 ([see host api](#host-api)).
 
 ## props
 
 Inputs are declared once, in `component(gen, { props })`. The schema fixes the observed attributes and
-installs one accessor per prop on the element class; the generator, its render functions and any inner
-generator all receive the same object.
+installs one accessor per prop on the element class; the generator and its update generators all receive the same
+object.
 
 The schema is a plain object. Hoisting it above `customElements.define` puts the element's inputs in
 one place, and gives you something to export when two elements share a shape. Every example below is
@@ -1236,8 +1282,9 @@ customElements.define(
 	"labeled-count",
 	component(
 		function* () {
-			yield ({ label, count, disabled }) =>
-				html`<p aria-disabled=${disabled}>${label}: ${count}</p>`;
+			yield function* view({ label, count, disabled }) {
+				yield html`<p aria-disabled=${disabled}>${label}: ${count}</p>`;
+			};
 		},
 		{ props },
 	),
@@ -1255,7 +1302,7 @@ Every prop has one slot on the element, and both modes write it.
 2. **Every incoming value runs through the prop's function**: markup, an assignment, a parent's
    binding, `setProp`, the fallback at construction.
 3. **A refusal is ignored.** The function returning `undefined` means "not a value I accept": the
-   previous value stays, the console warns, and nothing throws or re-renders.
+   previous value stays, the console warns, and nothing throws or updates.
 4. **Absence is a write of the fallback.** `removeAttribute`, `el.x = undefined`, `el.x = null` and
    element construction are one code path, so nothing is required and no read fails. The fallback is
    not _restored_: the function is asked the same question and gives the same answer.
@@ -1311,7 +1358,7 @@ construction, so what the generator reads has already been parsed.
 
 - **copied** with `structuredClone`, deeply: any object-shaped value, so an array, a plain object, a
   `Map`, a `Set`, a `Date`, and any nested object inside them.
-- **shared**: primitives, functions and `Template`s. A template is already shared by every render of
+- **shared**: primitives, functions and `Template`s. A template is already shared by every paint of
   its literal, and copying one would cost each element a parse-cache miss.
 
 ```typescript
@@ -1364,10 +1411,10 @@ a module doing both has to give one of them another name.
 
 ### load
 
-`load(host, fetcher, options?)` is for data that is needed before the first render. On the server the fetcher
+`load(host, fetcher, options?)` is for data that is needed before the first paint. On the server the fetcher
 runs and its result is serialized into the markup; on the client that value is replayed **once** during
 hydration so the fetcher doesn't run and every call after that runs normally. It returns a promise, so
-`yield` it (or `await` it in an async generator):
+`yield` it:
 
 ```typescript
 import { component, html, load } from "grundlage";
@@ -1378,7 +1425,9 @@ customElements.define(
 		const user = yield load(host, () =>
 			fetch("/api/user").then((response) => response.json()),
 		);
-		yield () => html`<p>${user.name}</p>`;
+		yield function* view() {
+			yield html`<p>${user.name}</p>`;
+		};
 	}),
 );
 ```
@@ -1397,7 +1446,7 @@ customElements.define(
 - a Vite plugin that server-renders the project's components into `index.html`, in dev and in build
 - opt in per element with a sentinel attribute (`ssr` by default), so only the marked instances prerender
 - components are discovered by importing the project's source files and reading the element registry back
-- anything it can't serialize is left untouched and rendered on the client
+- anything it can't serialize is left untouched and painted on the client
 
 It ships as its own package, `vite-plugin-grundlage`, versioned separately and younger than the library:
 
@@ -1442,7 +1491,7 @@ whose tag a scanned module actually defined:
 <click-counter start="3" ssr></click-counter>
 <!-- prerendered into the page -->
 <click-counter start="3"></click-counter>
-<!-- left alone, rendered on the client -->
+<!-- left alone, painted on the client -->
 ```
 
 Light-DOM children are kept as they were written, next to the inlined shadow root, the browser projects
@@ -1468,7 +1517,7 @@ component sitting in that light DOM is rendered along with its parent, sentinel 
 | `sentinelAttribute`   | `"ssr"`            | the marker attribute that opts an element in                                         |
 | `firstYieldTimeoutMs` | `5000`             | how long to wait for the first paint before giving up and leaving it for the client  |
 
-The plugin degrades to client render whenever it can't serialize: a
+The plugin falls back to painting on the client whenever it can't serialize: a
 `{ mode: "closed" }` root (happy-dom can't serialize it), a first-yield timeout, a tag no scanned module
 defines, or any throw during prerender. Each case logs a `[prerender]` warning and ships a working page.
 
@@ -1480,19 +1529,19 @@ Things the mental model makes tempting that tend to backfire:
   variables, communication outward happens with events, and a public API is added by subclassing
   ([see extending](#extending)). A property assigned in the generator only exists after `connectedCallback` ran, so
   other code can reach the element before the method is there.
-- **mutating a class instance or `Date` and expecting a render**: change detection hashes plain data, but
+- **mutating a class instance or `Date` and expecting an update**: change detection hashes plain data, but
   reference-typed values are compared by identity, so an in-place mutation reads as unchanged. Replace the reference or
   pass plain data.
-- **mutating a prop in place** (`el.items.push(x)`): assignment re-renders, mutation does not. Reassign or call
+- **mutating a prop in place** (`el.items.push(x)`): assignment triggers an update, mutation does not. Reassign or call
   `host.update()`. `el.items = el.items` is enough, since a value that could have been mutated behind
   its reference is never called unchanged.
 - **writing to the props object** (`componentProps.count = 5`): that object is the store, so the write would
   land without being parsed, reflected or scheduled on. It is typed readonly for that reason;
   `componentProps.host.count = 5` is the spelling that does all three.
 - **reading attributes directly** (`host.getAttribute("count")`): they are strings, they skip the parsing,
-  defaults and refusal the schema gives, and an undeclared attribute does not re-render at all.
+  defaults and refusal the schema gives, and an undeclared attribute does not trigger an update at all.
 - **destructuring props in the generator body and expecting them to update**: the body runs once, so those
-  values are seeds. Destructure the render function's parameter, or read off the object, for live values.
+  values are seeds. Destructure the update generator's parameter, or read off the object, for live values.
 - **writing `<!--^.^ …-->` or `<!--*.*-->` comments in a template**: those prefixes are the internal markers, and a
   collision silently misaligns hydration.
 - **`while (true)` in the generator**: it runs once to completion so this would create an infinite loop; per-frame work

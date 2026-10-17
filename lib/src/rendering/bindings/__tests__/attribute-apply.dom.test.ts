@@ -495,7 +495,7 @@ describe("applyAttributeValue - non-stringable values", () => {
 	test("does not call update() for stringable values", () => {
 		//the update() trigger lives only on the property-assignment branch.
 		//plain attribute writes must not fire it; otherwise every attribute
-		//flip on a child component would cause it to re-render twice
+		//flip on a child component would cause it to update twice
 		const element = document.createElement("div") as HTMLDivElement & {
 			update?: () => void;
 		};
@@ -519,7 +519,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 	});
 
 	test("the prior stringable attribute is removed by the transition", () => {
-		//both modes populated is a silent stale render: a child reading getAttribute("config")
+		//both modes populated is a silent stale value: a child reading getAttribute("config")
 		//after the switch would see the stringified previous value
 		const element = document.createElement("div");
 

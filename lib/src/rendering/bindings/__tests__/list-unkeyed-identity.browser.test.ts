@@ -11,10 +11,11 @@ describe("unkeyed lists of identical rows", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				yield () =>
-					html`<ul>
+				yield function* () {
+					yield html`<ul>
 						${texts().map((text) => html`<li>${text}<input /></li>`)}
 					</ul>`;
+				};
 			}),
 		);
 		const element = document.createElement(tag);

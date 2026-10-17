@@ -100,7 +100,7 @@ describe("parseNestedTemplate: host binding requirement", () => {
 			getParsedTemplate(value.__templateStrings).hostBindingCount,
 		).toBeGreaterThan(0);
 		expect(() => parseNestedTemplate(value)).toThrow(
-			/top level of a component's render output/,
+			/top level of the template a component yields/,
 		);
 	});
 
@@ -113,7 +113,7 @@ describe("parseNestedTemplate: host binding requirement", () => {
 		const inner = html`<template class="leak"><p>x</p></template>`;
 		expect(() =>
 			mountTemplateValue(html`<div>${inner}</div>`, moveState()),
-		).toThrow(/top level of a component's render output/);
+		).toThrow(/top level of the template a component yields/);
 	});
 
 	test("mounting a list whose item is a root template throws", () => {
@@ -125,7 +125,7 @@ describe("parseNestedTemplate: host binding requirement", () => {
 				</ul>`,
 				moveState(),
 			),
-		).toThrow(/top level of a component's render output/);
+		).toThrow(/top level of the template a component yields/);
 	});
 });
 
@@ -323,7 +323,7 @@ describe("raw content with a css plan", () => {
 		expect(declarationOf(style).getPropertyValue("color")).toBe("green");
 	});
 
-	test("a moved style whose reparse breaks the plan structure demotes and re-renders", () => {
+	test("a moved style whose reparse breaks the plan structure demotes to a full text rewrite", () => {
 		const { host, shadowRoot, instance } = mountIntoShadow(sheet("red"));
 		patchInstance(instance, sheet("blue").values); //resolve the CSSOM sheet
 		const style = shadowRoot.querySelector("style")!;
@@ -564,7 +564,7 @@ describe("hydrateInstance: rejects a server range that contradicts the value", (
 		expect(console.warn).toHaveBeenCalled();
 	});
 
-	test("fewer rows than the server wrote re-renders the range", () => {
+	test("fewer rows than the server wrote rebuilds the range", () => {
 		const { shadowRoot } = mountIntoShadow(rows(["a", "b", "c"]));
 
 		hydrateShadowRoot(rows(["a"]), shadowRoot, null, moveState());
@@ -572,7 +572,7 @@ describe("hydrateInstance: rejects a server range that contradicts the value", (
 		expect(rowLabels(shadowRoot)).toEqual(["a"]);
 	});
 
-	test("more rows than the server wrote re-renders the range", () => {
+	test("more rows than the server wrote rebuilds the range", () => {
 		const { shadowRoot } = mountIntoShadow(rows(["a"]));
 
 		hydrateShadowRoot(rows(["a", "b"]), shadowRoot, null, moveState());
@@ -580,7 +580,7 @@ describe("hydrateInstance: rejects a server range that contradicts the value", (
 		expect(rowLabels(shadowRoot)).toEqual(["a", "b"]);
 	});
 
-	test("a branch needing more markers than the server wrote re-renders the range", () => {
+	test("a branch needing more markers than the server wrote rebuilds the range", () => {
 		const { shadowRoot } = mountIntoShadow(contentHole(html`<p>${"x"}</p>`));
 
 		hydrateShadowRoot(
@@ -651,5 +651,76 @@ describe("hydrateInstance: rejects a server range that contradicts the value", (
 
 		expect(hole.textContent).toBe("filled");
 		expect(console.warn).not.toHaveBeenCalled();
+	});
+});
+
+describe("an iterator in a content hole paints as a list", () => {
+	const contentHole = (value: unknown) => html`<ul>${value}</ul>`;
+	const row = (label: string) => html`<li>${label}</li>`;
+	const rowLabels = (root: ParentNode): Array<string> =>
+		Array.from(root.querySelectorAll("li"), (item) => item.textContent!);
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	test("a generator paints one row per value it yields", () => {
+		const rows = function* () {
+			yield row("a");
+			yield row("b");
+		};
+		const { shadowRoot } = mountIntoShadow(contentHole(rows()));
+
+		expect(rowLabels(shadowRoot)).toEqual(["a", "b"]);
+	});
+
+	test("a patch with a new iterator updates the rows", () => {
+		const labels = ["a", "b"];
+		const { shadowRoot, instance } = mountIntoShadow(
+			contentHole(labels.values().map(row)),
+		);
+
+		patchInstance(instance, contentHole(["c", "b", "a"].values().map(row)).values);
+
+		expect(rowLabels(shadowRoot)).toEqual(["c", "b", "a"]);
+	});
+
+	test("a map's values are an iterator, the map itself is not and throws", () => {
+		const rowsByKey = new Map([["key", row("a")]]);
+		const { shadowRoot } = mountIntoShadow(contentHole(rowsByKey.values()));
+
+		expect(rowLabels(shadowRoot)).toEqual(["a"]);
+		expect(() => mountIntoShadow(contentHole(rowsByKey))).toThrow(
+			/expected a string/,
+		);
+	});
+
+	test("hydration adopts the server's rows", () => {
+		const { shadowRoot } = mountIntoShadow(contentHole([row("a"), row("b")]));
+		const serverRows = Array.from(shadowRoot.querySelectorAll("li"));
+
+		hydrateShadowRoot(
+			contentHole(["a", "b"].values().map(row)),
+			shadowRoot,
+			null,
+			moveState(),
+		);
+
+		expect(Array.from(shadowRoot.querySelectorAll("li"))).toEqual(serverRows);
+	});
+
+	//the fallback commit reads the hole a second time, after the first read used the iterator up
+	test("a server range the rows reject rebuilds them from the first read", () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		const { shadowRoot } = mountIntoShadow(contentHole([row("a")]));
+
+		hydrateShadowRoot(
+			contentHole(["a", "b"].values().map(row)),
+			shadowRoot,
+			null,
+			moveState(),
+		);
+
+		expect(rowLabels(shadowRoot)).toEqual(["a", "b"]);
 	});
 });

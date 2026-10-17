@@ -25,10 +25,11 @@ describe("multiple bindings", () => {
 		let c = "gamma";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<p>${a}</p>
+			yield function* () {
+				yield html`<p>${a}</p>
 					<p>${b}</p>
 					<p>${c}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -59,7 +60,9 @@ describe("multiple bindings", () => {
 		let handler = () => {};
 
 		const MyElement = component(function* () {
-			yield () => html` <div class="${cls}" onclick="${handler}">${text}</div>`;
+			yield function* () {
+				yield html` <div class="${cls}" onclick="${handler}">${text}</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -81,15 +84,15 @@ describe("multiple bindings", () => {
 		cleanup(element);
 	});
 
-	test("rapid sequential updates coalesce into one render", async () => {
+	test("rapid sequential update() calls coalesce into one run", async () => {
 		const tag = uniqueTag();
 		let value = 0;
-		let renderCount = 0;
+		let runCount = 0;
 
 		const MyElement = component(function* () {
-			yield () => {
-				renderCount++;
-				return html`<span>${value}</span>`;
+			yield function* () {
+				runCount++;
+				yield html`<span>${value}</span>`;
 			};
 		});
 
@@ -97,7 +100,7 @@ describe("multiple bindings", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const initialRenders = renderCount;
+		const initialRunCount = runCount;
 
 		value = 1;
 		element.update();
@@ -108,7 +111,7 @@ describe("multiple bindings", () => {
 
 		await sleep();
 
-		expect(renderCount).toBe(initialRenders + 1);
+		expect(runCount).toBe(initialRunCount + 1);
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
 			"3",
 		);

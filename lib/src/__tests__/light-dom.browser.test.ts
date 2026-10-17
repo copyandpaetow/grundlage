@@ -81,10 +81,12 @@ const ships = lightModeShips && isRealBrowser;
 
 describe("R1—R3 — the render root", () => {
 	test.skipIf(!lightModeShips)(
-		"a light component renders into its own child list and attaches no shadow root",
+		"a light component paints into its own child list and attaches no shadow root",
 		() => {
 			const tag = define(function* () {
-				yield () => html`<article>content</article>`;
+				yield function* () {
+					yield html`<article>content</article>`;
+				};
 			}, light());
 			const host = mount(tag);
 
@@ -97,13 +99,15 @@ describe("R1—R3 — the render root", () => {
 	);
 
 	test.skipIf(!lightModeShips)(
-		"R2 — the same component renders the same tree in both modes",
+		"R2 — the same component paints the same tree in both modes",
 		() => {
-			const renderTree = function* () {
-				yield () => html`<article><b>x</b></article>`;
+			const componentBody = function* () {
+				yield function* () {
+					yield html`<article><b>x</b></article>`;
+				};
 			};
-			const lightHost = mount(define(renderTree, light()));
-			const shadowHost = mount(define(renderTree));
+			const lightHost = mount(define(componentBody, light()));
+			const shadowHost = mount(define(componentBody));
 
 			expect(lightHost.innerHTML).toBe(
 				(shadowHost.shadowRoot as ShadowRoot).innerHTML,
@@ -112,11 +116,13 @@ describe("R1—R3 — the render root", () => {
 	);
 
 	test.skipIf(!lightModeShips)(
-		"R3 — `light-dom` is valueless, written by the library, and survives a re-render",
+		"R3 — `light-dom` is valueless, written by the library, and survives an update",
 		async () => {
 			let painted = 0;
 			const tag = define(function* () {
-				yield () => html`<p>${++painted}</p>`;
+				yield function* () {
+					yield html`<p>${++painted}</p>`;
+				};
 			}, light());
 			const host = mount(tag);
 
@@ -132,7 +138,9 @@ describe("R1—R3 — the render root", () => {
 		() => {
 			const host = mount(
 				define(function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				}),
 			);
 			expect(host.hasAttribute("light-dom")).toBe(false);
@@ -145,7 +153,9 @@ describe("R1—R3 — the render root", () => {
 			let painted = 0;
 			const host = mount(
 				define(function* () {
-					yield () => html`<p>${++painted}</p>`;
+					yield function* () {
+						yield html`<p>${++painted}</p>`;
+					};
 				}, light()),
 			);
 			const paragraph = host.querySelector("p");
@@ -168,18 +178,19 @@ describe("R4—R7 — styles", () => {
 	test.skipIf(!ships)(
 		"R4 — one authored `:host, :scope` rule paints the host in both modes",
 		() => {
-			const renderTree = function* () {
-				yield () =>
-					html`<style>
+			const componentBody = function* () {
+				yield function* () {
+					yield html`<style>
 							:host,
 							:scope {
 								background: red;
 							}
 						</style>
 						<b>x</b>`;
+				};
 			};
-			const lightHost = mount(define(renderTree, light()));
-			const shadowHost = mount(define(renderTree));
+			const lightHost = mount(define(componentBody, light()));
+			const shadowHost = mount(define(componentBody));
 
 			expect(paintOf(lightHost)).toBe(RED);
 			expect(paintOf(shadowHost)).toBe(RED);
@@ -189,13 +200,14 @@ describe("R4—R7 — styles", () => {
 	test.skipIf(!ships)("R4 — the authored text is wrapped, never edited", () => {
 		const host = mount(
 			define(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 						:host,
 						:scope {
 							background: red;
 						}
 					</style>`;
+				};
 			}, light()),
 		);
 		const sheetText = host.querySelector("style")!.textContent!;
@@ -211,13 +223,14 @@ describe("R4—R7 — styles", () => {
 			document.body.append(outside);
 			mount(
 				define(function* () {
-					yield () =>
-						html`<style>
+					yield function* () {
+						yield html`<style>
 								b {
 									background: red;
 								}
 							</style>
 							<b>x</b>`;
+					};
 				}, light()),
 			);
 			expect(paintOf(outside)).toBe(UNPAINTED);
@@ -232,13 +245,15 @@ describe("R4—R7 — styles", () => {
 			customElements.define(
 				"light-r5-child",
 				component(function* () {
-					yield () => html`<b>child</b>`;
+					yield function* () {
+						yield html`<b>child</b>`;
+					};
 				}, light()),
 			);
 			const parent = mount(
 				define(function* () {
-					yield () =>
-						html`<style>
+					yield function* () {
+						yield html`<style>
 								light-r5-child {
 									background: red;
 								}
@@ -248,6 +263,7 @@ describe("R4—R7 — styles", () => {
 							</style>
 							<light-r5-child></light-r5-child>
 							<b>own</b>`;
+					};
 				}, light()),
 			);
 			await sleep();
@@ -266,12 +282,13 @@ describe("R4—R7 — styles", () => {
 				.spyOn(console, "warn")
 				.mockImplementation(() => {});
 			const tag = define(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 						:host {
 							background: red;
 						}
 					</style>`;
+				};
 			}, light());
 			mount(tag);
 			mount(tag);
@@ -292,12 +309,13 @@ describe("R4—R7 — styles", () => {
 				.mockImplementation(() => {});
 			mount(
 				define(function* () {
-					yield () =>
-						html`<style>
+					yield function* () {
+						yield html`<style>
 							b::before {
 								content: ":host";
 							}
 						</style>`;
+					};
 				}, light()),
 			);
 			const falsePositives = consoleWarn.mock.calls.filter((call) =>
@@ -316,8 +334,8 @@ describe("R4—R7 — styles", () => {
 				.mockImplementation(() => {});
 			mount(
 				define(function* () {
-					yield () =>
-						html`<style>
+					yield function* () {
+						yield html`<style>
 							:scope {
 								display: block;
 							}
@@ -325,6 +343,7 @@ describe("R4—R7 — styles", () => {
 								background: red;
 							}
 						</style>`;
+					};
 				}, light()),
 			);
 			const hostWarnings = consoleWarn.mock.calls.filter((call) =>
@@ -343,12 +362,13 @@ describe("R4—R7 — styles", () => {
 				.mockImplementation(() => {});
 			mount(
 				define(function* () {
-					yield () =>
-						html`<style>
+					yield function* () {
+						yield html`<style>
 							::slotted(b) {
 								background: red;
 							}
 						</style>`;
+					};
 				}, light()),
 			);
 			const slottedWarnings = consoleWarn.mock.calls.filter((call) =>
@@ -362,22 +382,23 @@ describe("R4—R7 — styles", () => {
 	test.skipIf(!lightModeShips)(
 		"R7 — a `<style>` below the top level warns in light mode and not in shadow mode",
 		() => {
-			const renderTree = function* () {
-				yield () =>
-					html`<article>
+			const componentBody = function* () {
+				yield function* () {
+					yield html`<article>
 						<style>
 							b {
 								background: red;
 							}
 						</style>
 					</article>`;
+				};
 			};
 			const consoleWarn = vi
 				.spyOn(console, "warn")
 				.mockImplementation(() => {});
-			mount(define(renderTree, light()));
+			mount(define(componentBody, light()));
 			const lightWarnings = consoleWarn.mock.calls.length;
-			mount(define(renderTree));
+			mount(define(componentBody));
 			const bothWarnings = consoleWarn.mock.calls.length;
 			consoleWarn.mockRestore();
 
@@ -388,27 +409,34 @@ describe("R4—R7 — styles", () => {
 });
 
 describe("the three things that fail today", () => {
-	test.skipIf(!ships)("page CSS reaches into a light render", () => {
-		const pageSheet = document.createElement("style");
-		pageSheet.textContent = ".from-the-page { background: red }";
-		document.head.append(pageSheet);
+	test.skipIf(!ships)(
+		"page CSS reaches into what a light component paints",
+		() => {
+			const pageSheet = document.createElement("style");
+			pageSheet.textContent = ".from-the-page { background: red }";
+			document.head.append(pageSheet);
 
-		const host = mount(
-			define(function* () {
-				yield () => html`<b class="from-the-page">x</b>`;
-			}, light()),
-		);
+			const host = mount(
+				define(function* () {
+					yield function* () {
+						yield html`<b class="from-the-page">x</b>`;
+					};
+				}, light()),
+			);
 
-		expect(paintOf(host.querySelector("b")!)).toBe(RED);
-		pageSheet.remove();
-	});
+			expect(paintOf(host.querySelector("b")!)).toBe(RED);
+			pageSheet.remove();
+		},
+	);
 
 	test.skipIf(!ships)("`label[for]` associates across the host", () => {
 		const holder = document.createElement("div");
 		document.body.append(holder);
 		const host = document.createElement(
 			define(function* () {
-				yield () => html`<input id="across-the-host" />`;
+				yield function* () {
+					yield html`<input id="across-the-host" />`;
+				};
 			}, light()),
 		);
 		holder.append(host);
@@ -419,21 +447,26 @@ describe("the three things that fail today", () => {
 		expect(label.control).toBe(holder.querySelector("input"));
 	});
 
-	test.skipIf(!ships)("a `:target` id inside a light render responds", () => {
-		const host = mount(
-			define(function* () {
-				yield () => html`<section id="target-probe">x</section>`;
-			}, light()),
-		);
-		const pageSheet = document.createElement("style");
-		pageSheet.textContent = ":target { background: red }";
-		document.head.append(pageSheet);
-		location.hash = "#target-probe";
+	test.skipIf(!ships)(
+		"a `:target` id inside what a light component paints responds",
+		() => {
+			const host = mount(
+				define(function* () {
+					yield function* () {
+						yield html`<section id="target-probe">x</section>`;
+					};
+				}, light()),
+			);
+			const pageSheet = document.createElement("style");
+			pageSheet.textContent = ":target { background: red }";
+			document.head.append(pageSheet);
+			location.hash = "#target-probe";
 
-		expect(paintOf(host.querySelector("section")!)).toBe(RED);
-		location.hash = "";
-		pageSheet.remove();
-	});
+			expect(paintOf(host.querySelector("section")!)).toBe(RED);
+			location.hash = "";
+			pageSheet.remove();
+		},
+	);
 });
 
 describe("R25 — a render root is not a page surface", () => {
@@ -443,7 +476,9 @@ describe("R25 — a render root is not a page surface", () => {
 			let painted = 0;
 			const host = mount(
 				define(function* () {
-					yield () => html`<p>${++painted}</p>`;
+					yield function* () {
+						yield html`<p>${++painted}</p>`;
+					};
 				}, light()),
 			);
 			const consoleWarn = vi
@@ -465,13 +500,14 @@ describe("R25 — a render root is not a page surface", () => {
 			let painted = 0;
 			const host = mount(
 				define(function* () {
-					yield () =>
-						html`<style>
+					yield function* () {
+						yield html`<style>
 								b {
 									background: ${"red"};
 								}
 							</style>
 							<b>${++painted}</b>`;
+					};
 				}, light()),
 			);
 			const consoleWarn = vi
@@ -518,9 +554,9 @@ describe("R26 — a fatal reports the fact on the element", () => {
 			let shouldThrow = false;
 			const host = mount(
 				define(function* () {
-					yield () => {
+					yield function* () {
 						if (shouldThrow) throw new Error("boom");
-						return html`<p>good</p>`;
+						yield html`<p>good</p>`;
 					};
 				}, light()),
 			);
@@ -543,7 +579,9 @@ describe("R26 — a fatal reports the fact on the element", () => {
 			const host = mount(
 				define(function* () {
 					if (shouldThrow) throw new Error("boom");
-					yield () => html`<p>recovered</p>`;
+					yield function* () {
+						yield html`<p>recovered</p>`;
+					};
 				}, light()),
 			);
 			expect(host.hasAttribute("component-error")).toBe(true);

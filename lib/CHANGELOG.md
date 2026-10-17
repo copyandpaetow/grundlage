@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.0
+
+### Breaking
+
+- A component yields a template, an update generator or a promise; anything else throws.
+- Render functions are removed: `` yield () => html`…` `` → ``yield function* view() { yield html`…`; }``.
+- `async function*` and `await` are removed: `await promise` → `yield promise`.
+- A `yield` of an update generator waits for its run and evaluates to the run's return value.
+- The build targets ES2025: Chrome 122, Firefox 131, Safari 18.4.
+
+### Types
+
+- `YieldableValue` is `Template | Promise<unknown> | UpdateGenerator`; `UpdateGenerator` is exported.
+- A waited value is `any`; annotate it: `const user: User = yield fetchUser(id)`.
+
+### Added
+
+- An iterator in a content hole paints as a list.
+
+### Changed
+
+- A paint error throws at the `yield html` that painted it.
+- A torn-down generator runs its `finally` block to the end.
+- Messages say update or paint where they said render; a fatal error shows `<tag> stopped running.`
+
+### Fixed
+
+- On the server, a body that catches an update generator's error runs its `finally`, also when that generator called `update()`.
+- An `update()` queued for an update generator the body drops settles with the drop instead of re-running the next one.
+- A child moved straight after its parent's paint runs its update generator once.
+
 ## 0.8.0
 
 ### Breaking

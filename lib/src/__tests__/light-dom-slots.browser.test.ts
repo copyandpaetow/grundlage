@@ -81,7 +81,9 @@ describe("R8—R9 — a slot is a prop", () => {
 		() => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -99,7 +101,9 @@ describe("R8—R9 — a slot is a prop", () => {
 		expect(() =>
 			define(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
 				light({ heading: Slot, hEading: String }),
 			),
@@ -112,7 +116,9 @@ describe("R8—R9 — a slot is a prop", () => {
 			expect(() =>
 				define(
 					function* () {
-						yield () => html`<p>x</p>`;
+						yield function* () {
+							yield html`<p>x</p>`;
+						};
 					},
 					light({ body: DefaultSlot, rest: DefaultSlot }),
 				),
@@ -126,7 +132,9 @@ describe("R8—R9 — a slot is a prop", () => {
 			const [, warnings] = silenced(() =>
 				define(
 					function* () {
-						yield () => html`<p>x</p>`;
+						yield function* () {
+							yield html`<p>x</p>`;
+						};
 					},
 					{ mode: "closed", props: { heading: Slot } } as ComponentOptions,
 				),
@@ -140,7 +148,9 @@ describe("R8—R9 — a slot is a prop", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.sideBar}</header>`;
+					yield function* () {
+						yield html`<header>${props.sideBar}</header>`;
+					};
 				},
 				light({ sideBar: Slot }),
 			);
@@ -160,7 +170,9 @@ describe("R8—R9 — a slot is a prop", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -185,7 +197,9 @@ describe("R13—R15 — adoption", () => {
 			let childCountDuringBody = -1;
 			const tag = define(
 				function* (props) {
-					const host = yield () => html`<article>${props.body}</article>`;
+					const host = yield function* () {
+						yield html`<article>${props.body}</article>`;
+					};
 					childCountDuringBody = (host as Element).children.length;
 				},
 				light({ body: DefaultSlot }),
@@ -205,7 +219,9 @@ describe("R13—R15 — adoption", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -223,11 +239,13 @@ describe("R13—R15 — adoption", () => {
 	test.skipIf(!slotsShip)(
 		"R14 — light mode destroys an unmatched child and warns; shadow mode leaves it",
 		async () => {
-			const renderTree = function* (props: ComponentProps) {
-				yield () => html`<header>${props.heading}</header>`;
+			const componentBody = function* (props: ComponentProps) {
+				yield function* () {
+					yield html`<header>${props.heading}</header>`;
+				};
 			};
-			const lightTag = define(renderTree, light({ heading: Slot }));
-			const shadowTag = define(renderTree, { props: { heading: Slot } });
+			const lightTag = define(componentBody, light({ heading: Slot }));
+			const shadowTag = define(componentBody, { props: { heading: Slot } });
 
 			const [lightHost, warnings] = silenced(() =>
 				withChildren(lightTag, `<span slot="badges">1843</span>`),
@@ -249,7 +267,9 @@ describe("R13—R15 — adoption", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<footer>${props.footer}</footer>`;
+					yield function* () {
+						yield html`<footer>${props.footer}</footer>`;
+					};
 				},
 				light({ footer: [Slot, html`<i>—</i>`] as never }),
 			);
@@ -267,7 +287,9 @@ describe("R10—R12 — the value", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -292,9 +314,10 @@ describe("R10—R12 — the value", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () =>
-						html`<header>${props.heading}</header>
+					yield function* () {
+						yield html`<header>${props.heading}</header>
 							<nav>${props.heading}</nav>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -316,11 +339,13 @@ describe("R10—R12 — the value", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R12 — the stored array is frozen, so a push throws instead of landing a render late",
+		"R12 — the stored array is frozen, so a push throws instead of showing up one paint late",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -340,7 +365,9 @@ describe("R10—R12 — the value", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -361,11 +388,13 @@ describe("R10—R12 — the value", () => {
 
 describe("R16—R20 — fallbacks and ownership", () => {
 	test.skipIf(!slotsShip)(
-		"R16 — absence writes the fallback; an empty array is a value that renders nothing",
+		"R16 — absence writes the fallback; an empty array is a value that paints nothing",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<footer>${props.footer}</footer>`;
+					yield function* () {
+						yield html`<footer>${props.footer}</footer>`;
+					};
 				},
 				light({ footer: [Slot, html`<i>—</i>`] as never }),
 			);
@@ -389,7 +418,9 @@ describe("R16—R20 — fallbacks and ownership", () => {
 			expect(() =>
 				define(
 					function* () {
-						yield () => html`<p>x</p>`;
+						yield function* () {
+							yield html`<p>x</p>`;
+						};
 					},
 					light({ footer: [Slot, [document.createElement("i")]] as never }),
 				),
@@ -402,19 +433,21 @@ describe("R16—R20 — fallbacks and ownership", () => {
 		async () => {
 			const withFallback = define(
 				function* (props) {
-					yield () =>
-						html`<div>
+					yield function* () {
+						yield html`<div>
 							${props.footer && html`<aside>${props.footer}</aside>`}
 						</div>`;
+					};
 				},
 				light({ footer: [Slot, html`<i>—</i>`] as never }),
 			);
 			const bare = define(
 				function* (props) {
-					yield () =>
-						html`<div>
+					yield function* () {
+						yield html`<div>
 							${props.footer && html`<aside>${props.footer}</aside>`}
 						</div>`;
+					};
 				},
 				light({ footer: Slot }),
 			);
@@ -433,7 +466,9 @@ describe("R16—R20 — fallbacks and ownership", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -452,13 +487,14 @@ describe("R16—R20 — fallbacks and ownership", () => {
 	);
 
 	test.skipIf(!ships)(
-		"R19 — live nodes render in the first hole only, and the second warns rather than falling back",
+		"R19 — live nodes are painted into the first hole only, and the second warns rather than falling back",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () =>
-						html`<header>${props.heading}</header>
+					yield function* () {
+						yield html`<header>${props.heading}</header>
 							<nav>${props.heading}</nav>`;
+					};
 				},
 				light({ heading: [Slot, html`<h2>Untitled</h2>`] as never }),
 			);
@@ -481,7 +517,9 @@ describe("R16—R20 — fallbacks and ownership", () => {
 				"slot-r20-child",
 				component(
 					function* (props) {
-						yield () => html`<b>${props.label}</b>`;
+						yield function* () {
+							yield html`<b>${props.label}</b>`;
+						};
 					},
 					light({ label: [Slot, html`<i>inner</i>`] as never }),
 				),
@@ -489,8 +527,11 @@ describe("R16—R20 — fallbacks and ownership", () => {
 			const parent = withChildren(
 				define(
 					function* (props) {
-						yield () =>
-							html`<slot-r20-child label=${props.heading}></slot-r20-child>`;
+						yield function* () {
+							yield html`<slot-r20-child
+								label=${props.heading}
+							></slot-r20-child>`;
+						};
 					},
 					light({ heading: Slot }),
 				),
@@ -520,7 +561,9 @@ describe("R21—R22 — <slot> and late children", () => {
 				.mockImplementation(() => {});
 			const host = withChildren(
 				define(function* () {
-					yield () => html`<slot name="heading"></slot>`;
+					yield function* () {
+						yield html`<slot name="heading"></slot>`;
+					};
 				}, light()),
 				"",
 			);
@@ -542,7 +585,9 @@ describe("R21—R22 — <slot> and late children", () => {
 			const host = withChildren(
 				define(
 					function* () {
-						yield () => html`<slot name="heading"></slot>`;
+						yield function* () {
+							yield html`<slot name="heading"></slot>`;
+						};
 					},
 					{ props: { heading: Slot } } as ComponentOptions,
 				),
@@ -561,7 +606,9 @@ describe("R21—R22 — <slot> and late children", () => {
 			const host = withChildren(
 				define(
 					function* () {
-						yield () => html`<slot name="badges"></slot>`;
+						yield function* () {
+							yield html`<slot name="badges"></slot>`;
+						};
 					},
 					{ props: { heading: Slot } } as ComponentOptions,
 				),
@@ -579,7 +626,9 @@ describe("R21—R22 — <slot> and late children", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -601,7 +650,9 @@ describe("R21—R22 — <slot> and late children", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);

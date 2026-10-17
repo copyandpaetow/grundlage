@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { html, component, ComponentErrorEvent } from "../../index";
+import {
+	html,
+	component,
+	ComponentErrorEvent,
+	type Template,
+} from "../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -8,12 +13,14 @@ describe("dynamic tag placement", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-tag-placement-${tagId++}-${Date.now()}`;
 
-	const mountWithErrorCapture = async (renderTemplate: () => unknown) => {
+	const mountWithErrorCapture = async (buildTemplate: () => Template) => {
 		const tag = uniqueTag();
 		customElements.define(
 			tag,
 			component(function* () {
-				yield renderTemplate;
+				yield function* () {
+					yield buildTemplate();
+				};
 			}),
 		);
 		const element = document.createElement(tag);
@@ -53,7 +60,7 @@ describe("dynamic tag placement", () => {
 		expect(shadowMarkup).not.toContain("<table>");
 	});
 
-	test("a dynamic tag in a position the parser accepts renders", async () => {
+	test("a dynamic tag in a position the parser accepts paints", async () => {
 		const tag = "li";
 		const { shadowMarkup, errors } = await mountWithErrorCapture(
 			() => html`<ul><${tag}>a</${tag}></ul>`,

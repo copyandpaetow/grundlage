@@ -31,9 +31,9 @@ describe("engine terminal", () => {
 		const element = mount(
 			component(function* () {
 				yield function* () {
-					yield () => {
+					{
 						throw new Error("once");
-					};
+					}
 				};
 			}),
 		);
@@ -58,7 +58,7 @@ describe("engine terminal", () => {
 		const element = mount(
 			component(
 				function* () {
-					yield () => {
+					yield function* () {
 						throw new Error("closed-boom");
 					};
 				},
@@ -73,14 +73,14 @@ describe("engine terminal", () => {
 		element.remove();
 	});
 
-	test("update() after a terminal error is a no-op (the renderer was cleared)", async () => {
+	test("update() after a terminal error is a no-op (the runner was stopped)", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		let shouldThrow = true;
 		const element = mount(
 			component(function* () {
-				yield () => {
+				yield function* () {
 					if (shouldThrow) throw new Error("boom");
-					return html`<p>recovered</p>`;
+					yield html`<p>recovered</p>`;
 				};
 			}),
 		) as HTMLElement & { update(): Promise<void> };
@@ -88,7 +88,7 @@ describe("engine terminal", () => {
 		expect(element.shadowRoot?.textContent).toContain("boom");
 
 		shouldThrow = false;
-		await element.update(); //must resolve (not hang) and must NOT re-render
+		await element.update(); //must resolve (not hang) and must NOT run again
 		expect(element.shadowRoot?.textContent).toContain("boom");
 		element.remove();
 	});
@@ -98,9 +98,9 @@ describe("engine terminal", () => {
 		let boom = false;
 		const element = mount(
 			component(function* () {
-				yield () => {
+				yield function* () {
 					if (boom) throw new Error("late-boom");
-					return html`<p>alive</p>`;
+					yield html`<p>alive</p>`;
 				};
 			}),
 		) as HTMLElement & { update(): Promise<void> };
@@ -115,7 +115,7 @@ describe("engine terminal", () => {
 		element.remove();
 		document.body.appendChild(element); //reconnect restarts the engine on the same element
 		await sleep();
-		//same-hash re-render must not patch the detached error text; it must remount live DOM
+		//same-hash paint must not patch the detached error text; it must remount live DOM
 		expect(element.shadowRoot?.textContent).toContain("alive");
 		expect(element.shadowRoot?.textContent).not.toContain("late-boom");
 		element.remove();
@@ -127,9 +127,9 @@ describe("engine terminal", () => {
 		const consoleError = vi
 			.spyOn(console, "error")
 			.mockImplementation(() => {});
-		let rejectInnerRender: (error: Error) => void = () => {};
-		const innerRender = new Promise((_resolve, reject) => {
-			rejectInnerRender = reject;
+		let rejectInnerPromise: (error: Error) => void = () => {};
+		const innerPromise = new Promise((_resolve, reject) => {
+			rejectInnerPromise = reject;
 		});
 		let resolveGate: (value: string) => void = () => {};
 		const gate = new Promise<string>((resolve) => {
@@ -141,7 +141,7 @@ describe("engine terminal", () => {
 		const element = mount(
 			component(function* () {
 				yield function* () {
-					yield () => innerRender;
+					yield innerPromise;
 				};
 				try {
 					yield gate;
@@ -153,11 +153,11 @@ describe("engine terminal", () => {
 		);
 		await sleep();
 
-		rejectInnerRender(new Error("inner-render-rejected"));
+		rejectInnerPromise(new Error("inner-promise-rejected"));
 		await sleep();
 
 		expect(caughtAtTheGate).toBe(0);
-		expect(element.shadowRoot?.textContent).toContain("inner-render-rejected");
+		expect(element.shadowRoot?.textContent).toContain("inner-promise-rejected");
 		expect(consoleError).toHaveBeenCalledTimes(1);
 
 		resolveGate("late");
@@ -176,7 +176,7 @@ describe("the component error event", () => {
 		document.addEventListener(ComponentErrorEvent.eventName, recordEvent);
 		const element = mount(
 			component(function* () {
-				yield () => {
+				yield function* () {
 					throw thrown;
 				};
 			}),
@@ -195,9 +195,9 @@ describe("the component error event", () => {
 		let shouldThrow = false;
 		const element = mount(
 			component(function* () {
-				yield () => {
+				yield function* () {
 					if (shouldThrow) throw new Error("late");
-					return html`<p>alive</p>`;
+					yield html`<p>alive</p>`;
 				};
 			}),
 		) as HTMLElement & { update(): Promise<void> };
@@ -222,7 +222,7 @@ describe("the component error event", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				yield () => {
+				yield function* () {
 					throw new Error("handled");
 				};
 			}),
@@ -249,7 +249,9 @@ describe("a prop resolver that throws", () => {
 		mount(
 			component(
 				function* () {
-					yield () => html`<p>alive</p>`;
+					yield function* () {
+						yield html`<p>alive</p>`;
+					};
 				},
 				{ props: { label: refusingResolver } },
 			),
@@ -293,9 +295,9 @@ describe("dismissed child errors", () => {
 			component(function* () {
 				try {
 					yield function* () {
-						yield () => {
+						{
 							throw new Error("child-boom");
-						};
+						}
 					};
 				} catch {
 					return () => {
@@ -310,7 +312,7 @@ describe("dismissed child errors", () => {
 		expect(warn).not.toHaveBeenCalled();
 		expect(cleanupCalls).toBe(0);
 
-		//the dead child renderer was dropped: update() no-ops (does not re-run/re-throw)
+		//the failed update generator was dropped: update() no-ops (does not re-run/re-throw)
 		await element.update();
 		expect(warn).not.toHaveBeenCalled();
 		expect(cleanupCalls).toBe(0);
@@ -322,15 +324,17 @@ describe("dismissed child errors", () => {
 	});
 });
 
-describe("the refire enters the task loop", () => {
+describe("the refire enters the driver loop", () => {
 	test("the outer generator is not stepped again on update", async () => {
-		//a refire re-calls the render function only; the generator ran to completion at mount and
+		//a refire re-runs the update generator only; the body ran to completion at mount and
 		//stepping it again would allocate an iterator result per update on the hot path
 		let timesResumedPastTheYield = 0;
-		let renders = 0;
+		let runs = 0;
 		const element = mount(
 			component(function* () {
-				yield () => html`<p>${++renders}</p>`;
+				yield function* () {
+					yield html`<p>${++runs}</p>`;
+				};
 				timesResumedPastTheYield++;
 			}),
 		) as HTMLElement & { update(): Promise<void> };
@@ -341,7 +345,7 @@ describe("the refire enters the task loop", () => {
 		await element.update();
 		await element.update();
 
-		expect(renders).toBe(4);
+		expect(runs).toBe(4);
 		expect(timesResumedPastTheYield).toBe(1);
 		expect(element.shadowRoot?.textContent).toContain("4");
 		element.remove();
@@ -351,7 +355,9 @@ describe("the refire enters the task loop", () => {
 		let cleanupCalls = 0;
 		const element = mount(
 			component(function* () {
-				yield () => html`<p>x</p>`;
+				yield function* () {
+					yield html`<p>x</p>`;
+				};
 				return () => {
 					cleanupCalls++;
 				};
@@ -377,12 +383,14 @@ describe("the refire enters the task loop", () => {
 		const element = mount(
 			component(function* () {
 				yield function* () {
-					yield () => html`<p>branch</p>`;
+					yield html`<p>branch</p>`;
 					return () => {
 						throw new Error("branch-cleanup-threw");
 					};
 				};
-				yield () => html`<p>component</p>`;
+				yield function* () {
+					yield html`<p>component</p>`;
+				};
 			}),
 		);
 		await sleep();
@@ -398,7 +406,7 @@ describe("the refire enters the task loop", () => {
 		const element = mount(
 			component(function* () {
 				yield function* () {
-					yield () => html`<p>branch</p>`;
+					yield html`<p>branch</p>`;
 					return () => {
 						throw new Error("branch-cleanup-threw");
 					};
@@ -423,11 +431,11 @@ describe("the refire enters the task loop", () => {
 		let branchRuns = 0;
 		const branch = function* () {
 			branchRuns++;
-			yield () => html`<p>branch ${branchRuns}</p>`;
+			yield html`<p>branch ${branchRuns}</p>`;
 		};
 		const element = mount(
 			component(function* () {
-				yield () => branch;
+				yield branch;
 				return () => {
 					cleanupCalls++;
 				};
@@ -453,13 +461,15 @@ describe("the refire enters the task loop", () => {
 		const element = mount(
 			component(function* () {
 				const label = yield gate;
-				yield () => html`<p>${label}</p>`;
+				yield function* () {
+					yield html`<p>${label}</p>`;
+				};
 			}),
 		) as HTMLElement & { update(): Promise<void> };
 		await sleep();
 		expect(element.shadowRoot?.textContent).toBe("");
 
-		//nothing is refirable yet: no render function recorded, no generator installed
+		//nothing is refirable yet: the body has not yielded an update generator
 		await element.update(); //must resolve rather than hang, and must not step the outer
 		expect(element.shadowRoot?.textContent).toBe("");
 
@@ -476,22 +486,24 @@ describe("the refire enters the task loop", () => {
 		const gate = new Promise<string>((resolve) => {
 			resolveGate = resolve;
 		});
-		let renders = 0;
+		let runs = 0;
 		let resumed = 0;
 		const element = mount(
 			component(function* () {
-				yield () => html`<p>render ${++renders}</p>`;
+				yield function* () {
+					yield html`<p>run ${++runs}</p>`;
+				};
 				yield gate;
 				resumed++;
 			}),
 		) as HTMLElement & { update(): Promise<void> };
 		await sleep();
-		expect(renders).toBe(1);
+		expect(runs).toBe(1);
 		expect(resumed).toBe(0);
 
 		await element.update();
-		expect(renders).toBe(2);
-		expect(element.shadowRoot?.textContent).toContain("render 2");
+		expect(runs).toBe(2);
+		expect(element.shadowRoot?.textContent).toContain("run 2");
 		expect(resumed).toBe(0); //the refire must not resume the parked generator
 
 		resolveGate("go");
@@ -500,48 +512,16 @@ describe("the refire enters the task loop", () => {
 		element.remove();
 	});
 
-	test("a refire that installs a generator past a suspended outer does not step it either", async () => {
-		//the install half of the shape above: the refired render function returns a body rather than
-		//content, and the outer is parked on its own promise rather than on the yield that produced it
-		let resolveGate: (value: string) => void = () => {};
-		const gate = new Promise<string>((resolve) => {
-			resolveGate = resolve;
-		});
-		let innerRuns = 0;
-		let resumedWith: unknown = null;
-		const body = function* () {
-			innerRuns++;
-			yield () => html`<p>body ${innerRuns}</p>`;
-		};
-		const element = mount(
-			component(function* () {
-				yield () => body;
-				resumedWith = yield gate;
-			}),
-		) as HTMLElement & { update(): Promise<void> };
-		await sleep();
-		expect(innerRuns).toBe(1);
-		expect(resumedWith).toBe(null);
-
-		await element.update();
-		expect(innerRuns).toBe(2);
-		expect(element.shadowRoot?.textContent).toContain("body 2");
-		expect(resumedWith).toBe(null); //the install must not hand the outer its host
-
-		resolveGate("go");
-		await sleep();
-		expect(resumedWith).toBe("go");
-		element.remove();
-	});
-
 	test("an update queued before the body paints its own template still settles", async () => {
-		//the queue drains a microtask after the enqueue, so everything below lands first: the run is
-		//still running when the pass reaches it, with nothing left to re-fire
+		//the template drops the update generator the update was queued for, and the queued update
+		//goes with it
 		let updateSettled = false;
-		let renders = 0;
+		let runs = 0;
 		const element = mount(
 			component(function* ({ host }) {
-				yield () => html`<p>render ${++renders}</p>`;
+				yield function* () {
+					yield html`<p>run ${++runs}</p>`;
+				};
 				void host.update().then(() => {
 					updateSettled = true;
 				});
@@ -550,55 +530,59 @@ describe("the refire enters the task loop", () => {
 		);
 		await sleep();
 
-		expect(renders).toBe(1); //a plain yielded template leaves nothing the update could re-fire
+		expect(runs).toBe(1); //a plain yielded template leaves nothing the update could re-fire
 		expect(element.shadowRoot?.textContent).toContain("final");
 		expect(updateSettled).toBe(true);
 		element.remove();
 	});
 
-	test("a render function yielded after an inner generator wins the refire", async () => {
+	test("an update generator yielded after another one is what the refire re-runs", async () => {
 		//the two refire routes have separate fields now; the last yield decides which one answers
 		let innerRuns = 0;
-		let renders = 0;
+		let outerRuns = 0;
 		const element = mount(
 			component(function* () {
 				yield function* () {
 					innerRuns++;
-					yield () => html`<p>inner</p>`;
+					yield html`<p>inner</p>`;
 				};
-				yield () => html`<p>outer ${++renders}</p>`;
+				yield function* () {
+					yield html`<p>outer ${++outerRuns}</p>`;
+				};
 			}),
 		) as HTMLElement & { update(): Promise<void> };
 		await sleep();
 		expect(innerRuns).toBe(1);
-		expect(renders).toBe(1);
+		expect(outerRuns).toBe(1);
 
 		await element.update();
-		expect(renders).toBe(2);
+		expect(outerRuns).toBe(2);
 		expect(innerRuns).toBe(1); //the installed generator must NOT be restarted as well
 		expect(element.shadowRoot?.textContent).toContain("outer 2");
 		element.remove();
 	});
 
-	test("an inner generator yielded after a render function wins the refire", async () => {
+	test("an update generator yielded before another one is not re-run by the refire", async () => {
 		let innerRuns = 0;
-		let renders = 0;
+		let outerRuns = 0;
 		const element = mount(
 			component(function* () {
-				yield () => html`<p>outer ${++renders}</p>`;
+				yield function* () {
+					yield html`<p>outer ${++outerRuns}</p>`;
+				};
 				yield function* () {
 					innerRuns++;
-					yield () => html`<p>inner ${innerRuns}</p>`;
+					yield html`<p>inner ${innerRuns}</p>`;
 				};
 			}),
 		) as HTMLElement & { update(): Promise<void> };
 		await sleep();
-		expect(renders).toBe(1);
+		expect(outerRuns).toBe(1);
 		expect(innerRuns).toBe(1);
 
 		await element.update();
 		expect(innerRuns).toBe(2);
-		expect(renders).toBe(1); //the outer's stale record must not answer the refire
+		expect(outerRuns).toBe(1); //the outer's stale record must not answer the refire
 		expect(element.shadowRoot?.textContent).toContain("inner 2");
 		element.remove();
 	});
@@ -610,7 +594,9 @@ describe("the refire enters the task loop", () => {
 		let bad = false;
 		const element = mount(
 			component(function* () {
-				yield () => (bad ? html`<p>${Symbol("x")}</p>` : html`<p>fine</p>`);
+				yield function* () {
+					yield bad ? html`<p>${Symbol("x")}</p>` : html`<p>fine</p>`;
+				};
 			}),
 		) as HTMLElement & { update(): Promise<void> };
 		await sleep();

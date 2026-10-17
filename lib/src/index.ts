@@ -6,16 +6,16 @@ import {
 import {
 	ComponentRoot,
 	createComponentRoot,
-	renderedInstanceOf,
+	paintedInstanceOf,
 } from "./rendering/component-root";
 import {
-	createRenderRun,
-	endRunWithFatalError,
-	RENDER_REQUEST,
-	RenderRun,
-	requestRender,
+	ComponentRunner,
+	createComponentRunner,
+	endRunnerWithFatalError,
+	RUNNER_REQUEST,
+	sendRunnerRequest,
 } from "./runtime/driver";
-import { forgetAncestorRun } from "./runtime/render-order";
+import { forgetAncestorRunner } from "./runtime/update-order";
 import { html as htmlValue } from "./template";
 import { refreshStyleSheetsAfterMove } from "./rendering/instance";
 import { DEFER_HYDRATION_ATTRIBUTE } from "./rendering/constants";
@@ -41,7 +41,7 @@ import {
 	recoverPreUpgradeAssignments,
 	claimPropValueChange,
 } from "./props/values";
-import { isGeneratorFunction } from "./runtime/task";
+import { isAsyncGeneratorFunction, isGeneratorFunction } from "./runtime/run";
 import { InvariantError, libraryMessage } from "./utils/diagnostics";
 
 export { props } from "./props/read";
@@ -54,6 +54,7 @@ export {
 	type Resolve,
 	type Schema,
 	type Template,
+	type UpdateGenerator,
 	type YieldableValue,
 } from "./types";
 export { load, type LoadOptions } from "./load";
@@ -75,6 +76,12 @@ export const component = <DeclaredSchema extends Schema = {}>(
 	componentGenerator: ComponentGenerator<DeclaredSchema>,
 	options: ComponentOptions<DeclaredSchema> = defaultOptions,
 ): ComponentConstructor<DeclaredSchema> => {
+	if (isAsyncGeneratorFunction(componentGenerator))
+		throw new TypeError(
+			libraryMessage(
+				"component(fn) expects a generator function, not an async one. Drop the async and yield each promise instead of awaiting it.",
+			),
+		);
 	if (!isGeneratorFunction(componentGenerator))
 		throw new TypeError(
 			libraryMessage(
@@ -98,7 +105,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		#internals: ElementInternals | null = null;
 		#props: PropValues = createComponentProps(props, this);
 		#isReflecting = false;
-		#renderRun: RenderRun;
+		#runner: ComponentRunner;
 
 		get internals(): ElementInternals | null {
 			return (this.#internals ??= this.attachInternals?.() ?? null);
@@ -128,7 +135,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				return claimPropValueChange(this.#props, prop, incoming);
 			} catch (error) {
 				if (error instanceof InvariantError) throw error;
-				endRunWithFatalError(this.#renderRun, error);
+				endRunnerWithFatalError(this.#runner, error);
 				return false;
 			}
 		}
@@ -156,7 +163,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				existingRoot ?? this.attachShadow(mergedOptions),
 				existingRoot !== null,
 			);
-			this.#renderRun = createRenderRun({
+			this.#runner = createComponentRunner({
 				root: this.#root,
 				componentProps: this.#props as unknown as ComponentProps,
 				componentGenerator: componentGenerator as ComponentGenerator,
@@ -164,26 +171,26 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		}
 
 		connectedCallback() {
-			const instance = renderedInstanceOf(this.#root);
+			const instance = paintedInstanceOf(this.#root);
 			if (instance !== null) refreshStyleSheetsAfterMove(instance);
 			//an insertion is the only notice of a move, and a move can put a different component above
 			//this one
-			forgetAncestorRun(this.#renderRun);
+			forgetAncestorRunner(this.#runner);
 			try {
 				recoverPreUpgradeAssignments(this, props);
 			} catch (error) {
 				if (error instanceof InvariantError) throw error;
-				endRunWithFatalError(this.#renderRun, error);
+				endRunnerWithFatalError(this.#runner, error);
 				return;
 			}
-			requestRender(this.#renderRun, RENDER_REQUEST.START);
+			sendRunnerRequest(this.#runner, RUNNER_REQUEST.START);
 		}
 
 		async disconnectedCallback() {
-			requestRender(this.#renderRun, RENDER_REQUEST.DISCONNECT);
+			sendRunnerRequest(this.#runner, RUNNER_REQUEST.DISCONNECT);
 			await Promise.resolve();
 			if (this.isConnected) return;
-			requestRender(this.#renderRun, RENDER_REQUEST.STOP);
+			sendRunnerRequest(this.#runner, RUNNER_REQUEST.STOP);
 		}
 
 		attributeChangedCallback(
@@ -198,7 +205,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				//removal is the parent releasing this child
 				const parentHasSuppliedValues = newValue === null;
 				if (parentHasSuppliedValues)
-					requestRender(this.#renderRun, RENDER_REQUEST.START);
+					sendRunnerRequest(this.#runner, RUNNER_REQUEST.START);
 				return;
 			}
 			const prop = props.get(attributeName);
@@ -213,7 +220,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		}
 
 		update(): Promise<void> {
-			return requestRender(this.#renderRun, RENDER_REQUEST.RERENDER);
+			return sendRunnerRequest(this.#runner, RUNNER_REQUEST.UPDATE);
 		}
 	}
 

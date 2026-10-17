@@ -18,13 +18,15 @@ describe("tag updates", () => {
 		element.remove();
 	};
 
-	test("renders a dynamic tag name", async () => {
+	test("paints a dynamic tag name", async () => {
 		const tag = uniqueTag();
 		let tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>hello</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -43,8 +45,10 @@ describe("tag updates", () => {
 		let tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>content</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -70,8 +74,10 @@ describe("tag updates", () => {
 		let tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName} class="box" id="main">text</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -99,9 +105,10 @@ describe("tag updates", () => {
 		let tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`
+			yield function* () {
+				yield html`
                     <${tagName}><span>child1</span><span>child2</span></${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -130,9 +137,10 @@ describe("tag updates", () => {
 		const handler = () => clicks.push("clicked");
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`
+			yield function* () {
+				yield html`
                     <${tagName} onclick="${handler}">click me</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -161,9 +169,10 @@ describe("tag updates", () => {
 			let tagName = "div";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`
+				yield function* () {
+					yield html`
                     <${tagName}><input type="text"/></${tagName}>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -191,8 +200,10 @@ describe("tag updates", () => {
 		const tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>stable</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -218,8 +229,10 @@ describe("tag updates", () => {
 		let label = "first";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName} data-label="${label}">content</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -246,14 +259,16 @@ describe("tag updates", () => {
 	test("a multi-part attribute keeps writing to the new element after a tag swap", async () => {
 		//the multi-part lane is the one the swap does not rewrite, because copying the attributes
 		//across already carries its whole value. It still has to be re-pointed, or every later
-		//render writes into the element the swap detached
+		//paint writes into the element the swap detached
 		const tag = uniqueTag();
 		let tagName = "div";
 		let modifier = "small";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName} class="box ${modifier}">content</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -291,8 +306,10 @@ describe("tag updates", () => {
 		const attributes = { title: "kept", payload };
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName} ${attributes}>content</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -325,8 +342,10 @@ describe("tag updates", () => {
 		let text = "before";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>${text}</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -359,9 +378,10 @@ describe("tag updates", () => {
 		let handler = () => clicks.push("first");
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`
+			yield function* () {
+				yield html`
                     <${tagName} onclick="${handler}">click me</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -391,7 +411,9 @@ describe("tag updates", () => {
 		const handler = () => clicks.push("hit"); //same reference before and after the swap
 
 		const MyElement = component(function* () {
-			yield () => html`<${tagName} onclick="${handler}">click me</${tagName}>`;
+			yield function* () {
+				yield html`<${tagName} onclick="${handler}">click me</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -418,7 +440,9 @@ describe("tag updates", () => {
 		const handler = () => {};
 
 		const MyElement = component(function* () {
-			yield () => html`<button onclick="${handler}">click me</button>`;
+			yield function* () {
+				yield html`<button onclick="${handler}">click me</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -453,8 +477,10 @@ describe("tag updates", () => {
 		let tagName = "h1";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>heading</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -487,7 +513,9 @@ describe("tag updates", () => {
 			childTag,
 			component(
 				function* ({ items }) {
-					yield () => html`<span>${items.length}</span>`;
+					yield function* () {
+						yield html`<span>${items.length}</span>`;
+					};
 				},
 				{
 					props: {
@@ -502,7 +530,9 @@ describe("tag updates", () => {
 		const rows = ["a", "b"];
 
 		const MyElement = component(function* () {
-			yield () => html`<${tagName} items=${rows}></${tagName}>`;
+			yield function* () {
+				yield html`<${tagName} items=${rows}></${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
