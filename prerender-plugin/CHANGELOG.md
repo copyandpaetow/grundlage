@@ -21,6 +21,7 @@
 - A root that isn't serializable stays out quietly unless the element carries `ssr` itself.
 - Dev loads components through the dev server, so an edit shows up on the next request; `componentLoader` applies to builds only.
 - A component that paints nothing and announces no `pending-task` warns without claiming a wait.
+- Warnings say "left for the browser" instead of "rendering on client".
 - Node 22.12 or newer is enough, down from 24.
 
 ### Fixed

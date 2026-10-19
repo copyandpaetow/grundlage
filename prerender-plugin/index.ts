@@ -52,13 +52,13 @@ const warningFor = (
 ): string => {
 	switch (support) {
 		case TAG_SUPPORT.UNDEFINED:
-			return `[prerender] no module the page imports defines <${tagName}> — rendering on client. A component defined in the page script itself does not run on the server: define it in a module the page imports.`;
+			return `[prerender] no module the page imports defines <${tagName}> => left for the browser. If the page script defines it, move the definition into a module the page imports: a page script's own body never runs on the server.`;
 		case TAG_SUPPORT.CONSTRUCTOR_THREW:
-			return `[prerender] <${tagName}> threw while being constructed — rendering on client.`;
+			return `[prerender] <${tagName}> threw while being constructed => left for the browser.`;
 		case TAG_SUPPORT.CLOSED_ROOT:
-			return `[prerender] <${tagName}> uses a closed shadow root, which happy-dom cannot serialize — rendering on client.`;
+			return `[prerender] <${tagName}> uses a closed shadow root, which happy-dom cannot serialize => left for the browser.`;
 		case TAG_SUPPORT.NO_SERIALIZABLE_ROOT:
-			return `[prerender] <${tagName}> has no serializable shadow root when constructed — rendering on client.`;
+			return `[prerender] <${tagName}> has no serializable shadow root when constructed => left for the browser.`;
 		default:
 			return support satisfies never;
 	}

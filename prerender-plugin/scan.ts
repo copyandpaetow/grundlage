@@ -61,7 +61,7 @@ export const prerenderChoiceOfValue = (
 		return PRERENDER_CHOICE.ON;
 	if (lowercasedValue === "false") return PRERENDER_CHOICE.OFF;
 	throw new Error(
-		`[prerender] ssr="${value}" on <${tagName}> is not a value the plugin reads. Use ssr or ssr="true" to prerender the element, ssr="false" to leave it for the client.`,
+		`[prerender] ssr="${value}" on <${tagName}> is not a value the plugin reads. Use ssr or ssr="true" to prerender the element, ssr="false" to leave it for the browser.`,
 	);
 };
 

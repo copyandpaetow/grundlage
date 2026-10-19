@@ -346,7 +346,7 @@ const importOnce = (
 		() => undefined,
 		(error: unknown) => {
 			console.warn(
-				`[prerender] could not load ${moduleUrl} — any component it defines renders on the client.`,
+				`[prerender] could not load ${moduleUrl}: any component it defines is left for the browser.`,
 				error,
 			);
 		},
@@ -365,11 +365,11 @@ const importsOfScript = async (
 		const transformed = await environment.transformRequest(scriptUrl);
 		if (transformed !== null) return transformed.deps ?? [];
 		console.warn(
-			`[prerender] could not find ${scriptUrl} — the components it imports render on the client.`,
+			`[prerender] could not find ${scriptUrl} — the components it imports are left for the browser.`,
 		);
 	} catch (error) {
 		console.warn(
-			`[prerender] could not read what ${scriptUrl} imports — the components it imports render on the client.`,
+			`[prerender] could not read what ${scriptUrl} imports — the components it imports are left for the browser.`,
 			error,
 		);
 	}
@@ -574,7 +574,7 @@ export const renderHost = async (
 		if (realm.reportedTags.has(thrownTagName)) return;
 		realm.reportedTags.add(thrownTagName);
 		console.warn(
-			`[prerender] <${thrownTagName}> threw on the server — rendering on client. Browser-only work placed after the component's first paint never runs on the server.`,
+			`[prerender] <${thrownTagName}> threw on the server — left for the browser. Browser-only work placed after the component's first paint never runs on the server.`,
 			error,
 		);
 	});
@@ -613,8 +613,8 @@ export const renderHost = async (
 		if (!hasPainted && !hostsThatThrew.has(host)) {
 			console.warn(
 				hasUnsettledTask(unsettledTasks, host)
-					? `[prerender] <${tagName}> was still waiting after ${firstYieldTimeoutMs}ms — leaving it for client render.`
-					: `[prerender] <${tagName}> painted nothing and had no open pending-task to wait for — leaving it for client render.`,
+					? `[prerender] <${tagName}> was still waiting after ${firstYieldTimeoutMs}ms — left for the browser.`
+					: `[prerender] <${tagName}> painted nothing and had no open pending-task to wait for — left for the browser.`,
 			);
 			return null;
 		}
@@ -626,7 +626,7 @@ export const renderHost = async (
 				continue;
 			realm.reportedTags.add(waitingHost.localName);
 			console.warn(
-				`[prerender] <${waitingHost.localName}> was still waiting after ${firstYieldTimeoutMs}ms — leaving it for client render.`,
+				`[prerender] <${waitingHost.localName}> was still waiting after ${firstYieldTimeoutMs}ms — left for the browser.`,
 			);
 		}
 		return serializeWithDeclarativeShadowRoots(
@@ -636,7 +636,7 @@ export const renderHost = async (
 		);
 	} catch (error) {
 		console.warn(
-			`[prerender] <${tagName}> could not be prerendered — rendering on client.`,
+			`[prerender] <${tagName}> could not be prerendered — left for the browser.`,
 			error,
 		);
 		return null;
