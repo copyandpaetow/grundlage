@@ -548,8 +548,8 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const clientTag = uniqueTag();
 				const serialized = await serverRender(
 					serverTag,
-					component(function* ({ host }) {
-						yield load(host, async () => "server payload");
+					component(function* () {
+						yield* load(async () => "server payload");
 						yield function* () {
 							yield html`<div>${"server"}</div>`;
 						};
@@ -579,7 +579,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					warnings.some((text) => text.includes("hydration mismatch")),
 				).toBe(true);
 				expect(
-					warnings.some((text) => text.includes("1 SSR load() payload(s)")),
+					warnings.some((text) =>
+						text.includes("1 load() result(s) from the server went unused"),
+					),
 				).toBe(true);
 
 				cleanup(element);

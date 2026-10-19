@@ -188,7 +188,7 @@ describe("a paint error is thrown at the yield that painted", () => {
 	});
 });
 
-describe("a yield that is not a template, an update generator or a promise", () => {
+describe("a yield that is not a template, an update generator, a promise or a load()", () => {
 	test.each([
 		["an arrow function", () => html`<p>x</p>`],
 		["an async arrow function", async () => html`<p>x</p>`],
@@ -199,7 +199,7 @@ describe("a yield that is not a template, an update generator or a promise", () 
 		["undefined", undefined],
 		["a thenable that is not a promise", { then: () => {} }],
 	] as const)(
-		"%s ends the component with a message naming the three",
+		"%s ends the component with a message naming the four",
 		async (_label, yielded) => {
 			vi.spyOn(console, "error").mockImplementation(() => {});
 			const element = mount(
@@ -209,7 +209,7 @@ describe("a yield that is not a template, an update generator or a promise", () 
 			);
 			await sleep();
 			expect(element.shadowRoot?.textContent).toContain(
-				"a component yields a template, an update generator or a promise",
+				"a component yields a template, an update generator, a promise or a load()",
 			);
 		},
 	);

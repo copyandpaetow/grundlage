@@ -16,6 +16,9 @@ kinds of value:
   reader, not a keyword: any name, or none (`yield function* () { … }`), behaves the same;
 - a PROMISE waits: the `yield` evaluates to its value, and a rejection throws at the `yield`.
 
+Data the SERVER should fetch for the first paint comes through one helper, WITH the star:
+`const user = yield* load(() => fetchUser(id))` (see API).
+
 Anything else throws, `async` included: there is no `async function*`, no arrow render function
 and no `await`. The body's ONE argument is a props object carrying `host` plus every prop
 declared in `component(gen, { props })`, and an update generator receives the same object. A
@@ -80,7 +83,7 @@ yield function* view({ userId }) {
   and any option passed overrides its default. `options.props` is the SCHEMA (see below):
   it fixes the observed attributes and installs one accessor per prop on the element class.
   `formAssociated: true` swaps the base class for the form-associated one. `{ mode: "closed" }`
-  still hydrates and replays `load` data: the closed root is reached through
+  still hydrates and reuses `load` results: the closed root is reached through
   `attachInternals().shadowRoot` instead of `host.shadowRoot`, so server output is reused
   rather than painted again. The return value is a class. `class extends component(fn) {}` is
   the extension point for methods, getters and static fields; nothing is assigned to `host`
@@ -160,15 +163,31 @@ yield function* view({ userId }) {
   same as everywhere else. The export collides with the conventional `const props = {…}`
   schema name, so a module using both renames one (`import { props as readProps }`).
 
-`load(host, fetcher, options?) => Promise<Value>`
-  Data needed before the first paint. On the server the fetcher runs and the result is
-  serialized into the markup as a `<script type="application/json" data-ssr>`; on the client
-  that payload is replayed once during hydration (the script is consumed) and every later
-  call runs the fetcher normally. `options` is `{ key?, skipSSR? }`, or a string shorthand
-  for `{ key }`. `skipSSR` skips the serialization only. The fetcher still runs on the
-  server, and the client always fetches. Unkeyed replay is POSITIONAL (first payload to
-  first `load`), so a conditional or reordered `load` can claim the wrong payload; a key
-  pins each payload to its call, and unclaimed payloads warn on hydration.
+`yield* load(fetcher)` and `yield* load(key, fetcher)` => the fetcher's awaited result
+  Data needed before the first paint:
+
+  ```javascript
+  const user = yield* load(() => fetchUser(userId));
+  const stats = yield* load("stats", () => fetchStats());
+  ```
+
+  ALWAYS with the star, and NO `host` argument: `load()` returns a generator, the star types
+  the result as the fetcher's, and `yield load(…)` throws. The fetcher returns a value or a
+  promise. On the server it runs and the result is written into the shadow root as a
+  `<script type="application/json" data-ssr>`. While the browser HYDRATES that markup, the
+  same `load` returns the server's result and removes the script instead of fetching.
+  Everywhere else (a client-only mount, every later run) the fetcher runs. There is no
+  `skipSSR` and no options object.
+
+  Unkeyed loads take the server's results in ORDER, per element, so a `load` inside a branch
+  the server and the browser can take differently needs a string KEY. A mixin builds its key
+  from its arguments, `` load(`user-${id}`, …) ``, because a key used twice in one element
+  throws on the server. The result crosses as JSON: return plain objects, arrays, strings,
+  finite numbers, booleans or `null`. A `Date`, a `Map`, a class instance, a `Response`, a
+  bigint or a template throws and names the fix. A fetcher that fails on the server throws
+  at the `yield*`, where a `try/catch` can paint a fallback, and the browser runs that load
+  again. The body runs once, so a `load` there runs once; inside an update generator a
+  `load` runs on every update.
 
 `host.update() => Promise<void>`
   The update trigger. See Rules for what it re-fires and when it resolves. On the server an
@@ -191,8 +210,8 @@ yield function* view({ userId }) {
   Lazily attached on first read, on every component, not only form-associated ones. `null`
   on the server.
 
-Types: `BaseComponent`, `ComponentOptions`, `ComponentProps`, `LoadOptions`, `Resolve`,
-`Schema`, `Template`.
+Types: `BaseComponent`, `Cleanup`, `ComponentOptions`, `ComponentProps`, `DeclaredProps`,
+`Resolve`, `Schema`, `Template`, `UpdateGenerator`, `YieldableValue`.
 
 ## Bindings
 
@@ -320,7 +339,9 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   host is also on the props object, `function* ({ host })`. A yielded promise evaluates to its resolved value
   (`const data = yield fetch(...)`) and a rejected one throws at that `yield`. Any other value
   (a plain or arrow function, an `async` function, a string, an array, a thenable that is not a
-  `Promise`) throws, naming the three. Yield each promise instead of awaiting it.
+  `Promise`) throws and names what a component yields. So do `yield load(…)` without the star
+  and a called generator, `yield helper()`: delegate with `yield* helper()`. Yield each promise
+  instead of awaiting it.
 - A run of an update generator runs to completion like the component body: it may paint several
   templates in a row (a placeholder, then the result) and wait on promises between them. An
   update while a run waits does not wait for it: the old run is torn down and a new run starts,
@@ -366,7 +387,11 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   removal. A `finally` that yields a template or an update generator has nothing to paint into:
   that is reported through `reportError` and ends the teardown.
 - On the SERVER a component runs until its first paint: yielded promises before it are awaited,
-  and the code after that paint does not run there.
+  and the code after that paint does not run there. Browser-only work (measuring, `matchMedia`,
+  storage) belongs after the first paint.
+- Whether an element is SERVER-RENDERED is the page's choice, never the component's: with
+  vite-plugin-grundlage, `ssr` on an element turns it on and `ssr="false"` off, for everything
+  inside it too. Don't add a prop or an option for it.
 - An uncaught error empties the shadow tree and dispatches `grundlage-error`
   (`ComponentErrorEvent`: `error`, `tagName`; bubbles, composed, cancelable). Unless a listener
   calls `preventDefault()`, the console logs an error naming the tag and the shadow tree shows the
@@ -478,7 +503,8 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   writing to it would move a value nothing parsed, reflected or scheduled on.
   `componentProps.host.count = 5` is the spelling that does all three, and it is the same one an
   outside caller uses (`element.count = 5`).
-- `load` replays SSR data on hydration; don't add a fetch-once cache around it.
+- `load` reuses the server's result only while hydrating and runs the fetcher everywhere else;
+  don't add a fetch-once cache around it.
 - TypeScript only: a yielded promise evaluates to `any`, because one generator has one resume
   type for all of its yields. Annotate the binding, `const user: User = yield fetchUser(id)`,
   or delegate to a typed helper whose `yield*` returns `T`:
@@ -489,6 +515,8 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   }
   const user = yield* awaited(fetchUser(id)); // User
   ```
+
+  `yield* load(() => fetchUser(id))` is typed the same way, by its fetcher.
 - TypeScript only: a schema hoisted out of the `component(…)` call needs `satisfies Schema`.
   Inline, `{ count: [Number, 0] }` is contextually typed; hoisted, `[Number, 0]` widens to
   `(NumberConstructor | number)[]` and stops being a valid entry. A function entry also needs

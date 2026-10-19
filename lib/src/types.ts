@@ -1,3 +1,5 @@
+import type { LoadRequest } from "./load";
+
 declare const templateMarker: unique symbol;
 
 export interface Template {
@@ -64,9 +66,9 @@ export type ComponentOptions<DeclaredSchema extends Schema = Schema> =
 	};
 
 //a promise resumes the generator with its value, a template paints once, an update generator re-runs
-//on every update
+//on every update, and a load request is the one `yield* load(…)` makes
 export type YieldableValue<DeclaredSchema extends Schema = Schema> =
-	Template | Promise<unknown> | UpdateGenerator<DeclaredSchema>;
+	Template | Promise<unknown> | UpdateGenerator<DeclaredSchema> | LoadRequest;
 
 export type Cleanup = () => void;
 

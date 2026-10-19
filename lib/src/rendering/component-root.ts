@@ -13,7 +13,7 @@ import {
 	AttributeStaticBinding,
 	DynamicAttributeStaticBinding,
 } from "../parser/types";
-import { warnOnUnclaimedSSRPayloads } from "../load";
+import { releaseUnclaimedPayloads } from "../load";
 import { TemplateValue } from "../template";
 import { ComponentErrorEvent } from "../runtime/component-error-event";
 import {
@@ -28,20 +28,17 @@ import {
 import { releaseDeferredChildren } from "./defer-hydration";
 import { warnOnRejectedServerRange } from "./markers";
 import { BaseComponent } from "../types";
-import { libraryMessage } from "../utils/diagnostics";
+import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 
 export interface ComponentRoot {
 	host: BaseComponent;
 	//held rather than read from the host: for mode "closed" host.shadowRoot is null
 	shadowRoot: ShadowRoot;
 	styleSheetMoveState: StyleSheetMoveState;
-	instance: Instance | typeof HYDRATION_PENDING | null;
+	//the root holds the server's markup, which the first paint hydrates instead of mounting
+	isHydrationPending: boolean;
+	instance: Instance | null;
 }
-
-const HYDRATION_PENDING: unique symbol = Symbol("hydration pending");
-
-export const paintedInstanceOf = (root: ComponentRoot): Instance | null =>
-	root.instance === HYDRATION_PENDING ? null : root.instance;
 
 export const createComponentRoot = (
 	host: BaseComponent,
@@ -51,11 +48,12 @@ export const createComponentRoot = (
 	host,
 	shadowRoot,
 	styleSheetMoveState: { needsStyleSheetRefreshOnMove: false },
-	instance: isHydrationPending ? HYDRATION_PENDING : null,
+	isHydrationPending,
+	instance: null,
 });
 
 const revertAllHostBindings = (root: ComponentRoot): void => {
-	const instance = paintedInstanceOf(root);
+	const instance = root.instance;
 	if (instance === null) return;
 	const liveBindings = instance.liveBindings;
 	for (let index = 0; index < instance.parsed.hostBindingCount; index++)
@@ -108,14 +106,17 @@ export const paintComponentRoot = (
 	root: ComponentRoot,
 	templateValue: TemplateValue,
 ): void => {
-	const current = root.instance;
-	if (current === HYDRATION_PENDING) {
+	if (root.isHydrationPending) {
+		assertDuringDevelopment(
+			root.instance === null,
+			"a root waiting for hydration has painted nothing yet",
+		);
 		//cleared before the attempt, not after: a throw an outer generator catches paints again, and
 		//a second pass through here would hydrate the recovery content against the server's tree
-		root.instance = null;
-		//before the attempt: a rejected range rebuilds the whole root, and that rebuild removes
-		//the very payload scripts this reads
-		warnOnUnclaimedSSRPayloads(root.shadowRoot);
+		root.isHydrationPending = false;
+		//before the attempt: a rejected range rebuilds the whole root, and that rebuild would remove
+		//the leftover payload scripts before they are counted
+		releaseUnclaimedPayloads(root.shadowRoot);
 		const hydrated = hydrateInstance(
 			document.createTreeWalker(root.shadowRoot, NodeFilter.SHOW_COMMENT),
 			templateValue,
@@ -131,7 +132,7 @@ export const paintComponentRoot = (
 			root.instance = hydrated;
 		}
 		releaseDeferredChildren(root.shadowRoot);
-	} else root.instance = mountOrPatchRoot(root, current, templateValue);
+	} else root.instance = mountOrPatchRoot(root, root.instance, templateValue);
 };
 
 export const displayFatalErrorInRoot = (
@@ -139,6 +140,8 @@ export const displayFatalErrorInRoot = (
 	error: unknown,
 ): void => {
 	revertAllHostBindings(root);
+	//the server's markup goes with the rest, so a re-insertion mounts fresh
+	root.isHydrationPending = false;
 	root.instance = null;
 	root.shadowRoot.replaceChildren();
 	const { host } = root;

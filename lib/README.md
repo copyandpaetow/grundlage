@@ -91,7 +91,7 @@ other HTML would.
 On the client the hydration needs to run the parser step again but doesn't paint the component again. It detects the
 dynamic positions and moves on from here. While the hydration runs, the interactivity sadly is paused.
 
-There is a small helper to avoid re-fetching data when the component is transferred in its DSD form to the client.
+Data the server fetched travels with the markup, so hydration doesn't fetch it again ([see load](#load)).
 
 ## lifecycle
 
@@ -215,6 +215,9 @@ Three ways to hand the component something to paint, from least to most lifecycl
 `view` is only a name for the reader, not a keyword: any name works, and so does none,
 `yield function* () { … }`. What makes it an update generator is the `function*`.
 
+`load()` is the library's own `yield*` helper: it returns a generator, so it runs with the star, and the star gives the
+result the fetcher's type ([see load](#load)).
+
 The body can branch, `yield isEditing ? editor : preview`, but it runs once, so that choice is made once per mount. A
 choice that changes per update belongs inside one update generator, as a conditional template. An update generator
 may not yield another update generator: nesting is one level deep
@@ -324,7 +327,8 @@ and focus restored, but a component in that position is torn down and mounted ag
 
 - html templates can be embedded in html templates → a template is just a value, so a helper can return one
 - `yield` a generator function → an update generator, a lifecycle that **restarts on every update**
-- `yield*` a generator → a mixin that runs **once**, inline in this generator's single run
+- `yield*` a generator → a mixin that runs inline, as part of the run that delegates to it: **once** in the body, on
+  every update inside an update generator
 
 #### html in html
 
@@ -1411,18 +1415,18 @@ a module doing both has to give one of them another name.
 
 ### load
 
-`load(host, fetcher, options?)` is for data that is needed before the first paint. On the server the fetcher
-runs and its result is serialized into the markup; on the client that value is replayed **once** during
-hydration so the fetcher doesn't run and every call after that runs normally. It returns a promise, so
-`yield` it:
+`yield* load(fetcher)` is for data a component needs before its first paint. On the server the fetcher runs and its
+result is written into the shadow root as a `<script type="application/json" data-ssr>`. While the browser hydrates
+that markup, the same `load` hands the result back and removes the script instead of fetching. Everywhere else the
+fetcher runs:
 
 ```typescript
 import { component, html, load } from "grundlage";
 
 customElements.define(
 	"user-name",
-	component(function* ({ host }) {
-		const user = yield load(host, () =>
+	component(function* () {
+		const user = yield* load(() =>
 			fetch("/api/user").then((response) => response.json()),
 		);
 		yield function* view() {
@@ -1432,23 +1436,25 @@ customElements.define(
 );
 ```
 
-`options` is `{ key?, skipSSR? }`, or a bare string as shorthand for the key:
-
-- `key`: a stable identity for the replay. Unkeyed replay is **positional** (first payload to first
-  `load`), so a conditional or reordered `load` can hand the wrong data to the wrong call; a key pins
-  each payload to its call. Grundlage warns when a payload goes unclaimed on hydration.
-- `skipSSR`: nothing is serialized for replay. The fetcher still runs on the server, and the client always fetches.
+- **the star**: `load()` returns a generator, and the star gives `user` the fetcher's type. `yield load(…)` throws and
+  names the fix.
+- **order or key**: an unkeyed `load` takes the server's results in order, per element. A `load` in a branch the server
+  and the browser can take differently needs a string key, `yield* load("user", () => …)`, and a mixin builds its key
+  from its arguments. A key used twice in one element throws on the server. A mismatch in order warns in the
+  development build.
+- **plain data**: the result reaches the browser as JSON, so it is made of plain objects, arrays, strings, finite
+  numbers, booleans and `null`. A `Date`, a class instance, a `Response` or a template throws and names the fix: on the
+  server always, in the browser in the development build.
+- **failures**: a fetcher that fails on the server throws at the `yield*`, where the component can catch it and paint a
+  fallback. The browser then runs that load again instead of reusing the failure.
+- **once** comes from the body: inside an update generator, a `load` runs on every update.
 
 ## tools
 
 ### prerender plugin
 
-- a Vite plugin that server-renders the project's components into `index.html`, in dev and in build
-- opt in per element with a sentinel attribute (`ssr` by default), so only the marked instances prerender
-- components are discovered by importing the project's source files and reading the element registry back
-- anything it can't serialize is left untouched and painted on the client
-
-It ships as its own package, `vite-plugin-grundlage`, versioned separately and younger than the library:
+`vite-plugin-grundlage` renders components on the server and inlines them into the page as declarative shadow DOM,
+in dev and in build. It ships as its own package, versioned separately and younger than the library:
 
 ```bash
 npm install --save-dev vite-plugin-grundlage
@@ -1464,62 +1470,15 @@ export default defineConfig({
 });
 ```
 
-There is no tag-to-module map to maintain. By default every source file under the Vite root is imported and the
-tags those modules registered are read back from `customElements`, so module side effects do run at build time
-(`node_modules`, `dist`, `build`, declaration files, test/spec/bench files and `*.config.*` are always skipped).
-`include`/`exclude` globs narrow that down when needed: `include` replaces the default "everything" pattern,
-`exclude` is added to the built-in skip list:
+- **pages** set the default: every page prerenders, and `include`/`exclude` page globs narrow that down
+- **elements** override it: `ssr` turns prerendering on, `ssr="false"` off, for the element and everything inside it,
+  through shadow roots too
+- components come from the modules a page's `<script type="module">` imports; the script's own body never runs on the
+  server
+- whatever can't be prerendered stays as written and paints in the browser, with a `[prerender]` warning
 
-```typescript
-prerenderWebcomponents({
-	include: ["src/components/**/*.ts"],
-	exclude: ["**/*.stories.ts"],
-});
-```
-
-Component modules are loaded through Vite's own SSR pipeline, so TypeScript, extensionless and directory
-imports, aliases and the project's own plugin transforms all work the way they do in the app. The plugin boots a
-throwaway Vite server that re-runs the project's `vite.config`. That means the config is evaluated a second time per
-build, so a plugin with heavy or one-shot side effects in `config`/`buildStart` sees them run twice; switch
-to `componentLoader: "isolated"` for a bare loader that only inherits the `resolve` settings. Either way, a
-module that throws while loading is reported and skipped rather than failing the build.
-
-The plugin then scans `index.html` for elements carrying the sentinel attribute, and prerenders the ones
-whose tag a scanned module actually defined:
-
-```html
-<click-counter start="3" ssr></click-counter>
-<!-- prerendered into the page -->
-<click-counter start="3"></click-counter>
-<!-- left alone, painted on the client -->
-```
-
-Light-DOM children are kept as they were written, next to the inlined shadow root, the browser projects
-them into their `<slot>`s while parsing, so slotted content is styled and laid out at first paint too:
-
-```html
-<user-card ssr>
-	<h2 slot="name">Ada</h2>
-</user-card>
-```
-
-The children are attached to the host **before** the component mounts, so a component that reads its own
-light DOM (`host.children`, `slot.assignedNodes()`) sees the real thing during prerender. A registered
-component sitting in that light DOM is rendered along with its parent, sentinel or not.
-
-**options**
-
-| option                | default            | effect                                                                               |
-| --------------------- | ------------------ | ------------------------------------------------------------------------------------ |
-| `include`             | every source file  | globs (relative to the Vite root) of the modules to import for component definitions |
-| `exclude`             | n/a                | globs added to the built-in skip list                                                |
-| `componentLoader`     | `"project-config"` | `"isolated"` loads component modules without re-running the project's `vite.config`  |
-| `sentinelAttribute`   | `"ssr"`            | the marker attribute that opts an element in                                         |
-| `firstYieldTimeoutMs` | `5000`             | how long to wait for the first paint before giving up and leaving it for the client  |
-
-The plugin falls back to painting on the client whenever it can't serialize: a
-`{ mode: "closed" }` root (happy-dom can't serialize it), a first-yield timeout, a tag no scanned module
-defines, or any throw during prerender. Each case logs a `[prerender]` warning and ships a working page.
+Options, fallbacks and what elements of other libraries need are in the
+[plugin's README](https://github.com/copyandpaetow/grundlage/tree/main/prerender-plugin#readme).
 
 ## antipatterns
 

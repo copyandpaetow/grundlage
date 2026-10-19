@@ -812,9 +812,7 @@ describe.skipIf("happyDOM" in globalThis)(
 						yield function* () {
 							const userId = componentProps.userId;
 							yield html`<p>loading…</p>`;
-							const user = (yield load(componentProps.host, () =>
-								fetchUser(userId),
-							)) as { name: string };
+							const user = yield* load(() => fetchUser(userId));
 							yield html`<h2>${user.name}</h2>`;
 						};
 					},

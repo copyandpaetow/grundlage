@@ -10,7 +10,7 @@ import {
 	displayFatalErrorInRoot,
 	paintComponentRoot,
 } from "../rendering/component-root";
-import { flushHostPayload } from "../load";
+import { flushHostPayload, LOAD_REQUEST, RecordedLoad } from "../load";
 import { isServer } from "../utils/guards";
 import { ValueOf } from "../utils/types";
 import {
@@ -23,6 +23,7 @@ import {
 import {
 	createRun,
 	isGeneratorFunction,
+	isGeneratorObject,
 	isParkedAtTemplateOrUpdateGeneratorYield,
 	isStillParkedAt,
 	PARKED_AT_TEMPLATE_OR_UPDATE_GENERATOR_YIELD,
@@ -30,6 +31,8 @@ import {
 	tearDownRun,
 } from "./run";
 import { isTemplate } from "../template";
+import { ComponentRenderEvent } from "./component-render-event";
+import { PendingTaskEvent } from "./pending-task-event";
 import {
 	assertDuringDevelopment,
 	InvariantError,
@@ -55,6 +58,7 @@ export interface ComponentRunner extends ComponentRunnerSetup, OrderedRunner {
 	//latched at mount rather than a fresh isServer() per use: the global is mutable, and one mount
 	//must not switch sides halfway
 	wasMountedOnServer: boolean;
+	loadsRecordedOnServer: Array<RecordedLoad>;
 	hasEndedWithFatalError: boolean;
 	lastUpdatedInPassNumber: number;
 	updateCountInPass: number;
@@ -111,7 +115,11 @@ const UPDATE_GENERATOR_INSIDE_UPDATE_GENERATOR_MESSAGE = libraryMessage(
 );
 
 const YIELDED_VALUE_MESSAGE = libraryMessage(
-	"a component yields a template, an update generator or a promise. Write `yield html`…``, `yield function* () { … }` or `yield promise`, and yield each promise instead of awaiting it",
+	"a component yields a template, an update generator, a promise or a load(). Write `yield html`…``, `yield function* () { … }`, `yield promise` or `yield* load(() => …)`, and yield each promise instead of awaiting it",
+);
+
+const YIELDED_GENERATOR_OBJECT_MESSAGE = libraryMessage(
+	"a component yielded a generator object. To run a helper generator, add the star: `yield* helper(…)`. To declare an update generator, yield the function without calling it: `yield view`",
 );
 
 export const alreadySettled = Promise.resolve();
@@ -127,6 +135,7 @@ export const createComponentRunner = (
 		updateGeneratorRun: null,
 		pendingUpdate: null,
 		wasMountedOnServer: false,
+		loadsRecordedOnServer: [],
 		hasEndedWithFatalError: false,
 		lastUpdatedInPassNumber: NEVER_UPDATED_IN_PASS,
 		updateCountInPass: 0,
@@ -273,14 +282,19 @@ export const sendRunnerRequest = (
 	request: ValueOf<typeof RUNNER_REQUEST>,
 ): Promise<void> => {
 	switch (request) {
-		case RUNNER_REQUEST.START:
-			if (phaseOf(runner) === RUNNER_PHASE.READY_TO_START) {
-				//a top-level mount stays synchronous; one inside a paint joins that paint
-				if (scheduler.runnerCurrentlyPainting === null)
-					mountComponentGenerator(runner);
-				else enqueue(runner);
-			}
+		case RUNNER_REQUEST.START: {
+			if (phaseOf(runner) !== RUNNER_PHASE.READY_TO_START)
+				return alreadySettled;
+			const isLeftForTheBrowser =
+				isServer() &&
+				!runner.root.host.dispatchEvent(new ComponentRenderEvent());
+			if (isLeftForTheBrowser) return alreadySettled;
+			//a top-level mount stays synchronous; one inside a paint joins that paint
+			if (scheduler.runnerCurrentlyPainting === null)
+				mountComponentGenerator(runner);
+			else enqueue(runner);
 			return alreadySettled;
+		}
 		//the one request the phase cannot answer: a host that is gone reads NOT_CONNECTED whether or
 		//not it left a run, a queue entry and an unsettled update() behind, and all three go
 		case RUNNER_REQUEST.STOP:
@@ -499,6 +513,10 @@ const driveRunUntilItStops = (
 			if (yielded instanceof Promise) {
 				run.suspension = yielded;
 				void driveRunOnceSettled(run, yielded);
+				//after the continuation is registered: a listener awaiting the task resumes only once this
+				//run has gone on, so every child its next paint mounts has announced its own task by then
+				if (runner.wasMountedOnServer)
+					runner.root.host.dispatchEvent(new PendingTaskEvent(yielded));
 				return;
 			}
 			if (isGeneratorFunction(yielded)) {
@@ -510,7 +528,15 @@ const driveRunUntilItStops = (
 				resume = RESUME.START_UPDATE_GENERATOR;
 				continue;
 			}
-			if (!isTemplate(yielded)) throw new Error(YIELDED_VALUE_MESSAGE);
+			if (yielded === LOAD_REQUEST) {
+				payload = runner;
+				continue;
+			}
+			if (!isTemplate(yielded)) {
+				if (isGeneratorObject(yielded))
+					throw new Error(YIELDED_GENERATOR_OBJECT_MESSAGE);
+				throw new Error(YIELDED_VALUE_MESSAGE);
+			}
 			run.suspension = PARKED_AT_TEMPLATE_OR_UPDATE_GENERATOR_YIELD;
 			//a template the body yields replaces its update generator, so update() has nothing to re-run
 			//until the body yields the next one
@@ -519,7 +545,11 @@ const driveRunUntilItStops = (
 			scheduler.runnerCurrentlyPainting = runner;
 			try {
 				paintComponentRoot(runner.root, yielded);
-				if (runner.wasMountedOnServer) flushHostPayload(runner.root.host);
+				if (runner.wasMountedOnServer)
+					flushHostPayload(
+						runner.loadsRecordedOnServer,
+						runner.root.shadowRoot,
+					);
 			} finally {
 				scheduler.runnerCurrentlyPainting = previousPainter;
 			}

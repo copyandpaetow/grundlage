@@ -3,11 +3,7 @@ import {
 	applyAttributeValue,
 	isDeclaredPropName,
 } from "./rendering/bindings/attribute-apply";
-import {
-	ComponentRoot,
-	createComponentRoot,
-	paintedInstanceOf,
-} from "./rendering/component-root";
+import { ComponentRoot, createComponentRoot } from "./rendering/component-root";
 import {
 	ComponentRunner,
 	createComponentRunner,
@@ -57,7 +53,7 @@ export {
 	type UpdateGenerator,
 	type YieldableValue,
 } from "./types";
-export { load, type LoadOptions } from "./load";
+export { load } from "./load";
 export { ComponentErrorEvent } from "./runtime/component-error-event";
 
 const defaultOptions = {
@@ -171,7 +167,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		}
 
 		connectedCallback() {
-			const instance = paintedInstanceOf(this.#root);
+			const instance = this.#root.instance;
 			if (instance !== null) refreshStyleSheetsAfterMove(instance);
 			//an insertion is the only notice of a move, and a move can put a different component above
 			//this one

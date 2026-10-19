@@ -4,26 +4,37 @@
 
 ### Breaking
 
-- A component yields a template, an update generator or a promise; anything else throws.
+- A component yields a template, an update generator, a promise or a `load()`; anything else throws.
 - Render functions are removed: `` yield () => html`…` `` → ``yield function* view() { yield html`…`; }``.
 - `async function*` and `await` are removed: `await promise` → `yield promise`.
 - A `yield` of an update generator waits for its run and evaluates to the run's return value.
 - The build targets ES2025: Chrome 122, Firefox 131, Safari 18.4.
+- `load` runs with the star and takes no host: `yield load(host, fetcher)` → `yield* load(fetcher)`, keyed `yield* load("key", fetcher)`.
+- `load`'s `skipSSR` option and the `LoadOptions` type are removed.
 
 ### Types
 
-- `YieldableValue` is `Template | Promise<unknown> | UpdateGenerator`; `UpdateGenerator` is exported.
+- `YieldableValue` is `Template | Promise<unknown> | UpdateGenerator` or a `load()` request; `UpdateGenerator` is exported.
+- `yield* load(…)` evaluates to the fetcher's awaited type.
 - A waited value is `any`; annotate it: `const user: User = yield fetchUser(id)`.
 
 ### Added
 
 - An iterator in a content hole paints as a list.
+- A `load` result JSON cannot carry (a `Date`, a class instance, a template) throws and names the fix.
+- A `load` key used twice in one element throws on the server.
+- A yielded generator object, such as `yield load(…)` without the star, throws and names the fix.
+- On the server, a run waiting on a promise dispatches the webcomponents-cg `pending-task` event.
+- On the server, a cancelable `grundlage-render` event precedes a component's first run; cancelling it leaves the component unstarted.
 
 ### Changed
 
 - A paint error throws at the `yield html` that painted it.
 - A torn-down generator runs its `finally` block to the end.
 - Messages say update or paint where they said render; a fatal error shows `<tag> stopped running.`
+- The browser reuses a server `load` result only while hydrating, and runs the fetcher everywhere else.
+- A `load` the server failed runs again in the browser, and the loads after it keep their order.
+- Unused server `load` results are removed at hydration, and only unkeyed ones warn.
 
 ### Fixed
 

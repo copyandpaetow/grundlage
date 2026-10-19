@@ -1,8 +1,21 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { flushHostPayload, load, warnOnUnclaimedSSRPayloads } from "../load";
+import {
+	flushHostPayload,
+	load,
+	LOAD_REQUEST,
+	LoadRequest,
+	releaseUnclaimedPayloads,
+} from "../load";
+import type { ComponentRunner } from "../runtime/driver";
 
-//happy-dom env — `window` is defined here, so load takes the client path
-//these tests cover the DOM-as-queue behavior plus the round-trip via flushHostPayload
+//happy-dom env: the payload protocol, from the server's record and flush to the browser's claim and
+//release. The driver decides when each runs; tests/integration/load.browser.test.ts covers that
+
+type LoadGenerator = Generator<
+	LoadRequest | Promise<unknown>,
+	unknown,
+	unknown
+>;
 
 const createHostWithShadow = (): HTMLElement => {
 	const host = document.createElement("div");
@@ -11,260 +24,395 @@ const createHostWithShadow = (): HTMLElement => {
 	return host;
 };
 
+//stand-ins for the runner the driver hands back: a load reads nothing else of it
+const createServerRunner = (host: HTMLElement): ComponentRunner =>
+	({
+		wasMountedOnServer: true,
+		loadsRecordedOnServer: [],
+		root: { host, shadowRoot: host.shadowRoot, isHydrationPending: false },
+	}) as unknown as ComponentRunner;
+
+const createHydratingRunner = (host: HTMLElement): ComponentRunner =>
+	({
+		wasMountedOnServer: false,
+		loadsRecordedOnServer: [],
+		root: { host, shadowRoot: host.shadowRoot, isHydrationPending: true },
+	}) as unknown as ComponentRunner;
+
+//what the driver does for a fetcher that returns at once: answer the request, take the result
+const finishSynchronousLoad = (
+	generator: LoadGenerator,
+	runner: ComponentRunner,
+): unknown => {
+	expect(generator.next()).toEqual({ done: false, value: LOAD_REQUEST });
+	const step = generator.next(runner);
+	expect(step.done).toBe(true);
+	return step.value;
+};
+
+const failingFetcher = (): never => {
+	throw new Error("offline");
+};
+
+const payloadScript = (
+	content: string | null,
+	attributes: Record<string, string> = {},
+): HTMLScriptElement => {
+	const script = document.createElement("script");
+	script.setAttribute("type", "application/json");
+	script.setAttribute("data-ssr", "");
+	for (const [name, value] of Object.entries(attributes))
+		script.setAttribute(name, value);
+	if (content !== null) script.textContent = content;
+	return script;
+};
+
+const payloadScriptsOf = (shadowRoot: ShadowRoot) =>
+	Array.from(shadowRoot.querySelectorAll("script[data-ssr]"));
+
 beforeEach(() => {
 	document.body.innerHTML = "";
 });
 
-describe("client replay reads scripts from the host's shadow root", () => {
-	test("returns the parsed value and removes the script so the next read sees the next entry", async () => {
+describe("the server writes one script per load, in call order, at the first paint", () => {
+	test("scripts follow the painted content, keyed ones carry their key", () => {
 		const host = createHostWithShadow();
-		const fragment = document.createDocumentFragment();
-		const first = document.createElement("script");
-		first.setAttribute("type", "application/json");
-		first.setAttribute("data-ssr", "");
-		first.textContent = JSON.stringify({ name: "Ada" });
-		const second = document.createElement("script");
-		second.setAttribute("type", "application/json");
-		second.setAttribute("data-ssr", "");
-		second.textContent = JSON.stringify({ name: "Lin" });
-		fragment.appendChild(first);
-		fragment.appendChild(second);
-		host.shadowRoot!.prepend(fragment);
-
-		const fetcher = vi.fn(() => Promise.resolve({ name: "fallback" }));
-		const a = await load(host, fetcher);
-		const b = await load(host, fetcher);
-
-		expect(a).toEqual({ name: "Ada" });
-		expect(b).toEqual({ name: "Lin" });
-		expect(fetcher).not.toHaveBeenCalled();
-		expect(host.shadowRoot!.querySelector("script[data-ssr]")).toBeNull();
-	});
-
-	test("a script the component painted itself is not a payload", async () => {
-		const host = createHostWithShadow();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const wrapper = document.createElement("div");
-		const ownScript = document.createElement("script");
-		ownScript.setAttribute("type", "application/json");
-		ownScript.setAttribute("data-ssr", "");
-		ownScript.textContent = JSON.stringify("the component's own data");
-		wrapper.appendChild(ownScript);
-		host.shadowRoot!.append(wrapper);
-
-		const fetcher = vi.fn(() => Promise.resolve("fetched"));
-		const value = await load(host, fetcher);
-		warnOnUnclaimedSSRPayloads(host.shadowRoot!);
-
-		expect(value).toBe("fetched");
-		expect(fetcher).toHaveBeenCalledTimes(1);
-		expect(wrapper.querySelector("script[data-ssr]")).toBe(ownScript);
-		expect(warnSpy).not.toHaveBeenCalled();
-		warnSpy.mockRestore();
-	});
-
-	test("falls back to the fetcher when no replay script is left", async () => {
-		const host = createHostWithShadow();
-		const fetcher = vi.fn(() => Promise.resolve("fetched"));
-		const value = await load(host, fetcher);
-		expect(value).toBe("fetched");
-		expect(fetcher).toHaveBeenCalledTimes(1);
-	});
-
-	test("keyed read ignores unkeyed scripts and finds the matching key", async () => {
-		const host = createHostWithShadow();
-		const unkeyed = document.createElement("script");
-		unkeyed.setAttribute("type", "application/json");
-		unkeyed.setAttribute("data-ssr", "");
-		unkeyed.textContent = JSON.stringify("not-this-one");
-		const keyed = document.createElement("script");
-		keyed.setAttribute("type", "application/json");
-		keyed.setAttribute("data-ssr", "");
-		keyed.setAttribute("data-key", "posts");
-		keyed.textContent = JSON.stringify(["p1", "p2"]);
-		host.shadowRoot!.append(unkeyed, keyed);
-
-		const value = await load(host, () => Promise.resolve([]), "posts");
-		expect(value).toEqual(["p1", "p2"]);
-		//keyed script removed; the unkeyed one is left for a future unkeyed read
-		expect(
-			host.shadowRoot!.querySelector('script[data-key="posts"]'),
-		).toBeNull();
-		expect(
-			host.shadowRoot!.querySelector("script[data-ssr]:not([data-key])"),
-		).not.toBeNull();
-	});
-
-	test("unkeyed reads do not consume keyed scripts", async () => {
-		const host = createHostWithShadow();
-		const keyed = document.createElement("script");
-		keyed.setAttribute("type", "application/json");
-		keyed.setAttribute("data-ssr", "");
-		keyed.setAttribute("data-key", "user");
-		keyed.textContent = JSON.stringify("keyed-value");
-		host.shadowRoot!.append(keyed);
-
-		const fetcher = vi.fn(() => Promise.resolve("fresh"));
-		const value = await load(host, fetcher);
-		expect(value).toBe("fresh");
-		expect(fetcher).toHaveBeenCalledTimes(1);
-		expect(
-			host.shadowRoot!.querySelector('script[data-key="user"]'),
-		).not.toBeNull();
-	});
-
-	test("skipSSR bypasses replay even when a matching script is present", async () => {
-		const host = createHostWithShadow();
-		const script = document.createElement("script");
-		script.setAttribute("type", "application/json");
-		script.setAttribute("data-ssr", "");
-		script.textContent = JSON.stringify("should-not-be-read");
-		host.shadowRoot!.append(script);
-
-		const fetcher = vi.fn(() => Promise.resolve("forced"));
-		const value = await load(host, fetcher, { skipSSR: true });
-		expect(value).toBe("forced");
-		expect(host.shadowRoot!.querySelector("script[data-ssr]")).not.toBeNull();
-	});
-});
-
-describe("warnOnUnclaimedSSRPayloads flags drift between server and client load() calls", () => {
-	test("warns with a count when unclaimed data-ssr scripts remain after hydration", async () => {
-		const host = createHostWithShadow();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const first = document.createElement("script");
-		first.setAttribute("type", "application/json");
-		first.setAttribute("data-ssr", "");
-		first.textContent = JSON.stringify("posts");
-		const second = document.createElement("script");
-		second.setAttribute("type", "application/json");
-		second.setAttribute("data-ssr", "");
-		second.setAttribute("data-key", "user");
-		second.textContent = JSON.stringify("user");
-		host.shadowRoot!.append(first, second);
-
-		//simulates a conditional load() call that never ran on the client this time
-		await load(host, () => Promise.resolve("fallback"));
-
-		warnOnUnclaimedSSRPayloads(host.shadowRoot!);
-
-		expect(warnSpy).toHaveBeenCalledTimes(1);
-		expect(warnSpy.mock.calls[0][0]).toContain("1 SSR load()");
-		warnSpy.mockRestore();
-	});
-
-	test("does not warn once every replayed script has been claimed", async () => {
-		const host = createHostWithShadow();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const script = document.createElement("script");
-		script.setAttribute("type", "application/json");
-		script.setAttribute("data-ssr", "");
-		script.textContent = JSON.stringify("posts");
-		host.shadowRoot!.append(script);
-
-		await load(host, () => Promise.resolve("fallback"));
-
-		warnOnUnclaimedSSRPayloads(host.shadowRoot!);
-
-		expect(warnSpy).not.toHaveBeenCalled();
-		warnSpy.mockRestore();
-	});
-});
-
-//load branches on `typeof window === "undefined"` at call time
-//swapping it out drives the server-side collect path against a real shadow root, which is what
-//makes flushHostPayload's writes assertable
-const withoutWindow = async <ReturnValue>(
-	body: () => Promise<ReturnValue>,
-): Promise<ReturnValue> => {
-	const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-	delete (globalThis as { window?: unknown }).window;
-	try {
-		return await body();
-	} finally {
-		if (descriptor !== undefined)
-			Object.defineProperty(globalThis, "window", descriptor);
-	}
-};
-
-describe("flushHostPayload writes server-collected values into the shadow root", () => {
-	test("emits one script per collected value, in call order, appended after existing shadow root content", async () => {
-		const host = createHostWithShadow();
+		const runner = createServerRunner(host);
 		host.shadowRoot!.append(document.createElement("article"));
+		finishSynchronousLoad(
+			load(() => "alpha"),
+			runner,
+		);
+		finishSynchronousLoad(
+			load("beta", () => ({ name: "Ada" })),
+			runner,
+		);
 
-		await withoutWindow(async () => {
-			await load(host, () => Promise.resolve("alpha"));
-			await load(host, () => Promise.resolve("beta-value"), "beta");
-		});
-		flushHostPayload(host);
+		flushHostPayload(runner.loadsRecordedOnServer, host.shadowRoot!);
 
 		const children = host.shadowRoot!.children;
 		expect(children.length).toBe(3);
-		//pre-existing user content stays at the front; scripts are appended after it
 		expect(children[0].tagName).toBe("ARTICLE");
-		expect(children[1].tagName).toBe("SCRIPT");
-		expect(children[1].getAttribute("data-ssr")).toBe("");
 		expect(children[1].getAttribute("data-key")).toBeNull();
-		expect(children[1].textContent).toBe(JSON.stringify("alpha"));
-		expect(children[2].tagName).toBe("SCRIPT");
+		expect(children[1].textContent).toBe('"alpha"');
 		expect(children[2].getAttribute("data-key")).toBe("beta");
-		expect(children[2].textContent).toBe(JSON.stringify("beta-value"));
+		expect(children[2].textContent).toBe('{"name":"Ada"}');
 	});
 
-	test("flush clears the per-host scratch — a second flush is a no-op", async () => {
+	test("a failed load keeps its position as an empty placeholder", () => {
 		const host = createHostWithShadow();
-		await withoutWindow(async () => {
-			await load(host, () => Promise.resolve("once"));
-		});
-		flushHostPayload(host);
-		expect(host.shadowRoot!.children.length).toBe(1);
-		flushHostPayload(host);
-		expect(host.shadowRoot!.children.length).toBe(1);
-	});
-
-	test("a skipSSR load runs the fetcher but emits no script — nothing to replay on the client", async () => {
-		const host = createHostWithShadow();
-		const fetcher = vi.fn(() => Promise.resolve("server-only"));
-		const value = await withoutWindow(() =>
-			load(host, fetcher, { skipSSR: true }),
+		const runner = createServerRunner(host);
+		expect(() => finishSynchronousLoad(load(failingFetcher), runner)).toThrow(
+			"offline",
 		);
-		flushHostPayload(host);
+		finishSynchronousLoad(
+			load(() => "second"),
+			runner,
+		);
 
-		expect(value).toBe("server-only");
-		expect(fetcher).toHaveBeenCalledTimes(1);
-		expect(host.shadowRoot!.querySelector("script[data-ssr]")).toBeNull();
+		flushHostPayload(runner.loadsRecordedOnServer, host.shadowRoot!);
+
+		const [failed, second] = payloadScriptsOf(host.shadowRoot!);
+		expect(failed.hasAttribute("data-failed")).toBe(true);
+		expect(failed.textContent).toBe("");
+		expect(second.textContent).toBe('"second"');
 	});
 
-	test("escapes `<` so a value containing `</script>` cannot break out of the inline script context", async () => {
+	test("a rejection the driver throws back keeps its position too", () => {
 		const host = createHostWithShadow();
-		const payload = { body: "</script><script>alert(1)</script>" };
-		await withoutWindow(async () => {
-			await load(host, () => Promise.resolve(payload));
-		});
-		flushHostPayload(host);
+		const runner = createServerRunner(host);
+		const generator = load(() => new Promise(() => {}));
+		generator.next();
+		generator.next(runner);
 
-		const script = host.shadowRoot!.querySelector("script[data-ssr]")!;
+		expect(() => generator.throw(new Error("offline"))).toThrow("offline");
+
+		flushHostPayload(runner.loadsRecordedOnServer, host.shadowRoot!);
+		const [failed] = payloadScriptsOf(host.shadowRoot!);
+		expect(failed.hasAttribute("data-failed")).toBe(true);
+	});
+
+	test("a run torn down while it waits never resumes, so its result takes no position", () => {
+		const host = createHostWithShadow();
+		const runner = createServerRunner(host);
+		const generator = load(() => new Promise(() => {}));
+		generator.next();
+		generator.next(runner);
+
+		generator.return(undefined);
+		finishSynchronousLoad(
+			load(() => "after the teardown"),
+			runner,
+		);
+
+		flushHostPayload(runner.loadsRecordedOnServer, host.shadowRoot!);
+		const scripts = payloadScriptsOf(host.shadowRoot!);
+		expect(scripts).toHaveLength(1);
+		expect(scripts[0].textContent).toBe('"after the teardown"');
+	});
+
+	test("`<` is escaped, so a value holding `</script>` cannot end the script early", () => {
+		const host = createHostWithShadow();
+		const runner = createServerRunner(host);
+		const value = { body: "</script><script>alert(1)</script>" };
+		finishSynchronousLoad(
+			load(() => value),
+			runner,
+		);
+
+		flushHostPayload(runner.loadsRecordedOnServer, host.shadowRoot!);
+
+		const [script] = payloadScriptsOf(host.shadowRoot!);
 		expect(script.textContent).not.toContain("</script>");
 		expect(script.textContent).toContain("\\u003c/script>");
-		//round-trips back to the original after the browser parses the inline JSON
-		expect(JSON.parse(script.textContent!)).toEqual(payload);
+		expect(JSON.parse(script.textContent!)).toEqual(value);
 	});
 
-	test("a host that never called load survives flushHostPayload as a no-op", () => {
+	test("undefined is written as null, since JSON.stringify(undefined) is no string", () => {
 		const host = createHostWithShadow();
-		host.shadowRoot!.append(document.createElement("article"));
-		flushHostPayload(host);
-		expect(host.shadowRoot!.children.length).toBe(1);
-		expect(host.shadowRoot!.children[0].tagName).toBe("ARTICLE");
+		const runner = createServerRunner(host);
+		finishSynchronousLoad(
+			load(() => undefined),
+			runner,
+		);
+
+		flushHostPayload(runner.loadsRecordedOnServer, host.shadowRoot!);
+
+		expect(payloadScriptsOf(host.shadowRoot!)[0].textContent).toBe("null");
 	});
 
-	test("a fetcher that resolves undefined does not crash the flush", async () => {
-		//JSON.stringify(undefined) returns the value undefined, not a string, so the
-		//following .replace() would throw and serialize the whole component as error text
+	test("a flush empties the recorded loads, so a second flush writes nothing", () => {
 		const host = createHostWithShadow();
-		await withoutWindow(async () => {
-			await load(host, () => Promise.resolve(undefined));
+		const runner = createServerRunner(host);
+		finishSynchronousLoad(
+			load(() => "once"),
+			runner,
+		);
+
+		flushHostPayload(runner.loadsRecordedOnServer, host.shadowRoot!);
+		flushHostPayload(runner.loadsRecordedOnServer, host.shadowRoot!);
+
+		expect(payloadScriptsOf(host.shadowRoot!)).toHaveLength(1);
+	});
+});
+
+describe("a key the server already recorded throws", () => {
+	test("only a repeated key", () => {
+		const runner = createServerRunner(createHostWithShadow());
+		finishSynchronousLoad(
+			load("post", () => 1),
+			runner,
+		);
+
+		expect(() =>
+			finishSynchronousLoad(
+				load("post", () => 2),
+				runner,
+			),
+		).toThrow('two load() calls in <div> use the key "post"');
+		expect(
+			finishSynchronousLoad(
+				load("comments", () => 3),
+				runner,
+			),
+		).toBe(3);
+		expect(
+			finishSynchronousLoad(
+				load(() => 4),
+				runner,
+			),
+		).toBe(4);
+	});
+
+	test("a failed load holds its key too", () => {
+		const runner = createServerRunner(createHostWithShadow());
+		expect(() =>
+			finishSynchronousLoad(load("post", failingFetcher), runner),
+		).toThrow("offline");
+
+		expect(() =>
+			finishSynchronousLoad(
+				load("post", () => 1),
+				runner,
+			),
+		).toThrow('use the key "post"');
+	});
+});
+
+describe("a hydrating browser claims a server value and removes its script", () => {
+	test("positional values come back in order without fetching, and each claim removes its script", () => {
+		const host = createHostWithShadow();
+		host.shadowRoot!.append(
+			payloadScript('{"name":"Ada"}'),
+			payloadScript('{"name":"Lin"}'),
+		);
+		const runner = createHydratingRunner(host);
+		const fetcher = vi.fn(() => "fetched");
+
+		expect(finishSynchronousLoad(load(fetcher), runner)).toEqual({
+			name: "Ada",
 		});
-		expect(() => flushHostPayload(host)).not.toThrow();
+		expect(finishSynchronousLoad(load(fetcher), runner)).toEqual({
+			name: "Lin",
+		});
+		expect(fetcher).not.toHaveBeenCalled();
+		expect(payloadScriptsOf(host.shadowRoot!)).toHaveLength(0);
+	});
+
+	test("a keyed claim skips positional scripts, and a positional claim skips keyed ones", () => {
+		const host = createHostWithShadow();
+		host.shadowRoot!.append(
+			payloadScript('"positional"'),
+			payloadScript('["p1"]', { "data-key": "posts" }),
+		);
+		const runner = createHydratingRunner(host);
+
+		expect(
+			finishSynchronousLoad(
+				load("posts", () => "fetched"),
+				runner,
+			),
+		).toEqual(["p1"]);
+		expect(
+			finishSynchronousLoad(
+				load(() => "fetched"),
+				runner,
+			),
+		).toBe("positional");
+	});
+
+	test("a failed placeholder is removed and claims nothing, so the browser fetches", () => {
+		const host = createHostWithShadow();
+		host.shadowRoot!.append(
+			payloadScript(null, { "data-failed": "" }),
+			payloadScript('"second"'),
+		);
+		const runner = createHydratingRunner(host);
+
+		expect(
+			finishSynchronousLoad(
+				load(() => "fetched"),
+				runner,
+			),
+		).toBe("fetched");
+		expect(
+			finishSynchronousLoad(
+				load(() => "fetched"),
+				runner,
+			),
+		).toBe("second");
+	});
+
+	test("a missing position warns about a branch, a missing key does not", () => {
+		const runner = createHydratingRunner(createHostWithShadow());
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		expect(
+			finishSynchronousLoad(
+				load("draft", () => "fetched"),
+				runner,
+			),
+		).toBe("fetched");
+		expect(warnSpy).not.toHaveBeenCalled();
+		expect(
+			finishSynchronousLoad(
+				load(() => "fetched"),
+				runner,
+			),
+		).toBe("fetched");
+		expect(warnSpy).toHaveBeenCalledTimes(1);
+		expect(String(warnSpy.mock.calls[0][0])).toContain(
+			"the browser reached a load() the server did not reach",
+		);
+		warnSpy.mockRestore();
+	});
+
+	test("a script the component painted itself, below the root, is not a payload", () => {
+		const host = createHostWithShadow();
+		const wrapper = document.createElement("div");
+		const ownScript = payloadScript('"the component\'s own data"');
+		wrapper.append(ownScript);
+		host.shadowRoot!.append(wrapper);
+		const runner = createHydratingRunner(host);
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		expect(
+			finishSynchronousLoad(
+				load(() => "fetched"),
+				runner,
+			),
+		).toBe("fetched");
+		releaseUnclaimedPayloads(host.shadowRoot!);
+
+		const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
+		expect(ownScript.isConnected).toBe(true);
+		expect(warnings.some((warning) => warning.includes("went unused"))).toBe(
+			false,
+		);
+		warnSpy.mockRestore();
+	});
+
+	test("a round trip hands back what the server recorded", () => {
+		const host = createHostWithShadow();
+		const serverRunner = createServerRunner(host);
+		const value = { body: "</script>", tags: ["a"], count: 2, draft: null };
+		finishSynchronousLoad(
+			load(() => value),
+			serverRunner,
+		);
+		finishSynchronousLoad(
+			load("comments", () => ["first"]),
+			serverRunner,
+		);
+		flushHostPayload(serverRunner.loadsRecordedOnServer, host.shadowRoot!);
+		const hydratingRunner = createHydratingRunner(host);
+
+		expect(
+			finishSynchronousLoad(
+				load(() => "fetched"),
+				hydratingRunner,
+			),
+		).toEqual(value);
+		expect(
+			finishSynchronousLoad(
+				load("comments", () => "fetched"),
+				hydratingRunner,
+			),
+		).toEqual(["first"]);
+	});
+});
+
+describe("at the hydrating paint, leftover scripts are removed", () => {
+	test("every leftover goes, and only positional ones warn, with their count", () => {
+		const host = createHostWithShadow();
+		host.shadowRoot!.append(
+			document.createElement("article"),
+			payloadScript('"posts"'),
+			payloadScript('"draft"', { "data-key": "draft" }),
+			payloadScript(null, { "data-failed": "" }),
+		);
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		releaseUnclaimedPayloads(host.shadowRoot!);
+
+		expect(payloadScriptsOf(host.shadowRoot!)).toHaveLength(0);
+		expect(host.shadowRoot!.children[0].tagName).toBe("ARTICLE");
+		expect(warnSpy).toHaveBeenCalledTimes(1);
+		expect(String(warnSpy.mock.calls[0][0])).toContain(
+			"2 load() result(s) from the server went unused while hydrating",
+		);
+		warnSpy.mockRestore();
+	});
+
+	test("keyed leftovers are a branch the browser did not take, so they stay silent", () => {
+		const host = createHostWithShadow();
+		host.shadowRoot!.append(payloadScript('"draft"', { "data-key": "draft" }));
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		releaseUnclaimedPayloads(host.shadowRoot!);
+
+		expect(payloadScriptsOf(host.shadowRoot!)).toHaveLength(0);
+		expect(warnSpy).not.toHaveBeenCalled();
+		warnSpy.mockRestore();
 	});
 });

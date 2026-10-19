@@ -17,6 +17,11 @@ export const isGeneratorFunction = (value: unknown): value is UpdateGenerator =>
 	typeof value === "function" &&
 	Object.getPrototypeOf(value) === generatorFunctionPrototype;
 
+//there is no global Generator constructor to test with instanceof, but every generator object carries
+//this tag, from whichever realm made it
+export const isGeneratorObject = (value: unknown): boolean =>
+	Object.prototype.toString.call(value) === "[object Generator]";
+
 export const isAsyncGeneratorFunction = (value: unknown): boolean =>
 	typeof value === "function" &&
 	Object.getPrototypeOf(value) === asyncGeneratorFunctionPrototype;
