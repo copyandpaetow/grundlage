@@ -11,15 +11,17 @@ const AttributeComponent = component(function* ({ host: element }) {
 		element.update();
 	};
 
-	yield () => html`
-		<button ${attrs}>click</button>
-		<p>attributes are</p>
-		<ul>
-			${attrs.map((item) => html` <li>${item}</li>`)}
-		</ul>
-		<div ${attr}="hello">test dynamic attributes</div>
-		<button onclick="${updateAttr}">update attribute</button>
-	`;
+	yield function* view() {
+		yield html`
+			<button ${attrs}>click</button>
+			<p>attributes are</p>
+			<ul>
+				${attrs.map((item) => html` <li>${item}</li>`)}
+			</ul>
+			<div ${attr}="hello">test dynamic attributes</div>
+			<button onclick="${updateAttr}">update attribute</button>
+		`;
+	};
 }) as ComponentConstructor;
 
 customElements.define("attribute-component", AttributeComponent);

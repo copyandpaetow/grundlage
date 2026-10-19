@@ -18,6 +18,7 @@ customElements.define(
 				<a href="/grundlage/pages/reorder-stress/">reorder stress</a>
 				<a href="/grundlage/pages/mutation-stress/">mutation stress</a>
 				<a href="/grundlage/pages/nesting/">nesting</a>
+				<a href="/grundlage/pages/light-dom/">light dom</a>
 				<a href="/grundlage/pages/krausest/">krausest</a>
 				<a href="/grundlage/pages/ssr-vs-csr/">ssr vs csr</a>
 				<a href="/grundlage/pages/parser-bench/">parser bench</a>

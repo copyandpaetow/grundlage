@@ -28,11 +28,9 @@
 				swing, wheel to zoom). <em>Export</em> copies portable markup.
 			</p>
 
-			<!-- Hardcoded Phase 1 scene. Several cubes share an identical rotation but
-         sit at different positions: the case where naive per-face culling
-         showed the wrong faces under perspective. With backface-visibility the
-         compositor culls correctly regardless of position. A couple of varied
-         cubes round out the eyeball test for perspective and camera motion. -->
+			<!-- Cubes sharing one rotation at different positions are the case naive
+			     per-face culling got wrong under perspective; backface-visibility culls
+			     them correctly whatever the position. -->
 			<scene-editor>
 				<scene-camera>
 					<scene-world>
@@ -55,7 +53,6 @@
 							rotation="0 -30 10"
 						></scene-cube>
 
-						<!-- The other two geometries, sharing the same authoring contract. -->
 						<scene-wall position="-1.5 0 3" size="3 1.5 1"></scene-wall>
 						<scene-ramp position="1.5 0 -3"></scene-ramp>
 					</scene-world>

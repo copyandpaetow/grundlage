@@ -63,6 +63,20 @@ export default defineConfig({
 				},
 			},
 			{
+				root: "./website",
+				test: {
+					//happy-dom upgrades custom elements inside template.content, so a component
+					//rendered from another component's template never shows its own content there
+					name: "cubes-browser",
+					include: ["pages/cubes/**/*.browser.test.ts"],
+					browser: {
+						enabled: true,
+						provider: playwright(),
+						instances: [{ browser: "chromium" }],
+					},
+				},
+			},
+			{
 				root: "./prerender-plugin",
 				test: {
 					name: "prerender-plugin",

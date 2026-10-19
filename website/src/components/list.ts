@@ -63,18 +63,20 @@ customElements.define(
 			element.update();
 		};
 
-		yield () => html`
-			<menu>
-				<button onclick="${addEntry}">add</button>
-				<button onclick="${deleteEntry}">delete</button>
-				<button onclick="${shuffleEntries}">shuffle</button>
-				<button onclick="${replaceEntry}">replace</button>
-				<button onclick="${swap}">swap 2</button>
-			</menu>
+		yield function* () {
+			yield html`
+				<menu>
+					<button onclick="${addEntry}">add</button>
+					<button onclick="${deleteEntry}">delete</button>
+					<button onclick="${shuffleEntries}">shuffle</button>
+					<button onclick="${replaceEntry}">replace</button>
+					<button onclick="${swap}">swap 2</button>
+				</menu>
 
-			<ul>
-				${entries.map((data) => html`<li data-key=${data}>${data}</li>`)}
-			</ul>
-		`;
+				<ul>
+					${entries.map((data) => html`<li data-key=${data}>${data}</li>`)}
+				</ul>
+			`;
+		};
 	}),
 );

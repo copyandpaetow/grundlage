@@ -32,19 +32,21 @@ const FormField = component(
 			host.update();
 		};
 
-		yield () => html`
-			<template on-form-reset="${onReset}" on-form-disabled="${onDisabled}">
-				<label>
-					nickname
-					<input
-						type="text"
-						oninput="${onInput}"
-						${disabled ? "disabled" : ""}
-					/>
-				</label>
-				<p>value seen by the form: <strong>${value || "(empty)"}</strong></p>
-			</template>
-		`;
+		yield function* view() {
+			yield html`
+				<template on-form-reset="${onReset}" on-form-disabled="${onDisabled}">
+					<label>
+						nickname
+						<input
+							type="text"
+							oninput="${onInput}"
+							${disabled ? "disabled" : ""}
+						/>
+					</label>
+					<p>value seen by the form: <strong>${value || "(empty)"}</strong></p>
+				</template>
+			`;
+		};
 	},
 	{ mode: "open", formAssociated: true },
 ) as ComponentConstructor;

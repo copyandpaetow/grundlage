@@ -24,10 +24,13 @@ of truth.
 ## Consequences
 
 - Everything routes through the one render channel (see lib ADR-0004: no imperative DOM
-  side-lane). The Gizmo and Cage do **not** observe their own content; the editor, which
-  owns every content change (fold in/out, inspector edit, Flatten), re-renders them via
-  `update()`. A component spying on its own subtree to react to changes it or its
-  coordinator caused is the anti-pattern this avoids.
+  side-lane). Every Transform carrier DECLARES its transform attributes as props, so
+  writing one re-renders that element and the editor never drives a render for its own
+  writes. Content is the exception: the Gizmo and Cage do **not** observe their own
+  subtree, so the editor — which owns every content change (fold in/out, Flatten) —
+  re-renders them via `update()`, and awaits it wherever it has to measure afterwards. A
+  component spying on its own subtree to react to changes its coordinator caused is the
+  anti-pattern this avoids.
 - The Cage (`scene-select`) is a Render function: it resolves `position`/`rotation` into
   its committed carrier transform and MEASURES its blocks at render time, emitting the box
   size as bindings — no `writeBounds()` method, no imperative style writes, no observer.

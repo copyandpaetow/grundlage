@@ -105,132 +105,134 @@ customElements.define(
 
 		const formatMs = (value: number) => value.toFixed(2);
 
-		yield () => html`
-			<style>
-				:host {
-					display: block;
-					font: 13px monospace;
+		yield function* view() {
+			yield html`
+				<style>
+					:host {
+						display: block;
+						font: 13px monospace;
+					}
+
+					menu {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 8px;
+						padding: 0;
+					}
+
+					button {
+						padding: 6px 12px;
+						font: inherit;
+						cursor: pointer;
+					}
+
+					.sizes {
+						margin-top: 8px;
+						display: flex;
+						gap: 8px;
+						align-items: center;
+					}
+
+					.results {
+						margin-top: 12px;
+						display: grid;
+						grid-template-columns: max-content repeat(4, max-content);
+						gap: 4px 24px;
+					}
+
+					.results > div {
+						padding: 2px 0;
+						text-align: right;
+						border-bottom: 1px solid #eee;
+					}
+
+					.results > div.label {
+						text-align: left;
+					}
+
+					.results > div.head {
+						font-weight: bold;
+						border-bottom-color: #333;
+					}
+
+					ul {
+						margin-top: 16px;
+						padding: 0;
+						list-style: none;
+						max-height: 240px;
+						overflow: auto;
+						border: 1px solid #ddd;
+						contain: strict;
+						height: 240px;
+					}
+
+					li {
+						padding: 2px 6px;
+						font-size: 11px;
+						line-height: 14px;
+						height: 14px;
+					}
+				</style>
+
+				<menu>
+					<button onclick="${() => runOperation("reverse", reverseInPlace)}">
+						reverse
+					</button>
+					<button onclick="${() => runOperation("shuffle", shuffleInPlace)}">
+						shuffle
+					</button>
+					<button onclick="${() => runOperation("rotate", rotateOne)}">
+						rotate 1
+					</button>
+					<button onclick="${() => runOperation("swap ends", swapEnds)}">
+						swap ends
+					</button>
+					<button onclick="${() => runOperation("mutate", mutateValues)}">
+						mutate values
+					</button>
+				</menu>
+
+				<div class="sizes">
+					size:
+					<button onclick="${() => resize(100)}">100</button>
+					<button onclick="${() => resize(500)}">500</button>
+					<button onclick="${() => resize(1000)}">1000</button>
+					<button onclick="${() => resize(5000)}">5000</button>
+					<span>current: ${rows.length}</span>
+				</div>
+
+				${
+					measurements.size > 0
+						? html`
+								<div class="results">
+									<div class="label head">operation</div>
+									<div class="head">items</div>
+									<div class="head">last (ms)</div>
+									<div class="head">avg (ms)</div>
+									<div class="head">samples</div>
+									${Array.from(measurements.values()).map(
+										(measurement) => html`
+											<div class="label">${measurement.label}</div>
+											<div>${measurement.itemCount}</div>
+											<div>${formatMs(measurement.lastDurationMs)}</div>
+											<div>${formatMs(measurement.averageDurationMs)}</div>
+											<div>${measurement.sampleCount}</div>
+										`,
+									)}
+								</div>
+							`
+						: html``
 				}
 
-				menu {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 8px;
-					padding: 0;
-				}
-
-				button {
-					padding: 6px 12px;
-					font: inherit;
-					cursor: pointer;
-				}
-
-				.sizes {
-					margin-top: 8px;
-					display: flex;
-					gap: 8px;
-					align-items: center;
-				}
-
-				.results {
-					margin-top: 12px;
-					display: grid;
-					grid-template-columns: max-content repeat(4, max-content);
-					gap: 4px 24px;
-				}
-
-				.results > div {
-					padding: 2px 0;
-					text-align: right;
-					border-bottom: 1px solid #eee;
-				}
-
-				.results > div.label {
-					text-align: left;
-				}
-
-				.results > div.head {
-					font-weight: bold;
-					border-bottom-color: #333;
-				}
-
-				ul {
-					margin-top: 16px;
-					padding: 0;
-					list-style: none;
-					max-height: 240px;
-					overflow: auto;
-					border: 1px solid #ddd;
-					contain: strict;
-					height: 240px;
-				}
-
-				li {
-					padding: 2px 6px;
-					font-size: 11px;
-					line-height: 14px;
-					height: 14px;
-				}
-			</style>
-
-			<menu>
-				<button onclick="${() => runOperation("reverse", reverseInPlace)}">
-					reverse
-				</button>
-				<button onclick="${() => runOperation("shuffle", shuffleInPlace)}">
-					shuffle
-				</button>
-				<button onclick="${() => runOperation("rotate", rotateOne)}">
-					rotate 1
-				</button>
-				<button onclick="${() => runOperation("swap ends", swapEnds)}">
-					swap ends
-				</button>
-				<button onclick="${() => runOperation("mutate", mutateValues)}">
-					mutate values
-				</button>
-			</menu>
-
-			<div class="sizes">
-				size:
-				<button onclick="${() => resize(100)}">100</button>
-				<button onclick="${() => resize(500)}">500</button>
-				<button onclick="${() => resize(1000)}">1000</button>
-				<button onclick="${() => resize(5000)}">5000</button>
-				<span>current: ${rows.length}</span>
-			</div>
-
-			${
-				measurements.size > 0
-					? html`
-							<div class="results">
-								<div class="label head">operation</div>
-								<div class="head">items</div>
-								<div class="head">last (ms)</div>
-								<div class="head">avg (ms)</div>
-								<div class="head">samples</div>
-								${Array.from(measurements.values()).map(
-									(measurement) => html`
-										<div class="label">${measurement.label}</div>
-										<div>${measurement.itemCount}</div>
-										<div>${formatMs(measurement.lastDurationMs)}</div>
-										<div>${formatMs(measurement.averageDurationMs)}</div>
-										<div>${measurement.sampleCount}</div>
-									`,
-								)}
-							</div>
-						`
-					: html``
-			}
-
-			<ul>
-				${rows.map(
-					(row) =>
-						html`<li data-key=${row.identifier}>
-							#${row.identifier} → ${row.value}
-						</li>`,
-				)}
-			</ul>
-		`;
+				<ul>
+					${rows.map(
+						(row) =>
+							html`<li data-key=${row.identifier}>
+								#${row.identifier} → ${row.value}
+							</li>`,
+					)}
+				</ul>
+			`;
+		};
 	}),
 );

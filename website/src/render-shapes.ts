@@ -7,7 +7,7 @@
     otherwise read half price.
 
     Churn is the second axis, and it is the one the gate hash makes interesting.
-    combinedPartsHash runs BEFORE claimHashChange, so an unchanged binding still
+    combinedPartsHash runs BEFORE the gate compares it, so an unchanged binding still
     walks its nameParts and still pays for the walk. "unchanged" is that tax with
     nothing else in it; "changing" adds compose plus the write.
 */
@@ -18,6 +18,7 @@ export type CommitLane =
 	| "customElementAttribute"
 	| "declaredPropAttribute"
 	| "attributeSpread"
+	| "liveStateProperty"
 	| "content";
 
 export type ValueChurn = "changing" | "unchanged";
@@ -187,6 +188,8 @@ const markupForLane = (lane: CommitLane, bindings: number): LaneMarkup => {
 			return composedNameMarkup(bindings);
 		case "attributeSpread":
 			return attributeSpreadMarkup(bindings);
+		case "liveStateProperty":
+			return singleValueAttributeMarkup("input", () => "value", bindings);
 		case "content":
 			return contentMarkup(bindings);
 	}
@@ -220,6 +223,8 @@ const LANE_HYPOTHESES: Record<CommitLane, string> = {
 		"isDeclaredPropName answers yes and the write leaves the attribute path entirely",
 	attributeSpread:
 		"one binding, four keys: normalize to a Map and diff it every commit",
+	liveStateProperty:
+		"value on <input>: the first commit writes the attribute, every later one the IDL property",
 	content: "a text hole. No name, no compose, no attribute write: the floor",
 };
 
@@ -238,6 +243,7 @@ const LANES_IN_ORDER: Array<CommitLane> = [
 	"customElementAttribute",
 	"declaredPropAttribute",
 	"attributeSpread",
+	"liveStateProperty",
 ];
 
 export const COMMIT_SHAPES: Array<CommitShape> = LANES_IN_ORDER.flatMap(

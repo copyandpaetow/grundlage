@@ -13,8 +13,9 @@
 */
 
 import { getParsedTemplate } from "../../lib/src/parser/html";
+import { type Instance } from "../../lib/src/rendering/bindings/types";
 import {
-	type Instance,
+	cloneTemplateFragment,
 	mountInstance,
 	patchInstance,
 } from "../../lib/src/rendering/instance";
@@ -102,9 +103,12 @@ const mountShape = (
 	container: Element,
 ): MountedShape => {
 	const { templateStrings, valuesByParity } = generated;
-	const { instance, fragment } = mountInstance(
+	const parsed = getParsedTemplate(templateStrings);
+	const fragment = cloneTemplateFragment(parsed, container);
+	const instance = mountInstance(
+		fragment,
 		html(templateStrings, ...valuesByParity[0]),
-		getParsedTemplate(templateStrings),
+		parsed,
 		{ needsStyleSheetRefreshOnMove: false },
 	);
 	container.replaceChildren(fragment);
@@ -153,19 +157,30 @@ const calibrateUpdatesPerPass = (mounted: MountedShape): number => {
 	return updates;
 };
 
+const readPropertyOfEveryChild = (
+	mounted: MountedShape,
+	propertyName: string,
+): string =>
+	Array.from(mounted.container.children, (child) =>
+		String((child as unknown as Record<string, unknown>)[propertyName]),
+	).join(",");
+
 /*
-    A declared prop is assigned to the element rather than written to markup, so
-    a MutationObserver sees a closed gate and an open one as the same nothing.
-    Reading the property back is the only proof for that lane.
+    A declared prop, and a live-state property past its first commit, is
+    assigned to the element rather than written to markup, so a
+    MutationObserver sees a closed gate and an open one as the same nothing.
+    Reading the property back is the only proof for those lanes.
 */
-const readObservableState = (mounted: MountedShape): string =>
-	mounted.generated.shape.lane === "declaredPropAttribute"
-		? Array.from(mounted.container.children, (child) =>
-				String(
-					(child as unknown as Record<string, unknown>)[DECLARED_PROP_NAME],
-				),
-			).join(",")
-		: mounted.container.innerHTML;
+const readObservableState = (mounted: MountedShape): string => {
+	switch (mounted.generated.shape.lane) {
+		case "declaredPropAttribute":
+			return readPropertyOfEveryChild(mounted, DECLARED_PROP_NAME);
+		case "liveStateProperty":
+			return readPropertyOfEveryChild(mounted, "value");
+		default:
+			return mounted.container.innerHTML;
+	}
+};
 
 /*
     Proves the churn axis is real before anything is timed. "unchanged" that

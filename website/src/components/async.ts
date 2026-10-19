@@ -15,11 +15,11 @@ const mockFetch = () =>
 
 customElements.define(
 	"async-component",
-	component(async function* () {
+	component(function* () {
 		yield html`<p>loading</p>`;
 
 		try {
-			const data = await mockFetch();
+			const data: { name: string; age: string } = yield mockFetch();
 			yield html`<p>name:${data.name} ${data.name}, age: ${data.age}</p>`;
 		} catch (error) {
 			yield html`<p>error: ${error}</p>`;

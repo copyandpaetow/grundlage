@@ -35,7 +35,7 @@ const classWhenLowerIsBetter = (current: number, previous: number): string =>
 
     Self-driving rAF loop; the shared measureWindow harness only OBSERVES it for
     a wall-clock window and reports fps, frame time, DOM writes per frame, and
-    heap delta — the executable form of lib/CONVENTIONS.md's "Measuring"
+    heap delta — the executable form of lib/STYLE_GUIDE.md's "Measuring"
     contract. Heap numbers need Chrome --enable-precise-memory-info to be
     byte-accurate; otherwise they round coarsely.
 */
@@ -115,193 +115,198 @@ customElements.define(
 		`;
 
 		try {
-			yield () => html`
-				<style>
-					:host {
-						display: block;
-						font: 13px monospace;
-					}
+			yield function* view() {
+				yield html`
+					<style>
+						:host {
+							display: block;
+							font: 13px monospace;
+						}
 
-					button {
-						padding: 8px 16px;
-						font: inherit;
-						cursor: pointer;
-					}
+						button {
+							padding: 8px 16px;
+							font: inherit;
+							cursor: pointer;
+						}
 
-					button[disabled] {
-						cursor: progress;
-						opacity: 0.6;
-					}
+						button[disabled] {
+							cursor: progress;
+							opacity: 0.6;
+						}
 
-					.controls {
-						display: flex;
-						gap: 8px;
-						align-items: center;
-					}
+						.controls {
+							display: flex;
+							gap: 8px;
+							align-items: center;
+						}
 
-					.grid {
-						display: grid;
-						grid-template-columns: max-content 1fr;
-						gap: 4px 16px;
-						margin: 12px 0;
-					}
+						.grid {
+							display: grid;
+							grid-template-columns: max-content 1fr;
+							gap: 4px 16px;
+							margin: 12px 0;
+						}
 
-					.delta {
-						margin-left: 8px;
-					}
+						.delta {
+							margin-left: 8px;
+						}
 
-					.regress {
-						color: #b00020;
-					}
+						.regress {
+							color: #b00020;
+						}
 
-					.improve {
-						color: #006a2b;
-					}
+						.improve {
+							color: #006a2b;
+						}
 
-					.bars {
-						display: grid;
-						gap: 2px;
-					}
+						.bars {
+							display: grid;
+							gap: 2px;
+						}
 
-					.bar {
-						height: 6px;
-						background: steelblue;
-					}
-				</style>
+						.bar {
+							height: 6px;
+							background: steelblue;
+						}
+					</style>
 
-				<div class="controls">
-					<button onClick="${measure}" disabled="${isMeasuring}">
-						${isMeasuring ? "measuring…" : "measure"}
-					</button>
-					<label>
-						duration:
-						<input
-							type="number"
-							min="100"
-							step="100"
-							value="${durationMs}"
-							disabled="${isMeasuring}"
-							oninput="${(event: Event) => {
-								const next = Number((event.target as HTMLInputElement).value);
-								if (Number.isFinite(next) && next > 0) durationMs = next;
-							}}"
-						/>
-						ms
-					</label>
-					<button
-						onclick="${promoteToBaseline}"
-						disabled="${!result || isMeasuring}"
-					>
-						save as baseline
-					</button>
-					<button
-						onclick="${dropBaseline}"
-						disabled="${!baseline || isMeasuring}"
-					>
-						clear baseline
-					</button>
+					<div class="controls">
+						<button onClick="${measure}" disabled="${isMeasuring}">
+							${isMeasuring ? "measuring…" : "measure"}
+						</button>
+						<label>
+							duration:
+							<input
+								type="number"
+								min="100"
+								step="100"
+								value="${durationMs}"
+								disabled="${isMeasuring}"
+								oninput="${(event: Event) => {
+									const next = Number((event.target as HTMLInputElement).value);
+									if (Number.isFinite(next) && next > 0) durationMs = next;
+								}}"
+							/>
+							ms
+						</label>
+						<button
+							onclick="${promoteToBaseline}"
+							disabled="${!result || isMeasuring}"
+						>
+							save as baseline
+						</button>
+						<button
+							onclick="${dropBaseline}"
+							disabled="${!baseline || isMeasuring}"
+						>
+							clear baseline
+						</button>
+						${
+							baseline
+								? html`<span>baseline ${baseline.capturedAt}</span>`
+								: html`<span>no baseline</span>`
+						}
+					</div>
+
 					${
-						baseline
-							? html`<span>baseline ${baseline.capturedAt}</span>`
-							: html`<span>no baseline</span>`
+						result
+							? (() => {
+									const base = baseline?.value;
+									return html`
+										<div class="grid">
+											${metricRow(
+												"fps",
+												formatNumber(result.framesPerSecond),
+												base
+													? formatDelta(
+															result.framesPerSecond,
+															base.framesPerSecond,
+														)
+													: "",
+												base
+													? classWhenHigherIsBetter(
+															result.framesPerSecond,
+															base.framesPerSecond,
+														)
+													: "",
+											)}
+											${metricRow(
+												"median frame",
+												`${formatNumber(result.medianFrameMs, 3)} ms`,
+												base
+													? formatDelta(
+															result.medianFrameMs,
+															base.medianFrameMs,
+														)
+													: "",
+												base
+													? classWhenLowerIsBetter(
+															result.medianFrameMs,
+															base.medianFrameMs,
+														)
+													: "",
+											)}
+											${metricRow("frames", String(result.frames), "", "")}
+											${metricRow(
+												"DOM writes / frame",
+												formatNumber(result.mutationsPerFrame),
+												base
+													? formatDelta(
+															result.mutationsPerFrame,
+															base.mutationsPerFrame,
+														)
+													: "",
+												base
+													? classWhenLowerIsBetter(
+															result.mutationsPerFrame,
+															base.mutationsPerFrame,
+														)
+													: "",
+											)}
+											${metricRow(
+												"DOM writes total",
+												String(result.mutations),
+												"",
+												"",
+											)}
+											${metricRow(
+												"heap delta",
+												result.heapDeltaMb !== null
+													? `${formatNumber(result.heapDeltaMb)} MB`
+													: "n/a",
+												"",
+												"",
+											)}
+										</div>
+									`;
+								})()
+							: html``
 					}
-				</div>
 
-				${
-					result
-						? (() => {
-								const base = baseline?.value;
-								return html`
-									<div class="grid">
-										${metricRow(
-											"fps",
-											formatNumber(result.framesPerSecond),
-											base
-												? formatDelta(
-														result.framesPerSecond,
-														base.framesPerSecond,
-													)
-												: "",
-											base
-												? classWhenHigherIsBetter(
-														result.framesPerSecond,
-														base.framesPerSecond,
-													)
-												: "",
-										)}
-										${metricRow(
-											"median frame",
-											`${formatNumber(result.medianFrameMs, 3)} ms`,
-											base
-												? formatDelta(result.medianFrameMs, base.medianFrameMs)
-												: "",
-											base
-												? classWhenLowerIsBetter(
-														result.medianFrameMs,
-														base.medianFrameMs,
-													)
-												: "",
-										)}
-										${metricRow("frames", String(result.frames), "", "")}
-										${metricRow(
-											"DOM writes / frame",
-											formatNumber(result.mutationsPerFrame),
-											base
-												? formatDelta(
-														result.mutationsPerFrame,
-														base.mutationsPerFrame,
-													)
-												: "",
-											base
-												? classWhenLowerIsBetter(
-														result.mutationsPerFrame,
-														base.mutationsPerFrame,
-													)
-												: "",
-										)}
-										${metricRow(
-											"DOM writes total",
-											String(result.mutations),
-											"",
-											"",
-										)}
-										${metricRow(
-											"heap delta",
-											result.heapDeltaMb !== null
-												? `${formatNumber(result.heapDeltaMb)} MB`
-												: "n/a",
-											"",
-											"",
-										)}
-									</div>
-								`;
-							})()
-						: html``
-				}
-
-				<div class="bars">
-					<div class="bar" style="width:${busyValues[0]}%"></div>
-					<div class="bar" style="width:${busyValues[1]}%"></div>
-					<div class="bar" style="width:${busyValues[2]}%"></div>
-					<div class="bar" style="width:${busyValues[3]}%"></div>
-					<div class="bar" style="width:${busyValues[4]}%"></div>
-					<div class="bar" style="width:${busyValues[5]}%"></div>
-					<div class="bar" style="width:${busyValues[6]}%"></div>
-					<div class="bar" style="width:${busyValues[7]}%"></div>
-					<div class="bar" style="width:${busyValues[8]}%"></div>
-					<div class="bar" style="width:${busyValues[9]}%"></div>
-					<div class="bar" style="width:${busyValues[10]}%"></div>
-					<div class="bar" style="width:${busyValues[11]}%"></div>
-					<div class="bar" style="width:${busyValues[12]}%"></div>
-					<div class="bar" style="width:${busyValues[13]}%"></div>
-					<div class="bar" style="width:${busyValues[14]}%"></div>
-					<div class="bar" style="width:${busyValues[15]}%"></div>
-					<div class="bar" style="width:${busyValues[16]}%"></div>
-					<div class="bar" style="width:${busyValues[17]}%"></div>
-					<div class="bar" style="width:${busyValues[18]}%"></div>
-					<div class="bar" style="width:${busyValues[19]}%"></div>
-				</div>
-			`;
+					<div class="bars">
+						<div class="bar" style="width:${busyValues[0]}%"></div>
+						<div class="bar" style="width:${busyValues[1]}%"></div>
+						<div class="bar" style="width:${busyValues[2]}%"></div>
+						<div class="bar" style="width:${busyValues[3]}%"></div>
+						<div class="bar" style="width:${busyValues[4]}%"></div>
+						<div class="bar" style="width:${busyValues[5]}%"></div>
+						<div class="bar" style="width:${busyValues[6]}%"></div>
+						<div class="bar" style="width:${busyValues[7]}%"></div>
+						<div class="bar" style="width:${busyValues[8]}%"></div>
+						<div class="bar" style="width:${busyValues[9]}%"></div>
+						<div class="bar" style="width:${busyValues[10]}%"></div>
+						<div class="bar" style="width:${busyValues[11]}%"></div>
+						<div class="bar" style="width:${busyValues[12]}%"></div>
+						<div class="bar" style="width:${busyValues[13]}%"></div>
+						<div class="bar" style="width:${busyValues[14]}%"></div>
+						<div class="bar" style="width:${busyValues[15]}%"></div>
+						<div class="bar" style="width:${busyValues[16]}%"></div>
+						<div class="bar" style="width:${busyValues[17]}%"></div>
+						<div class="bar" style="width:${busyValues[18]}%"></div>
+						<div class="bar" style="width:${busyValues[19]}%"></div>
+					</div>
+				`;
+			};
 		} finally {
 			animating = false;
 		}

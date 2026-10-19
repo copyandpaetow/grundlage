@@ -1,136 +1,110 @@
-import { html, component } from "../../../../lib/src";
-import type { BaseComponent } from "../../../../lib/src/types";
+import { html, component, type Schema } from "../../../../lib/src";
 
-// <scene-palette> — the editor's 2D chrome: the toolbar (add / group / camera /
-// export) and the transform inspector. It is pure presentation and owns no editor
-// state. The editor hands it two things through the complex-value channel (JS
-// properties, per the attribute-vs-property rule): a `handlers` bag it calls on
-// click / input, and an `inspector` snapshot it renders the number fields from.
-// One render channel: the editor never reaches in to poke an input — it writes the
-// `inspector` prop and we re-render through update(). The handlers are read once at
-// connect (the editor sets them before mounting us, and they never change); only
-// `inspector` and the camera label drive re-renders.
+// <scene-palette> — the editor's 2D chrome: the toolbar and the transform inspector. It
+// is pure presentation and owns no editor state: the editor renders it with an
+// `inspector` snapshot and a `cameraMode`, and it answers with one `palette-command`
+// event per intent.
 
-// The three transform fields the inspector edits, each mapped to a per-axis triple.
 export type InspectorField = "position" | "rotation" | "size";
 
-// The callbacks the toolbar and inspector fire. The editor owns the behaviour; we
-// only translate a click or an input event into the matching call.
-export type PaletteHandlers = {
-	onAdd: (tag: string) => void;
-	onExport: () => void;
-	onDelete: () => void;
-	onGroup: () => void;
-	onUngroup: () => void;
-	// Returns the new camera mode label ("Free" / "Orbit") so we can show it. Omitted
-	// when the scene has no <scene-camera> to drive — then we hide the camera button.
-	onToggleCamera?: () => string;
-	onField: (field: InspectorField, axis: number, value: number) => void;
-};
+export type CameraMode = "free" | "orbit";
 
-// The transform the inspector reflects. `visible` is false when zero or many blocks
-// are selected — the panel only makes sense for a single block — and `sized` is
-// false for a group, which has no size of its own and greys out the size row.
+export type PaletteCommand =
+	| { kind: "add"; tag: string }
+	| { kind: "export" }
+	| { kind: "delete" }
+	| { kind: "group" }
+	| { kind: "ungroup" }
+	| { kind: "toggle-camera" }
+	| { kind: "edit-field"; field: InspectorField; axis: number; value: number };
+
+export type PaletteCommandEvent = CustomEvent<PaletteCommand>;
+
+// Absent while zero or many blocks are selected, which hides the panel. `sized` is false
+// for a group, which has no size of its own.
 export type InspectorState = {
-	visible: boolean;
 	position: readonly [number, number, number];
 	rotation: readonly [number, number, number];
 	size: readonly [number, number, number];
 	sized: boolean;
 };
 
-// The host element with its two editor-supplied props typed on — what the editor assigns to.
-export interface ScenePaletteElement extends BaseComponent {
-	handlers: PaletteHandlers;
-	inspector?: InspectorState;
-}
-
-// Neither prop survives being written as an attribute, so each parses the value it is handed.
-const asPaletteHandlers = (incoming: unknown): PaletteHandlers | undefined =>
-	typeof incoming === "object" &&
-	incoming !== null &&
-	typeof (incoming as PaletteHandlers).onAdd === "function"
-		? (incoming as PaletteHandlers)
-		: undefined;
-
+// An object never arrives as an attribute, so this only checks what JS handed over.
 const asInspectorState = (incoming: unknown): InspectorState | undefined =>
 	typeof incoming === "object" &&
 	incoming !== null &&
-	typeof (incoming as InspectorState).visible === "boolean"
+	Array.isArray((incoming as InspectorState).position)
 		? (incoming as InspectorState)
 		: undefined;
+
+const asCameraMode = (incoming: unknown): CameraMode | undefined =>
+	incoming === "free" || incoming === "orbit" ? incoming : undefined;
+
+// `cameraMode` stays absent when the scene has no <scene-camera>, which hides the button.
+const props = {
+	inspector: asInspectorState,
+	cameraMode: asCameraMode,
+} satisfies Schema;
+
+const COMMAND_BY_ACTION: Record<string, PaletteCommand> = {
+	export: { kind: "export" },
+	delete: { kind: "delete" },
+	group: { kind: "group" },
+	ungroup: { kind: "ungroup" },
+	camera: { kind: "toggle-camera" },
+};
+
+const isInspectorField = (value: string | undefined): value is InspectorField =>
+	value === "position" || value === "rotation" || value === "size";
 
 customElements.define(
 	"scene-palette",
 	component(
 		function* (componentProps) {
-			// Handlers arrive as a JS property before we mount and never change, so
-			// destructuring here is the right read; `inspector` changes per render and is
-			// read off the live object below instead.
-			//the editor assigns handlers before it inserts the element, so this read is never absent
 			const { host } = componentProps;
-			const handlers = componentProps.handlers as PaletteHandlers;
 
-			// The camera button is the one bit of local state: the mode label the toggle
-			// returns. We hold it here and re-render on toggle (update()), instead of
-			// writing the button's text imperatively.
-			let cameraLabel = "Free";
+			const sendCommand = (command: PaletteCommand): void => {
+				host.dispatchEvent(
+					new CustomEvent("palette-command", { detail: command }),
+				);
+			};
 
-			// One delegated click listener for the whole toolbar, dispatching on the
-			// data-* attributes the buttons carry — the same shape as before, now wired
-			// through a template binding instead of addEventListener.
+			// One delegated listener for the whole toolbar, dispatching on the buttons' data-*.
 			const onClick = (event: Event): void => {
 				const target = event.target;
 				if (!(target instanceof HTMLElement)) return;
 				const addTag = target.dataset.add;
 				if (addTag !== undefined) {
-					handlers.onAdd(addTag);
+					sendCommand({ kind: "add", tag: addTag });
 					return;
 				}
-				switch (target.dataset.action) {
-					case "export":
-						handlers.onExport();
-						break;
-					case "delete":
-						handlers.onDelete();
-						break;
-					case "group":
-						handlers.onGroup();
-						break;
-					case "ungroup":
-						handlers.onUngroup();
-						break;
-					case "camera":
-						if (handlers.onToggleCamera === undefined) break;
-						cameraLabel = handlers.onToggleCamera();
-						void host.update();
-						break;
-				}
+				const command = COMMAND_BY_ACTION[target.dataset.action ?? ""];
+				if (command !== undefined) sendCommand(command);
 			};
 
-			// One delegated input listener for the inspector. Position and rotation take
-			// any value; only size must stay positive.
-			const onInput = (event: Event): void => {
+			// Commits on `change` (Enter, blur, arrows), never per keystroke: the editor echoes a
+			// normalized number back, which would rewrite a half-typed "-0.5" or "1.23456".
+			// Position and rotation take any value; only size must stay positive.
+			const onFieldCommit = (event: Event): void => {
 				const target = event.target;
 				if (!(target instanceof HTMLInputElement)) return;
-				const field = target.dataset.field as InspectorField | undefined;
+				const field = target.dataset.field;
 				const axis = target.dataset.axis;
-				if (field === undefined || axis === undefined) return;
-				const value = Number(target.value);
+				if (!isInspectorField(field) || axis === undefined) return;
+				// An emptied field is NaN here, where Number("") would move the block to 0.
+				const value = target.valueAsNumber;
 				if (Number.isNaN(value)) return;
 				if (field === "size" && value <= 0) return;
-				handlers.onField(field, Number(axis), value);
+				sendCommand({ kind: "edit-field", field, axis: Number(axis), value });
 			};
 
-			yield () => {
-				const { inspector } = componentProps;
+			yield function* view({ inspector, cameraMode }) {
 				const sized = inspector?.sized ?? false;
-				// The concrete input value for a field/axis, or empty while nothing is
-				// selected (the panel is hidden then, so the value is never seen).
+				// Empty while nothing is selected: the panel is hidden then, so it is never seen.
 				const fieldValue = (field: InspectorField, axis: number): string =>
 					inspector ? String(inspector[field][axis]) : "";
 
-				return html`
+				yield html`
 					<style>
 						:host {
 							position: absolute;
@@ -205,7 +179,7 @@ customElements.define(
 							cursor: not-allowed;
 						}
 					</style>
-					<div class="palette" onclick="${onClick}" oninput="${onInput}">
+					<div class="palette" onClick=${onClick} onChange=${onFieldCommit}>
 						<div class="row">
 							<button data-add="scene-cube">+ Cube</button>
 							<button data-add="scene-wall">+ Wall</button>
@@ -216,18 +190,15 @@ customElements.define(
 							<button data-action="delete">Delete</button>
 							<span class="spacer"></span>
 							${
-								handlers.onToggleCamera
+								cameraMode
 									? html`<button data-action="camera">
-											Camera: ${cameraLabel}
+											Camera: ${cameraMode === "orbit" ? "Orbit" : "Free"}
 										</button>`
 									: null
 							}
 							<button data-action="export">Export</button>
 						</div>
-						<div
-							class="inspector"
-							style="${inspector?.visible ? "" : "display:none"}"
-						>
+						<div class="inspector" style=${inspector ? "" : "display:none"}>
 							<div class="row field-row">
 								<span>Pos</span>
 								<input
@@ -236,7 +207,7 @@ customElements.define(
 									data-field="position"
 									data-axis="0"
 									title="x"
-									value="${fieldValue("position", 0)}"
+									value=${fieldValue("position", 0)}
 								/>
 								<input
 									type="number"
@@ -244,7 +215,7 @@ customElements.define(
 									data-field="position"
 									data-axis="1"
 									title="y"
-									value="${fieldValue("position", 1)}"
+									value=${fieldValue("position", 1)}
 								/>
 								<input
 									type="number"
@@ -252,7 +223,7 @@ customElements.define(
 									data-field="position"
 									data-axis="2"
 									title="z"
-									value="${fieldValue("position", 2)}"
+									value=${fieldValue("position", 2)}
 								/>
 							</div>
 							<div class="row field-row">
@@ -263,7 +234,7 @@ customElements.define(
 									data-field="rotation"
 									data-axis="0"
 									title="rotate-x"
-									value="${fieldValue("rotation", 0)}"
+									value=${fieldValue("rotation", 0)}
 								/>
 								<input
 									type="number"
@@ -271,7 +242,7 @@ customElements.define(
 									data-field="rotation"
 									data-axis="1"
 									title="rotate-y"
-									value="${fieldValue("rotation", 1)}"
+									value=${fieldValue("rotation", 1)}
 								/>
 								<input
 									type="number"
@@ -279,7 +250,7 @@ customElements.define(
 									data-field="rotation"
 									data-axis="2"
 									title="rotate-z"
-									value="${fieldValue("rotation", 2)}"
+									value=${fieldValue("rotation", 2)}
 								/>
 							</div>
 							<div class="row field-row">
@@ -291,8 +262,8 @@ customElements.define(
 									data-field="size"
 									data-axis="0"
 									title="width"
-									value="${fieldValue("size", 0)}"
-									${sized ? "" : "disabled"}
+									value=${fieldValue("size", 0)}
+									disabled=${!sized}
 								/>
 								<input
 									type="number"
@@ -301,8 +272,8 @@ customElements.define(
 									data-field="size"
 									data-axis="1"
 									title="height"
-									value="${fieldValue("size", 1)}"
-									${sized ? "" : "disabled"}
+									value=${fieldValue("size", 1)}
+									disabled=${!sized}
 								/>
 								<input
 									type="number"
@@ -311,8 +282,8 @@ customElements.define(
 									data-field="size"
 									data-axis="2"
 									title="depth"
-									value="${fieldValue("size", 2)}"
-									${sized ? "" : "disabled"}
+									value=${fieldValue("size", 2)}
+									disabled=${!sized}
 								/>
 							</div>
 						</div>
@@ -320,11 +291,6 @@ customElements.define(
 				`;
 			};
 		},
-		{
-			props: {
-				handlers: asPaletteHandlers,
-				inspector: asInspectorState,
-			},
-		},
+		{ props },
 	),
 );

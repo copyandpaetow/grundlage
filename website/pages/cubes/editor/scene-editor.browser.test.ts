@@ -12,17 +12,17 @@ import "./scene-editor";
 // the scene-world / scene-camera wrappers are never imported here, so they stay inert and
 // carry only their tagName + attributes, which is all selection / grouping / serialization
 // and the mode toggle read. The chrome the editor mounts IS the framework, though:
-// scene-editor mounts a scene-palette into its own shadow at connect (hence the palette
+// scene-editor renders a scene-palette into its own shadow at connect (hence the palette
 // helpers below reach a shadow deeper, and the inspector, which the editor feeds through a
 // prop, settles a microtask after selection). The placement grid, scene-ground, is mounted
 // only while a block is being placed — it rides the world's `ground` slot in and out.
 
-// `host` is the <scene-world>: where geometry lives, where the editor drops the ground
+// `world` is the <scene-world>: where geometry lives, where the editor drops the ground
 // while placing, and where placed blocks land. `sceneCamera` is the wrapper whose `mode`
 // the camera button toggles.
 let editor: HTMLElement;
 let sceneCamera: HTMLElement;
-let host: HTMLElement;
+let world: HTMLElement;
 let dispose: () => void;
 
 beforeEach(() => {
@@ -31,8 +31,8 @@ beforeEach(() => {
 	// synchronously, so the palette and listeners are live straight away.
 	editor = document.createElement("scene-editor");
 	sceneCamera = document.createElement("scene-camera");
-	host = document.createElement("scene-world");
-	sceneCamera.appendChild(host);
+	world = document.createElement("scene-world");
+	sceneCamera.appendChild(world);
 	editor.appendChild(sceneCamera);
 	document.body.appendChild(editor);
 	dispose = () => editor.remove();
@@ -40,10 +40,10 @@ beforeEach(() => {
 
 afterEach(async () => {
 	// disconnectedCallback fires teardown a microtask later (it waits to rule out a
-	// move), so let that settle before tearing down the host.
+	// move), so let that settle before tearing down the world.
 	dispose();
 	await flush();
-	host.remove();
+	world.remove();
 });
 
 // --- helpers ----------------------------------------------------------------
@@ -56,7 +56,7 @@ const addBlock = (
 	for (const [name, value] of Object.entries(attributes)) {
 		block.setAttribute(name, value);
 	}
-	host.appendChild(block);
+	world.appendChild(block);
 	return block;
 };
 
@@ -75,7 +75,7 @@ const pressKey = (key: string): void => {
 // Stand in for the pointer crossing the placement grid: the real scene-ground emits
 // this when moved over, in world units. The editor snaps it and fixes the drop point.
 const moveOverFloor = (x: number, z: number): void => {
-	host
+	world
 		.querySelector("scene-ground")
 		?.dispatchEvent(
 			new CustomEvent("scene-floor-point", { bubbles: true, detail: { x, z } }),
@@ -98,9 +98,9 @@ const clickPaletteButton = (selector: string): void => {
 	button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 };
 
-const gizmo = (): HTMLElement | null => host.querySelector("scene-gizmo");
+const gizmo = (): HTMLElement | null => world.querySelector("scene-gizmo");
 const sceneSelect = (): HTMLElement | null =>
-	host.querySelector("scene-select");
+	world.querySelector("scene-select");
 const selectedBlocks = (): HTMLElement[] => {
 	const select = sceneSelect();
 	if (select === null) return [];
@@ -127,16 +127,16 @@ describe("selection wrapping", () => {
 		expect(gizmo()).not.toBeNull();
 		expect(sceneSelect()?.parentElement).toBe(gizmo());
 		expect(block.parentElement).toBe(sceneSelect());
-		expect([...host.children]).not.toContain(block);
+		expect([...world.children]).not.toContain(block);
 	});
 
-	test("clicking empty space deselects and returns the block to the host", () => {
+	test("clicking empty space deselects and returns the block to the world", () => {
 		const block = addBlock("scene-cube");
 		pointerDown(block);
-		pointerDown(host);
+		pointerDown(world);
 
 		expect(gizmo()).toBeNull();
-		expect(block.parentElement).toBe(host);
+		expect(block.parentElement).toBe(world);
 	});
 
 	test("selecting another block clears the first selection", () => {
@@ -145,8 +145,8 @@ describe("selection wrapping", () => {
 		pointerDown(first);
 		pointerDown(second);
 
-		expect(host.querySelectorAll("scene-gizmo")).toHaveLength(1);
-		expect(first.parentElement).toBe(host);
+		expect(world.querySelectorAll("scene-gizmo")).toHaveLength(1);
+		expect(first.parentElement).toBe(world);
 		expect(selectedBlocks()).toEqual([second]);
 	});
 
@@ -168,7 +168,7 @@ describe("multi-selection", () => {
 		pointerDown(second, true);
 		await flush();
 
-		expect(host.querySelectorAll("scene-select")).toHaveLength(1);
+		expect(world.querySelectorAll("scene-select")).toHaveLength(1);
 		expect(new Set(selectedBlocks())).toEqual(new Set([first, second]));
 		// The inspector only makes sense for one block, so it hides for many.
 		expect(inspector()?.style.display).toBe("none");
@@ -182,9 +182,9 @@ describe("multi-selection", () => {
 		pointerDown(b);
 		pointerDown(a, true);
 		pointerDown(c, true);
-		pointerDown(host); // deselect everything
+		pointerDown(world); // deselect everything
 
-		const order = [...host.children].filter(
+		const order = [...world.children].filter(
 			(child) => child.tagName.toLowerCase() === "scene-cube",
 		);
 		expect(order).toEqual([a, b, c]);
@@ -196,7 +196,7 @@ describe("multi-selection", () => {
 		pointerDown(block, true); // fold the only block back out
 
 		expect(gizmo()).toBeNull();
-		expect(block.parentElement).toBe(host);
+		expect(block.parentElement).toBe(world);
 	});
 });
 
@@ -209,8 +209,8 @@ describe("delete", () => {
 		pressKey("Delete");
 
 		expect(gizmo()).toBeNull();
-		expect(host.contains(a)).toBe(false);
-		expect(host.contains(b)).toBe(false);
+		expect(world.contains(a)).toBe(false);
+		expect(world.contains(b)).toBe(false);
 	});
 });
 
@@ -224,7 +224,7 @@ describe("grouping", () => {
 		pointerDown(b, true);
 		pressKey("g");
 
-		const group = host.querySelector("scene-group");
+		const group = world.querySelector("scene-group");
 		expect(group).not.toBeNull();
 		expect(group?.getAttribute("position")).toBe("3 0 0");
 
@@ -245,7 +245,7 @@ describe("grouping", () => {
 		pointerDown(a);
 		pressKey("g");
 
-		expect(host.querySelector("scene-group")).toBeNull();
+		expect(world.querySelector("scene-group")).toBeNull();
 		expect(selectedBlocks()).toEqual([a]);
 	});
 });
@@ -260,8 +260,8 @@ describe("ungrouping", () => {
 		pointerDown(group);
 		pressKey("u");
 
-		expect(host.querySelector("scene-group")).toBeNull();
-		expect(child.parentElement).toBe(host);
+		expect(world.querySelector("scene-group")).toBeNull();
+		expect(child.parentElement).toBe(world);
 		expect(child.getAttribute("position")).toBe("6 0 0");
 		expect(child.getAttribute("rotation")).toBe("0 0 0");
 	});
@@ -309,13 +309,13 @@ describe("ungrouping", () => {
 describe("placement", () => {
 	test("adding then dropping creates a selected block and discards the ghost", () => {
 		clickPaletteButton('[data-add="scene-cube"]');
-		expect(host.querySelector("scene-ghost")).not.toBeNull();
+		expect(world.querySelector("scene-ghost")).not.toBeNull();
 
 		moveOverFloor(2, 3); // cross the grid so the drop has a point to land on
-		pointerDown(host); // drop at the current ghost position
+		pointerDown(world); // drop at the current ghost position
 
-		expect(host.querySelector("scene-ghost")).toBeNull();
-		const placed = host.querySelector("scene-cube");
+		expect(world.querySelector("scene-ghost")).toBeNull();
+		const placed = world.querySelector("scene-cube");
 		expect(placed).not.toBeNull();
 		expect(placed?.getAttribute("position")).toBe("2 0 3");
 		expect(selectedBlocks()).toEqual([placed]);
@@ -323,13 +323,13 @@ describe("placement", () => {
 
 	test("dropping before the pointer crosses the grid strands no block", () => {
 		clickPaletteButton('[data-add="scene-cube"]');
-		pointerDown(host); // click without ever moving over the floor
+		pointerDown(world); // click without ever moving over the floor
 
 		// The ghost is still up (placement continues) and nothing was committed at the
 		// origin — the no-floor-point guard, not a block stranded at 0,0,0. The only
 		// cube in the tree is the ghost's preview child, never a placed sibling.
-		expect(host.querySelector("scene-ghost")).not.toBeNull();
-		expect(host.querySelector(":scope > scene-cube")).toBeNull();
+		expect(world.querySelector("scene-ghost")).not.toBeNull();
+		expect(world.querySelector(":scope > scene-cube")).toBeNull();
 		expect(selectedBlocks()).toEqual([]);
 	});
 
@@ -337,7 +337,7 @@ describe("placement", () => {
 		clickPaletteButton('[data-add="scene-cube"]');
 		pressKey("Escape");
 
-		expect(host.querySelector("scene-ghost")).toBeNull();
+		expect(world.querySelector("scene-ghost")).toBeNull();
 	});
 });
 
@@ -369,7 +369,7 @@ describe("inspector", () => {
 
 		const input = fieldInput("position", 0)!;
 		input.value = "5";
-		input.dispatchEvent(new Event("input", { bubbles: true }));
+		input.dispatchEvent(new Event("change", { bubbles: true }));
 
 		expect(block.getAttribute("position")).toBe("5 2 3");
 		expect(block.hasAttribute("x")).toBe(false);
@@ -385,7 +385,7 @@ describe("inspector", () => {
 		// Editing it is also a no-op: no size attribute is written.
 		const input = fieldInput("size", 0)!;
 		input.value = "3";
-		input.dispatchEvent(new Event("input", { bubbles: true }));
+		input.dispatchEvent(new Event("change", { bubbles: true }));
 		expect(group.hasAttribute("size")).toBe(false);
 	});
 });

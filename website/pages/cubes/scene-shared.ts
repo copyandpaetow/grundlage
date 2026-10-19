@@ -1,89 +1,95 @@
-// Shared geometry constants and the attribute → variable bridge helpers for the
-// DOM-as-geometry scene. Both <scene-world> and <scene-cube> lean on this module
-// so the two state channels stay consistent: attributes are the committed,
-// authored, serializable state; CSS variables are the in-flight render state.
+import type { Resolve, Schema } from "../../../lib/src";
 
-// Pixels of screen space one authored grid unit occupies. The unit-cube geometry
-// is laid out once at this size; every dimension after that is scale3d over it.
+// Geometry constants and the authoring contract shared by every scene element:
+// attributes are the committed, serializable state; --block-* variables are the
+// render state.
+
+// Screen px one authored grid unit occupies. Geometry is laid out once at this size
+// and every dimension after that is scale3d over it.
 export const UNIT_SIZE = 120;
-
-// Half a unit cube in px. Every geometry lays its faces out around this, and the
-// leaf cube/ramp publish it as their --block-extent-*; shared so the value can't drift.
 export const HALF_UNIT = UNIT_SIZE / 2;
-
-// Authoring grid resolution in grid units. Direct manipulation commits snap to
-// this so dragged blocks land on a regular lattice instead of arbitrary floats.
 export const GRID_SNAP = 0.5;
 
-// The placement floor's half-extent in grid units: the grid spans this many cells
-// either side of the origin. <scene-ground> draws the sheet and maps a screen hit
-// back to a world cell from it, so the drawn grid and the snapped point share one
-// definition.
+// The placement floor spans this many cells either side of the origin.
 export const GROUND_HALF_UNITS = 20;
-
-// The placement floor's full side length in px — the square sheet <scene-ground>
-// renders, centred on the origin.
 export const GROUND_SIZE = GROUND_HALF_UNITS * 2 * UNIT_SIZE;
 
-// Snap a continuous grid value onto the authoring lattice.
+export type Vector3 = [number, number, number];
+
 export const snapToGrid = (value: number): number =>
 	Math.round(value / GRID_SNAP) * GRID_SNAP;
 
-// Format a number for serialized attributes: drop trailing zeros so exported
-// markup reads `2` and `1.5`, never `2.000000001` or `1.50`.
+// Exported markup reads `2` and `1.5`, never `2.000000001`, `1.50` or `-0`.
 export const formatNumber = (value: number): string => {
 	const rounded = Math.round(value * 1000) / 1000;
 	return Object.is(rounded, -0) ? "0" : String(rounded);
 };
 
-export type Vector3 = [number, number, number];
+// --- the authoring contract --------------------------------------------------
 
-// The three authored transform triples and their per-axis specific attributes.
-// One copy lives here so every geometry element, the gizmo, and the editor read
-// the same names — both for resolution precedence and for MutationObserver filters.
-export const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
-export const POSITION_SPECIFIC = ["x", "y", "z"] as const;
-export const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
-
-const parseNumberList = (raw: string | null): number[] => {
-	if (raw === null) return [];
-	return raw
-		.trim()
-		.split(/\s+/)
-		.filter((token) => token !== "")
-		.map(Number);
-};
-
-// Resolve one axis triple (e.g. `size` → width/height/depth) following the
-// plan's precedence: the shorthand seeds all three axes, and a specific
-// attribute overrides its own axis when present. A single shorthand value
-// applies to every axis; three values map to x/y/z in order. We resolve this in
-// JS so CSS only ever sees the concrete --block-* channel, never the shorthand.
-const resolveAxisTriple = (
-	element: Element,
-	shorthand: string,
-	specific: readonly [string, string, string],
-	fallback: number,
-): Vector3 => {
-	const shorthandValues = parseNumberList(element.getAttribute(shorthand));
-
-	const seedForAxis = (axis: number): number => {
-		if (shorthandValues.length === 1) return shorthandValues[0];
-		if (axis < shorthandValues.length) return shorthandValues[axis];
-		return fallback;
+// A shorthand triple: one value seeds every axis, three map to x/y/z, missing axes
+// take the fallback. Never refuses, so malformed markup keeps the element rendering.
+const asTriple =
+	(fallback: number): Resolve<Vector3> =>
+	(incoming) => {
+		if (Array.isArray(incoming))
+			return [
+				incoming[0] ?? fallback,
+				incoming[1] ?? fallback,
+				incoming[2] ?? fallback,
+			];
+		const values = String(incoming)
+			.trim()
+			.split(/\s+/)
+			.filter((token) => token !== "")
+			.map(Number);
+		if (values.length === 1) return [values[0], values[0], values[0]];
+		return [
+			values[0] ?? fallback,
+			values[1] ?? fallback,
+			values[2] ?? fallback,
+		];
 	};
 
-	const resolveAxis = (axis: number): number => {
-		const specificRaw = element.getAttribute(specific[axis]);
-		if (specificRaw !== null && specificRaw.trim() !== "") {
-			const parsed = Number(specificRaw);
-			if (!Number.isNaN(parsed)) return parsed;
-		}
-		return seedForAxis(axis);
-	};
+const asSizeTriple = asTriple(1);
+const asOriginTriple = asTriple(0);
 
-	return [resolveAxis(0), resolveAxis(1), resolveAxis(2)];
-};
+const sizeProps = {
+	size: [asSizeTriple, [1, 1, 1]],
+	width: Number,
+	height: Number,
+	depth: Number,
+} satisfies Schema;
+
+const positionProps = {
+	position: [asOriginTriple, [0, 0, 0]],
+	x: Number,
+	y: Number,
+	z: Number,
+} satisfies Schema;
+
+const rotationProps = {
+	rotation: [asOriginTriple, [0, 0, 0]],
+	"rotate-x": Number,
+	"rotate-y": Number,
+	"rotate-z": Number,
+} satisfies Schema;
+
+// Declaring these is what makes a scene element react to its own markup: a plain
+// setAttribute re-renders it, so the editor writes attributes and awaits the paint
+// rather than driving every render by hand.
+export const geometryProps = {
+	...sizeProps,
+	...positionProps,
+	...rotationProps,
+} satisfies Schema;
+
+export const carrierProps = {
+	...positionProps,
+	...rotationProps,
+} satisfies Schema;
+
+export const ghostProps = { ...positionProps } satisfies Schema;
 
 export type BlockTransform = {
 	size: Vector3;
@@ -91,56 +97,101 @@ export type BlockTransform = {
 	rotation: Vector3;
 };
 
-// Resolve a block's three authored triples in one pass. Every element that carries
-// a transform — leaf geometry, the group carrier, the ghost — reads the same way, so
-// the attribute → variable bridge lives in exactly one place. A group has no size of
-// its own and simply ignores the resolved `size` (three cheap getAttribute reads on a
-// cold path; not worth a second helper). Returns packed tuples so a caller can pull a
-// single field with one contiguous destructure.
-export const resolveBlockTransform = (element: Element): BlockTransform => ({
-	size: resolveAxisTriple(element, "size", SIZE_SPECIFIC, 1),
-	position: resolveAxisTriple(element, "position", POSITION_SPECIFIC, 0),
-	rotation: resolveAxisTriple(element, "rotation", ROTATION_SPECIFIC, 0),
+type TransformProps = {
+	readonly size?: Vector3;
+	readonly width?: number;
+	readonly height?: number;
+	readonly depth?: number;
+	readonly position?: Vector3;
+	readonly x?: number;
+	readonly y?: number;
+	readonly z?: number;
+	readonly rotation?: Vector3;
+	readonly "rotate-x"?: number;
+	readonly "rotate-y"?: number;
+	readonly "rotate-z"?: number;
+};
+
+// A specific attribute overrides its own axis of the shorthand.
+const resolveTriple = (
+	shorthand: Vector3 | undefined,
+	alongX: number | undefined,
+	alongY: number | undefined,
+	alongZ: number | undefined,
+	fallback: number,
+): Vector3 => {
+	const seed = shorthand ?? [fallback, fallback, fallback];
+	return [alongX ?? seed[0], alongY ?? seed[1], alongZ ?? seed[2]];
+};
+
+export const blockTransformFromProps = (
+	props: TransformProps,
+): BlockTransform => ({
+	size: resolveTriple(props.size, props.width, props.height, props.depth, 1),
+	position: resolveTriple(props.position, props.x, props.y, props.z, 0),
+	rotation: resolveTriple(
+		props.rotation,
+		props["rotate-x"],
+		props["rotate-y"],
+		props["rotate-z"],
+		0,
+	),
 });
 
-// Commit sequencing for a live manipulation (drag, grouping). The gesture holds its
-// in-flight value as an inline --block-* override, which wins over the geometry's
-// shadow :host rule. On commit we write the authored attribute — but that re-renders
-// ASYNCHRONOUSLY (the lib re-renders off a MutationObserver, two microtask hops away),
-// so clearing the override too early would flash the pre-commit value for a frame.
-//
-// The fix is to call update() ourselves (which skips the observer hop) and await it:
-// the returned promise resolves AFTER the synchronous re-render, so by the time `clear`
-// runs the resolved --block-* already reflect the commit and there is no flash. A bare
-// `await Promise.resolve()` would NOT do — its continuation is enqueued ahead of the
-// bridge's delivery, so the clear would still run first.
-//
-// update() early-returns (resolving immediately) if the block is disconnected or
-// already mid-update; that is fine here because we run exactly one commit per gesture,
-// on a connected, idle block — do NOT lean on this await to sequence overlapping updates
-// on the same block. A block that is not a lib component (e.g. under test) has no
-// update(); we skip straight to the clear.
-// Await a block's next render, so a subsequent read of its resolved --block-* sees a
-// just-committed attribute rather than the stale prior value. We call update() directly
-// (skipping the attribute observer's extra hop) and the returned promise resolves AFTER
-// the synchronous re-render. A block that is not a lib component (e.g. under test) has
-// no update(), so we resolve immediately.
-export const blockRendered = (block: HTMLElement): Promise<void> => {
-	const update = (block as { update?: () => Promise<void> }).update;
-	return typeof update === "function" ? update.call(block) : Promise.resolve();
+const readTriple = (
+	parse: Resolve<Vector3>,
+	element: Element,
+	name: string,
+): Vector3 => parse(element.getAttribute(name) ?? "") as Vector3;
+
+const readNumber = (element: Element, name: string): number | undefined => {
+	const raw = element.getAttribute(name);
+	if (raw === null || raw.trim() === "") return undefined;
+	const parsed = Number(raw);
+	return Number.isNaN(parsed) ? undefined : parsed;
 };
 
-export const commitBlockRender = async (
-	block: HTMLElement,
-	clear: (block: HTMLElement) => void,
-): Promise<void> => {
-	await blockRendered(block);
-	clear(block);
+// The editor authors markup, so it resolves transforms straight off attributes and
+// works on elements whose definition never loaded.
+export const blockTransformFromAttributes = (
+	element: Element,
+): BlockTransform =>
+	blockTransformFromProps({
+		size: readTriple(asSizeTriple, element, "size"),
+		width: readNumber(element, "width"),
+		height: readNumber(element, "height"),
+		depth: readNumber(element, "depth"),
+		position: readTriple(asOriginTriple, element, "position"),
+		x: readNumber(element, "x"),
+		y: readNumber(element, "y"),
+		z: readNumber(element, "z"),
+		rotation: readTriple(asOriginTriple, element, "rotation"),
+		"rotate-x": readNumber(element, "rotate-x"),
+		"rotate-y": readNumber(element, "rotate-y"),
+		"rotate-z": readNumber(element, "rotate-z"),
+	});
+
+// The per-axis attributes an edit to a shorthand has to clear.
+export const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
+export const POSITION_SPECIFIC = ["x", "y", "z"] as const;
+export const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
+
+// --- render sequencing -------------------------------------------------------
+
+// Make sure a scene element has rendered, and resolve once it has, so a following
+// measure sees the committed attribute rather than the value it replaced. An attribute write has already scheduled the pass and this coalesces onto
+// it; a content change has not, and this is what triggers it. Resolves straight away
+// for an element whose definition never loaded.
+export const sceneElementRendered = (element: HTMLElement): Promise<void> => {
+	const update = (element as Partial<{ update: () => Promise<void> }>).update;
+	return typeof update === "function"
+		? update.call(element)
+		: Promise.resolve();
 };
 
-// Scene elements that carry a --block-* transform: leaf geometry plus the group
-// carrier. This is the one selectable/boundable set — the editor, the gizmo, and
-// the cage all share it. blockCornersPx recurses through a group into these.
+// --- selection and bounds ----------------------------------------------------
+
+// Scene elements that carry a --block-* transform: the one selectable, boundable set.
 export const BLOCK_TAGS = new Set([
 	"scene-cube",
 	"scene-wall",
@@ -151,21 +202,16 @@ export const BLOCK_TAGS = new Set([
 export const isBlock = (node: Element): boolean =>
 	BLOCK_TAGS.has(node.tagName.toLowerCase());
 
-// The eight corners of a block in screen-px world space, read from the LIVE
-// transform the BROWSER resolved for it. We do not re-derive rotation by hand:
-// getComputedStyle().transform already composes the block's translate · rotate ·
-// scale — with the bridge's Y-negation and scale3d baked in — into one matrix, so
-// pushing the unit corners through it lands them exactly where the faces paint.
+// The eight corners of a block in screen-px world space, read from the matrix the
+// BROWSER resolved. getComputedStyle already composed translate · rotate · scale with
+// the bridge's Y-negation baked in, so pushing the unit corners through it lands them
+// exactly where the faces paint — no rotation re-derived by hand.
 //
-// getComputedStyle gives only this element's LOCAL matrix, so to bound a block
-// inside a (possibly rotated) group we compose: each recursion multiplies the
-// parent's accumulated matrix by the child's local one and passes it down.
-//
-// A LEAF geometry publishes its own pre-scale half-extents as --block-extent-* (px),
-// so a thin wall bounds as a slab, not a cube. We push those PRE-scale extents
-// through the matrix — the matrix ALREADY carries scale3d, so re-applying
-// --block-scale-* would double the scale. A transform CARRIER (a group) has no
-// faces and no extent: we recurse into its blocks through the composed matrix.
+// That matrix is LOCAL, so bounding a block inside a rotated group composes: each
+// recursion multiplies the parent's accumulated matrix by the child's local one.
+// A leaf publishes its own PRE-scale half-extents as --block-extent-* (a thin wall
+// bounds as a slab); the matrix already carries scale3d, so re-applying --block-scale-*
+// would double it. A carrier has no extent and recurses into its blocks.
 export const blockCornersPx = (
 	block: Element,
 	accumulated: DOMMatrix = new DOMMatrix(),
@@ -184,13 +230,11 @@ export const blockCornersPx = (
 	};
 	const hasExtent = style.getPropertyValue("--block-extent-x").trim() !== "";
 
-	// Leaf geometry: the eight corners of its own pre-scale box, pushed through the
-	// composed matrix (which already scales them).
+	const corners: Vector3[] = [];
 	if (hasExtent) {
 		const halfX = readExtent("--block-extent-x");
 		const halfY = readExtent("--block-extent-y");
 		const halfZ = readExtent("--block-extent-z");
-		const corners: Vector3[] = [];
 		for (const signX of [-1, 1]) {
 			for (const signY of [-1, 1]) {
 				for (const signZ of [-1, 1]) {
@@ -204,8 +248,6 @@ export const blockCornersPx = (
 		return corners;
 	}
 
-	// Transform carrier (group): bound by its blocks' corners, composed through our matrix.
-	const corners: Vector3[] = [];
 	for (const child of Array.from(block.children)) {
 		if (!isBlock(child)) continue;
 		for (const corner of blockCornersPx(child, worldMatrix))
@@ -216,11 +258,9 @@ export const blockCornersPx = (
 
 export type Bounds = { center: Vector3; half: Vector3 };
 
-// World-axis-aligned bounding box, in screen px, that contains every block's eight
-// corners. Because we union the actual rotated corners, the box is tight when a
-// block is axis-aligned and grows to wrap it as it turns — exactly the "biggest
-// when you look straight down a corner" case the cage has to survive. Null for an
-// empty set so callers can hide their chrome.
+// World-axis-aligned box around every block's eight corners. Unioning the actual
+// rotated corners is what keeps it tight when a block is axis-aligned and grows it to
+// wrap one turned corner-on. Null for an empty set so callers can hide their chrome.
 export const blocksBoundsPx = (blocks: Iterable<Element>): Bounds | null => {
 	let min: Vector3 | null = null;
 	let max: Vector3 | null = null;
@@ -248,24 +288,20 @@ export const blocksBoundsPx = (blocks: Iterable<Element>): Bounds | null => {
 	};
 };
 
-// --- World ↔ screen and rotation matrices ------------------------------------
-// Composing transforms by matrix lives here because both the editor (flattening a
-// carrier into its leaves) and the gizmo (driving its direct child as one rigid
-// body) need the same maths. Euler angles do NOT compose by addition, so anything
-// combining two rotations must go through these.
+// --- world / screen matrices -------------------------------------------------
+// Euler angles do NOT compose by addition, so anything combining two rotations goes
+// through these. Shared by the gizmo (driving its child) and the editor (flattening).
 
-// Author-space position (grid units, +Y up) ↔ the screen-px point a carrier
-// translates to (+Y down). The attribute → variable bridge negates Y; we mirror it.
+// Author space is +Y up, screen space +Y down; the bridge negates Y and so do we.
 export const toScreenPoint = ([x, y, z]: Vector3): DOMPoint =>
 	new DOMPoint(x * UNIT_SIZE, -y * UNIT_SIZE, z * UNIT_SIZE);
+
 export const fromScreenPoint = (point: DOMPoint): Vector3 => [
 	point.x / UNIT_SIZE,
 	-point.y / UNIT_SIZE,
 	point.z / UNIT_SIZE,
 ];
 
-// A pure rotation matrix in the carrier's own order (rotateX · rotateY · rotateZ),
-// built from a resolved Euler triple. Multiply two of these to combine rotations.
 export const rotationMatrix = ([
 	rotateX,
 	rotateY,
@@ -275,9 +311,8 @@ export const rotationMatrix = ([
 		`rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`,
 	);
 
-// The full transform a carrier contributes to its content: translate then rotate, in
-// the same order every :host writes it (carriers never scale). A child lifts into the
-// carrier's frame by pushing its own translation through this.
+// What a carrier contributes to its content, in the same order every :host writes it
+// (carriers never scale). A child lifts into the carrier's frame through this.
 export const frameMatrix = (position: Vector3, rotation: Vector3): DOMMatrix =>
 	new DOMMatrix(
 		`translate3d(${position[0] * UNIT_SIZE}px, ${-position[1] * UNIT_SIZE}px, ${
@@ -287,16 +322,13 @@ export const frameMatrix = (position: Vector3, rotation: Vector3): DOMMatrix =>
 		}deg)`,
 	);
 
-// Decompose a rotation matrix back into the rotateX·rotateY·rotateZ Euler triple
-// (degrees), mirroring frameMatrix's order so a round-trip is stable. Reads the
-// rotated basis vectors out of the matrix; falls back to a yaw-only read at the ±90°
-// pitch gimbal, where the X and Z rotations couple and one must be chosen as 0.
+// Decompose back into frameMatrix's rotateX·rotateY·rotateZ order so a round-trip is
+// stable.
 export const eulerFromMatrix = (matrix: DOMMatrix): Vector3 => {
-	// Read the rotated basis as the LINEAR part only. transformPoint applies the FULL
-	// affine transform — translation included — so we map the origin too and subtract it.
-	// Without this, a matrix that also translates (a rotation about an off-origin pivot, or
-	// even a pure translation) contaminates the basis: e.g. a translation of dx px makes
-	// zAxis.x = dx, which asin clamps to ±90deg and decodes as a garbage rotation.
+	// transformPoint applies the FULL affine transform, so a matrix that also
+	// translates would contaminate the basis: a translation of dx px makes zAxis.x = dx,
+	// which asin clamps to ±90deg and decodes as a garbage rotation. Map the origin too
+	// and subtract it to read the LINEAR part alone.
 	const origin = matrix.transformPoint(new DOMPoint(0, 0, 0));
 	const mapAxis = (x: number, y: number, z: number) => {
 		const mapped = matrix.transformPoint(new DOMPoint(x, y, z));
@@ -319,7 +351,7 @@ export const eulerFromMatrix = (matrix: DOMMatrix): Vector3 => {
 			toDegrees(Math.atan2(-yAxis.x, xAxis.x)),
 		];
 	}
-	// Gimbal lock: fold the coupled rotation into X and leave Z at zero.
+	// Gimbal lock at ±90° pitch: X and Z couple, so fold the rotation into X.
 	return [
 		toDegrees(Math.atan2(sinPitch * xAxis.y, yAxis.y)),
 		toDegrees(pitch),

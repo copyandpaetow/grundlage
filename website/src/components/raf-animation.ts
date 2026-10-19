@@ -27,7 +27,7 @@ customElements.define(
 			};
 		};
 
-		yield () => {
+		yield function* view() {
 			const bar0 = bar(0.0);
 			const bar1 = bar(0.3);
 			const bar2 = bar(0.6);
@@ -49,7 +49,7 @@ customElements.define(
 			const bar18 = bar(5.4);
 			const bar19 = bar(5.7);
 
-			return html`
+			yield html`
 				<style>
 					:host {
 						display: block;

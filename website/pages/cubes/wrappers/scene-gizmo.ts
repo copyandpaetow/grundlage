@@ -1,44 +1,40 @@
 import { html, component } from "../../../../lib/src";
 import {
+	sceneElementRendered,
 	blocksBoundsPx,
+	blockTransformFromAttributes,
 	eulerFromMatrix,
 	formatNumber,
 	frameMatrix,
 	fromScreenPoint,
-	resolveBlockTransform,
 	UNIT_SIZE,
 	type Vector3,
 } from "../scene-shared";
 
-// <scene-gizmo> — the manipulation knobs, and nothing else. It is a GENERIC transform
-// tool: it reads and writes the transform of its ONE direct child and never looks past
-// it. That child can be a block, a group, or a <scene-select> cage — the gizmo treats
-// them all the same, because every Transform carrier honours the same contract: authored
-// `position`/`rotation` for the committed value, and an inherited `--carrier-live` for the
-// in-flight one.
+// <scene-gizmo> — the manipulation knobs, and nothing else. A GENERIC transform tool: it
+// reads and writes the transform of its ONE direct child and never looks past it. Block,
+// group or <scene-select> cage, they are all the same to it, because every carrier honours
+// the same contract: authored position/rotation for the committed value, an inherited
+// --carrier-live for the in-flight one.
 //
-// Everything the gizmo renders is declarative. The handle frame's position and length,
-// and the live drag transform, are all `:host` bindings fed by closure state and re-run
-// through update() — there are no imperative DOM writes. A drag is a SINGLE matrix:
-//   - live: we DECLARE `--carrier-live: matrix3d(…)` on our host. It inherits across the
-//     slot to the child, whose :host pulls it (`transform: var(--carrier-live, committed)`),
-//     so the child and whatever it wraps ride the drag as one rigid body — moved by pure
-//     CSS inheritance, with no JS touching the child and nothing measured per frame.
-//   - drop: we write the child's authored attributes, then clear `--carrier-live` only once
-//     the child has re-rendered against them (so the committed transform already equals the
-//     live one — no flash), and bubble `scene-commit`. The editor then flattens the child's
+// A drag is a SINGLE matrix and everything about it is declarative:
+//   live: we DECLARE --carrier-live on our host. It inherits across the slot to the child,
+//     whose :host pulls it, so the child and whatever it wraps ride the drag as one rigid
+//     body — pure CSS inheritance, no JS touching the child, nothing measured per frame.
+//   drop: we write the child's authored attributes, clear --carrier-live once the child
+//     has re-rendered against them (so the committed transform already equals the live one
+//     and nothing flashes), and bubble `scene-commit`. The editor then flattens the child's
 //     transform into the leaf blocks; the gizmo neither knows nor cares.
 //
-// The handle frame is WORLD-axis-aligned (it follows the child's bounding-box centre, never
-// its rotation) so the handles never swing behind a turned block and the X/Y/Z handles line
-// up with the world axes they drive. Drag projection is the one genuinely DOM-dependent read:
-// the gizmo measures its own handle knobs (already perspective-projected by the browser) and
-// turns a pointer delta into world units with one dot product — no camera matrix.
+// The handle frame follows the child's bounding-box centre but never its rotation, so the
+// handles never swing behind a turned block and the X/Y/Z handles line up with the world
+// axes they drive. Drag projection is the one genuinely DOM-dependent read: we measure our
+// own knobs, already perspective-projected by the browser, and turn a pointer delta into
+// world units with one dot product — no camera matrix.
 
 const HANDLE_LENGTH = UNIT_SIZE;
 const YAW_PER_PIXEL = 0.5;
-// Screen-px a knob sits beyond the child's bounding box, so the handles always clear the
-// cage whatever the selection's size.
+// Screen px a knob sits beyond the child's box, so handles clear the cage at any size.
 const HANDLE_MARGIN = 44;
 
 type ScreenPoint = { x: number; y: number };
@@ -60,10 +56,9 @@ const addPx = (point: Vector3, delta: Vector3): Vector3 => [
 customElements.define(
 	"scene-gizmo",
 	component(function* ({ host: element }) {
-		// The handle frame, in screen-px world space: where the knobs sit (the child's bbox
-		// centre) and how far out each axis reaches (its half-extent + margin). These are the
-		// closure state the render reads; a non-drag render re-measures them from the child, a
-		// drag render derives the centre from the gesture instead.
+		// Where the knobs sit (the child's box centre) and how far each axis reaches. A
+		// non-drag render re-measures them from the child; a drag render derives the centre
+		// from the gesture instead.
 		let handleCenterPx: Vector3 = [0, 0, 0];
 		let handleLengthsPx: Vector3 = [
 			HANDLE_LENGTH,
@@ -78,26 +73,23 @@ customElements.define(
 			// Screen displacement for ONE world unit along the dragged axis.
 			axisScreen: ScreenPoint;
 			target: HTMLElement;
-			// The child's transform when the drag began (screen-px world space).
+			// The child's transform when the drag began, in screen-px world space.
 			startMatrix: DOMMatrix;
 			startCenterPx: Vector3;
-			// What the latest move produced — read straight from here by the render
-			// (--carrier-live) and the commit (the authored attributes).
+			// What the latest move produced: read straight from here by the render
+			// (--carrier-live) and by the commit (the authored attributes).
 			liveMatrix: DOMMatrix;
 			centerPx: Vector3;
 		} | null = null;
 
-		// Our one slotted child — whatever it is. The gizmo drives THIS element's transform
-		// and nothing inside it.
 		const child = (): HTMLElement | null => {
 			const slot = element.shadowRoot?.querySelector("slot");
 			const assigned = (slot?.assignedElements() ?? [])[0];
 			return assigned instanceof HTMLElement ? assigned : null;
 		};
 
-		// The child's committed transform as a screen-px matrix (translate · rotate).
 		const childMatrix = (target: HTMLElement): DOMMatrix => {
-			const { position, rotation } = resolveBlockTransform(target);
+			const { position, rotation } = blockTransformFromAttributes(target);
 			return frameMatrix(position, rotation);
 		};
 
@@ -117,17 +109,16 @@ customElements.define(
 			};
 
 			if (active.mode === "yaw") {
-				// Rotate the whole child about its bbox centre: a pivot matrix premultiplied
-				// onto the start transform. For a cage this orbits + spins every block as one
-				// rigid body; for a lone block (centre == its origin) it is a spin in place.
+				// Rotate the whole child about its box centre: a pivot matrix premultiplied
+				// onto the start transform. For a cage that orbits and spins every block as
+				// one rigid body; for a lone block it is a spin in place.
 				const degrees = delta.x * YAW_PER_PIXEL;
-				const [cx, cy, cz] = active.startCenterPx;
+				const [centerX, centerY, centerZ] = active.startCenterPx;
 				const pivot = new DOMMatrix(
-					`translate3d(${cx}px, ${cy}px, ${cz}px) rotateY(${degrees}deg) translate3d(${-cx}px, ${-cy}px, ${-cz}px)`,
+					`translate3d(${centerX}px, ${centerY}px, ${centerZ}px) rotateY(${degrees}deg) translate3d(${-centerX}px, ${-centerY}px, ${-centerZ}px)`,
 				);
 				active.liveMatrix = pivot.multiply(active.startMatrix);
-				// The pivot is the bbox centre, so it is fixed under the rotation — the
-				// world-aligned handle frame stays put.
+				// The pivot is fixed under its own rotation, so the handle frame stays put.
 				active.centerPx = active.startCenterPx;
 			} else {
 				const lengthSquared = dot(active.axisScreen, active.axisScreen);
@@ -136,7 +127,7 @@ customElements.define(
 						? 0
 						: dot(delta, active.axisScreen) / lengthSquared;
 				const offsetPx = units * UNIT_SIZE;
-				// World axis → world-CSS-px direction (author +Y is up = screen −Y).
+				// World axis → world-CSS-px direction (author +Y up is screen −Y).
 				const translatePx: Vector3 =
 					active.axisIndex === 0
 						? [offsetPx, 0, 0]
@@ -147,11 +138,10 @@ customElements.define(
 					`translate3d(${translatePx[0]}px, ${translatePx[1]}px, ${translatePx[2]}px)`,
 				);
 				active.liveMatrix = slide.multiply(active.startMatrix);
-				// The handle frame slides by the same world delta, so the knobs follow live.
 				active.centerPx = addPx(active.startCenterPx, translatePx);
 			}
-			// One channel: the move changed our state, so re-render. The child rides the new
-			// --carrier-live by inheritance; the handles re-pin to active.centerPx.
+			// One channel: the move changed our state, so re-render. The child rides the
+			// new --carrier-live by inheritance; the handles re-pin to active.centerPx.
 			void element.update();
 		};
 
@@ -163,12 +153,12 @@ customElements.define(
 			// Hand the child its RAW dragged transform. This carrier transform is an
 			// intermediate the editor flattens into the leaf blocks and then zeroes, and
 			// flatten snaps THOSE blocks — so snapping here would only inject a grid-sized
-			// jump (worst for a yaw, whose off-origin pivot puts a large translation in the
-			// matrix). Grid snapping is the editor's job, not this generic tool's.
+			// jump, worst for a yaw whose off-origin pivot puts a large translation in the
+			// matrix. Grid snapping is the editor's job, not this generic tool's.
 			const position = fromScreenPoint(
 				new DOMPoint(matrix.m41, matrix.m42, matrix.m43),
-			) as Vector3;
-			const rotation = eulerFromMatrix(matrix) as Vector3;
+			);
+			const rotation = eulerFromMatrix(matrix);
 			target.setAttribute("position", position.map(formatNumber).join(" "));
 			target.setAttribute("rotation", rotation.map(formatNumber).join(" "));
 			target.removeAttribute("x");
@@ -178,15 +168,13 @@ customElements.define(
 			window.removeEventListener("pointermove", onPointerMove);
 			window.removeEventListener("pointerup", commitDrag);
 
-			// The authored attributes are written, but --carrier-live still holds the dragged
-			// matrix (our last render), so the child does not move. Once the child has
-			// re-rendered from its attributes — by which point its committed transform equals
-			// the live one — we drop the drag and re-render, clearing --carrier-live with no
-			// flash, then tell the editor the transform settled so it can flatten.
-			const settledTarget = target as { update?: () => Promise<void> };
-			const cleared = Promise.resolve(settledTarget.update?.());
+			// --carrier-live still holds the dragged matrix from our last render, so the
+			// child has not moved. Once it has re-rendered from its new attributes its
+			// committed transform equals the live one, so dropping the drag and re-rendering
+			// clears the override with no flash. Then tell the editor it can flatten.
+			const settledChild = sceneElementRendered(target);
 			drag = null;
-			void cleared.then(() => {
+			void settledChild.then(() => {
 				void element.update();
 				element.dispatchEvent(
 					new CustomEvent("scene-commit", { bubbles: true }),
@@ -194,8 +182,7 @@ customElements.define(
 			});
 		};
 
-		const onHandleDown = (rawEvent: Event): void => {
-			const event = rawEvent as PointerEvent;
+		const onHandleDown = (event: PointerEvent): void => {
 			if (event.button !== 0) return;
 			const target = child();
 			if (target === null) return;
@@ -218,9 +205,9 @@ customElements.define(
 						: mode === "y"
 							? handlePoint("#knob-y")
 							: handlePoint("#knob-z");
-				// The knob sits handleLengthsPx px from the origin = that / UNIT_SIZE world
-				// units out; scale its screen offset down to a single world unit so the
-				// dot-product projection yields world units directly.
+				// The knob sits handleLengthsPx / UNIT_SIZE world units out; scaling its
+				// screen offset down to one world unit makes the dot product below yield
+				// world units directly.
 				const worldUnitsOut = handleLengthsPx[axisIndex] / UNIT_SIZE;
 				const scale = worldUnitsOut === 0 ? 0 : 1 / worldUnitsOut;
 				axisScreen = {
@@ -244,12 +231,10 @@ customElements.define(
 			window.addEventListener("pointerup", commitDrag);
 		};
 
-		// A Render function: re-invoked on every update(). A non-drag render measures the
-		// child to place the handle frame; a drag render takes the frame from the gesture and
-		// declares the live transform. Both emit only bindings — no imperative DOM writes.
-		yield () => {
+		yield function* view() {
 			if (drag === null) {
-				const bounds = blocksBoundsPx(child() === null ? [] : [child()!]);
+				const target = child();
+				const bounds = blocksBoundsPx(target === null ? [] : [target]);
 				if (bounds !== null) {
 					handleCenterPx = bounds.center;
 					handleLengthsPx = [
@@ -261,24 +246,21 @@ customElements.define(
 			} else {
 				handleCenterPx = drag.centerPx;
 			}
-			// Unset (initial) when idle, so the child's var() falls back to its committed
-			// transform; the dragged matrix while a gesture is live.
+			// Unset while idle, so the child's var() falls back to its committed transform.
 			const carrierLive =
 				drag === null ? "initial" : (drag.liveMatrix.toString() as string);
 
-			return html`
+			yield html`
 				<style>
 					:host {
 						position: absolute;
 						/* Zero size at the world centre, so the slotted child keeps its own
-						   top/left:50% world origin unchanged. The handle frame below positions
-						   itself at the child's bounding-box centre. */
+						   top/left:50% world origin. */
 						top: 50%;
 						left: 50%;
 						transform-style: preserve-3d;
 						pointer-events: none;
 
-						/* Handle frame placement + reach, read by .mirror and the bars/knobs. */
 						--frame-x: ${handleCenterPx[0]}px;
 						--frame-y: ${handleCenterPx[1]}px;
 						--frame-z: ${handleCenterPx[2]}px;
@@ -286,13 +268,12 @@ customElements.define(
 						--len-y: ${handleLengthsPx[1]}px;
 						--len-z: ${handleLengthsPx[2]}px;
 
-						/* Declared for the slotted child to pull (see the file header). */
+						/* Declared for the slotted child to pull; see the file header. */
 						--carrier-live: ${carrierLive};
 					}
 
-					/* Handle frame: follows the child's bbox centre but NOT its rotation, so
-					   the handles stay world-axis-aligned (never swing behind a block, and the
-					   X/Y/Z handles line up with the world axes they drive). */
+					/* Follows the child's box centre but NOT its rotation, so the handles stay
+					   world-axis-aligned. */
 					.mirror {
 						position: absolute;
 						top: 50%;
@@ -311,16 +292,14 @@ customElements.define(
 						left: 50%;
 						transform-style: preserve-3d;
 					}
-					/* Each axis container must keep its own 3D context. Without this the z
-					   handle's translateZ/rotateY would be flattened onto the screen plane and
-					   collapse back onto the origin — the "blue handle sits at the origin" bug. */
+					/* Without its own 3D context the z handle's translateZ/rotateY flattens
+					   onto the screen plane and collapses back onto the origin. */
 					.axis {
 						transform-style: preserve-3d;
 					}
 
-					/* Each axis bar is a thin rod pivoting at the origin (transform-origin: left
-					   center); its length tracks the child's extent so it always reaches its
-					   knob, whatever the selection's size. */
+					/* A thin rod pivoting at the origin; its length tracks the child's extent
+					   so it always reaches its knob. */
 					.bar {
 						position: absolute;
 						top: 50%;
@@ -341,10 +320,9 @@ customElements.define(
 						pointer-events: auto;
 						cursor: grab;
 					}
-					/* Knobs are flat discs; left as-is they vanish edge-on as the view turns.
-					   Appending the inverse of the world's camera rotation (it applies
-					   rotateX(-pitch) rotateY(-yaw)) makes each disc face the camera — a CSS
-					   billboard, no JS per frame. The trailing translate is unaffected. */
+					/* Knobs are flat discs and would vanish edge-on as the view turns.
+					   Appending the inverse of the world's camera rotation makes each face the
+					   camera: a CSS billboard, no JS per frame. */
 					#origin {
 						position: absolute;
 						top: 50%;
@@ -358,7 +336,7 @@ customElements.define(
 							rotateX(var(--camera-pitch, 0deg));
 					}
 
-					/* +x runs right: the bar needs no rotation (its left edge is the origin). */
+					/* +x runs right, so the bar needs no rotation. */
 					.axis-x .bar {
 						width: var(--len-x, ${HANDLE_LENGTH}px);
 						background: #ff5d5d;
@@ -369,7 +347,7 @@ customElements.define(
 							rotateX(var(--camera-pitch, 0deg));
 						background: #ff5d5d;
 					}
-					/* Author +Y is up; screen +Y is down, so the up handle points -y. */
+					/* Author +Y is up and screen +Y is down, so the up handle points -y. */
 					.axis-y .bar {
 						width: var(--len-y, ${HANDLE_LENGTH}px);
 						transform: rotateZ(-90deg);
@@ -414,14 +392,13 @@ customElements.define(
 							rotateX(var(--camera-pitch, 0deg));
 					}
 
-					/* The wrapped child must share our 3D context, so the slot must not
-					   introduce a flattening box. */
+					/* A flattening box here would collapse the child's preserve-3d. */
 					slot {
 						display: contents;
 					}
 				</style>
 				<div class="mirror">
-					<div class="handles">
+					<div class="handles" onPointerDown=${onHandleDown}>
 						<div id="origin"></div>
 						<div class="axis axis-x">
 							<div class="bar"></div>
@@ -442,15 +419,11 @@ customElements.define(
 			`;
 		};
 
-		element.shadowRoot?.addEventListener("pointerdown", onHandleDown);
-
+		// Torn down mid-drag, removing the gizmo removes the inherited --carrier-live, so
+		// the child falls back to its committed transform on its own.
 		return () => {
-			element.shadowRoot?.removeEventListener("pointerdown", onHandleDown);
 			window.removeEventListener("pointermove", onPointerMove);
 			window.removeEventListener("pointerup", commitDrag);
-			// Torn down mid-drag (e.g. Escape while holding a knob, or the editor dropping
-			// the selection): removing the gizmo removes the inherited --carrier-live, so the
-			// child falls back to its committed transform on its own — nothing to clear here.
 		};
 	}),
 );

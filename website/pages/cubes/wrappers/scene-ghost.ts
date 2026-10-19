@@ -1,58 +1,59 @@
 import { html, component } from "../../../../lib/src";
-import { resolveBlockTransform, UNIT_SIZE } from "../scene-shared";
+import {
+	blockTransformFromProps,
+	ghostProps,
+	UNIT_SIZE,
+} from "../scene-shared";
 
-// <scene-ghost> — the placement preview. It wraps the geometry being placed
-// (<scene-ghost><scene-cube/></scene-ghost>) and carries the grid-snapped preview
-// position, so the slotted child shows the real shape at the real spot, just
-// translucent and inert. On drop the editor lifts the child out at the ghost's
-// position and discards the ghost — the same wrap/unwrap shape as the gizmo.
-// Editor-only: it is never serialized, and `pointer-events` here cascades to the
-// previewed child so the preview can't be clicked.
+// <scene-ghost> — the placement preview. It wraps the geometry being placed and carries
+// the snapped preview position, so the slotted child shows the real shape at the real
+// spot, translucent and inert. On drop the editor lifts the child out and discards the
+// ghost. Editor-only: never serialized.
 //
-// Translucency is the subtle part: setting `opacity` on this wrapper would create
-// a group that FLATTENS the child's preserve-3d, collapsing the ghost to a 2D
-// silhouette. Instead we hand the child an inherited `--block-opacity`, which its
-// faces apply per-face (each face is a single plane, so dimming it stays 3D). The
-// custom property inherits across the slot into the child's shadow, so the ghost
-// dims the real geometry without ever touching its 3D context.
+// `opacity` on this wrapper would create a group that FLATTENS the child's preserve-3d,
+// collapsing the ghost to a 2D silhouette. Instead we hand the child an inherited
+// --block-opacity, which its faces apply one plane at a time.
 
 customElements.define(
 	"scene-ghost",
-	component(function* ({ host: element }) {
-		yield () => {
-			const {
-				position: [positionX, positionY, positionZ],
-			} = resolveBlockTransform(element);
-			return html`
-				<style>
-					:host {
-						position: absolute;
-						top: 50%;
-						left: 50%;
-						transform-style: preserve-3d;
-						pointer-events: none;
-						/* Inherits across the slot into the child's faces; dims the
-						   preview per-face so the 3D context survives (see note above). */
-						--block-opacity: 0.45;
+	component(
+		function* () {
+			yield function* view(props) {
+				const {
+					position: [positionX, positionY, positionZ],
+				} = blockTransformFromProps(props);
 
-						--block-x: ${positionX * UNIT_SIZE}px;
-						--block-y: ${-positionY * UNIT_SIZE}px;
-						--block-z: ${positionZ * UNIT_SIZE}px;
+				yield html`
+					<style>
+						:host {
+							position: absolute;
+							top: 50%;
+							left: 50%;
+							transform-style: preserve-3d;
+							/* Cascades to the previewed child, so the preview can't be clicked. */
+							pointer-events: none;
+							--block-opacity: 0.45;
 
-						transform: translate3d(
-							var(--block-x),
-							var(--block-y),
-							var(--block-z)
-						);
-					}
+							--block-x: ${positionX * UNIT_SIZE}px;
+							--block-y: ${-positionY * UNIT_SIZE}px;
+							--block-z: ${positionZ * UNIT_SIZE}px;
 
-					/* Children share the ghost's 3D context, so the slot must not flatten. */
-					slot {
-						display: contents;
-					}
-				</style>
-				<slot></slot>
-			`;
-		};
-	}),
+							transform: translate3d(
+								var(--block-x),
+								var(--block-y),
+								var(--block-z)
+							);
+						}
+
+						/* A flattening box here would collapse the child's preserve-3d. */
+						slot {
+							display: contents;
+						}
+					</style>
+					<slot></slot>
+				`;
+			};
+		},
+		{ props: ghostProps },
+	),
 );

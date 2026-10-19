@@ -137,260 +137,271 @@ customElements.define(
 			previous !== 0 &&
 			Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
 
-		yield () => html`
-			<style>
-				:host {
-					display: block;
-					font: 13px monospace;
-				}
+		yield function* view() {
+			yield html`
+				<style>
+					:host {
+						display: block;
+						font: 13px monospace;
+					}
 
-				button {
-					padding: 6px 12px;
-					font: inherit;
-					cursor: pointer;
-				}
+					button {
+						padding: 6px 12px;
+						font: inherit;
+						cursor: pointer;
+					}
 
-				.controls {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 8px;
-					align-items: center;
-					margin-bottom: 12px;
-				}
+					.controls {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 8px;
+						align-items: center;
+						margin-bottom: 12px;
+					}
 
-				.status {
-					margin: 8px 0;
-					opacity: 0.75;
-				}
+					.status {
+						margin: 8px 0;
+						opacity: 0.75;
+					}
 
-				.gaps {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 24px;
-					margin: 12px 0;
-					padding: 10px 12px;
-					border: 1px solid currentColor;
-				}
+					.gaps {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 24px;
+						margin: 12px 0;
+						padding: 10px 12px;
+						border: 1px solid currentColor;
+					}
 
-				.gap-value {
-					font-size: 18px;
-				}
+					.gap-value {
+						font-size: 18px;
+					}
 
-				.gap-label {
-					opacity: 0.7;
-				}
+					.gap-label {
+						opacity: 0.7;
+					}
 
-				.below-resolution .gap-value {
-					opacity: 0.45;
-				}
+					.below-resolution .gap-value {
+						opacity: 0.45;
+					}
 
-				table {
-					border-collapse: collapse;
-					width: 100%;
-				}
+					table {
+						border-collapse: collapse;
+						width: 100%;
+					}
 
-				th,
-				td {
-					padding: 3px 10px 3px 0;
-					text-align: right;
-					white-space: nowrap;
-				}
+					th,
+					td {
+						padding: 3px 10px 3px 0;
+						text-align: right;
+						white-space: nowrap;
+					}
 
-				th:first-child,
-				td:first-child {
-					text-align: left;
-				}
+					th:first-child,
+					td:first-child {
+						text-align: left;
+					}
 
-				thead th {
-					border-bottom: 1px solid currentColor;
-				}
+					thead th {
+						border-bottom: 1px solid currentColor;
+					}
 
-				tr.churn-header td {
-					padding-top: 14px;
-					text-align: left;
-					opacity: 0.7;
-				}
+					tr.churn-header td {
+						padding-top: 14px;
+						text-align: left;
+						opacity: 0.7;
+					}
 
-				.beyond-resolution {
-					font-weight: 700;
-				}
+					.beyond-resolution {
+						font-weight: 700;
+					}
 
-				.within-resolution {
-					opacity: 0.45;
-				}
+					.within-resolution {
+						opacity: 0.45;
+					}
 
-				.void-warning {
-					font-weight: 700;
-				}
+					.void-warning {
+						font-weight: 700;
+					}
 
-				/*
-				  The measured tree lives in the document so attribute writes
-				  invalidate a real subtree; it is clipped rather than hidden
-				  because display:none would skip that invalidation entirely.
-				*/
-				.target {
-					height: 4px;
-					overflow: hidden;
-					contain: strict;
-					opacity: 0.35;
-				}
-			</style>
+					/*
+					  The measured tree lives in the document so attribute writes
+					  invalidate a real subtree; it is clipped rather than hidden
+					  because display:none would skip that invalidation entirely.
+					*/
+					.target {
+						height: 4px;
+						overflow: hidden;
+						contain: strict;
+						opacity: 0.35;
+					}
+				</style>
 
-			<div class="controls">
-				<button onclick="${runAllShapes}" disabled="${isRunning}">
-					run ${COMMIT_SHAPES.length} shapes
-				</button>
-				<button
-					onclick="${promoteToBaseline}"
-					disabled="${isRunning || results.length === 0}"
-				>
-					save as baseline
-				</button>
-				<button onclick="${dropBaseline}" disabled="${isRunning || !baseline}">
-					clear baseline
-				</button>
-				<span
-					>${passes} passes, best-of · ±${RESOLUTION_PERCENT}% resolution ·
-					${voidCount()} void</span
-				>
-			</div>
+				<div class="controls">
+					<button onclick="${runAllShapes}" disabled="${isRunning}">
+						run ${COMMIT_SHAPES.length} shapes
+					</button>
+					<button
+						onclick="${promoteToBaseline}"
+						disabled="${isRunning || results.length === 0}"
+					>
+						save as baseline
+					</button>
+					<button
+						onclick="${dropBaseline}"
+						disabled="${isRunning || !baseline}"
+					>
+						clear baseline
+					</button>
+					<span
+						>${passes} passes, best-of · ±${RESOLUTION_PERCENT}% resolution ·
+						${voidCount()} void</span
+					>
+				</div>
 
-			<div class="status">
+				<div class="status">
+					${
+						isRunning
+							? html`running: ${activeShape ?? "…"}`
+							: baseline
+								? html`baseline captured ${baseline.capturedAt}`
+								: html`no baseline saved`
+					}
+				</div>
+
 				${
-					isRunning
-						? html`running: ${activeShape ?? "…"}`
-						: baseline
-							? html`baseline captured ${baseline.capturedAt}`
-							: html`no baseline saved`
-				}
-			</div>
-
-			${
-				gaps.length === 0 && !registryLookup
-					? html``
-					: html`
-							<div class="gaps">
-								${
-									registryLookup
-										? html`
-												<div>
-													<div class="gap-value">
-														${registryLookup.nanosecondsPerLookup.toFixed(1)}
-														ns/lookup
+					gaps.length === 0 && !registryLookup
+						? html``
+						: html`
+								<div class="gaps">
+									${
+										registryLookup
+											? html`
+													<div>
+														<div class="gap-value">
+															${registryLookup.nanosecondsPerLookup.toFixed(1)}
+															ns/lookup
+														</div>
+														<div class="gap-label">
+															customElements.get — B4's ceiling, timed alone
+														</div>
 													</div>
-													<div class="gap-label">
-														customElements.get — B4's ceiling, timed alone
-													</div>
-												</div>
-											`
-										: html``
-								}
-								${gaps.map(
-									(gap) => html`
-										<div
-											class="${gap.isBelowResolution ? "below-resolution" : ""}"
-										>
-											<div class="gap-value">
-												${gap.nanosecondsPerCommit.toFixed(1)}
-												ns/commit${
-													gap.isBelowResolution ? " · under resolution" : ""
-												}
-											</div>
-											<div class="gap-label">${gap.name} — ${gap.question}</div>
-										</div>
-									`,
-								)}
-							</div>
-						`
-			}
-			${
-				results.length === 0
-					? html``
-					: html`
-							<table>
-								<thead>
-									<tr>
-										<th>lane</th>
-										<th>bindings</th>
-										<th>updates/pass</th>
-										<th>best pass ms</th>
-										<th>ns/commit</th>
-										<th>B/commit</th>
-										<th>vs baseline</th>
-									</tr>
-								</thead>
-								<tbody>
-									${churnsInOrder().map(
-										(churn) => html`
-											<tr class="churn-header">
-												<td colspan="7">
-													${churn} ·
-													${
-														churn === "unchanged"
-															? "the gate closes: hash only"
-															: "the gate opens: hash, compose, write"
+												`
+											: html``
+									}
+									${gaps.map(
+										(gap) => html`
+											<div
+												class="${gap.isBelowResolution ? "below-resolution" : ""}"
+											>
+												<div class="gap-value">
+													${gap.nanosecondsPerCommit.toFixed(1)}
+													ns/commit${
+														gap.isBelowResolution ? " · under resolution" : ""
 													}
-												</td>
-											</tr>
-											${results
-												.filter((result) => result.churn === churn)
-												.map((result) => {
-													const previous = baselineFor(result.name);
-													return html`
-														<tr title="${result.hypothesis}">
-															<td>
-																${result.lane}${
-																	result.voidReasons.length === 0
-																		? html``
-																		: html`<span class="void-warning">
-																				· VOID:
-																				${result.voidReasons.join(", ")}</span
-																			>`
-																}
-															</td>
-															<td>${result.bindingsPerTemplate}</td>
-															<td>${result.updatesPerPass}</td>
-															<td>${result.bestPassMs.toFixed(2)}</td>
-															<td>${result.nanosecondsPerCommit.toFixed(1)}</td>
-															<td>
-																${
-																	result.heapGrowthBytesPerCommit === null
-																		? "—"
-																		: result.heapGrowthBytesPerCommit.toFixed(1)
-																}
-															</td>
-															<td
-																class="${
-																	previous
-																		? isBeyondResolution(
-																				result.nanosecondsPerCommit,
-																				previous.nanosecondsPerCommit,
-																			)
-																			? "beyond-resolution"
-																			: "within-resolution"
-																		: ""
-																}"
-															>
-																${
-																	previous
-																		? formatDelta(
-																				result.nanosecondsPerCommit,
-																				previous.nanosecondsPerCommit,
-																			)
-																		: "—"
-																}
-															</td>
-														</tr>
-													`;
-												})}
+												</div>
+												<div class="gap-label">
+													${gap.name} — ${gap.question}
+												</div>
+											</div>
 										`,
 									)}
-								</tbody>
-							</table>
-						`
-			}
+								</div>
+							`
+				}
+				${
+					results.length === 0
+						? html``
+						: html`
+								<table>
+									<thead>
+										<tr>
+											<th>lane</th>
+											<th>bindings</th>
+											<th>updates/pass</th>
+											<th>best pass ms</th>
+											<th>ns/commit</th>
+											<th>B/commit</th>
+											<th>vs baseline</th>
+										</tr>
+									</thead>
+									<tbody>
+										${churnsInOrder().map(
+											(churn) => html`
+												<tr class="churn-header">
+													<td colspan="7">
+														${churn} ·
+														${
+															churn === "unchanged"
+																? "the gate closes: hash only"
+																: "the gate opens: hash, compose, write"
+														}
+													</td>
+												</tr>
+												${results
+													.filter((result) => result.churn === churn)
+													.map((result) => {
+														const previous = baselineFor(result.name);
+														return html`
+															<tr title="${result.hypothesis}">
+																<td>
+																	${result.lane}${
+																		result.voidReasons.length === 0
+																			? html``
+																			: html`<span class="void-warning">
+																					· VOID:
+																					${result.voidReasons.join(", ")}</span
+																				>`
+																	}
+																</td>
+																<td>${result.bindingsPerTemplate}</td>
+																<td>${result.updatesPerPass}</td>
+																<td>${result.bestPassMs.toFixed(2)}</td>
+																<td>
+																	${result.nanosecondsPerCommit.toFixed(1)}
+																</td>
+																<td>
+																	${
+																		result.heapGrowthBytesPerCommit === null
+																			? "—"
+																			: result.heapGrowthBytesPerCommit.toFixed(
+																					1,
+																				)
+																	}
+																</td>
+																<td
+																	class="${
+																		previous
+																			? isBeyondResolution(
+																					result.nanosecondsPerCommit,
+																					previous.nanosecondsPerCommit,
+																				)
+																				? "beyond-resolution"
+																				: "within-resolution"
+																			: ""
+																	}"
+																>
+																	${
+																		previous
+																			? formatDelta(
+																					result.nanosecondsPerCommit,
+																					previous.nanosecondsPerCommit,
+																				)
+																			: "—"
+																	}
+																</td>
+															</tr>
+														`;
+													})}
+											`,
+										)}
+									</tbody>
+								</table>
+							`
+				}
 
-			<div class="target" aria-hidden="true"></div>
-		`;
+				<div class="target" aria-hidden="true"></div>
+			`;
+		};
 	}),
 );

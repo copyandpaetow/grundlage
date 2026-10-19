@@ -27,7 +27,7 @@
 			</p>
 			<p>
 				Every lane runs twice, because <code>combinedPartsHash</code> runs
-				<em>before</em> <code>claimHashChange</code>. <em>unchanged</em> is what
+				<em>before</em> the gate compares it. <em>unchanged</em> is what
 				a binding costs when nothing moved — the gate hash and nothing else,
 				which is the majority case in a real update. <em>changing</em> adds
 				<code>composeParts</code> and the write. A finding that only shows up in

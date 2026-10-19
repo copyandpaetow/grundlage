@@ -17,7 +17,7 @@ import {
 
     All measurement (paint-gated timing, DOM-mutation count, baseline/delta)
     comes from the shared ../measure harness — the executable form of the
-    "Measuring" contract in lib/CONVENTIONS.md. This component only defines the
+    "Measuring" contract in lib/STYLE_GUIDE.md. This component only defines the
     operations and renders the results.
 
     "Run suite" executes every op a configurable number of times (with one
@@ -305,237 +305,250 @@ customElements.define(
 		const baselineFor = (label: string): OperationResult | undefined =>
 			baseline?.value.find((entry) => entry.label === label);
 
-		yield () => html`
-			<style>
-				:host {
-					display: block;
-					font: 13px monospace;
-				}
+		yield function* view() {
+			yield html`
+				<style>
+					:host {
+						display: block;
+						font: 13px monospace;
+					}
 
-				.controls {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 8px;
-					align-items: center;
-				}
+					.controls {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 8px;
+						align-items: center;
+					}
 
-				.controls + .controls {
-					margin-top: 6px;
-				}
+					.controls + .controls {
+						margin-top: 6px;
+					}
 
-				button {
-					padding: 6px 12px;
-					font: inherit;
-					cursor: pointer;
-				}
+					button {
+						padding: 6px 12px;
+						font: inherit;
+						cursor: pointer;
+					}
 
-				button[disabled] {
-					opacity: 0.5;
-					cursor: progress;
-				}
+					button[disabled] {
+						opacity: 0.5;
+						cursor: progress;
+					}
 
-				.status {
-					margin-top: 8px;
-					color: #555;
-					min-height: 1.2em;
-				}
+					.status {
+						margin-top: 8px;
+						color: #555;
+						min-height: 1.2em;
+					}
 
-				.results {
-					margin-top: 12px;
-					display: grid;
-					grid-template-columns: max-content repeat(6, max-content);
-					gap: 4px 24px;
-				}
+					.results {
+						margin-top: 12px;
+						display: grid;
+						grid-template-columns: max-content repeat(6, max-content);
+						gap: 4px 24px;
+					}
 
-				.results > div {
-					padding: 2px 0;
-					text-align: right;
-					border-bottom: 1px solid #eee;
-				}
+					.results > div {
+						padding: 2px 0;
+						text-align: right;
+						border-bottom: 1px solid #eee;
+					}
 
-				.results > div.label {
-					text-align: left;
-				}
+					.results > div.label {
+						text-align: left;
+					}
 
-				.results > div.head {
-					font-weight: bold;
-					border-bottom-color: #333;
-				}
+					.results > div.head {
+						font-weight: bold;
+						border-bottom-color: #333;
+					}
 
-				.delta {
-					display: flex;
-					flex-direction: column;
-					align-items: flex-end;
-					gap: 2px;
-				}
+					.delta {
+						display: flex;
+						flex-direction: column;
+						align-items: flex-end;
+						gap: 2px;
+					}
 
-				.regress {
-					color: #b00020;
-				}
+					.regress {
+						color: #b00020;
+					}
 
-				.improve {
-					color: #006a2b;
-				}
+					.improve {
+						color: #006a2b;
+					}
 
-				table {
-					margin-top: 16px;
-					border-collapse: collapse;
-					width: 100%;
-					max-width: 480px;
-				}
+					table {
+						margin-top: 16px;
+						border-collapse: collapse;
+						width: 100%;
+						max-width: 480px;
+					}
 
-				td {
-					padding: 2px 6px;
-					font-size: 11px;
-					line-height: 14px;
-					border-bottom: 1px solid #eee;
-				}
+					td {
+						padding: 2px 6px;
+						font-size: 11px;
+						line-height: 14px;
+						border-bottom: 1px solid #eee;
+					}
 
-				tr.selected td {
-					background: #fffbcc;
-				}
+					tr.selected td {
+						background: #fffbcc;
+					}
 
-				.list-shell {
-					max-height: 320px;
-					overflow: auto;
-					border: 1px solid #ddd;
-					contain: strict;
-					height: 320px;
-				}
-			</style>
+					.list-shell {
+						max-height: 320px;
+						overflow: auto;
+						border: 1px solid #ddd;
+						contain: strict;
+						height: 320px;
+					}
+				</style>
 
-			<div class="controls">
-				<button onclick="${runSuite}" disabled="${isRunning}">run suite</button>
-				${operations.map(
-					(op) => html`
-						<button onclick="${() => runOperation(op)}" disabled="${isRunning}">
-							${op.label}
-						</button>
-					`,
-				)}
-			</div>
+				<div class="controls">
+					<button onclick="${runSuite}" disabled="${isRunning}">
+						run suite
+					</button>
+					${operations.map(
+						(op) => html`
+							<button
+								onclick="${() => runOperation(op)}"
+								disabled="${isRunning}"
+							>
+								${op.label}
+							</button>
+						`,
+					)}
+				</div>
 
-			<div class="controls">
-				samples per op:
-				<input
-					type="number"
-					min="1"
-					max="50"
-					value="${sampleCount}"
-					oninput="${(event: Event) => {
-						const next = Number((event.target as HTMLInputElement).value);
-						if (Number.isFinite(next) && next > 0) {
-							sampleCount = next;
-						}
-					}}"
-				/>
-				<button
-					onclick="${promoteToBaseline}"
-					disabled="${measurements.size === 0 || isRunning}"
-				>
-					save as baseline
-				</button>
-				<button onclick="${dropBaseline}" disabled="${!baseline || isRunning}">
-					clear baseline
-				</button>
+				<div class="controls">
+					samples per op:
+					<input
+						type="number"
+						min="1"
+						max="50"
+						value="${sampleCount}"
+						oninput="${(event: Event) => {
+							const next = Number((event.target as HTMLInputElement).value);
+							if (Number.isFinite(next) && next > 0) {
+								sampleCount = next;
+							}
+						}}"
+					/>
+					<button
+						onclick="${promoteToBaseline}"
+						disabled="${measurements.size === 0 || isRunning}"
+					>
+						save as baseline
+					</button>
+					<button
+						onclick="${dropBaseline}"
+						disabled="${!baseline || isRunning}"
+					>
+						clear baseline
+					</button>
+					${
+						baseline
+							? html`<span>baseline captured ${baseline.capturedAt}</span>`
+							: html`<span>no baseline saved</span>`
+					}
+				</div>
+
+				<div class="status">
+					${
+						isRunning
+							? html`running: ${activeOperation ?? "suite"}…`
+							: html`idle`
+					}
+				</div>
+
 				${
-					baseline
-						? html`<span>baseline captured ${baseline.capturedAt}</span>`
-						: html`<span>no baseline saved</span>`
+					measurements.size > 0
+						? html`
+								<div class="results">
+									<div class="label head">operation</div>
+									<div class="head">items</div>
+									<div class="head">min applied (ms)</div>
+									<div class="head">median applied</div>
+									<div class="head">frames to paint</div>
+									<div class="head">DOM writes</div>
+									<div class="head">vs baseline</div>
+									${Array.from(measurements.values()).map((measurement) => {
+										const previous = baselineFor(measurement.label);
+										// the delta rides on min applied ms — the one timing here that resolves
+										// a change smaller than a frame. DOM writes are deterministic, so
+										// compare them exactly — any drift is a real false-write signal.
+										const msClass = !previous
+											? ""
+											: measurement.minAppliedMs > previous.minAppliedMs * 1.02
+												? "regress"
+												: measurement.minAppliedMs <
+													  previous.minAppliedMs * 0.98
+													? "improve"
+													: "";
+										const writesClass = !previous
+											? ""
+											: measurement.medianMutations > previous.medianMutations
+												? "regress"
+												: measurement.medianMutations < previous.medianMutations
+													? "improve"
+													: "";
+										return html`
+											<div class="label">${measurement.label}</div>
+											<div>${itemCounts.get(measurement.label) ?? "—"}</div>
+											<div>${formatMs(measurement.minAppliedMs)}</div>
+											<div>${formatMs(measurement.medianAppliedMs)}</div>
+											<div>${measurement.medianPaintedFrames}</div>
+											<div>${measurement.medianMutations}</div>
+											<div class="delta">
+												${
+													previous
+														? html`
+																<span class="${msClass}"
+																	>${formatDelta(
+																		measurement.minAppliedMs,
+																		previous.minAppliedMs,
+																	)}
+																	ms</span
+																>
+																<span class="${writesClass}"
+																	>${formatDelta(
+																		measurement.medianMutations,
+																		previous.medianMutations,
+																	)}
+																	writes</span
+																>
+															`
+														: "—"
+												}
+											</div>
+										`;
+									})}
+								</div>
+							`
+						: html``
 				}
-			</div>
 
-			<div class="status">
-				${
-					isRunning ? html`running: ${activeOperation ?? "suite"}…` : html`idle`
-				}
-			</div>
-
-			${
-				measurements.size > 0
-					? html`
-							<div class="results">
-								<div class="label head">operation</div>
-								<div class="head">items</div>
-								<div class="head">min applied (ms)</div>
-								<div class="head">median applied</div>
-								<div class="head">frames to paint</div>
-								<div class="head">DOM writes</div>
-								<div class="head">vs baseline</div>
-								${Array.from(measurements.values()).map((measurement) => {
-									const previous = baselineFor(measurement.label);
-									// the delta rides on min applied ms — the one timing here that resolves
-									// a change smaller than a frame. DOM writes are deterministic, so
-									// compare them exactly — any drift is a real false-write signal.
-									const msClass = !previous
-										? ""
-										: measurement.minAppliedMs > previous.minAppliedMs * 1.02
-											? "regress"
-											: measurement.minAppliedMs < previous.minAppliedMs * 0.98
-												? "improve"
-												: "";
-									const writesClass = !previous
-										? ""
-										: measurement.medianMutations > previous.medianMutations
-											? "regress"
-											: measurement.medianMutations < previous.medianMutations
-												? "improve"
-												: "";
-									return html`
-										<div class="label">${measurement.label}</div>
-										<div>${itemCounts.get(measurement.label) ?? "—"}</div>
-										<div>${formatMs(measurement.minAppliedMs)}</div>
-										<div>${formatMs(measurement.medianAppliedMs)}</div>
-										<div>${measurement.medianPaintedFrames}</div>
-										<div>${measurement.medianMutations}</div>
-										<div class="delta">
-											${
-												previous
-													? html`
-															<span class="${msClass}"
-																>${formatDelta(
-																	measurement.minAppliedMs,
-																	previous.minAppliedMs,
-																)}
-																ms</span
-															>
-															<span class="${writesClass}"
-																>${formatDelta(
-																	measurement.medianMutations,
-																	previous.medianMutations,
-																)}
-																writes</span
-															>
-														`
-													: "—"
-											}
-										</div>
-									`;
-								})}
-							</div>
-						`
-					: html``
-			}
-
-			<div class="list-shell">
-				<table>
-					<tbody>
-						${rows.map(
-							(row) => html`
-								<!--${row.identifier}-->
-								<tr
-									class="${
-										row.identifier === selectedIdentifier ? "selected" : ""
-									}"
-								>
-									<td>${row.identifier}</td>
-									<td>${row.label}</td>
-								</tr>
-							`,
-						)}
-					</tbody>
-				</table>
-			</div>
-		`;
+				<div class="list-shell">
+					<table>
+						<tbody>
+							${rows.map(
+								(row) => html`
+									<!--${row.identifier}-->
+									<tr
+										class="${
+											row.identifier === selectedIdentifier ? "selected" : ""
+										}"
+									>
+										<td>${row.identifier}</td>
+										<td>${row.label}</td>
+									</tr>
+								`,
+							)}
+						</tbody>
+					</table>
+				</div>
+			`;
+		};
 	}),
 );

@@ -10,7 +10,7 @@ customElements.define(
 			host.update();
 		};
 
-		yield async function* () {
+		yield function* view() {
 			const controller = new AbortController();
 
 			// Pre-yield: capture current positions (old DOM)
@@ -44,7 +44,7 @@ customElements.define(
 
 			// Async work; user-owned cancellation
 			try {
-				await new Promise((resolve, reject) => {
+				yield new Promise((resolve, reject) => {
 					const id = setTimeout(resolve, 1000);
 					controller.signal.addEventListener("abort", () => {
 						clearTimeout(id);

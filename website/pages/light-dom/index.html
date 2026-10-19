@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
+		<link rel="stylesheet" type="text/css" href="/src/styles/index.css" />
+		<script type="module" src="./scripts.ts"></script>
+		<title>Grundlage - light dom</title>
+		<style>
+			/* the page's own rules, written against the components' insides on purpose */
+			light-card header,
+			shadow-card header {
+				outline: 1px dashed currentColor;
+			}
+			#reached-by-a-fragment:target {
+				background: gold;
+			}
+			#results {
+				border-collapse: collapse;
+				margin-top: 1rem;
+			}
+			#results th,
+			#results td {
+				border: 1px solid currentColor;
+				padding: 0.25rem 0.5rem;
+				text-align: left;
+			}
+			.outcome {
+				text-align: center;
+			}
+			.cards {
+				display: flex;
+				gap: 1rem;
+				align-items: start;
+			}
+		</style>
+	</head>
+	<body>
+		<nav-bar></nav-bar>
+		<main>
+			<h1>light dom</h1>
+			<p id="state"></p>
+
+			<div class="cards">
+				<section>
+					<h2>light-card</h2>
+					<!-- the site prerenders no page by default (include: []), so `ssr` opts this
+					     element in: the subtree arrives already rendered, which is what the hydration rows read -->
+					<light-card ssr>
+						<h2 slot="heading">Ada Lovelace</h2>
+						<p>Wrote the first algorithm.</p>
+						<span slot="badges">1843</span>
+					</light-card>
+				</section>
+				<section>
+					<h2>shadow-card</h2>
+					<shadow-card ssr>
+						<h2 slot="heading">Ada Lovelace</h2>
+						<p>Wrote the first algorithm.</p>
+						<span slot="badges">1843</span>
+					</shadow-card>
+				</section>
+			</div>
+
+			<script>
+				//classic and inline, so it runs at parse position: a module script is deferred, and this
+				//is the last moment the server's markup and its nodes are still untouched
+				window.beforeUpgrade = Object.fromEntries(
+					["light-card", "shadow-card"].map((tag) => {
+						const host = document.querySelector(tag);
+						const mutations = [];
+						const observer = new MutationObserver((records) =>
+							mutations.push(...records),
+						);
+						const watched = { childList: true, subtree: true, characterData: true };
+						observer.observe(host, watched);
+						//a declarative shadow root is already parsed here and a MutationObserver does not
+						//cross into one, so the shadow card needs its own
+						if (host.shadowRoot) observer.observe(host.shadowRoot, watched);
+						return [
+							tag,
+							{
+								//split, because a shadow host's outerHTML stops at the boundary and the
+								//declarative shadow root it was parsed from is already gone from the markup
+								hostMarkup: host.outerHTML,
+								renderMarkup: host.shadowRoot
+									? host.shadowRoot.innerHTML
+									: host.innerHTML,
+								heading: host.querySelector("[slot=heading]"),
+								mutations,
+							},
+						];
+					}),
+				);
+			</script>
+
+			<label for="reached-by-a-label">a label outside the component</label>
+
+			<table id="results">
+				<thead>
+					<tr>
+						<th>rule</th>
+						<th>claim</th>
+						<th>light</th>
+						<th>shadow</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+			<button id="rerun">re-run the checks</button>
+		</main>
+	</body>
+</html>

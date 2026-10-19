@@ -142,202 +142,202 @@ customElements.define(
 			>
 		`;
 
-		try {
-			yield () => {
-				const bars = phases.map((phase, index) => computeBar(phase, index));
+		yield function* view() {
+			const bars = phases.map((phase, index) => computeBar(phase, index));
 
-				return html`
-					<style>
-						:host {
-							display: block;
-							font: 12px monospace;
-						}
-
-						button {
-							padding: 6px 12px;
-							font: inherit;
-							cursor: pointer;
-						}
-
-						button[disabled] {
-							opacity: 0.6;
-							cursor: progress;
-						}
-
-						.controls {
-							display: flex;
-							gap: 8px;
-							align-items: center;
-						}
-
-						.grid {
-							display: grid;
-							grid-template-columns: max-content 1fr;
-							gap: 4px 16px;
-							margin: 12px 0;
-						}
-
-						.delta {
-							margin-left: 8px;
-						}
-
-						.regress {
-							color: #b00020;
-						}
-
-						.improve {
-							color: #006a2b;
-						}
-
-						.bar {
-							height: 8px;
-							margin: 1px 0;
-						}
-
-						.row {
-							display: grid;
-							grid-template-columns: 40px 1fr 64px;
-							gap: 4px;
-							align-items: center;
-						}
-					</style>
-
-					<div class="controls">
-						<button onclick="${measure}" disabled="${isMeasuring}">
-							${isMeasuring ? "measuring…" : "measure"}
-						</button>
-						<label>
-							duration:
-							<input
-								type="number"
-								min="100"
-								step="100"
-								value="${durationMs}"
-								disabled="${isMeasuring}"
-								oninput="${(event: Event) => {
-									const next = Number((event.target as HTMLInputElement).value);
-									if (Number.isFinite(next) && next > 0) durationMs = next;
-								}}"
-							/>
-							ms
-						</label>
-						<span>${barCount} bars</span>
-						<button
-							onclick="${promoteToBaseline}"
-							disabled="${!result || isMeasuring}"
-						>
-							save as baseline
-						</button>
-						<button
-							onclick="${dropBaseline}"
-							disabled="${!baseline || isMeasuring}"
-						>
-							clear baseline
-						</button>
-						${
-							baseline
-								? html`<span>baseline ${baseline.capturedAt}</span>`
-								: html`<span>no baseline</span>`
-						}
-					</div>
-
-					${
-						result
-							? (() => {
-									const base = baseline?.value;
-									const { observed, driven } = result;
-									return html`
-										<div class="grid">
-											${metricRow("fps", formatNumber(observed.framesPerSecond), "", "")}
-											${metricRow(
-												"median frame",
-												`${formatNumber(observed.medianFrameMs, 3)} ms`,
-												"",
-												"",
-											)}
-											${metricRow("frames", String(observed.frames), "", "")}
-											${metricRow(
-												"observed writes / frame",
-												formatNumber(observed.mutationsPerFrame),
-												"",
-												"",
-											)}
-											${metricRow(
-												"heap delta",
-												observed.heapDeltaMb !== null
-													? `${formatNumber(observed.heapDeltaMb)} MB`
-													: "n/a",
-												"",
-												"",
-											)}
-											${metricRow(
-												"min update",
-												`${formatNumber(driven.minAppliedMs, 3)} ms`,
-												base
-													? formatDelta(
-															driven.minAppliedMs,
-															base.driven.minAppliedMs,
-														)
-													: "",
-												base
-													? classWhenLowerIsBetter(
-															driven.minAppliedMs,
-															base.driven.minAppliedMs,
-														)
-													: "",
-											)}
-											${metricRow(
-												"median update",
-												`${formatNumber(driven.medianAppliedMs, 3)} ms`,
-												"",
-												"",
-											)}
-											${metricRow(
-												"frames to paint",
-												String(driven.medianPaintedFrames),
-												"",
-												"",
-											)}
-											${metricRow(
-												"writes / update",
-												String(driven.medianMutations),
-												base
-													? formatDelta(
-															driven.medianMutations,
-															base.driven.medianMutations,
-														)
-													: "",
-												base
-													? classWhenLowerIsBetter(
-															driven.medianMutations,
-															base.driven.medianMutations,
-														)
-													: "",
-											)}
-										</div>
-									`;
-								})()
-							: html``
+			yield html`
+				<style>
+					:host {
+						display: block;
+						font: 12px monospace;
 					}
 
-					<div class="bars">
-						${bars.map(
-							(bar) => html`
-								<div class="row">
-									<span>${formatLabel(bar.index)}</span>
-									<div
-										class="bar"
-										style="width:${bar.width}%;background:hsl(${bar.hue},70%,${bar.lightness}%);opacity:${bar.opacity}"
-									></div>
-									<span>${bar.counter}</span>
-								</div>
-							`,
-						)}
-					</div>
-				`;
-			};
-		} finally {
+					button {
+						padding: 6px 12px;
+						font: inherit;
+						cursor: pointer;
+					}
+
+					button[disabled] {
+						opacity: 0.6;
+						cursor: progress;
+					}
+
+					.controls {
+						display: flex;
+						gap: 8px;
+						align-items: center;
+					}
+
+					.grid {
+						display: grid;
+						grid-template-columns: max-content 1fr;
+						gap: 4px 16px;
+						margin: 12px 0;
+					}
+
+					.delta {
+						margin-left: 8px;
+					}
+
+					.regress {
+						color: #b00020;
+					}
+
+					.improve {
+						color: #006a2b;
+					}
+
+					.bar {
+						height: 8px;
+						margin: 1px 0;
+					}
+
+					.row {
+						display: grid;
+						grid-template-columns: 40px 1fr 64px;
+						gap: 4px;
+						align-items: center;
+					}
+				</style>
+
+				<div class="controls">
+					<button onclick="${measure}" disabled="${isMeasuring}">
+						${isMeasuring ? "measuring…" : "measure"}
+					</button>
+					<label>
+						duration:
+						<input
+							type="number"
+							min="100"
+							step="100"
+							value="${durationMs}"
+							disabled="${isMeasuring}"
+							oninput="${(event: Event) => {
+								const next = Number((event.target as HTMLInputElement).value);
+								if (Number.isFinite(next) && next > 0) durationMs = next;
+							}}"
+						/>
+						ms
+					</label>
+					<span>${barCount} bars</span>
+					<button
+						onclick="${promoteToBaseline}"
+						disabled="${!result || isMeasuring}"
+					>
+						save as baseline
+					</button>
+					<button
+						onclick="${dropBaseline}"
+						disabled="${!baseline || isMeasuring}"
+					>
+						clear baseline
+					</button>
+					${
+						baseline
+							? html`<span>baseline ${baseline.capturedAt}</span>`
+							: html`<span>no baseline</span>`
+					}
+				</div>
+
+				${
+					result
+						? (() => {
+								const base = baseline?.value;
+								const { observed, driven } = result;
+								return html`
+									<div class="grid">
+										${metricRow("fps", formatNumber(observed.framesPerSecond), "", "")}
+										${metricRow(
+											"median frame",
+											`${formatNumber(observed.medianFrameMs, 3)} ms`,
+											"",
+											"",
+										)}
+										${metricRow("frames", String(observed.frames), "", "")}
+										${metricRow(
+											"observed writes / frame",
+											formatNumber(observed.mutationsPerFrame),
+											"",
+											"",
+										)}
+										${metricRow(
+											"heap delta",
+											observed.heapDeltaMb !== null
+												? `${formatNumber(observed.heapDeltaMb)} MB`
+												: "n/a",
+											"",
+											"",
+										)}
+										${metricRow(
+											"min update",
+											`${formatNumber(driven.minAppliedMs, 3)} ms`,
+											base
+												? formatDelta(
+														driven.minAppliedMs,
+														base.driven.minAppliedMs,
+													)
+												: "",
+											base
+												? classWhenLowerIsBetter(
+														driven.minAppliedMs,
+														base.driven.minAppliedMs,
+													)
+												: "",
+										)}
+										${metricRow(
+											"median update",
+											`${formatNumber(driven.medianAppliedMs, 3)} ms`,
+											"",
+											"",
+										)}
+										${metricRow(
+											"frames to paint",
+											String(driven.medianPaintedFrames),
+											"",
+											"",
+										)}
+										${metricRow(
+											"writes / update",
+											String(driven.medianMutations),
+											base
+												? formatDelta(
+														driven.medianMutations,
+														base.driven.medianMutations,
+													)
+												: "",
+											base
+												? classWhenLowerIsBetter(
+														driven.medianMutations,
+														base.driven.medianMutations,
+													)
+												: "",
+										)}
+									</div>
+								`;
+							})()
+						: html``
+				}
+
+				<div class="bars">
+					${bars.map(
+						(bar) => html`
+							<div class="row">
+								<span>${formatLabel(bar.index)}</span>
+								<div
+									class="bar"
+									style="width:${bar.width}%;background:hsl(${bar.hue},70%,${bar.lightness}%);opacity:${bar.opacity}"
+								></div>
+								<span>${bar.counter}</span>
+							</div>
+						`,
+					)}
+				</div>
+			`;
+		};
+
+		return () => {
 			animating = false;
-		}
+		};
 	}),
 );

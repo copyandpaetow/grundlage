@@ -1,4 +1,4 @@
-// The executable form of the "Measuring" contract in lib/CONVENTIONS.md.
+// The executable form of the "Measuring" contract in lib/STYLE_GUIDE.md.
 //
 // One shared way to measure, so a "win" is never an artifact. Every probe
 // reports the same four numbers per operation/frame:
