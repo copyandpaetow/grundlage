@@ -5,6 +5,8 @@ import { component, html } from "../../../lib/src";
 customElements.define(
 	"ssr-isolated-probe",
 	component(function* () {
-		yield () => html`<p>${greeting}</p>`;
+		yield function* view() {
+			yield html`<p>${greeting}</p>`;
+		};
 	}),
 );

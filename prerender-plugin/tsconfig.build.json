@@ -1,4 +1,4 @@
 {
 	"extends": "./tsconfig.json",
-	"include": ["index.ts", "ssr-render.ts"]
+	"include": ["index.ts", "ssr-render.ts", "scan.ts", "page-scripts.ts"]
 }

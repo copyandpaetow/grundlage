@@ -1,342 +1,296 @@
-import { dirname, resolve } from "node:path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, test, vi } from "vitest";
+import { createServer, normalizePath, type Plugin } from "vite";
+import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { TAGS } from "./__fixtures__/tags";
-import { prerenderWebcomponents } from "./index";
-import { closeModuleLoaderServers } from "./ssr-render";
+import { prerenderWebcomponents, type PrerenderOptions } from "./index";
+import {
+	closeModuleLoaderServers,
+	closeServerRealm,
+	markServerRealmStale,
+} from "./ssr-render";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const fixtureModulePattern = "prerender-plugin/__fixtures__/components.ts";
+const fixturesDirectory = resolve(repoRoot, "prerender-plugin/__fixtures__");
+const fixturePage = resolve(fixturesDirectory, "index.html");
+const pageScript = `<script type="module" src="/prerender-plugin/__fixtures__/page-script.ts"></script>`;
+const brokenPageScript = `<script type="module" src="/prerender-plugin/__fixtures__/broken-page-script.ts"></script>`;
 
-//the fixture components are files on disk: the plugin discovers them by glob and loads them
-//through vite, exactly as it does in a real project
-const buildPlugin = (
-	overrides: {
-		sentinel?: string;
-		firstYieldTimeoutMs?: number;
-		root?: string;
-		configFile?: string;
-		componentLoader?: "project-config" | "isolated";
-		include?: Array<string>;
-		exclude?: Array<string>;
-	} = {},
-) => {
-	const plugin = prerenderWebcomponents({
-		include:
-			"include" in overrides ? overrides.include : [fixtureModulePattern],
-		exclude: overrides.exclude,
-		componentLoader: overrides.componentLoader,
-		sentinelAttribute: overrides.sentinel,
-		firstYieldTimeoutMs: overrides.firstYieldTimeoutMs,
-	});
-	(plugin.configResolved as (config: unknown) => void).call(undefined, {
-		root: overrides.root ?? repoRoot,
-		configFile: overrides.configFile,
-		resolve: {},
-	});
-	return plugin;
+const pageWith = (body: string, head = pageScript) =>
+	`<html><head>${head}</head><body>${body}</body></html>`;
+
+//the plugin's hooks run on their own, the way vite calls them for one page of a build; the
+//fixture components are files on disk, loaded through vite exactly as in a real project
+const buildPlugins = (
+	options: PrerenderOptions = {},
+	project: { root?: string; configFile?: string } = {},
+): Array<Plugin> => {
+	const plugins = prerenderWebcomponents(options);
+	for (const plugin of plugins) {
+		const configResolved = plugin.configResolved as
+			((config: unknown) => void) | undefined;
+		configResolved?.call(undefined, {
+			root: project.root ?? repoRoot,
+			configFile: project.configFile,
+			resolve: {},
+		});
+	}
+	return plugins;
 };
 
+//every transformIndexHtml hook in plugin order, in both shapes vite accepts: function or `{ handler }`
+const runTransform = async (
+	plugins: Array<Plugin>,
+	html: string,
+	page = fixturePage,
+): Promise<string> => {
+	let output = html;
+	for (const plugin of plugins) {
+		const hook = plugin.transformIndexHtml;
+		if (hook === undefined) continue;
+		const handler = (typeof hook === "function" ? hook : hook.handler) as (
+			html: string,
+			context: { filename: string },
+		) => Promise<unknown> | unknown;
+		const result = await handler.call(undefined, output, { filename: page });
+		if (typeof result === "string") output = result;
+	}
+	return output;
+};
+
+const countOf = (text: string, pattern: RegExp) =>
+	(text.match(pattern) ?? []).length;
+
+//a fresh realm per test: nothing defined, nothing warned about yet
+beforeEach(() => {
+	markServerRealmStale();
+});
+
 afterAll(async () => {
+	await closeServerRealm();
 	await closeModuleLoaderServers();
 });
 
-//handles both shapes vite exposes for transformIndexHtml — function or `{ handler }`
-const runTransform = async (
-	plugin: ReturnType<typeof prerenderWebcomponents>,
-	html: string,
-): Promise<string> => {
-	const hook = plugin.transformIndexHtml;
-	const handler =
-		typeof hook === "function"
-			? hook
-			: (hook as { handler: (input: string) => Promise<string | undefined> })
-					.handler;
-	const result = await (handler as (input: string) => Promise<unknown>).call(
-		undefined,
-		html,
-	);
-	return typeof result === "string" ? result : html;
-};
-
-describe("prerender plugin: sentinel-attribute scan", () => {
-	test("page without any registered tag is returned unchanged (fast path)", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><nav-bar></nav-bar><p>plain</p></body></html>`;
-		const output = await runTransform(plugin, input);
-		expect(output).toBe(input);
-	});
-
-	test("registered tag without the sentinel attribute is left alone", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.unmarked}></${TAGS.unmarked}></body></html>`;
-		const output = await runTransform(plugin, input);
-		expect(output).not.toContain("shadowrootmode");
-		expect(output).not.toContain("unmarked-rendered");
-		expect(output).toContain(`<${TAGS.unmarked}></${TAGS.unmarked}>`);
-	});
-
-	test("element with sentinel gets its first yield serialized inline", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.simple} ssr></${TAGS.simple}></body></html>`;
-		const output = await runTransform(plugin, input);
+describe("prerender plugin: pages", () => {
+	test("every page prerenders when no include is given", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.simple}></${TAGS.simple}>`),
+		);
 
 		expect(output).toContain("shadowrootmode");
 		expect(output).toContain("simple-first");
 		expect(output).not.toContain("simple-second");
 	});
 
-	test("host attributes survive into the rendered output", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.withAttrs} ssr data-label="hello"></${TAGS.withAttrs}></body></html>`;
-		const output = await runTransform(plugin, input);
+	test("an excluded page is left alone", async () => {
+		const input = pageWith(`<${TAGS.simple}></${TAGS.simple}>`);
+		const output = await runTransform(
+			buildPlugins({ exclude: ["prerender-plugin/__fixtures__/dashboard/**"] }),
+			input,
+			resolve(fixturesDirectory, "dashboard/index.html"),
+		);
 
-		//`hello` is split from `label=` by content-binding marker comments, so we check the value rather than the raw `label=hello` slice
-		expect(output).toContain("hello");
-		expect(output).toContain(`data-label="hello"`);
-		//shadowrootmode proves the prerender happened, not just attribute pass-through
-		expect(output).toContain("shadowrootmode");
+		expect(output).toBe(input);
 	});
 
-	test("async work before the first yield resolves and lands in the output", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.asyncPreYield} ssr></${TAGS.asyncPreYield}></body></html>`;
-		const output = await runTransform(plugin, input);
+	test("include limits prerendering to the pages it matches", async () => {
+		const plugins = buildPlugins({
+			include: ["prerender-plugin/__fixtures__/blog/**"],
+		});
+		const input = pageWith(`<${TAGS.simple}></${TAGS.simple}>`);
 
-		expect(output).toContain("resolved-value");
+		expect(await runTransform(plugins, input)).toBe(input);
+		expect(
+			await runTransform(
+				plugins,
+				input,
+				resolve(fixturesDirectory, "blog/index.html"),
+			),
+		).toContain("simple-first");
 	});
 
-	test("attribute names that contain the sentinel as a substring do not trigger SSR", async () => {
-		//`data-ssr`, `nossr`, `ssrcheck` must NOT match — only a standalone `ssr`
-		const plugin = buildPlugin();
-		const input = `<html><body>
-			<${TAGS.falsePositive} data-ssr></${TAGS.falsePositive}>
-			<${TAGS.falsePositive} nossr></${TAGS.falsePositive}>
-			<${TAGS.falsePositive} ssrcheck></${TAGS.falsePositive}>
-		</body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).not.toContain("should-not-render");
-		expect(output).not.toContain("shadowrootmode");
-	});
-
-	test("multiple opted-in instances of the same tag each get rendered with their own attributes", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body>
-			<${TAGS.multiInstance} ssr data-id="alpha"></${TAGS.multiInstance}>
-			<${TAGS.multiInstance} ssr data-id="beta"></${TAGS.multiInstance}>
-		</body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).toContain(">alpha<");
-		expect(output).toContain(">beta<");
-		const shadowMatches = output.match(/shadowrootmode/g) ?? [];
-		expect(shadowMatches.length).toBe(2);
-	});
-
-	test("opted-in and opted-out instances on the same page render independently", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body>
-			<${TAGS.multiInstance} ssr data-id="server"></${TAGS.multiInstance}>
-			<${TAGS.multiInstance} data-id="client"></${TAGS.multiInstance}>
-		</body></html>`;
-		const output = await runTransform(plugin, input);
+	test("an empty include prerenders no page, and ssr still opts an element in", async () => {
+		const output = await runTransform(
+			buildPlugins({ include: [] }),
+			pageWith(
+				`<${TAGS.multiInstance} data-id="client"></${TAGS.multiInstance}><${TAGS.multiInstance} ssr data-id="server"></${TAGS.multiInstance}>`,
+			),
+		);
 
 		expect(output).toContain(">server<");
-		//the client-only instance survives but its content is not inlined
 		expect(output).not.toContain(">client<");
-		expect(output).toContain(`data-id="client"`);
-		const shadowMatches = output.match(/shadowrootmode/g) ?? [];
-		expect(shadowMatches.length).toBe(1);
+		expect(countOf(output, /shadowrootmode/g)).toBe(1);
 	});
 
-	test("custom sentinel attribute name is honoured", async () => {
-		const plugin = buildPlugin({ sentinel: "prerender" });
-		const input = `<html><body>
-			<${TAGS.customSentinel} prerender></${TAGS.customSentinel}>
-			<${TAGS.customSentinel} ssr></${TAGS.customSentinel}>
-		</body></html>`;
-		const output = await runTransform(plugin, input);
-
-		//`prerender` renders; `ssr` does not (plugin was built with a different sentinel)
-		const shadowMatches = output.match(/shadowrootmode/g) ?? [];
-		expect(shadowMatches.length).toBe(1);
-		expect(output).toContain("custom-rendered");
-	});
-
-	test("sentinel attribute survives serialization onto the host", async () => {
-		//the sentinel doubles as the hydrate-side signal — client code branches on host.hasAttribute("ssr")
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.noSentinel} ssr></${TAGS.noSentinel}></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).toContain("ssr");
-		expect(output).toContain("no-sentinel-rendered");
-	});
-
-	test("a component using web APIs beyond the core DOM subset still renders", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.wideWebApi} ssr></${TAGS.wideWebApi}></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).toContain("shadowrootmode");
-		expect(output).toContain("display=");
-	});
-
-	test("attribute values may be single-quoted or contain `>`", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.quotedAttrs} ssr data-expr="a > b" data-note='hi there'></${TAGS.quotedAttrs}></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).toContain("shadowrootmode");
-		expect(output).toContain("a &gt; b");
-		expect(output).toContain("hi there");
-	});
-
-	test("a closed-root component is skipped fast (not prerendered) with a closed-specific warning", async () => {
+	test("an excluded page without ssr loads nothing", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		//large timeout: the test only stays fast if closed detection short-circuits instead of polling to the deadline
-		const plugin = buildPlugin({ firstYieldTimeoutMs: 4000 });
-		const input = `<html><body><${TAGS.closedRoot} ssr></${TAGS.closedRoot}></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).not.toContain("shadowrootmode");
-		expect(output).not.toContain("closed-rendered");
-		expect(output).toContain(`<${TAGS.closedRoot} ssr></${TAGS.closedRoot}>`);
-		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining("closed shadow root"),
+		//the page script imports a module that throws on load: silence proves nothing was loaded
+		const input = pageWith(
+			`<${TAGS.simple}></${TAGS.simple}>`,
+			brokenPageScript,
 		);
-		warn.mockRestore();
-	});
-
-	test("a component that never reaches its first yield is left for client render, with a warning", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const plugin = buildPlugin({ firstYieldTimeoutMs: 60 });
-		const input = `<html><body><${TAGS.neverYields} ssr></${TAGS.neverYields}></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).not.toContain("shadowrootmode");
-		expect(output).toContain(`<${TAGS.neverYields} ssr></${TAGS.neverYields}>`);
-		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining(`<${TAGS.neverYields}>`),
-		);
-		warn.mockRestore();
-	});
-});
-
-describe("prerender plugin: component discovery", () => {
-	test("with no include, every source file under the root is scanned", async () => {
-		const plugin = buildPlugin({
-			root: resolve(repoRoot, "prerender-plugin/__fixtures__/default-scan"),
-			include: undefined,
-		});
-		const input = `<html><body><ssr-default-scan ssr></ssr-default-scan></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).toContain("shadowrootmode");
-		expect(output).toContain("default-scan-rendered");
-	});
-
-	test("an excluded module is not loaded, so its component stays client-rendered", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const plugin = buildPlugin({
-			include: [
-				fixtureModulePattern,
-				"prerender-plugin/__fixtures__/excluded-component.ts",
-			],
-			exclude: ["**/excluded-component.ts"],
-		});
-		const input = `<html><body><${TAGS.excluded} ssr></${TAGS.excluded}></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).toBe(input);
-		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining(`<${TAGS.excluded}>`),
-		);
-		warn.mockRestore();
-	});
-
-	test("a marked tag that no scanned module defines warns and is left for the client", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.undefinedTag} ssr></${TAGS.undefinedTag}></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		expect(output).toBe(input);
-		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining(`no scanned module defines`),
-		);
-		warn.mockRestore();
-	});
-
-	test("a page with no marked element loads nothing", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		//the include names a module that throws on import — silence proves the scan short-circuited first
-		const plugin = buildPlugin({
-			include: [
-				fixtureModulePattern,
-				"prerender-plugin/__fixtures__/broken/throws-on-load.ts",
-			],
-		});
-		const input = `<html><body><${TAGS.simple}></${TAGS.simple}></body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(buildPlugins({ include: [] }), input);
 
 		expect(output).toBe(input);
 		expect(warn).not.toHaveBeenCalled();
 		warn.mockRestore();
 	});
 
-	test("the project config is re-run for the loader, so its plugins transform component modules", async () => {
-		const projectRoot = resolve(
-			repoRoot,
-			"prerender-plugin/__fixtures__/project-config",
-		);
-		const plugin = buildPlugin({
-			root: projectRoot,
-			configFile: resolve(projectRoot, "vite.config.ts"),
-			include: ["greeting-component.ts"],
-		});
-		const input = `<html><body><ssr-greeting ssr></ssr-greeting></body></html>`;
-		const output = await runTransform(plugin, input);
-
-		//the import only resolves through the fixture config's own plugin
-		expect(output).toContain("greetings from a project plugin");
-		expect(output).toContain("shadowrootmode");
-	});
-
-	test("componentLoader `isolated` skips the project config, so its plugins do not apply", async () => {
+	test("a page without custom elements loads nothing", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const projectRoot = resolve(
-			repoRoot,
-			"prerender-plugin/__fixtures__/project-config",
-		);
-		const plugin = buildPlugin({
-			root: projectRoot,
-			configFile: resolve(projectRoot, "vite.config.ts"),
-			componentLoader: "isolated",
-			include: ["isolated-probe-component.ts"],
-		});
-		const input = `<html><body><ssr-isolated-probe ssr></ssr-isolated-probe></body></html>`;
-		const output = await runTransform(plugin, input);
+		const input = pageWith(`<p>plain</p>`, brokenPageScript);
+		const output = await runTransform(buildPlugins(), input);
 
 		expect(output).toBe(input);
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+});
+
+describe("prerender plugin: the ssr attribute", () => {
+	test(`ssr="false" leaves an element for the client on a prerendered page`, async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.optedOut} ssr="false"></${TAGS.optedOut}><${TAGS.simple}></${TAGS.simple}>`,
+			),
+		);
+
+		expect(output).toContain(
+			`<${TAGS.optedOut} ssr="false"></${TAGS.optedOut}>`,
+		);
+		expect(output).not.toContain("opted-out-rendered");
+		expect(output).toContain("simple-first");
+	});
+
+	test(`ssr="false" on the body leaves the page for the client, and ssr inside opts back in`, async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			`<html><head>${pageScript}</head><body ssr="false"><${TAGS.multiInstance} data-id="client"></${TAGS.multiInstance}><${TAGS.multiInstance} ssr data-id="server"></${TAGS.multiInstance}></body></html>`,
+		);
+
+		expect(output).toContain(">server<");
+		expect(output).not.toContain(">client<");
+	});
+
+	test(`ssr on the html element prerenders a page no include matches`, async () => {
+		const output = await runTransform(
+			buildPlugins({ include: [] }),
+			`<html ssr><head>${pageScript}</head><body><${TAGS.simple}></${TAGS.simple}></body></html>`,
+		);
+
+		expect(output).toContain("simple-first");
+	});
+
+	test("an element inherits from the custom element around it, and its own ssr wins", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotted} ssr="false"><${TAGS.multiInstance} data-id="inherits"></${TAGS.multiInstance}><${TAGS.multiInstance} ssr data-id="own"></${TAGS.multiInstance}></${TAGS.slotted}>`,
+			),
+		);
+
+		expect(output).not.toContain(`class="wrap"`);
+		expect(output).not.toContain(">inherits<");
+		expect(output).toContain(">own<");
+		expect(countOf(output, /shadowrootmode/g)).toBe(1);
+	});
+
+	test(`ssr="true" opts in like ssr`, async () => {
+		const output = await runTransform(
+			buildPlugins({ include: [] }),
+			pageWith(`<${TAGS.simple} ssr="true"></${TAGS.simple}>`),
+		);
+
+		expect(output).toContain("simple-first");
+	});
+
+	test("a value the plugin does not read fails with the two that work", async () => {
+		await expect(
+			runTransform(
+				buildPlugins(),
+				pageWith(`<${TAGS.simple} ssr="no"></${TAGS.simple}>`),
+			),
+		).rejects.toThrow(/ssr="no" on <ssr-simple>.*ssr="false"/);
+	});
+
+	test("attributes that only contain ssr in their name or value are not the attribute", async () => {
+		const input = pageWith(`
+			<${TAGS.falsePositive} data-ssr></${TAGS.falsePositive}>
+			<${TAGS.falsePositive} nossr></${TAGS.falsePositive}>
+			<${TAGS.falsePositive} ssrcheck></${TAGS.falsePositive}>
+			<${TAGS.falsePositive} title="no ssr here"></${TAGS.falsePositive}>
+		`);
+		const output = await runTransform(buildPlugins({ include: [] }), input);
+
+		expect(output).toBe(input);
+	});
+});
+
+describe("prerender plugin: page scripts", () => {
+	test("a tag no module of the page defines warns once and is left for the client", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		//the inline-imported fixture exists, but only an inline script imports it
+		const input = pageWith(
+			`<${TAGS.inlineImported}></${TAGS.inlineImported}><${TAGS.inlineImported}></${TAGS.inlineImported}>`,
+		);
+		const output = await runTransform(buildPlugins(), input);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledTimes(1);
 		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining("isolated-probe-component.ts"),
-			expect.anything(),
+			expect.stringContaining(
+				`no module the page imports defines <${TAGS.inlineImported}>`,
+			),
 		);
 		warn.mockRestore();
 	});
 
+	test("what an inline module script imports is loaded", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.inlineImported}></${TAGS.inlineImported}>`,
+				`<script type="module">import "./inline-imported-component";</script>`,
+			),
+		);
+
+		expect(output).toContain("inline-imported-rendered");
+	});
+
+	test("a script src is resolved against the page", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.simple}></${TAGS.simple}>`,
+				`<script type="module" src="./page-script.ts"></script>`,
+			),
+		);
+
+		expect(output).toContain("simple-first");
+	});
+
+	test("the page script's own body never runs on the server", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.simple}></${TAGS.simple}>`),
+		);
+
+		expect(output).toContain("simple-first");
+		expect(
+			(globalThis as { pageScriptBodyRan?: boolean }).pageScriptBodyRan,
+		).toBeUndefined();
+	});
+
 	test("a module that throws on import warns, and the other components still render", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const plugin = buildPlugin({
-			include: [
-				fixtureModulePattern,
-				"prerender-plugin/__fixtures__/broken/throws-on-load.ts",
-			],
-		});
-		const input = `<html><body><${TAGS.simple} ssr></${TAGS.simple}></body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.simple}></${TAGS.simple}>`, brokenPageScript),
+		);
 
 		expect(output).toContain("simple-first");
 		expect(warn).toHaveBeenCalledWith(
@@ -345,13 +299,405 @@ describe("prerender plugin: component discovery", () => {
 		);
 		warn.mockRestore();
 	});
+
+	test("classic, external and commented-out scripts are not page modules", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		//each of these would import the module that throws on load, or ask vite for a url it cannot serve
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.simple}></${TAGS.simple}>`,
+				`${pageScript}<script src="/prerender-plugin/__fixtures__/broken-page-script.ts"></script><script type="module" src="https://cdn.example/elements.js"></script><!-- ${brokenPageScript} -->`,
+			),
+		);
+
+		expect(output).toContain("simple-first");
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	test("a tag one page leaves undefined is prerendered on a page that imports it", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const plugins = buildPlugins();
+		const body = `<${TAGS.inlineImported}></${TAGS.inlineImported}>`;
+
+		await runTransform(plugins, pageWith(body));
+		const output = await runTransform(
+			plugins,
+			pageWith(
+				body,
+				`<script type="module">import "./inline-imported-component";</script>`,
+			),
+		);
+
+		expect(output).toContain("inline-imported-rendered");
+		warn.mockRestore();
+	});
+
+	test("a component from a package is still defined after the realm is replaced", async () => {
+		const projectRoot = await mkdtemp(join(tmpdir(), "prerender-package-"));
+		const packageDirectory = join(projectRoot, "node_modules/fixture-elements");
+		await mkdir(packageDirectory, { recursive: true });
+		await writeFile(
+			join(packageDirectory, "package.json"),
+			`{ "name": "fixture-elements", "type": "module", "exports": "./index.js" }`,
+		);
+		//extends the HTMLElement of the realm it is evaluated in, like every packaged component
+		await writeFile(
+			join(packageDirectory, "index.js"),
+			`customElements.define("package-card", class extends HTMLElement {\n\tconstructor() { super(); this.attachShadow({ mode: "open", serializable: true }); }\n\tconnectedCallback() { this.shadowRoot.innerHTML = "<i>package-card</i>"; }\n});\n`,
+		);
+		//one module away from the page, the way a project's own code imports a component library:
+		//vite always runs what the page script imports directly, and hands deeper imports to node
+		await writeFile(
+			join(projectRoot, "card.ts"),
+			`import "fixture-elements";\n`,
+		);
+		await writeFile(join(projectRoot, "page.ts"), `import "./card";\n`);
+		const plugins = buildPlugins({}, { root: projectRoot });
+		const page = pageWith(
+			`<package-card></package-card>`,
+			`<script type="module" src="./page.ts"></script>`,
+		);
+		const pageFilename = join(projectRoot, "index.html");
+
+		try {
+			expect(await runTransform(plugins, page, pageFilename)).toContain(
+				"<i>package-card</i>",
+			);
+			markServerRealmStale();
+			expect(await runTransform(plugins, page, pageFilename)).toContain(
+				"<i>package-card</i>",
+			);
+		} finally {
+			await rm(projectRoot, { recursive: true, force: true });
+		}
+	});
+
+	test("the project config is re-run for the loader, so its plugins transform component modules", async () => {
+		const projectRoot = resolve(fixturesDirectory, "project-config");
+		const output = await runTransform(
+			buildPlugins(
+				{},
+				{
+					root: projectRoot,
+					configFile: resolve(projectRoot, "vite.config.ts"),
+				},
+			),
+			pageWith(
+				`<ssr-greeting></ssr-greeting>`,
+				`<script type="module" src="./page-script.ts"></script>`,
+			),
+			resolve(projectRoot, "index.html"),
+		);
+
+		//the import only resolves through the fixture config's own plugin
+		expect(output).toContain("greetings from a project plugin");
+		expect(output).toContain("shadowrootmode");
+	});
+
+	test("componentLoader `isolated` skips the project config, so its plugins do not apply", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const projectRoot = resolve(fixturesDirectory, "project-config");
+		const input = pageWith(
+			`<ssr-isolated-probe></ssr-isolated-probe>`,
+			`<script type="module" src="./isolated-page-script.ts"></script>`,
+		);
+		const output = await runTransform(
+			buildPlugins(
+				{ componentLoader: "isolated" },
+				{
+					root: projectRoot,
+					configFile: resolve(projectRoot, "vite.config.ts"),
+				},
+			),
+			input,
+			resolve(projectRoot, "index.html"),
+		);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("isolated-probe-component.ts"),
+			expect.anything(),
+		);
+		warn.mockRestore();
+	});
+});
+
+describe("prerender plugin: what a component paints", () => {
+	test("host attributes survive into the output", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.withAttrs} data-label="hello"></${TAGS.withAttrs}>`),
+		);
+
+		//`hello` is split from `label=` by content-binding marker comments, so we check the value rather than the raw `label=hello` slice
+		expect(output).toContain("hello");
+		expect(output).toContain(`data-label="hello"`);
+		expect(output).toContain("shadowrootmode");
+	});
+
+	test("async work before the first paint resolves and lands in the output", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.asyncPreYield}></${TAGS.asyncPreYield}>`),
+		);
+
+		expect(output).toContain("resolved-value");
+	});
+
+	test("instances of the same tag each paint with their own attributes", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`
+				<${TAGS.multiInstance} data-id="alpha"></${TAGS.multiInstance}>
+				<${TAGS.multiInstance} data-id="beta"></${TAGS.multiInstance}>
+			`),
+		);
+
+		expect(output).toContain(">alpha<");
+		expect(output).toContain(">beta<");
+		expect(countOf(output, /shadowrootmode/g)).toBe(2);
+	});
+
+	test("a component using web APIs beyond the core DOM subset still renders", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.wideWebApi}></${TAGS.wideWebApi}>`),
+		);
+
+		expect(output).toContain("shadowrootmode");
+		expect(output).toContain("display=");
+	});
+
+	test("attribute values may be single-quoted or contain `>`", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.quotedAttrs} data-expr="a > b" data-note='hi there'></${TAGS.quotedAttrs}>`,
+			),
+		);
+
+		expect(output).toContain("shadowrootmode");
+		expect(output).toContain("a &gt; b");
+		expect(output).toContain("hi there");
+	});
+
+	test("a component in another component's template paints into the shadow root that ships", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.paintsNestedChild}></${TAGS.paintsNestedChild}>`),
+		);
+
+		expect(output).toContain(
+			`<${TAGS.nestedChild}><template shadowrootmode="open" shadowrootdelegatesfocus="" shadowrootserializable="" shadowrootclonable=""><em>nested-rendered</em></template>`,
+		);
+	});
+
+	test("a shadow root ships with the delegatesFocus and clonable its component asked for", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotted}><${TAGS.rootWithoutFocusOrCloning}></${TAGS.rootWithoutFocusOrCloning}></${TAGS.slotted}>`,
+			),
+		);
+
+		expect(output).toContain(
+			`<${TAGS.slotted}><template shadowrootmode="open" shadowrootdelegatesfocus="" shadowrootserializable="" shadowrootclonable="">`,
+		);
+		expect(output).toContain(
+			`<${TAGS.rootWithoutFocusOrCloning}><template shadowrootmode="open" shadowrootserializable="">`,
+		);
+	});
+});
+
+describe("prerender plugin: what is left for the client", () => {
+	test("a closed-root component is skipped fast with a closed-specific warning", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		//large timeout: the test only stays fast if the closed root is seen before any waiting
+		const input = pageWith(`<${TAGS.closedRoot}></${TAGS.closedRoot}>`);
+		const output = await runTransform(
+			buildPlugins({ firstYieldTimeoutMs: 4000 }),
+			input,
+		);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("closed shadow root"),
+		);
+		warn.mockRestore();
+	});
+
+	test("a root that is not serializable leaves the source markup untouched, quietly when inherited", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const input = pageWith(
+			`<${TAGS.nonSerializableRoot}></${TAGS.nonSerializableRoot}>`,
+		);
+		const output = await runTransform(buildPlugins(), input);
+
+		expect(output).toBe(input);
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	test("a root that is not serializable warns when the element asks for ssr itself", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const input = pageWith(
+			`<${TAGS.nonSerializableRoot} ssr></${TAGS.nonSerializableRoot}>`,
+		);
+		const output = await runTransform(buildPlugins(), input);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("no serializable shadow root"),
+		);
+		warn.mockRestore();
+	});
+
+	test("a custom element without a shadow root is left alone without connecting it", async () => {
+		const input = pageWith(
+			`<${TAGS.withoutShadowRoot}></${TAGS.withoutShadowRoot}>`,
+		);
+		const output = await runTransform(
+			buildPlugins({ firstYieldTimeoutMs: 4000 }),
+			input,
+		);
+
+		expect(output).toBe(input);
+		expect(
+			(globalThis as { withoutShadowRootConnected?: boolean })
+				.withoutShadowRootConnected,
+		).toBeUndefined();
+	});
+
+	test("an element without a close tag is left alone", async () => {
+		const input = pageWith(`<${TAGS.simple}><p>never closed</p>`);
+		const output = await runTransform(buildPlugins(), input);
+
+		expect(output).toBe(input);
+	});
+
+	test("a component that never reaches its first paint is left for the client, with a warning", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const input = pageWith(`<${TAGS.neverYields}></${TAGS.neverYields}>`);
+		const output = await runTransform(
+			buildPlugins({ firstYieldTimeoutMs: 60 }),
+			input,
+		);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(
+				`<${TAGS.neverYields}> was still waiting after 60ms`,
+			),
+		);
+		warn.mockRestore();
+	});
+
+	test("an element that paints later without announcing a pending-task is left for the client, with no wait claimed", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const input = pageWith(
+			`<${TAGS.foreignLatePainter}></${TAGS.foreignLatePainter}>`,
+		);
+		const output = await runTransform(buildPlugins(), input);
+
+		expect(output).toBe(input);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(
+				`<${TAGS.foreignLatePainter}> painted nothing and had no open pending-task to wait for`,
+			),
+		);
+		warn.mockRestore();
+	});
+});
+
+describe("prerender plugin: a component that throws on the server", () => {
+	const thrower = `<${TAGS.throwsBeforePaint}></${TAGS.throwsBeforePaint}>`;
+
+	test("it ships without a shadow root, with one warning and nothing from the library", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`${thrower}${thrower}<${TAGS.simple}></${TAGS.simple}>`),
+		);
+
+		expect(countOf(output, new RegExp(thrower, "g"))).toBe(2);
+		expect(output).not.toContain("server-thrown");
+		expect(output).toContain("simple-first");
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(
+				`<${TAGS.throwsBeforePaint}> threw on the server`,
+			),
+			expect.objectContaining({ message: "server-thrown" }),
+		);
+		expect(error).not.toHaveBeenCalled();
+		warn.mockRestore();
+		error.mockRestore();
+	});
+
+	test("inside another component's template it is left for the client, and its sibling is not", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.throwerParent}></${TAGS.throwerParent}>`),
+		);
+
+		expect(output).toContain(thrower);
+		expect(output).toContain("nested-rendered");
+		expect(countOf(output, /shadowrootmode/g)).toBe(2);
+		warn.mockRestore();
+	});
+
+	test("a component in its light DOM still ships its own shadow root", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.throwsBeforePaint}><${TAGS.rootWithoutFocusOrCloning}></${TAGS.rootWithoutFocusOrCloning}></${TAGS.throwsBeforePaint}>`,
+			),
+		);
+
+		//the thrower's root asks for delegatesFocus and clonable and the child's for neither, so the
+		//child's template cannot pass with the thrower's attributes
+		expect(output).toContain(
+			`<${TAGS.throwsBeforePaint}><${TAGS.rootWithoutFocusOrCloning}><template shadowrootmode="open" shadowrootserializable="">`,
+		);
+		expect(output).toContain("without-focus-or-cloning-rendered");
+		warn.mockRestore();
+	});
+
+	test("a throw while it waits ends the wait at once, not at the timeout", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		//large timeout: the test only stays fast if the throw ends the wait
+		const output = await runTransform(
+			buildPlugins({ firstYieldTimeoutMs: 4000 }),
+			pageWith(`<${TAGS.rejectsBeforePaint}></${TAGS.rejectsBeforePaint}>`),
+		);
+
+		expect(output).toContain(
+			`<${TAGS.rejectsBeforePaint}></${TAGS.rejectsBeforePaint}>`,
+		);
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(
+				`<${TAGS.rejectsBeforePaint}> threw on the server`,
+			),
+			expect.objectContaining({ message: "server-rejected" }),
+		);
+		warn.mockRestore();
+	});
 });
 
 describe("prerender plugin: light-DOM children", () => {
 	test("light-DOM children survive alongside the declarative shadow root", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.slotted} ssr><h1>slotted heading</h1><p>slotted body</p></${TAGS.slotted}></body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotted}><h1>slotted heading</h1><p>slotted body</p></${TAGS.slotted}>`,
+			),
+		);
 
 		expect(output).toContain("shadowrootmode");
 		expect(output).toContain(`class="wrap"`);
@@ -365,68 +711,195 @@ describe("prerender plugin: light-DOM children", () => {
 	});
 
 	test("children are attached before the component mounts", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.slotCounting} ssr><span>a</span><span>b</span></${TAGS.slotCounting}></body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotCounting}><span>a</span><span>b</span></${TAGS.slotCounting}>`,
+			),
+		);
 
 		expect(output).toContain(">2<");
 	});
 
-	test("a registered component in the light DOM is prerendered with its parent", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.slotted} ssr><${TAGS.nestedChild}></${TAGS.nestedChild}></${TAGS.slotted}></body></html>`;
-		const output = await runTransform(plugin, input);
+	test("a component in the light DOM is prerendered with its parent", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotted}><${TAGS.nestedChild}></${TAGS.nestedChild}></${TAGS.slotted}>`,
+			),
+		);
 
 		expect(output).toContain("nested-rendered");
-		const shadowMatches = output.match(/shadowrootmode/g) ?? [];
-		expect(shadowMatches.length).toBe(2);
+		expect(countOf(output, /shadowrootmode/g)).toBe(2);
 	});
 
-	test("an element with children but no sentinel is left alone", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.unmarked}><p>kept</p></${TAGS.unmarked}></body></html>`;
-		const output = await runTransform(plugin, input);
+	test("a root that is not serializable stays out of the output inside a prerendered element", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotted}><${TAGS.nonSerializableRoot}></${TAGS.nonSerializableRoot}></${TAGS.slotted}>`,
+			),
+		);
 
-		expect(output).toBe(input);
+		expect(output).toContain(`class="wrap"`);
+		expect(output).not.toContain("non-serializable-rendered");
+	});
+
+	test("a component inside an element the page does not define is still prerendered", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.undefinedTag}><${TAGS.nestedChild}></${TAGS.nestedChild}></${TAGS.undefinedTag}>`,
+			),
+		);
+
+		expect(output).toContain(
+			`<${TAGS.undefinedTag}><${TAGS.nestedChild}><template shadowrootmode`,
+		);
+		warn.mockRestore();
 	});
 
 	test("nesting the same tag inside itself matches the outer close tag", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.selfNesting} ssr data-depth="outer"><${TAGS.selfNesting} data-depth="inner"></${TAGS.selfNesting}></${TAGS.selfNesting}><p>after</p></body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.selfNesting} data-depth="outer"><${TAGS.selfNesting} data-depth="inner"></${TAGS.selfNesting}></${TAGS.selfNesting}><p>after</p>`,
+			),
+		);
 
 		expect(output).toContain(">outer<");
 		expect(output).toContain(">inner<");
 		//the outer close tag ends the match — trailing markup is neither swallowed nor duplicated
-		expect(output.match(/<p>after<\/p>/g)?.length).toBe(1);
+		expect(countOf(output, /<p>after<\/p>/g)).toBe(1);
 	});
 
 	test("markup inside an HTML comment is not prerendered", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><!-- <${TAGS.commented} ssr></${TAGS.commented}> --></body></html>`;
-		const output = await runTransform(plugin, input);
+		const input = pageWith(`<!-- <${TAGS.commented}></${TAGS.commented}> -->`);
+		const output = await runTransform(buildPlugins(), input);
 
 		expect(output).toBe(input);
 	});
 
+	test("a component inside a <template> is not prerendered, a component named template-… is", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.templatePrefixed}></${TAGS.templatePrefixed}><template><${TAGS.simple}></${TAGS.simple}></template>`,
+			),
+		);
+
+		expect(output).toContain(
+			`<template><${TAGS.simple}></${TAGS.simple}></template>`,
+		);
+		expect(output).toContain("template-prefixed-rendered");
+	});
+
 	test("a close tag inside a script does not end the element early", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.slotted} ssr><script type="text/template">\`</${TAGS.slotted}>\`</script><p>real child</p></${TAGS.slotted}></body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotted}><script type="text/template">\`</${TAGS.slotted}>\`</script><p>real child</p></${TAGS.slotted}>`,
+			),
+		);
 
 		expect(output).toContain("shadowrootmode");
 		expect(output).toContain("<p>real child</p>");
 	});
 });
 
+describe("prerender plugin: components a paint creates", () => {
+	test("a nested child that waits before its first paint ships painted, and so does its own", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.waitsForChild}></${TAGS.waitsForChild}>`),
+		);
+
+		expect(output).toContain(">waiting-child-1<");
+		expect(output).toContain(">waiting-child-2<");
+		expect(countOf(output, /shadowrootmode/g)).toBe(3);
+	});
+
+	test(`ssr="false" in a template leaves that child for the client, and ssr inside opts back in`, async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.optsChildrenOut}></${TAGS.optsChildrenOut}>`),
+		);
+
+		expect(output).toContain(
+			`<${TAGS.optedOut} ssr="false"></${TAGS.optedOut}>`,
+		);
+		expect(output).not.toContain("opted-out-rendered");
+		expect(output).toContain(`<${TAGS.nestedChild}></${TAGS.nestedChild}>`);
+		expect(output).toContain(">opted-back-in<");
+		expect(countOf(output, /shadowrootmode/g)).toBe(2);
+	});
+
+	test(`ssr="false" on a light-DOM child of a prerendered root leaves that child for the client`, async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotted}><${TAGS.optedOut} ssr="false"></${TAGS.optedOut}></${TAGS.slotted}>`,
+			),
+		);
+
+		expect(output).toContain(`class="wrap"`);
+		expect(output).toContain(
+			`<${TAGS.optedOut} ssr="false"></${TAGS.optedOut}>`,
+		);
+		expect(output).not.toContain("opted-out-rendered");
+		expect(countOf(output, /shadowrootmode/g)).toBe(1);
+	});
+
+	test("a container that stops its children's pending tasks still has them waited for", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.stopsPendingTasks}></${TAGS.stopsPendingTasks}>`),
+		);
+
+		expect(output).toContain(">waiting-child-2<");
+	});
+
+	test(`ssr="false" leaves the root of another library's element out too, which the server still runs`, async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(
+				`<${TAGS.slotted}><${TAGS.foreignPainter}></${TAGS.foreignPainter}><${TAGS.foreignPainter} ssr="false"></${TAGS.foreignPainter}></${TAGS.slotted}>`,
+			),
+		);
+
+		expect(countOf(output, /foreign-painted/g)).toBe(1);
+		expect(output).toContain(
+			`<${TAGS.foreignPainter} ssr="false"></${TAGS.foreignPainter}>`,
+		);
+	});
+
+	test("a nested child still waiting at the timeout is left for the client, with a warning, and the rest ships", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const output = await runTransform(
+			buildPlugins({ firstYieldTimeoutMs: 60 }),
+			pageWith(
+				`<${TAGS.holdsNeverYieldingChild}></${TAGS.holdsNeverYieldingChild}>`,
+			),
+		);
+
+		expect(output).toContain(`<${TAGS.neverYields}></${TAGS.neverYields}>`);
+		expect(output).toContain("nested-rendered");
+		expect(countOf(output, /shadowrootmode/g)).toBe(2);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(`<${TAGS.neverYields}>`),
+		);
+		warn.mockRestore();
+	});
+});
+
 describe("prerender plugin: load payload injection", () => {
 	test("load call on the server emits a per-host data-ssr script inside the declarative shadow root", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.loadSingle} ssr></${TAGS.loadSingle}></body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.loadSingle}></${TAGS.loadSingle}>`),
+		);
 
-		//declarative shadow root carries the payload — no global window.__ssrData any more
-		expect(output).not.toContain("__ssrData");
 		expect(output).toContain("shadowrootmode");
 		expect(output).toContain(
 			`<script type="application/json" data-ssr="">{"name":"Ada"}</script>`,
@@ -436,26 +909,69 @@ describe("prerender plugin: load payload injection", () => {
 	});
 
 	test("two hosts get independent per-host payloads — no cross-host dedupe", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body>
-			<${TAGS.loadShared} ssr data-id="alpha"></${TAGS.loadShared}>
-			<${TAGS.loadShared} ssr data-id="beta"></${TAGS.loadShared}>
-		</body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`
+				<${TAGS.loadShared} data-id="alpha"></${TAGS.loadShared}>
+				<${TAGS.loadShared} data-id="beta"></${TAGS.loadShared}>
+			`),
+		);
 
-		//each host has its own data-ssr script, with its own serialized value
 		expect(output).toContain(`>"payload-alpha"</script>`);
 		expect(output).toContain(`>"payload-beta"</script>`);
-		const scriptMatches = output.match(/data-ssr=""/g) ?? [];
-		expect(scriptMatches.length).toBe(2);
+		expect(countOf(output, /data-ssr=""/g)).toBe(2);
 	});
 
 	test("a page with no load calls gets no data-ssr scripts", async () => {
-		const plugin = buildPlugin();
-		const input = `<html><body><${TAGS.simple} ssr></${TAGS.simple}></body></html>`;
-		const output = await runTransform(plugin, input);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.simple}></${TAGS.simple}>`),
+		);
 
 		expect(output).not.toContain("data-ssr");
-		expect(output).not.toContain("__ssrData");
+	});
+});
+
+//last: closing the dev server runs the plugin's closeBundle, which also closes the loader servers
+//the tests above share
+describe("prerender plugin: dev server", () => {
+	test("a dev request prerenders the page, and an edit shows up on the next request", async () => {
+		const projectRoot = await mkdtemp(join(tmpdir(), "prerender-dev-"));
+		const libraryEntry = normalizePath(resolve(repoRoot, "lib/src/index.ts"));
+		const writeCard = (text: string) =>
+			writeFile(
+				join(projectRoot, "dev-card.ts"),
+				`import { component, html } from "${libraryEntry}";\ncustomElements.define("dev-card", component(function* () {\n\tyield html\`<p>${text}</p>\`;\n}));\n`,
+			);
+		await writeCard("before-edit");
+		await writeFile(join(projectRoot, "page.ts"), `import "./dev-card";\n`);
+		const html = `<html><head><script type="module" src="./page.ts"></script></head><body><dev-card></dev-card></body></html>`;
+
+		const server = await createServer({
+			root: projectRoot,
+			configFile: false,
+			logLevel: "silent",
+			appType: "custom",
+			server: { middlewareMode: true },
+			plugins: [prerenderWebcomponents()],
+		});
+		try {
+			expect(await server.transformIndexHtml("/index.html", html)).toContain(
+				"before-edit",
+			);
+
+			await writeCard("after-edit");
+			//vite reports the edit to the plugin asynchronously, after dropping the stale modules
+			let output = "";
+			const deadline = Date.now() + 4000;
+			while (!output.includes("after-edit") && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				output = await server.transformIndexHtml("/index.html", html);
+			}
+			expect(output).toContain("after-edit");
+		} finally {
+			await server.close();
+			await rm(projectRoot, { recursive: true, force: true });
+		}
 	});
 });
