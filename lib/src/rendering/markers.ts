@@ -1,5 +1,7 @@
-import { CHARACTER_CODE, MARKUP } from "../parser/characters";
-import { DYNAMIC_TAG_PLACEHOLDER, OPEN_CONSTRUCT } from "../parser/constants";
+import * as MARKUP from "../parser/markup";
+import * as CHARACTER_CODE from "../parser/character-code";
+import { DYNAMIC_TAG_PLACEHOLDER } from "../parser/constants";
+import * as OPEN_CONSTRUCT from "../parser/open-construct";
 import {
 	assertDuringDevelopment,
 	libraryMessage,

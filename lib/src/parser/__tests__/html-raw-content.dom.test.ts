@@ -1,7 +1,8 @@
 import { describe, test, expect } from "vitest";
 import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING, STYLE_SHEET_NOT_COMPILED } from "../constants";
+import { STYLE_SHEET_NOT_COMPILED } from "../constants";
+import * as BINDING from "../binding";
 import { RawContentStaticBinding } from "../types";
 
 const dynamicDeclarationsOf = (binding: RawContentStaticBinding) =>

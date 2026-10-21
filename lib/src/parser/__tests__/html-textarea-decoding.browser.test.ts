@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
-import { BINDING } from "../constants";
+import * as BINDING from "../binding";
 import { composeParts } from "../../rendering/compose";
 
 //happy-dom's parser skips RCDATA decoding, so only chromium is an oracle

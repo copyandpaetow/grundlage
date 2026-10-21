@@ -1,15 +1,13 @@
-import { BINDING, STYLE_SHEET_NOT_COMPILED } from "../../parser/constants";
+import { STYLE_SHEET_NOT_COMPILED } from "../../parser/constants";
+import * as BINDING from "../../parser/binding";
 import {
 	AttributeStaticBinding,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
 	StaticBinding,
 } from "../../parser/types";
-import {
-	NO_ATTRIBUTE_WRITTEN,
-	STYLE_SHEET_LANE,
-	UNSET_HASH,
-} from "../constants";
+import { NO_ATTRIBUTE_WRITTEN, UNSET_HASH } from "../constants";
+import * as STYLE_SHEET_LANE from "../style-sheet-lane";
 import { elementAfterMarker } from "../markers";
 import { commitAttribute, removeWrittenAttribute } from "./attribute";
 import { commitDynamic } from "./attribute-dynamic";

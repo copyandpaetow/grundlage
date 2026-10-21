@@ -432,9 +432,10 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 - Those rules are for a value that is exactly ONE hole, which is what picks that lane, whatever
   the NAME is made of: `${name}=${value}` and `on${eventName}=${handler}` get them too. A value
   with anything else in it (`class="card ${extra}"`, `style="top:${y}px"`) is COMPOSED to a
-  string instead, so that attribute is always SET and never removed: `null` and `undefined`
-  contribute `""`, `false` contributes `"false"`, and an object contributes `String(value)`
-  rather than reaching the property mode. Either way, a name that composes to something new
+  string instead, so that attribute is always SET and never removed: `null`, `undefined`, `true`
+  and `false` contribute `""`, as in a content hole, so `class="card ${isOpen && "open"}"` drops
+  the word when closed, and an object contributes `String(value)` rather than reaching the
+  property mode. Either way, a name that composes to something new
   clears the slot the old name held, listener and property mode included, before writing
   the new one.
 - LIVE STATE: `value` on `<input>`/`<textarea>`, `checked` and `indeterminate` on

@@ -1,4 +1,4 @@
-import { CHARACTER_CODE } from "./characters";
+import * as CHARACTER_CODE from "./character-code";
 import { Part } from "./types";
 import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING, DYNAMIC_TAG_PLACEHOLDER } from "../constants";
+import { DYNAMIC_TAG_PLACEHOLDER } from "../constants";
+import * as BINDING from "../binding";
 import {
 	AttributeStaticBinding,
 	StaticBinding,

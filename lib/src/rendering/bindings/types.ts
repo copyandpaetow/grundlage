@@ -1,4 +1,4 @@
-import { BINDING } from "../../parser/constants";
+import * as BINDING from "../../parser/binding";
 import {
 	AttributeStaticBinding,
 	CommentStaticBinding,
@@ -9,7 +9,8 @@ import {
 	RawContentStaticBinding,
 	TagStaticBinding,
 } from "../../parser/types";
-import { CONTENT_KIND, STYLE_SHEET_LANE } from "../constants";
+import * as STYLE_SHEET_LANE from "../style-sheet-lane";
+import * as CONTENT_KIND from "../content-kind";
 
 export interface Instance {
 	parsed: ParsedTemplate;

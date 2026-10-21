@@ -1,5 +1,17 @@
 import { describe, expect, test, vi } from "vitest";
+import { component } from "../../../index";
+import { BaseComponent } from "../../../types";
 import { applyAttributeValue, reapplyValueOnSwap } from "../attribute-apply";
+
+let componentTagCount = 0;
+const createComponentElement = (): BaseComponent => {
+	const tag = `apply-target-${componentTagCount++}`;
+	customElements.define(
+		tag,
+		component(function* () {}),
+	);
+	return document.createElement(tag) as BaseComponent;
+};
 
 describe("applyAttributeValue - event listeners", () => {
 	test("attaches an event listener for an on* key whose value is a function", () => {
@@ -479,31 +491,44 @@ describe("applyAttributeValue - non-stringable values", () => {
 		expect((element as unknown as { items: unknown }).items).toBeUndefined();
 	});
 
-	test("calls update() when the receiver exposes one (custom-element handoff)", () => {
-		//a target with an update() method is triggered so a custom element reacts to the new property,
-		//which is the component-to-component data flow path
-		const element = document.createElement("div") as HTMLDivElement & {
-			update?: () => void;
-		};
-		const updateSpy = vi.fn();
-		element.update = updateSpy;
+	test("calls update() on a component receiving a property (component-to-component data flow)", () => {
+		const element = createComponentElement();
+		const update = vi.spyOn(element, "update").mockResolvedValue(undefined);
 
 		applyAttributeValue(element, "config", { nested: 1 });
-		expect(updateSpy).toHaveBeenCalledTimes(1);
+		expect(update).toHaveBeenCalledTimes(1);
+	});
+
+	test("does not call update() on another library's element", () => {
+		//its update() has that library's contract: Lit's is its render step, which throws before the
+		//element is connected
+		class ElementOfAnotherLibrary extends HTMLElement {
+			update = vi.fn();
+		}
+		customElements.define(
+			"element-of-another-library",
+			ElementOfAnotherLibrary,
+		);
+		const element = document.createElement(
+			"element-of-another-library",
+		) as ElementOfAnotherLibrary;
+
+		applyAttributeValue(element, "config", { nested: 1 });
+		expect(element.update).not.toHaveBeenCalled();
+		expect((element as unknown as { config: unknown }).config).toEqual({
+			nested: 1,
+		});
 	});
 
 	test("does not call update() for stringable values", () => {
 		//the update() trigger lives only on the property-assignment branch.
 		//plain attribute writes must not fire it; otherwise every attribute
 		//flip on a child component would cause it to update twice
-		const element = document.createElement("div") as HTMLDivElement & {
-			update?: () => void;
-		};
-		const updateSpy = vi.fn();
-		element.update = updateSpy;
+		const element = createComponentElement();
+		const update = vi.spyOn(element, "update").mockResolvedValue(undefined);
 
 		applyAttributeValue(element, "title", "hello");
-		expect(updateSpy).not.toHaveBeenCalled();
+		expect(update).not.toHaveBeenCalled();
 	});
 });
 
@@ -562,17 +587,14 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 	test("update() still fires on the property-assignment branch after the transition", () => {
 		//the update() trigger still runs for the non-stringable side even after a prior stringable
 		//value
-		const element = document.createElement("div") as HTMLDivElement & {
-			update?: () => void;
-		};
-		const updateSpy = vi.fn();
-		element.update = updateSpy;
+		const element = createComponentElement();
+		const update = vi.spyOn(element, "update").mockResolvedValue(undefined);
 
 		applyAttributeValue(element, "config", "before");
-		expect(updateSpy).not.toHaveBeenCalled();
+		expect(update).not.toHaveBeenCalled();
 
 		applyAttributeValue(element, "config", { x: 1 }, "before");
-		expect(updateSpy).toHaveBeenCalledTimes(1);
+		expect(update).toHaveBeenCalledTimes(1);
 	});
 });
 

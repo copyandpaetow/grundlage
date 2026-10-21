@@ -35,12 +35,20 @@
 - The browser reuses a server `load` result only while hydrating, and runs the fetcher everywhere else.
 - A `load` the server failed runs again in the browser, and the loads after it keep their order.
 - Unused server `load` results are removed at hydration, and only unkeyed ones warn.
+- The production build is 43.9 KB minified and 16.8 KB gzip (0.8.0: 54.7 KB, 18.0 KB): enums are inlined and internal property names shortened.
 
 ### Fixed
 
 - On the server, a body that catches an update generator's error runs its `finally`, also when that generator called `update()`.
 - An `update()` queued for an update generator the body drops settles with the drop instead of re-running the next one.
 - A child moved straight after its parent's paint runs its update generator once.
+- When a component's own prop write throws in the prop's function, also from a cleanup, a `finally` block, a parameter default, a child's setter or a host binding on its own `<template>`, the component ends once that step or paint is over instead of painting over the error.
+- A component whose host binding ended it during an update or a hydration paints again once it is re-inserted.
+- A generator whose own prop write ends its component still runs its returned cleanup and its `finally` block, an update generator's before the body's.
+- An error thrown after a component's own prop write has ended it is reported instead of ending the component twice or going missing.
+- A component body's `this` is `undefined`, as an update generator's is, instead of an internal object.
+- A component body whose parameter default throws ends the component through the error event instead of escaping the library.
+- An object or array bound to another library's custom element no longer calls its `update()`, which for a Lit element threw before it was connected and skipped `updated()` after.
 
 ## 0.8.0
 

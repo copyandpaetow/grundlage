@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { BINDING } from "../../../parser/constants";
+import * as BINDING from "../../../parser/binding";
 import { UNSET_HASH } from "../../constants";
 import { commitDynamic } from "../attribute-dynamic";
 import { DynamicAttributeLiveBinding } from "../types";

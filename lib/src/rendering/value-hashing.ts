@@ -5,20 +5,7 @@ import {
 	HASH_MULTIPLIER,
 	stringHash,
 } from "../utils/hashing";
-
-const TAG = {
-	NULLISH: 1,
-	STRING: 2,
-	NUMBER: 3,
-	BOOLEAN: 4,
-	BIGINT: 5,
-	ARRAY: 6,
-	OBJECT: 7,
-	MAP: 8,
-	SET: 9,
-	REFERENCE: 10,
-	TRUNCATED: 11,
-} as const;
+import * as TAG from "./value-hashing-tag";
 
 const HASH_DEPTH_LIMIT = 64;
 

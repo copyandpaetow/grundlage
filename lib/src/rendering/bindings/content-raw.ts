@@ -1,5 +1,6 @@
 import { combinedPartsHash, composeParts } from "../compose";
-import { STYLE_SHEET_LANE, UNSET_HASH } from "../constants";
+import { UNSET_HASH } from "../constants";
+import * as STYLE_SHEET_LANE from "../style-sheet-lane";
 import { elementAfterMarker } from "../markers";
 import {
 	commitChangedDeclarations,

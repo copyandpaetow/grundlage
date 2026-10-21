@@ -2,7 +2,8 @@ import { isTemplate, TemplateValue } from "../../template";
 import { stringifyPrimitive } from "../../utils/guards";
 import { hashValue } from "../value-hashing";
 import { ValueOf } from "../../utils/types";
-import { CONTENT_KIND, UNSET_HASH } from "../constants";
+import { UNSET_HASH } from "../constants";
+import * as CONTENT_KIND from "../content-kind";
 import {
 	HYDRATION_MISMATCH,
 	parseNestedTemplate,

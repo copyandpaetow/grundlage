@@ -75,10 +75,13 @@ Read top to bottom. A lower rule never overrides a higher one.
   hold a real value". An optional parameter's own absence and a `Map.get` miss are honest
   `undefined`. Where the platform forces one channel to carry two meanings, the declaration names
   both in a comment.
-- Enums are `as const` objects read through a type named after the constant plus `Kind`:
-  `type ParseModeKind = ValueOf<typeof PARSE_MODE>`. Values are numbers. Enums that
-  meet get disjoint ranges, so one value cannot pass for another; an enum that indexes an array
-  starts at 0.
+- An enum is a module with one `export const` per member, imported as a namespace:
+  `import * as PARSE_MODE from "./parse-mode"`. The bundler inlines `PARSE_MODE.NO_ROOT_TEMPLATE`
+  as `31`, which it never does for an object's member. The module is named after the constant,
+  and says more where that name is generic or taken (`html-state.ts`, `parse-context-kind.ts`). A
+  type named after the constant plus `Kind` reads it: `type ParseModeKind = ValueOf<typeof PARSE_MODE>`.
+  Values are numbers. Enums that meet get disjoint ranges, so one value cannot pass for another;
+  an enum that indexes an array starts at 0.
 - A variant without data is one shared constant, so switching to it allocates nothing.
 
 ## Functions and control flow
@@ -180,6 +183,10 @@ Read top to bottom. A lower rule never overrides a higher one.
   `as` carries a comment.
 - **One marker-walk primitive per DOM protocol.** A marker protocol is defined once and reused by
   every site, so stop conditions cannot drift.
+- **A name read from outside the bundle is listed.** The production build shortens every property
+  name no DOM or ES typing mentions. A new public member, custom element reaction or field another
+  bundled copy reads goes into `NAMES_NOT_TO_MANGLE` in tsdown.config.ts. The `bundle-*` test
+  projects run every test that uses only the public entry against a build shortened that way.
 
 ## Comments
 

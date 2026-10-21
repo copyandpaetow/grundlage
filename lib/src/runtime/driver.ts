@@ -24,21 +24,26 @@ import {
 	createRun,
 	isGeneratorFunction,
 	isGeneratorObject,
-	isParkedAtTemplateOrUpdateGeneratorYield,
 	isStillParkedAt,
-	PARKED_AT_TEMPLATE_OR_UPDATE_GENERATOR_YIELD,
+	isWaitingForUpdateGeneratorRun,
 	Run,
 	tearDownRun,
+	WAITING_FOR_UPDATE_GENERATOR_RUN,
 } from "./run";
-import { isTemplate } from "../template";
+import { isTemplate, TemplateValue } from "../template";
 import { ComponentRenderEvent } from "./component-render-event";
 import { PendingTaskEvent } from "./pending-task-event";
 import {
 	assertDuringDevelopment,
 	InvariantError,
+	isDevelopmentBuild,
 	libraryMessage,
+	reportErrorFromUserCode,
 	warnDuringDevelopment,
 } from "../utils/diagnostics";
+import * as RUNNER_REQUEST from "./runner-request";
+import * as RUNNER_PHASE from "./runner-phase";
+import * as TURN from "./driver-turn";
 
 interface ComponentRunnerSetup {
 	root: ComponentRoot;
@@ -60,6 +65,9 @@ export interface ComponentRunner extends ComponentRunnerSetup, OrderedRunner {
 	wasMountedOnServer: boolean;
 	loadsRecordedOnServer: Array<RecordedLoad>;
 	hasEndedWithFatalError: boolean;
+	//a fatal error that lands while a loop drives the runner waits for that loop to let go, so no
+	//teardown and no error display runs in the middle of a step, a paint or a teardown
+	pendingFatalError: unknown;
 	lastUpdatedInPassNumber: number;
 	updateCountInPass: number;
 }
@@ -98,6 +106,10 @@ const STEPS_PER_DRIVER_LOOP_LIMIT = 10_000;
 //the pass number starts at 0 and only grows
 const NEVER_UPDATED_IN_PASS = -1;
 
+//pendingFatalError while no loop drives the runner, so a fatal error ends it at once
+const NOT_DRIVEN: unique symbol = Symbol("not driven");
+const NO_PENDING_FATAL_ERROR: unique symbol = Symbol("no pending fatal error");
+
 const RUNAWAY_UPDATE_MESSAGE = libraryMessage(
 	"a component updated too often in one pass. An update is writing a value that schedules it again: move that write out of the update generator, or write only when the value differs",
 );
@@ -118,6 +130,9 @@ const YIELDED_VALUE_MESSAGE = libraryMessage(
 	"a component yields a template, an update generator, a promise or a load(). Write `yield html`…``, `yield function* () { … }`, `yield promise` or `yield* load(() => …)`, and yield each promise instead of awaiting it",
 );
 
+const DROPPED_BODY_RETURN_MESSAGE =
+	"the generator returned a value that is not a function, so it was dropped. The return position is the cleanup function.";
+
 const YIELDED_GENERATOR_OBJECT_MESSAGE = libraryMessage(
 	"a component yielded a generator object. To run a helper generator, add the star: `yield* helper(…)`. To declare an update generator, yield the function without calling it: `yield view`",
 );
@@ -137,6 +152,7 @@ export const createComponentRunner = (
 		wasMountedOnServer: false,
 		loadsRecordedOnServer: [],
 		hasEndedWithFatalError: false,
+		pendingFatalError: NOT_DRIVEN,
 		lastUpdatedInPassNumber: NEVER_UPDATED_IN_PASS,
 		updateCountInPass: 0,
 		ancestorRunner: null,
@@ -152,10 +168,12 @@ const runScheduledPass = (): void => {
 };
 
 const enqueue = (runner: ComponentRunner): void => {
-	const painter = scheduler.runnerCurrentlyPainting;
 	//an update from outside a paint says nothing about order, so it may not erase what a paint said
-	if (painter !== null)
-		runner.blockedByRunner = painter === runner ? null : painter;
+	if (scheduler.runnerCurrentlyPainting !== null)
+		runner.blockedByRunner =
+			scheduler.runnerCurrentlyPainting === runner
+				? null
+				: scheduler.runnerCurrentlyPainting;
 	scheduler.queuedRunners.add(runner);
 	const needsPass = !scheduler.isPassScheduled && !scheduler.isPassRunning;
 	if (!needsPass) return;
@@ -243,23 +261,6 @@ const runOnePass = (): void => {
 
 //derived, never stored: every field it reads is written by the driver itself, so a stored phase
 //would be a second source of truth to keep in step
-const RUNNER_PHASE = {
-	NOT_CONNECTED: 140,
-	WAITING_FOR_PARENT_VALUES: 141,
-	READY_TO_START: 142,
-	RUNNING: 143,
-	ENDED_BY_FATAL_ERROR: 144,
-} as const;
-
-//spelled, not numbered: RUNNER_PHASE covers the same small integers, and a phase handed to
-//sendRunnerRequest would otherwise typecheck as some other request
-export const RUNNER_REQUEST = {
-	START: "start",
-	STOP: "stop",
-	DISCONNECT: "disconnect",
-	UPDATE: "update",
-} as const;
-
 const phaseOf = (runner: ComponentRunner): ValueOf<typeof RUNNER_PHASE> => {
 	//ahead of the body run, because disconnectedCallback is a microtask behind the removal: between
 	//the two a runner still holds everything RUNNING reads, and its host is already nowhere
@@ -275,12 +276,37 @@ const phaseOf = (runner: ComponentRunner): ValueOf<typeof RUNNER_PHASE> => {
 		: RUNNER_PHASE.READY_TO_START;
 };
 
+//the fields a phase is derived from constrain each other; checked wherever user code can be watching
+const assertRunnerIsConsistent = (runner: ComponentRunner): void => {
+	const isQueued = scheduler.queuedRunners.has(runner);
+	assertDuringDevelopment(
+		runner.blockedByRunner === null || isQueued,
+		"a runner waits for another only while it is queued",
+	);
+	assertDuringDevelopment(
+		runner.bodyRun !== null ||
+			(runner.currentUpdateGenerator === null &&
+				runner.updateGeneratorRun === null),
+		"an update generator belongs to a running body",
+	);
+	assertDuringDevelopment(
+		runner.updateGeneratorRun === null ||
+			runner.currentUpdateGenerator !== null,
+		"an update generator run belongs to the current update generator",
+	);
+	assertDuringDevelopment(
+		!runner.hasEndedWithFatalError || (runner.bodyRun === null && !isQueued),
+		"a runner that ended with a fatal error holds no run and no queue entry",
+	);
+};
+
 //the one entry into a runner's timing: a call site reports what happened to it, the phase decides
 //whether that does anything
 export const sendRunnerRequest = (
 	runner: ComponentRunner,
 	request: ValueOf<typeof RUNNER_REQUEST>,
 ): Promise<void> => {
+	if (isDevelopmentBuild) assertRunnerIsConsistent(runner);
 	switch (request) {
 		case RUNNER_REQUEST.START: {
 			if (phaseOf(runner) !== RUNNER_PHASE.READY_TO_START)
@@ -347,6 +373,15 @@ export const endRunnerWithFatalError = (
 	runner: ComponentRunner,
 	error: unknown,
 ): void => {
+	if (runner.pendingFatalError === NO_PENDING_FATAL_ERROR) {
+		runner.pendingFatalError = error;
+		return;
+	}
+	//the component is already ending, so a second error has nothing left to end
+	if (runner.pendingFatalError !== NOT_DRIVEN) {
+		reportErrorFromUserCode(error);
+		return;
+	}
 	stopRunner(runner);
 	runner.hasEndedWithFatalError = true;
 	displayFatalErrorInRoot(runner.root, error);
@@ -383,39 +418,48 @@ const mountComponentGenerator = (runner: ComponentRunner): void => {
 	scheduler.queuedRunners.delete(runner);
 	runner.blockedByRunner = null;
 	runner.wasMountedOnServer = isServer();
-	const bodyRun = createRun(
-		runner,
-		runner.componentGenerator(runner.componentProps),
-	);
+	let bodyRun: Run;
+	try {
+		bodyRun = createRun(
+			runner,
+			//not a method call, which would hand user code the runner as this
+			runner.componentGenerator.call(undefined, runner.componentProps),
+		);
+	} catch (error) {
+		if (error instanceof InvariantError) throw error;
+		endRunnerWithFatalError(runner, error);
+		return;
+	}
+	//the body's parameter defaults run user code, which can end the component before the body starts
+	if (phaseOf(runner) !== RUNNER_PHASE.READY_TO_START) return;
 	runner.bodyRun = bodyRun;
-	driveRun(bodyRun, RESUME.SEND, undefined);
+	driveRun(bodyRun, TURN.SEND, undefined);
 };
 
 const rerunCurrentUpdateGenerator = (runner: ComponentRunner): void => {
-	const bodyRun = runner.bodyRun;
 	assertDuringDevelopment(
-		bodyRun !== null && runner.currentUpdateGenerator !== null,
+		runner.bodyRun !== null && runner.currentUpdateGenerator !== null,
 		"a running component is queued only while it has an update generator to re-run",
 	);
-	driveRun(bodyRun, RESUME.START_UPDATE_GENERATOR, undefined);
+	driveRun(runner.bodyRun, TURN.START_UPDATE_GENERATOR, undefined);
 };
 
-//how the loop resumes the run it holds
-const RESUME = {
-	SEND: 150,
-	THROW: 151,
-	//the run held is the body's, parked at the yield that made runner.currentUpdateGenerator
-	START_UPDATE_GENERATOR: 152,
-} as const;
+type TurnKind = ValueOf<typeof TURN>;
 
-type ResumeKind = ValueOf<typeof RESUME>;
-
-const NO_CATCHER: unique symbol = Symbol("no catcher");
-
-const driveRun = (run: Run, resume: ResumeKind, payload: unknown): void => {
+const driveRun = (run: Run, turn: TurnKind, payload: unknown): void => {
+	assertDuringDevelopment(
+		run.runner.pendingFatalError === NOT_DRIVEN,
+		"one loop at a time drives a runner",
+	);
 	scheduler.generatorCountOnStack++;
+	run.runner.pendingFatalError = NO_PENDING_FATAL_ERROR;
 	try {
-		driveRunUntilItStops(run, resume, payload);
+		driveRunUntilItStops(run, turn, payload);
+		const pendingFatalError = run.runner.pendingFatalError;
+		run.runner.pendingFatalError = NOT_DRIVEN;
+		if (pendingFatalError !== NO_PENDING_FATAL_ERROR)
+			endRunnerWithFatalError(run.runner, pendingFatalError);
+		if (isDevelopmentBuild) assertRunnerIsConsistent(run.runner);
 	} finally {
 		scheduler.generatorCountOnStack--;
 		//a queued runner updates when no generator is left on the stack, so a pass either is already
@@ -428,85 +472,159 @@ const driveRun = (run: Run, resume: ResumeKind, payload: unknown): void => {
 	}
 };
 
-const cleanupOf = (returned: unknown): Cleanup | null => {
-	//the type layer holds the return position to Cleanup | void
-	if (typeof returned === "function") return returned as Cleanup;
-	//nothing downstream reads a non-function return, so without this the drop is invisible to
-	//anyone not running the types
-	if (returned !== undefined)
-		warnDuringDevelopment(
-			"the generator returned a value that is not a function, so it was dropped. The return position is the cleanup function.",
-		);
-	return null;
-};
+//true only inside a loop: from there on the loop runs no more of the component and lets go
+const hasFatalErrorWaiting = (runner: ComponentRunner): boolean =>
+	runner.pendingFatalError !== NO_PENDING_FATAL_ERROR &&
+	runner.pendingFatalError !== NOT_DRIVEN;
 
-//only the body can catch an update generator's error, and only while it still waits at the yield
-//that made it current: anything else ends the component
-const catcherOf = (run: Run): Run | typeof NO_CATCHER => {
-	const bodyRun = run.runner.bodyRun;
-	const noGeneratorCanCatchIt =
-		run === bodyRun ||
-		bodyRun === null ||
-		!isParkedAtTemplateOrUpdateGeneratorYield(bodyRun);
-	return noGeneratorCanCatchIt ? NO_CATCHER : bodyRun;
-};
-
-//one turn is one step of one generator; every write stays in this loop, so the turn reads top to
-//bottom: step, then what the step produced
-const driveRunUntilItStops = (
-	startRun: Run,
-	startResume: ResumeKind,
-	startPayload: unknown,
+//a component this paint writes into updates after it, so the queue has to know who is painting
+const paintRunnerRoot = (
+	runner: ComponentRunner,
+	template: TemplateValue,
 ): void => {
-	const runner = startRun.runner;
-	let run = startRun;
-	let resume = startResume;
-	let payload = startPayload;
+	const previousPainter = scheduler.runnerCurrentlyPainting;
+	scheduler.runnerCurrentlyPainting = runner;
+	try {
+		paintComponentRoot(runner.root, template);
+		if (runner.wasMountedOnServer)
+			flushHostPayload(runner.loadsRecordedOnServer, runner.root.shadowRoot);
+	} finally {
+		scheduler.runnerCurrentlyPainting = previousPainter;
+	}
+};
+
+//a turn does what the last step asked for, steps the run, then reads what it asks for next. Every
+//call into user code is followed by the check that no fatal error is waiting
+const driveRunUntilItStops = (
+	run: Run,
+	turn: TurnKind,
+	payload: unknown,
+): void => {
 	for (let step = 0; step < STEPS_PER_DRIVER_LOOP_LIMIT; step++) {
-		try {
-			if (resume === RESUME.START_UPDATE_GENERATOR) {
-				const updateGenerator = runner.currentUpdateGenerator;
+		switch (turn) {
+			case TURN.SEND:
+			case TURN.THROW:
+				break;
+			case TURN.START_UPDATE_GENERATOR: {
+				tearDownUpdateGeneratorRun(run.runner);
+				//the last run's cleanup or finally block can end the component
+				if (hasFatalErrorWaiting(run.runner)) return;
 				assertDuringDevelopment(
-					updateGenerator !== null,
+					run.runner.currentUpdateGenerator !== null,
 					"an update generator starts only once the body has made it the current one",
 				);
-				tearDownUpdateGeneratorRun(runner);
-				const updateGeneratorRun = createRun(
-					runner,
-					updateGenerator(runner.componentProps),
-				);
-				runner.updateGeneratorRun = updateGeneratorRun;
+				let updateGeneratorRun: Run;
+				try {
+					updateGeneratorRun = createRun(
+						run.runner,
+						//not a method call, which would hand user code the runner as this
+						run.runner.currentUpdateGenerator.call(
+							undefined,
+							run.runner.componentProps,
+						),
+					);
+				} catch (error) {
+					if (error instanceof InvariantError) throw error;
+					turn = TURN.FAIL;
+					payload = error;
+					continue;
+				}
+				//so can the update generator's parameter defaults
+				if (hasFatalErrorWaiting(run.runner)) return;
+				run.runner.updateGeneratorRun = updateGeneratorRun;
 				run = updateGeneratorRun;
+				turn = TURN.SEND;
 				payload = undefined;
+				break;
 			}
-			run.suspension = null;
+			case TURN.PAINT: {
+				assertDuringDevelopment(
+					isTemplate(payload),
+					"a paint is asked for with the template the run yielded",
+				);
+				//a template the body yields replaces its update generator, so update() has nothing to re-run
+				//until the body yields the next one
+				if (run === run.runner.bodyRun) dropCurrentUpdateGenerator(run.runner);
+				//the dropped run's cleanup or finally block can end the component
+				if (hasFatalErrorWaiting(run.runner)) return;
+				try {
+					paintRunnerRoot(run.runner, payload);
+				} catch (error) {
+					if (error instanceof InvariantError) throw error;
+					//a failed paint is thrown at the yield that asked for it, while that run is still there
+					turn = hasFatalErrorWaiting(run.runner) ? TURN.FAIL : TURN.THROW;
+					payload = error;
+					continue;
+				}
+				//a paint can end the component as well
+				if (hasFatalErrorWaiting(run.runner)) return;
+				//the server's run ends at its first paint
+				if (run.runner.wasMountedOnServer) {
+					settleRunner(run.runner);
+					return;
+				}
+				turn = TURN.SEND;
+				payload = run.runner.root.host;
+				break;
+			}
+			case TURN.FAIL: {
+				//only the body can catch an update generator's error, and only while it still waits at the
+				//yield that made it current: anything else ends the component
+				const bodyRun = run.runner.bodyRun;
+				const bodyCatchesIt =
+					bodyRun !== null && isWaitingForUpdateGeneratorRun(bodyRun);
+				if (!bodyCatchesIt) {
+					endRunnerWithFatalError(run.runner, payload);
+					return;
+				}
+				dropCurrentUpdateGenerator(run.runner);
+				//the dropped run's cleanup or finally block can end the component, and then the error has
+				//no yield left to surface at
+				if (hasFatalErrorWaiting(run.runner)) {
+					reportErrorFromUserCode(payload);
+					return;
+				}
+				run = bodyRun;
+				turn = TURN.THROW;
+				break;
+			}
+			default:
+				return turn satisfies never;
+		}
+		run.suspension = null;
+		try {
 			const result =
-				resume === RESUME.THROW
+				turn === TURN.THROW
 					? run.generator.throw(payload)
 					: run.generator.next(payload);
-			resume = RESUME.SEND;
-			const bodyRun = runner.bodyRun;
-			if (result.done && run === bodyRun) {
-				run.cleanup = cleanupOf(result.value);
-				settleRunner(runner);
+			//the type layer holds a returned function to Cleanup
+			const hasReturnedCleanup =
+				result.done === true && typeof result.value === "function";
+			if (hasReturnedCleanup) run.cleanup = result.value as Cleanup;
+			//a prop the step wrote can end the component
+			if (hasFatalErrorWaiting(run.runner)) return;
+			const isBodyRun = run === run.runner.bodyRun;
+			if (result.done && isBodyRun) {
+				//nothing downstream reads any other return, so without this the drop is invisible to
+				//anyone not running the types
+				if (!hasReturnedCleanup && result.value !== undefined)
+					warnDuringDevelopment(DROPPED_BODY_RETURN_MESSAGE);
+				settleRunner(run.runner);
 				return;
 			}
 			if (result.done) {
-				//the body waits at its yield for the first run that finishes, and that run's return value is
-				//what the yield evaluates to, unless it is the run's cleanup
-				const hasReturnedCleanup = typeof result.value === "function";
-				//the type layer holds a returned function to Cleanup
-				if (hasReturnedCleanup) run.cleanup = result.value as Cleanup;
-				const bodyIsWaitingForThisRun =
-					bodyRun !== null &&
-					runner.updateGeneratorRun === run &&
-					isParkedAtTemplateOrUpdateGeneratorYield(bodyRun);
-				settleRunner(runner);
-				const bodyMayResume =
-					bodyIsWaitingForThisRun && !runner.wasMountedOnServer;
-				if (!bodyMayResume) return;
-				run = bodyRun;
+				settleRunner(run.runner);
+				//the server's body never goes on past the yield of an update generator
+				if (run.runner.wasMountedOnServer) return;
+				//the body waits at its yield for the first run that finishes, and goes on with its value
+				const bodyRun = run.runner.bodyRun;
+				const bodyWaitsForThisRun =
+					bodyRun !== null && isWaitingForUpdateGeneratorRun(bodyRun);
+				if (!bodyWaitsForThisRun) return;
+				//the body's yield evaluates to the run's return value, unless that is the run's cleanup
 				payload = hasReturnedCleanup ? undefined : result.value;
+				run = bodyRun;
+				turn = TURN.SEND;
 				continue;
 			}
 			const yielded = result.value;
@@ -515,70 +633,42 @@ const driveRunUntilItStops = (
 				void driveRunOnceSettled(run, yielded);
 				//after the continuation is registered: a listener awaiting the task resumes only once this
 				//run has gone on, so every child its next paint mounts has announced its own task by then
-				if (runner.wasMountedOnServer)
-					runner.root.host.dispatchEvent(new PendingTaskEvent(yielded));
+				if (run.runner.wasMountedOnServer)
+					run.runner.root.host.dispatchEvent(new PendingTaskEvent(yielded));
 				return;
 			}
 			if (isGeneratorFunction(yielded)) {
-				//thrown before the park, so the update generator's own catch around this yield does not take it
-				if (run !== bodyRun)
+				//thrown before the wait, so the update generator's own catch around this yield does not take it
+				if (!isBodyRun)
 					throw new Error(UPDATE_GENERATOR_INSIDE_UPDATE_GENERATOR_MESSAGE);
-				run.suspension = PARKED_AT_TEMPLATE_OR_UPDATE_GENERATOR_YIELD;
-				runner.currentUpdateGenerator = yielded;
-				resume = RESUME.START_UPDATE_GENERATOR;
+				run.suspension = WAITING_FOR_UPDATE_GENERATOR_RUN;
+				run.runner.currentUpdateGenerator = yielded;
+				turn = TURN.START_UPDATE_GENERATOR;
 				continue;
 			}
 			if (yielded === LOAD_REQUEST) {
-				payload = runner;
+				turn = TURN.SEND;
+				payload = run.runner;
 				continue;
 			}
-			if (!isTemplate(yielded)) {
-				if (isGeneratorObject(yielded))
-					throw new Error(YIELDED_GENERATOR_OBJECT_MESSAGE);
-				throw new Error(YIELDED_VALUE_MESSAGE);
+			if (isTemplate(yielded)) {
+				turn = TURN.PAINT;
+				payload = yielded;
+				continue;
 			}
-			run.suspension = PARKED_AT_TEMPLATE_OR_UPDATE_GENERATOR_YIELD;
-			//a template the body yields replaces its update generator, so update() has nothing to re-run
-			//until the body yields the next one
-			if (run === bodyRun) dropCurrentUpdateGenerator(runner);
-			const previousPainter = scheduler.runnerCurrentlyPainting;
-			scheduler.runnerCurrentlyPainting = runner;
-			try {
-				paintComponentRoot(runner.root, yielded);
-				if (runner.wasMountedOnServer)
-					flushHostPayload(
-						runner.loadsRecordedOnServer,
-						runner.root.shadowRoot,
-					);
-			} finally {
-				scheduler.runnerCurrentlyPainting = previousPainter;
-			}
-			const generatorMayResumeAfterPaint =
-				!runner.wasMountedOnServer &&
-				isParkedAtTemplateOrUpdateGeneratorYield(run);
-			if (!generatorMayResumeAfterPaint) {
-				settleRunner(runner);
-				return;
-			}
-			payload = runner.root.host;
+			if (isGeneratorObject(yielded))
+				throw new Error(YIELDED_GENERATOR_OBJECT_MESSAGE);
+			throw new Error(YIELDED_VALUE_MESSAGE);
 		} catch (error) {
 			if (error instanceof InvariantError) throw error;
-			//a failed paint leaves its generator parked at the yield that asked for it
-			const catcher = isParkedAtTemplateOrUpdateGeneratorYield(run)
-				? run
-				: catcherOf(run);
-			run.suspension = null;
-			if (catcher === NO_CATCHER) {
-				endRunnerWithFatalError(runner, error);
-				return;
-			}
-			if (catcher !== run) dropCurrentUpdateGenerator(runner);
-			run = catcher;
-			resume = RESUME.THROW;
+			turn = TURN.FAIL;
 			payload = error;
 		}
 	}
-	endRunnerWithFatalError(runner, new Error(ENDLESS_SYNCHRONOUS_STEPS_MESSAGE));
+	endRunnerWithFatalError(
+		run.runner,
+		new Error(ENDLESS_SYNCHRONOUS_STEPS_MESSAGE),
+	);
 };
 
 //the async function sits outside the loop: a synchronous step never pays for the promise an async
@@ -591,8 +681,8 @@ const driveRunOnceSettled = async (
 	try {
 		value = await settling;
 	} catch (error) {
-		if (isStillParkedAt(run, settling)) driveRun(run, RESUME.THROW, error);
+		if (isStillParkedAt(run, settling)) driveRun(run, TURN.THROW, error);
 		return;
 	}
-	if (isStillParkedAt(run, settling)) driveRun(run, RESUME.SEND, value);
+	if (isStillParkedAt(run, settling)) driveRun(run, TURN.SEND, value);
 };

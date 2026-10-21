@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { BINDING } from "../../../parser/constants";
+import * as BINDING from "../../../parser/binding";
 import {
 	CompiledStyleSheet,
 	RawContentStaticBinding,

@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, load, component } from "../index";
-import { FORM_EVENTS } from "../forms";
+import * as FORM_EVENTS from "../form-events";
 
 //the closed-mode round-trip needs a real browser: happy-dom has neither attachInternals nor
 //declarative-shadow parsing. What it settles along the way is the platform fact the whole path

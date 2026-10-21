@@ -1,4 +1,5 @@
-import { BINDING, NO_KEY, STYLE_SHEET_NOT_COMPILED } from "./constants";
+import { NO_KEY, STYLE_SHEET_NOT_COMPILED } from "./constants";
+import * as BINDING from "./binding";
 
 export type Part = string | number;
 

@@ -62,6 +62,39 @@ describe("the yield position", () => {
 	});
 });
 
+describe("the call", () => {
+	test("the body and its update generator are called with no this", async () => {
+		const thisByCall: Array<unknown> = [];
+		mount(
+			component(function* (this: unknown) {
+				thisByCall.push(this);
+				yield function* (this: unknown) {
+					thisByCall.push(this);
+					yield html`<p>x</p>`;
+				};
+			}),
+		);
+		await sleep();
+		expect(thisByCall).toEqual([undefined, undefined]);
+	});
+
+	test("a body whose parameter default throws ends the component", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const element = mount(
+			component(function* (
+				_props: unknown,
+				_failure = (() => {
+					throw new Error("the default threw");
+				})(),
+			) {
+				yield html`<p>painted after the error</p>`;
+			}),
+		);
+		await sleep();
+		expect(element.shadowRoot?.textContent).toContain("the default threw");
+	});
+});
+
 describe("the body waits at an update generator yield for the first run that finishes", () => {
 	test("an update during the first run restarts it, and the body resumes with the newer run's value", async () => {
 		const gates: Array<PromiseWithResolvers<string>> = [];
@@ -87,6 +120,22 @@ describe("the body waits at an update generator yield for the first run that fin
 		gates[1].resolve("kept");
 		await sleep();
 		expect(received).toEqual(["kept from run 2"]);
+	});
+
+	test("a run that returns its cleanup hands the body undefined", async () => {
+		const received: Array<unknown> = [];
+		mount(
+			component(function* () {
+				received.push(
+					yield function* () {
+						yield html`<p>x</p>`;
+						return () => {};
+					},
+				);
+			}),
+		);
+		await sleep();
+		expect(received).toEqual([undefined]);
 	});
 
 	test("an error after a wait in the first run is thrown at the update generator yield", async () => {

@@ -1,10 +1,11 @@
 import { BaseComponent } from "../types";
 import { assertDuringDevelopment } from "../utils/diagnostics";
+import { DECLARED_PROP_NAMES } from "./constants";
 import {
-	PARSE_CONTEXT,
 	ParseContextKind,
 	WRAPPER_TAG_BY_PARSE_CONTEXT,
 } from "./parse-context";
+import * as PARSE_CONTEXT from "./parse-context-kind";
 
 //markup parsed on its own is HTML; inside <svg> or <math> the parser switches namespace, so a
 //template headed there is parsed inside a wrapper of that element and unwrapped
@@ -33,7 +34,11 @@ export const buildFragment = (
 export const findShadowRoot = (host: Element): ShadowRoot | null =>
 	host.shadowRoot ?? (host as BaseComponent).internals?.shadowRoot ?? null;
 
-//duck-typed user surface: any custom element exposing update() opts into a property-set update
+const isComponent = (element: Element): element is BaseComponent =>
+	DECLARED_PROP_NAMES in element.constructor;
+
+//a component of this library only: another library's update() has its own contract, and Lit's is
+//its render step, which throws before the element is connected and skips updated() after
 export const triggerComponentUpdate = (element: Element): void => {
-	if ("update" in element) (element as BaseComponent).update();
+	if (isComponent(element)) element.update();
 };

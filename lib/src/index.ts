@@ -8,13 +8,16 @@ import {
 	ComponentRunner,
 	createComponentRunner,
 	endRunnerWithFatalError,
-	RUNNER_REQUEST,
 	sendRunnerRequest,
 } from "./runtime/driver";
+import * as RUNNER_REQUEST from "./runtime/runner-request";
 import { forgetAncestorRunner } from "./runtime/update-order";
 import { html as htmlValue } from "./template";
 import { refreshStyleSheetsAfterMove } from "./rendering/instance";
-import { DEFER_HYDRATION_ATTRIBUTE } from "./rendering/constants";
+import {
+	DECLARED_PROP_NAMES,
+	DEFER_HYDRATION_ATTRIBUTE,
+} from "./rendering/constants";
 import { findShadowRoot } from "./rendering/dom";
 import {
 	BaseComponent,
@@ -93,7 +96,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 
 	class BaseElement extends ParentClass implements BaseComponent {
 		static observedAttributes = [...props.keys(), DEFER_HYDRATION_ATTRIBUTE];
-		static declaredPropNames: ReadonlySet<string> = new Set(
+		static readonly [DECLARED_PROP_NAMES]: ReadonlySet<string> = new Set(
 			[...props.values()].map((prop) => prop.propName),
 		);
 

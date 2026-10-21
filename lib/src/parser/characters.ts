@@ -1,48 +1,4 @@
-export const MARKUP = {
-	TAG_OPEN: "<",
-	TAG_CLOSE: ">",
-	END_TAG_OPEN: "</",
-	COMMENT_OPEN: "<!--",
-	COMMENT_CLOSE: "-->",
-	EMPTY_COMMENT: "<!---->",
-	ATTRIBUTE_SEPARATOR: " ",
-	ATTRIBUTE_ASSIGN: "=",
-	ATTRIBUTE_QUOTE: "'",
-	COMMENT_IDENTIFIER: "^.^",
-	LIST_MARKER_DATA: "*.*",
-	EVENT_PREFIX: "on",
-	CUSTOM_EVENT_PREFIX: "on-",
-} as const;
-
-export const CHARACTER_CODE = {
-	TAB: 9,
-	LINE_FEED: 10,
-	CARRIAGE_RETURN: 13,
-	SPACE: 32,
-	DOUBLE_QUOTE: 34,
-	SINGLE_QUOTE: 39,
-	DASH: 45,
-	SLASH: 47,
-	DIGIT_ZERO: 48,
-	DIGIT_NINE: 57,
-	LESS_THAN: 60,
-	EQUALS: 61,
-	GREATER_THAN: 62,
-	BANG: 33,
-	OPEN_PAREN: 40,
-	CLOSE_PAREN: 41,
-	COLON: 58,
-	SEMICOLON: 59,
-	AT: 64,
-	UPPERCASE_A: 65,
-	UPPERCASE_Z: 90,
-	BACKSLASH: 92,
-	UNDERSCORE: 95,
-	LOWERCASE_A: 97,
-	LOWERCASE_Z: 122,
-	OPEN_BRACE: 123,
-	CLOSE_BRACE: 125,
-} as const;
+import * as CHARACTER_CODE from "./character-code";
 
 export const isWhitespaceCode = (code: number) =>
 	code === CHARACTER_CODE.SPACE ||

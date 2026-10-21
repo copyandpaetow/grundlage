@@ -256,6 +256,15 @@ describe("a prop resolver that throws", () => {
 				{ props: { label: refusingResolver } },
 			),
 		) as HTMLElement & { label: unknown };
+	//a child writing back into the component that paints it: user code in the middle of that paint
+	customElements.define(
+		"refusing-child",
+		class extends HTMLElement {
+			set owner(owner: { label: unknown }) {
+				owner.label = "refused";
+			}
+		},
+	);
 
 	test("from an attribute, ends the component through the error event", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
@@ -283,6 +292,496 @@ describe("a prop resolver that throws", () => {
 
 		expect(() => (element.label = "refused")).not.toThrow();
 		expect(received).toHaveLength(1);
+		element.remove();
+	});
+
+	test("from the body's own write, the body stops instead of painting over the error", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const element = mount(
+			component(
+				function* ({ host }) {
+					host.label = "refused";
+					yield html`<p>painted after the error</p>`;
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(element.shadowRoot?.textContent).not.toContain("painted after");
+		element.remove();
+	});
+
+	test("from the body's own write, the body's finally block runs once its step is over", async () => {
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		let hasFinallyRun = false;
+		const element = mount(
+			component(
+				function* ({ host }) {
+					try {
+						host.label = "refused";
+						yield html`<p>painted after the error</p>`;
+					} finally {
+						hasFinallyRun = true;
+					}
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(hasFinallyRun).toBe(true);
+		//the error display's own line, and no report of a generator returned while it ran
+		expect(consoleError).toHaveBeenCalledOnce();
+		element.remove();
+	});
+
+	test("from an update generator's own write, the cleanup it returns in the same step runs", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const cleanup = vi.fn();
+		const element = mount(
+			component(
+				function* ({ host }) {
+					yield function* () {
+						host.label = "refused";
+						return cleanup;
+					};
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(cleanup).toHaveBeenCalledOnce();
+		element.remove();
+	});
+
+	test("from the body's own write, a throw later in the step does not end the component a second time", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const tag = uniqueTag();
+		customElements.define(
+			tag,
+			component(
+				function* ({ host }) {
+					host.label = "refused";
+					throw new Error("thrown after the error");
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		const element = document.createElement(tag);
+		const received: Array<unknown> = [];
+		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
+			received.push(event.error),
+		);
+		document.body.appendChild(element);
+		await sleep();
+
+		expect(received).toHaveLength(1);
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		element.remove();
+	});
+
+	test("from an update generator's own write, the promise it yields next does not resume it", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let isResumed = false;
+		const element = mount(
+			component(
+				function* ({ host }) {
+					yield function* () {
+						host.label = "refused";
+						yield Promise.resolve();
+						isResumed = true;
+						yield html`<p>painted after the error</p>`;
+					};
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(isResumed).toBe(false);
+		element.remove();
+	});
+
+	test("from the paint's own host binding, a finally block that waits is left to the teardown", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let hasFinallyGoneOn = false;
+		const element = mount(
+			component(
+				function* () {
+					yield function* () {
+						try {
+							yield html`<template label=${"refused"}><p>alive</p></template>`;
+						} finally {
+							yield Promise.resolve();
+							hasFinallyGoneOn = true;
+						}
+					};
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		const hasFinallyGoneOnDuringMount = hasFinallyGoneOn;
+		await sleep();
+
+		expect(hasFinallyGoneOnDuringMount).toBe(false);
+		expect(hasFinallyGoneOn).toBe(true);
+		element.remove();
+	});
+
+	test("from the paint's own host binding, the rest of that paint does not cover the error", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const element = mount(
+			component(
+				function* () {
+					yield function* () {
+						yield html`<template label=${"refused"}
+							><p>painted after the error</p></template
+						>`;
+					};
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(element.shadowRoot?.textContent).not.toContain("painted after");
+		element.remove();
+	});
+
+	test("from the host binding an update paints, a re-insertion paints again", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let label = "accepted";
+		const element = mount(
+			component(
+				function* () {
+					yield function* () {
+						yield html`<template label=${label}
+							><p>painted ${label}</p></template
+						>`;
+					};
+				},
+				{ props: { label: refusingResolver } },
+			),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		label = "refused";
+		await element.update();
+		label = "accepted again";
+		element.remove();
+		document.body.appendChild(element);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("painted accepted again");
+		element.remove();
+	});
+
+	test("from the host binding a hydrating paint commits, a re-insertion paints again", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let label = "refused";
+		const tag = uniqueTag();
+		//created before the definition, so the upgrade finds a root to hydrate
+		const element = document.createElement(tag);
+		element.attachShadow({ mode: "open" }).innerHTML =
+			"<p>painted on the server</p>";
+		document.body.appendChild(element);
+		customElements.define(
+			tag,
+			component(
+				function* () {
+					yield function* () {
+						yield html`<template label=${label}
+							><p>painted in the browser</p></template
+						>`;
+					};
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+		const textAfterError = element.shadowRoot?.textContent;
+		label = "accepted";
+		element.remove();
+		document.body.appendChild(element);
+		await sleep();
+
+		expect(textAfterError).toContain("refused");
+		expect(element.shadowRoot?.textContent).toContain("painted in the browser");
+		element.remove();
+	});
+
+	test("from the cleanup the body's template runs, the template is not painted", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let isPainted = false;
+		//a paint reads the iterator in a hole, so reading it marks the paint
+		function* paintedRows() {
+			isPainted = true;
+			yield "painted after the error";
+		}
+		const element = mount(
+			component(
+				function* ({ host }) {
+					yield function* () {
+						yield html`<p>alive</p>`;
+						return () => {
+							host.label = "refused";
+						};
+					};
+					yield html`<p>${paintedRows()}</p>`;
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(isPainted).toBe(false);
+		element.remove();
+	});
+
+	test("from the cleanup an update runs, the update does not call the update generator again", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let isRefusing = false;
+		let callCount = 0;
+		const element = mount(
+			component(
+				function* ({ host }) {
+					//counted by a parameter default, which runs at the call, before any step
+					yield function* (_props: unknown, _call = callCount++) {
+						yield html`<p>alive</p>`;
+						return () => {
+							if (isRefusing) host.label = "refused";
+						};
+					};
+				},
+				{ props: { label: refusingResolver } },
+			),
+		) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		isRefusing = true;
+		await element.update();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(callCount).toBe(1);
+		element.remove();
+	});
+
+	test("from an update generator's parameter default, that update generator does not run", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let hasRun = false;
+		const element = mount(
+			component(
+				function* ({ host }) {
+					yield function* (
+						_props: unknown,
+						_refusal = (host.label = "refused"),
+					) {
+						hasRun = true;
+						yield html`<p>painted after the error</p>`;
+					};
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(hasRun).toBe(false);
+		element.remove();
+	});
+
+	test("from an update generator's parameter default that then throws, the throw is reported instead of ending the component again", async () => {
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const failure = new Error("thrown after the refusal");
+		let isCaughtByBody = false;
+		const tag = uniqueTag();
+		customElements.define(
+			tag,
+			component(
+				function* ({ host }) {
+					try {
+						yield function* (
+							_props: unknown,
+							_refusal = (host.label = "refused"),
+							_failure = (() => {
+								throw failure;
+							})(),
+						) {
+							yield html`<p>painted after the error</p>`;
+						};
+					} catch {
+						isCaughtByBody = true;
+					}
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		const element = document.createElement(tag);
+		const received: Array<unknown> = [];
+		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
+			received.push(event.error),
+		);
+		document.body.appendChild(element);
+		await sleep();
+
+		expect(received).toHaveLength(1);
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(isCaughtByBody).toBe(false);
+		expect(consoleError).toHaveBeenCalledWith(failure);
+		element.remove();
+	});
+
+	test("from a child's setter in the paint, a hole that throws later in that paint is reported instead of thrown at the yield", async () => {
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const failure = new Error("thrown later in the paint");
+		//a paint reads the iterator in a hole, so its throw is the paint's
+		function* failingRows() {
+			throw failure;
+		}
+		let isCaughtByBody = false;
+		const tag = uniqueTag();
+		customElements.define(
+			tag,
+			component(
+				function* ({ host }) {
+					try {
+						yield html`<refusing-child owner=${host}></refusing-child>
+							<p>${failingRows()}</p>`;
+					} catch {
+						isCaughtByBody = true;
+					}
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		const element = document.createElement(tag);
+		const received: Array<unknown> = [];
+		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
+			received.push(event.error),
+		);
+		document.body.appendChild(element);
+		await sleep();
+
+		expect(received).toHaveLength(1);
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(isCaughtByBody).toBe(false);
+		expect(consoleError).toHaveBeenCalledWith(failure);
+		element.remove();
+	});
+
+	test("from an update generator's own write, the body does not go on past its yield", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		let hasBodyGoneOn = false;
+		const element = mount(
+			component(
+				function* ({ host }) {
+					yield function* () {
+						host.label = "refused";
+					};
+					hasBodyGoneOn = true;
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(hasBodyGoneOn).toBe(false);
+		element.remove();
+	});
+
+	test("from an update generator's own write, its finally block runs before the body's", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const finallyOrder: Array<string> = [];
+		const element = mount(
+			component(
+				function* ({ host }) {
+					try {
+						yield function* () {
+							try {
+								host.label = "refused";
+								yield html`<p>painted after the error</p>`;
+							} finally {
+								finallyOrder.push("update generator");
+							}
+						};
+					} finally {
+						finallyOrder.push("body");
+					}
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(finallyOrder).toEqual(["update generator", "body"]);
+		element.remove();
+	});
+
+	test("from the body's parameter default, the body does not run", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const element = mount(
+			component(
+				function* ({ host }, _refusal = (host.label = "refused")) {
+					yield html`<p>painted after the error</p>`;
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(element.shadowRoot?.textContent).not.toContain("painted after");
+		element.remove();
+	});
+
+	test("from the finally block of a failing update generator, the body does not go on to catch the failure, which is reported", async () => {
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		let isCaughtByBody = false;
+		let hasFinallyGoneOn = false;
+		const element = mount(
+			component(
+				function* ({ host }) {
+					try {
+						yield function* () {
+							try {
+								yield function* () {};
+							} finally {
+								host.label = "refused";
+							}
+						};
+					} catch {
+						isCaughtByBody = true;
+					} finally {
+						yield Promise.resolve();
+						hasFinallyGoneOn = true;
+					}
+				},
+				{ props: { label: refusingResolver } },
+			),
+		);
+		await sleep();
+
+		expect(element.shadowRoot?.textContent).toContain("refused");
+		expect(isCaughtByBody).toBe(false);
+		expect(consoleError).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining("One level of nesting only"),
+			}),
+		);
+		expect(hasFinallyGoneOn).toBe(true);
 		element.remove();
 	});
 });

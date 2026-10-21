@@ -3,6 +3,7 @@ import {
 	isDevelopmentBuild,
 	warnDuringDevelopment,
 } from "../utils/diagnostics";
+import * as PARSE_CONTEXT from "./parse-context-kind";
 
 export const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -10,8 +11,6 @@ const MATHML_NAMESPACE = "http://www.w3.org/1998/Math/MathML";
 
 export const FOREIGN_CONTENT_ROOT_TAGS = new Set(["svg", "math"]);
 
-//indexes the clone source cache, so it starts at 0
-export const PARSE_CONTEXT = { HTML: 0, SVG: 1, MATHML: 2 } as const;
 export type ParseContextKind = ValueOf<typeof PARSE_CONTEXT>;
 
 export const WRAPPER_TAG_BY_PARSE_CONTEXT: Record<ParseContextKind, string> = [

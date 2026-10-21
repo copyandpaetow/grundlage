@@ -3,7 +3,7 @@ import { coerceToTemplate, TemplateValue } from "../../template";
 import { combineOrderedHash, LIST_HASH_SEED } from "../../utils/hashing";
 import { hashValue } from "../value-hashing";
 import { combinedPartsHash } from "../compose";
-import { MARKUP } from "../../parser/characters";
+import * as MARKUP from "../../parser/markup";
 import { NO_KEY } from "../../parser/constants";
 import {
 	HYDRATION_MISMATCH,

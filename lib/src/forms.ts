@@ -1,9 +1,4 @@
-export const FORM_EVENTS = {
-	ASSOCIATED: "form-associated",
-	DISABLED: "form-disabled",
-	RESET: "form-reset",
-	RESTORE: "form-state-restore",
-} as const;
+import * as FORM_EVENTS from "./form-events";
 
 const createFormAssociatedBaseClass = () =>
 	class FormAssociatedBase extends HTMLElement {

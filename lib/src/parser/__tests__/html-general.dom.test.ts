@@ -2,7 +2,8 @@ import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { html } from "../../template";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING, DYNAMIC_TAG_PLACEHOLDER } from "../constants";
+import { DYNAMIC_TAG_PLACEHOLDER } from "../constants";
+import * as BINDING from "../binding";
 import { AttributeStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>

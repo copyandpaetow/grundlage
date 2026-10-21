@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { component, html } from "../index";
 import * as grundlage from "../index";
+import { DECLARED_PROP_NAMES } from "../rendering/constants";
 import {
 	BaseComponent,
 	ComponentOptions,
@@ -77,7 +78,7 @@ const silenced = <T>(run: () => T): [T, Array<unknown>] => {
 
 describe("R8—R9 — a slot is a prop", () => {
 	test.skipIf(!slotsShip)(
-		"a slot key is absent from observedAttributes and present in declaredPropNames",
+		"a slot key is absent from observedAttributes and present in the declared prop names",
 		() => {
 			const tag = define(
 				function* (props) {
@@ -89,11 +90,11 @@ describe("R8—R9 — a slot is a prop", () => {
 			);
 			const definition = customElements.get(tag) as CustomElementConstructor & {
 				observedAttributes: Array<string>;
-				declaredPropNames: ReadonlySet<string>;
+				[DECLARED_PROP_NAMES]: ReadonlySet<string>;
 			};
 
 			expect(definition.observedAttributes).not.toContain("heading");
-			expect(definition.declaredPropNames.has("heading")).toBe(true);
+			expect(definition[DECLARED_PROP_NAMES].has("heading")).toBe(true);
 		},
 	);
 

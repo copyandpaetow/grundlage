@@ -1,8 +1,9 @@
-import { MARKUP } from "../../parser/characters";
+import * as MARKUP from "../../parser/markup";
 import { warnDuringDevelopment } from "../../utils/diagnostics";
 import { isStringable } from "../../utils/guards";
 import { ValueOf } from "../../utils/types";
-import { ATTRIBUTE_MODE } from "../constants";
+import { DECLARED_PROP_NAMES } from "../constants";
+import * as ATTRIBUTE_MODE from "../attribute-mode";
 import { markDeferredHydration } from "../defer-hydration";
 import { triggerComponentUpdate } from "../dom";
 
@@ -24,12 +25,15 @@ export const isDeclaredPropName = (element: Element, name: string): boolean => {
 	if (!localName.includes("-")) return false;
 	const cached = declaredPropNamesByLocalName.get(localName);
 	if (cached !== undefined) return cached.has(name);
+	//the registry types a definition as a bare constructor; a component class adds the static
 	const definition = customElements.get(localName) as
-		| (CustomElementConstructor & { declaredPropNames?: ReadonlySet<string> })
+		| (CustomElementConstructor & {
+				[DECLARED_PROP_NAMES]?: ReadonlySet<string>;
+		  })
 		| undefined;
 	if (definition === undefined) return false;
 	const declaredPropNames =
-		definition.declaredPropNames ?? NO_DECLARED_PROP_NAMES;
+		definition[DECLARED_PROP_NAMES] ?? NO_DECLARED_PROP_NAMES;
 	declaredPropNamesByLocalName.set(localName, declaredPropNames);
 	return declaredPropNames.has(name);
 };

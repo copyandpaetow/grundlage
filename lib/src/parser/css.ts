@@ -1,4 +1,5 @@
-import { CHARACTER_CODE, isQuoteCode, isWhitespaceCode } from "./characters";
+import { isQuoteCode, isWhitespaceCode } from "./characters";
+import * as CHARACTER_CODE from "./character-code";
 import { ValueOf } from "../utils/types";
 import { STYLE_SHEET_NOT_COMPILED } from "./constants";
 import {
@@ -8,23 +9,12 @@ import {
 	RuleCountCheck,
 } from "./types";
 import { assertDuringDevelopment } from "../utils/diagnostics";
+import * as CSS_STATE from "./css-state";
+import * as RULE_KIND from "./rule-kind";
 
 type CSSStateKind = ValueOf<typeof CSS_STATE>;
 
-const CSS_STATE = {
-	SELECTOR: 50,
-	PROPERTY: 51,
-	VALUE: 52,
-} as const;
-
 type RuleKind = ValueOf<typeof RULE_KIND>;
-
-const RULE_KIND = {
-	STYLE: 60,
-	GROUPING: 61,
-	KEYFRAMES: 62,
-	DESCRIPTOR: 63,
-} as const;
 
 const NO_OPEN_RUN = -1;
 const NOT_A_PROPERTY_NAME: unique symbol = Symbol("not a property name");

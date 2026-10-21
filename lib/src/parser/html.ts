@@ -1,18 +1,15 @@
 import { stringListHash } from "../utils/hashing";
 import {
-	BINDING,
 	DYNAMIC_TAG_PLACEHOLDER,
 	NO_KEY,
-	OPEN_CONSTRUCT,
 	STYLE_SHEET_NOT_COMPILED,
 } from "./constants";
+import * as BINDING from "./binding";
+import * as OPEN_CONSTRUCT from "./open-construct";
 import { ParsedTemplate, Part, StaticBinding } from "./types";
-import {
-	CHARACTER_CODE,
-	isQuoteCode,
-	isWhitespaceCode,
-	MARKUP,
-} from "./characters";
+import { isQuoteCode, isWhitespaceCode } from "./characters";
+import * as MARKUP from "./markup";
+import * as CHARACTER_CODE from "./character-code";
 import { compileStyleSheet } from "./css";
 import { decodeTextareaParts } from "./rcdata";
 import { ValueOf } from "../utils/types";
@@ -21,6 +18,9 @@ import {
 	libraryMessage,
 	warnDuringDevelopment,
 } from "../utils/diagnostics";
+import * as STATE from "./html-state";
+import * as PARSE_MODE from "./parse-mode";
+import * as ROOT_TEMPLATE from "./root-template";
 
 type StateKind = ValueOf<typeof STATE>;
 
@@ -41,17 +41,6 @@ const parsesContentAsRaw = (parser: ParserState, tag: string) => {
 		return parser.rootTemplate !== ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
 	return tag === STYLE_TAG || tag === TEXTAREA_TAG || tag === SCRIPT_TAG;
 };
-
-const STATE = {
-	COMMENT: 0,
-	RAW_CONTENT: 1,
-	TAG: 2,
-	ATTRIBUTE_KEY: 3,
-	ATTRIBUTE_VALUE: 4,
-	TEXT: 5,
-	ELEMENT: 6,
-	END_TAG: 7,
-} as const;
 
 type BindingStartingState = Exclude<
 	StateKind,
@@ -81,16 +70,8 @@ const OPEN_CONSTRUCT_FOR_STATE: Record<
 	OPEN_CONSTRUCT.CONTENT,
 ];
 
-const PARSE_MODE = { OPTIMISTIC_ROOT: 30, NO_ROOT_TEMPLATE: 31 } as const;
 type ParseModeKind = ValueOf<typeof PARSE_MODE>;
 
-const ROOT_TEMPLATE = {
-	UNDECIDED: 40,
-	RULED_OUT: 41,
-	IS_THE_CURRENT_TAG: 42,
-	CONTENT_OPEN: 43,
-	CLOSED: 44,
-} as const;
 type RootTemplateKind = ValueOf<typeof ROOT_TEMPLATE>;
 
 //scan helpers write this struct directly: each moves three or four cursor fields, and returning

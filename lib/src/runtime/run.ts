@@ -26,14 +26,16 @@ export const isAsyncGeneratorFunction = (value: unknown): boolean =>
 	typeof value === "function" &&
 	Object.getPrototypeOf(value) === asyncGeneratorFunctionPrototype;
 
-//a template yield is resumed by its own paint and an update generator yield by the run it waits
-//for, never by a continuation, so neither needs an identity
-export const PARKED_AT_TEMPLATE_OR_UPDATE_GENERATOR_YIELD: unique symbol =
-	Symbol("parked at template or update generator yield");
+//only the body waits this way, at the yield of an update generator, and only the first run of it
+//that finishes resumes the body
+export const WAITING_FOR_UPDATE_GENERATOR_RUN: unique symbol = Symbol(
+	"waiting for update generator run",
+);
 
-//the promise a run waits on is its resume permit: only that promise's continuation may step it
+//what a run waits on is its resume permit: only that promise's continuation, or that update
+//generator run, may step it. null while the driver loop holds the run
 export type Suspension =
-	typeof PARKED_AT_TEMPLATE_OR_UPDATE_GENERATOR_YIELD | Promise<unknown>;
+	typeof WAITING_FOR_UPDATE_GENERATOR_RUN | Promise<unknown>;
 
 export interface Run {
 	runner: ComponentRunner;
@@ -52,8 +54,8 @@ export const createRun = (
 	cleanup: null,
 });
 
-export const isParkedAtTemplateOrUpdateGeneratorYield = (run: Run): boolean =>
-	run.suspension === PARKED_AT_TEMPLATE_OR_UPDATE_GENERATOR_YIELD;
+export const isWaitingForUpdateGeneratorRun = (run: Run): boolean =>
+	run.suspension === WAITING_FOR_UPDATE_GENERATOR_RUN;
 
 export const isStillParkedAt = (run: Run, promise: Promise<unknown>): boolean =>
 	run.suspension === promise;
@@ -81,10 +83,9 @@ const isTeardownPlaceTaken = (
 //never pays for its promise. Every turn waits on a promise the finally block yielded
 const driveTeardownUntilDone = async (
 	run: Run,
-	firstResult: IteratorResult<unknown>,
+	result: IteratorResult<unknown>,
 	place: TeardownPlace,
 ): Promise<void> => {
-	let result = firstResult;
 	while (!result.done) {
 		if (!(result.value instanceof Promise)) {
 			reportErrorFromUserCode(new Error(TEARDOWN_YIELDED_NON_PROMISE_MESSAGE));
@@ -116,13 +117,12 @@ const driveTeardownUntilDone = async (
 
 export const tearDownRun = (run: Run): void => {
 	run.suspension = null;
-	const runner = run.runner;
 	try {
 		const result = run.generator.return(undefined);
 		if (!result.done)
 			void driveTeardownUntilDone(run, result, {
-				bodyRun: runner.bodyRun,
-				updateGeneratorRun: runner.updateGeneratorRun,
+				bodyRun: run.runner.bodyRun,
+				updateGeneratorRun: run.runner.updateGeneratorRun,
 			});
 	} catch (error) {
 		//the caller still has a sibling cleanup to run and a paint to make after this

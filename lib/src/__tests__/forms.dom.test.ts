@@ -1,9 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import {
-	FORM_EVENTS,
-	type FormAssociatedBase,
-	getFormAssociatedBaseClass,
-} from "../forms";
+import { type FormAssociatedBase, getFormAssociatedBaseClass } from "../forms";
+import * as FORM_EVENTS from "../form-events";
 import { html, component, type BaseComponent } from "../index";
 
 const sleep = (duration = 0) =>

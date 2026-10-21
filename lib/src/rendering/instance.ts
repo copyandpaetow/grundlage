@@ -1,4 +1,4 @@
-import { BINDING } from "../parser/constants";
+import * as BINDING from "../parser/binding";
 import { getParsedTemplate } from "../parser/html";
 import { ParsedTemplate } from "../parser/types";
 import { TemplateValue } from "../template";
@@ -18,7 +18,7 @@ import {
 	isContentBinding,
 	isRawContentBinding,
 } from "./bindings/types";
-import { CONTENT_KIND } from "./constants";
+import * as CONTENT_KIND from "./content-kind";
 import { buildFragment } from "./dom";
 import {
 	ensureFragmentKeptEveryBinding,

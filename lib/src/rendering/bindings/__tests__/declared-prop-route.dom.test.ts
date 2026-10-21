@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { component, html } from "../../../index";
+import { DECLARED_PROP_NAMES } from "../../constants";
 import {
 	applyAttributeValue,
 	isAwaitingDefinition,
@@ -32,7 +33,7 @@ describe("isDeclaredPropName", () => {
 
 	test("a registered definition answers for its declared names", () => {
 		class DeclaringElement extends HTMLElement {
-			static declaredPropNames = new Set(["tags"]);
+			static [DECLARED_PROP_NAMES] = new Set(["tags"]);
 		}
 		customElements.define("declaring-el", DeclaringElement);
 		const element = document.createElement("declaring-el");

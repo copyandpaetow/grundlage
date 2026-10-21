@@ -291,8 +291,8 @@ customElements.define(
   reaches a nested custom element. A name the child **declares** always goes through that prop's accessor,
   so `null` / `undefined` write the child's fallback back
 - those rules hold for a value that is exactly one hole. A value with anything else in it
-  (`class="card ${extra}"`) is composed to a string and always set: `null` / `undefined` add `""`, `false`
-  adds `"false"`
+  (`class="card ${extra}"`) is composed to a string and always set: `null`, `undefined`, `true` and `false`
+  add `""`, as in a content hole
 - live state (`value` and `checked` on inputs, `selected` on options) is written as the attribute on the
   first commit and as the property after that, so `form.reset()` returns to the first painted value and a
   state change replaces what the user typed. `<select value=${…}>` warns and selects nothing: bind

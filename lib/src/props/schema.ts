@@ -1,4 +1,4 @@
-import { MARKUP } from "../parser/characters";
+import * as MARKUP from "../parser/markup";
 import { DEFER_HYDRATION_ATTRIBUTE } from "../rendering/constants";
 import { isTemplate } from "../template";
 import { PropEntry, Resolve, Schema } from "../types";
