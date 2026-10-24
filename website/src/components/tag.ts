@@ -1,4 +1,4 @@
-import { html, component } from "../../../lib/src";
+import { html, component, prop } from "../../../lib/src";
 
 customElements.define(
 	"tag-component",
@@ -21,6 +21,6 @@ customElements.define(
 	            `;
 			};
 		},
-		{ props: { headingLevel: [Number, 1] } },
+		{ props: { headingLevel: prop.attribute(Number, 1) } },
 	),
 );

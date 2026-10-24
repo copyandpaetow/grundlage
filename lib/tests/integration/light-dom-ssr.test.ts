@@ -8,7 +8,7 @@ import {
 	ComponentConstructor,
 	ComponentOptions,
 	Schema,
-	PropEntry,
+	PropDefinition,
 } from "../../src/types";
 
 //What the server *emits* for a light-DOM render (light-dom/PLAN.md §1.1, §3.5, §4.6, §5.1).
@@ -18,8 +18,8 @@ import {
 //neither export exists yet; typed as the schema entry each one will be, so these suites typecheck
 //against the target API instead of around it
 const { Slot, DefaultSlot } = grundlage as typeof grundlage & {
-	Slot: PropEntry;
-	DefaultSlot: PropEntry;
+	Slot: PropDefinition<unknown, "optional">;
+	DefaultSlot: PropDefinition<unknown, "optional">;
 };
 
 const light = <DeclaredSchema extends Schema>(

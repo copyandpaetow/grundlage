@@ -22,6 +22,13 @@ const NAMES_NOT_TO_MANGLE = [
 	"internals",
 	"setProp",
 	"props",
+	//the prop namespace: a bundled `export * as` becomes a plain object
+	"property",
+	"attribute",
+	"optional",
+	"oneOf",
+	"unreflected",
+	"read",
 	"eventName",
 	//read by another bundled copy of the library: a template it made, or its load() on our runner
 	"__templateStrings",
@@ -63,23 +70,31 @@ const sharedOptions: UserConfig = {
 };
 
 //every other property name is the library's own and gets a short one. The bundle projects in
-//vitest.config.ts run the public-API tests on a bundle minified the same way
+//vitest.config.ts run the public-API tests on a bundle minified the same way. Rolldown mangles
+//properties only in a single-chunk build, so the declarations are built in a pass of their own
 export const productionOptions: UserConfig = {
 	...sharedOptions,
 	outDir: "dist",
-	dts: true,
+	dts: false,
 	minify: {
 		mangleProps: {
 			include: /^/,
 			reserved: [...new Set([...readPlatformNames(), ...NAMES_NOT_TO_MANGLE])],
 		},
 	},
-	clean: ["dist/*.mjs", "dist/*.mts", "dist/*.map"],
+	clean: ["dist/index.mjs", "dist/index.mjs.map"],
 	define: { GRUNDLAGE_IS_DEVELOPMENT_BUILD: "false" },
 };
 
 export default defineConfig([
 	productionOptions,
+	{
+		...sharedOptions,
+		outDir: "dist",
+		dts: { emitDtsOnly: true },
+		minify: false,
+		clean: ["dist/*.d.mts", "dist/*.d.mts.map"],
+	},
 	{
 		...sharedOptions,
 		outDir: "dist/development",

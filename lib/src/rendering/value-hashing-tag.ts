@@ -1,0 +1,11 @@
+export const NULLISH = 1;
+export const STRING = 2;
+export const NUMBER = 3;
+export const BOOLEAN = 4;
+export const BIGINT = 5;
+export const ARRAY = 6;
+export const OBJECT = 7;
+export const MAP = 8;
+export const SET = 9;
+export const REFERENCE = 10;
+export const TRUNCATED = 11;

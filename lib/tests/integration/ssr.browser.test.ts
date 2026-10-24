@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, component, load } from "../../src/index";
+import { html, component, load, prop } from "../../src/index";
 import { ComponentConstructor } from "../../src/types";
 
 const sleep = (duration = 0) =>
@@ -905,7 +905,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 							>`;
 						};
 					},
-					{ props: { "data-label": String } },
+					{ props: { "data-label": prop.optional(prop.attribute(String)) } },
 				);
 
 			const serialized = await serverRender(serverTag, makeComponent());

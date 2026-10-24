@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, component } from "../../../index";
+import { html, component, prop } from "../../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -519,7 +519,10 @@ describe("tag updates", () => {
 				},
 				{
 					props: {
-						items: [(incoming: unknown) => incoming as Array<unknown>, []],
+						items: prop.attribute(
+							(incoming: unknown) => incoming as Array<unknown>,
+							[],
+						),
 					},
 				},
 			),

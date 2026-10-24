@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { component, html } from "../../index";
+import { component, html, prop } from "../../index";
 import {
 	assertDuringDevelopment,
 	InvariantError,
@@ -86,11 +86,13 @@ describe("an invariant error thrown inside a prop claim", () => {
 				},
 				{
 					props: {
-						level: (incoming: unknown) => {
-							if (incoming === "broken")
-								throw new InvariantError("library bug");
-							return incoming;
-						},
+						level: prop.optional(
+							prop.attribute((incoming: unknown) => {
+								if (incoming === "broken")
+									throw new InvariantError("library bug");
+								return incoming;
+							}),
+						),
 					},
 				},
 			),
@@ -125,11 +127,13 @@ describe("an invariant error thrown while recovering pre-upgrade assignments", (
 				},
 				{
 					props: {
-						level: (incoming: unknown) => {
-							if (incoming === "broken")
-								throw new InvariantError("library bug");
-							return incoming;
-						},
+						level: prop.optional(
+							prop.attribute((incoming: unknown) => {
+								if (incoming === "broken")
+									throw new InvariantError("library bug");
+								return incoming;
+							}),
+						),
 					},
 				},
 			),

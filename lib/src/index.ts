@@ -17,6 +17,7 @@ import { refreshStyleSheetsAfterMove } from "./rendering/instance";
 import {
 	DECLARED_PROP_NAMES,
 	DEFER_HYDRATION_ATTRIBUTE,
+	PROPERTY_PROP_NAMES,
 } from "./rendering/constants";
 import { findShadowRoot } from "./rendering/dom";
 import {
@@ -41,21 +42,30 @@ import {
 	claimPropValueChange,
 } from "./props/values";
 import { isAsyncGeneratorFunction, isGeneratorFunction } from "./runtime/run";
-import { InvariantError, libraryMessage } from "./utils/diagnostics";
+import * as PROP_KIND from "./props/prop-kind";
+import {
+	InvariantError,
+	isDevelopmentBuild,
+	libraryMessage,
+	warnDuringDevelopment,
+} from "./utils/diagnostics";
+import { isServer } from "./utils/guards";
 
-export { props } from "./props/read";
 export {
 	type BaseComponent,
 	type Cleanup,
 	type ComponentOptions,
 	type ComponentProps,
-	type DeclaredProps,
+	type PassedPropsOf,
+	type PropsOf,
 	type Resolve,
 	type Schema,
 	type Template,
 	type UpdateGenerator,
 	type YieldableValue,
 } from "./types";
+export { awaited } from "./awaited";
+export * as prop from "./prop";
 export { load } from "./load";
 export { ComponentErrorEvent } from "./runtime/component-error-event";
 
@@ -93,11 +103,24 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		: HTMLElement;
 
 	const props = normalizeSchema(mergedOptions.props ?? {});
+	const requiredPropNames = [...props.values()]
+		.filter((prop) => prop.isRequired)
+		.map((prop) => prop.propName);
 
 	class BaseElement extends ParentClass implements BaseComponent {
-		static observedAttributes = [...props.keys(), DEFER_HYDRATION_ATTRIBUTE];
+		static observedAttributes = [
+			...[...props]
+				.filter(([, prop]) => prop.kind !== PROP_KIND.PROPERTY)
+				.map(([attributeName]) => attributeName),
+			DEFER_HYDRATION_ATTRIBUTE,
+		];
 		static readonly [DECLARED_PROP_NAMES]: ReadonlySet<string> = new Set(
 			[...props.values()].map((prop) => prop.propName),
+		);
+		static readonly [PROPERTY_PROP_NAMES]: ReadonlySet<string> = new Set(
+			[...props.values()]
+				.filter((prop) => prop.kind === PROP_KIND.PROPERTY)
+				.map((prop) => prop.propName),
 		);
 
 		#root: ComponentRoot;
@@ -105,6 +128,9 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		#props: PropValues = createComponentProps(props, this);
 		#isReflecting = false;
 		#runner: ComponentRunner;
+		#startAfterThisTask = (): void => {
+			sendRunnerRequest(this.#runner, RUNNER_REQUEST.START);
+		};
 
 		get internals(): ElementInternals | null {
 			return (this.#internals ??= this.attachInternals?.() ?? null);
@@ -121,8 +147,9 @@ export const component = <DeclaredSchema extends Schema = {}>(
 					},
 					set(this: BaseElement, incoming: unknown) {
 						if (!this.#claimPropChange(prop, incoming)) return;
-						this.#reflect(attributeName, prop);
-						this.update();
+						if (prop.kind === PROP_KIND.ATTRIBUTE)
+							this.#reflect(attributeName, prop);
+						this.#scheduleAfterPropChange();
 					},
 				});
 		}
@@ -137,6 +164,14 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				endRunnerWithFatalError(this.#runner, error);
 				return false;
 			}
+		}
+
+		//the write that completes the required props queues the start, so every write of the same task
+		//lands before the body reads them; START is a no-op unless the runner waits to start
+		#scheduleAfterPropChange(): void {
+			this.update();
+			if (requiredPropNames.length > 0)
+				queueMicrotask(this.#startAfterThisTask);
 		}
 
 		#reflect(attributeName: string, prop: Prop): void {
@@ -163,6 +198,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				existingRoot !== null,
 			);
 			this.#runner = createComponentRunner({
+				requiredPropNames,
 				root: this.#root,
 				componentProps: this.#props as unknown as ComponentProps,
 				componentGenerator: componentGenerator as ComponentGenerator,
@@ -182,7 +218,31 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				endRunnerWithFatalError(this.#runner, error);
 				return;
 			}
+			const missingPropName = requiredPropNames.find(
+				(propName) => this.#props[propName] === undefined,
+			);
+			//on the server nothing arrives after connection, so a missing required prop never will
+			if (missingPropName !== undefined && isServer()) {
+				endRunnerWithFatalError(
+					this.#runner,
+					new TypeError(
+						libraryMessage(
+							`prop "${missingPropName}" is required, and nothing supplied it before the server rendered <${this.localName}>. Give it a fallback, or render the element inside a component that binds it.`,
+						),
+					),
+				);
+				return;
+			}
+			if (missingPropName !== undefined && isDevelopmentBuild)
+				requestAnimationFrame(() => this.#warnIfStillMissing(missingPropName));
 			sendRunnerRequest(this.#runner, RUNNER_REQUEST.START);
+		}
+
+		#warnIfStillMissing(propName: string): void {
+			if (!this.isConnected || this.#props[propName] !== undefined) return;
+			warnDuringDevelopment(
+				`<${this.localName}> waits for its required prop "${propName}", which is still missing a frame after it connected. Bind it from the parent, assign it, or give it a fallback.`,
+			);
 		}
 
 		async disconnectedCallback() {
@@ -209,7 +269,8 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			}
 			const prop = props.get(attributeName);
 			if (prop === undefined) return;
-			if (this.#claimPropChange(prop, newValue)) this.update();
+			if (this.#claimPropChange(prop, newValue))
+				this.#scheduleAfterPropChange();
 		}
 
 		setProp(name: string, value: unknown, oldValue?: unknown) {

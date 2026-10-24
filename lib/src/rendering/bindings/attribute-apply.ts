@@ -1,3 +1,4 @@
+import { PROPERTY_PROP_NAMES } from "../constants";
 import * as MARKUP from "../../parser/markup";
 import { warnDuringDevelopment } from "../../utils/diagnostics";
 import { isStringable } from "../../utils/guards";
@@ -139,7 +140,14 @@ export const applyAttributeValue = (
 	//add a listener for "ce" instead of being assigned
 	if (isDeclaredPropName(element, key)) {
 		(element as unknown as Record<string, unknown>)[key] = value;
-		markDeferredHydration(element, attributeMode);
+		//a property prop never reaches the server's markup, whatever its value
+		const definition = customElements.get(element.localName) as
+			{ [PROPERTY_PROP_NAMES]?: ReadonlySet<string> } | undefined;
+		const isPropertyProp = definition?.[PROPERTY_PROP_NAMES]?.has(key) === true;
+		markDeferredHydration(
+			element,
+			isPropertyProp ? ATTRIBUTE_MODE.PROPERTY : attributeMode,
+		);
 		return;
 	}
 
@@ -165,6 +173,10 @@ export const applyAttributeValue = (
 			break;
 		case ATTRIBUTE_MODE.ATTRIBUTE: {
 			clearPropertyValue(element, key);
+			//before definition nothing knows whether the prop observes an attribute, so the value also
+			//rides an own property, which upgrade claims either way; CSS still sees the attribute
+			if (isAwaitingDefinition(element))
+				(element as unknown as Record<string, unknown>)[key] = value;
 			const attributeValue = String(value);
 			if (element.getAttribute(key) !== attributeValue)
 				element.setAttribute(key, attributeValue);

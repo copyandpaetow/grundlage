@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, component } from "../../../index";
+import { html, component, prop } from "../../../index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -1009,7 +1009,7 @@ describe("root-template host attribute writes do not feed back into the componen
 					>`;
 				};
 			},
-			{ props: { "data-label": String } },
+			{ props: { "data-label": prop.optional(prop.attribute(String)) } },
 		);
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -1040,7 +1040,7 @@ describe("root-template host attribute writes do not feed back into the componen
 					yield html`<template label=${source}><p>${label}</p></template>`;
 				};
 			},
-			{ props: { label: [String, ""] } },
+			{ props: { label: prop.attribute(String, "") } },
 		);
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;

@@ -15,6 +15,7 @@ kinds of value:
   and the previous run is torn down before the next one starts. `view` is only a name for the
   reader, not a keyword: any name, or none (`yield function* () { … }`), behaves the same;
 - a PROMISE waits: the `yield` evaluates to its value, and a rejection throws at the `yield`.
+  In TypeScript, `yield* awaited(promise)` is the same wait with a typed value (see Rules).
 
 Data the SERVER should fetch for the first paint comes through one helper, WITH the star:
 `const user = yield* load(() => fetchUser(id))` (see API).
@@ -35,11 +36,13 @@ it.
 ## Complete example
 
 ```javascript
-import { component, html } from "grundlage";
+import { component, html, prop } from "grundlage";
 
 // the schema is a plain object; hoisting it keeps the element's inputs readable at a glance
-// (in TypeScript this needs `satisfies Schema`, see Rules)
-const props = { start: [Number, 0], label: [String, "count"] };
+const props = {
+	start: prop.attribute(Number, 0),
+	label: prop.attribute(String, "count"),
+};
 
 customElements.define(
 	"click-counter",
@@ -66,7 +69,7 @@ Waiting inside an update generator paints a placeholder first, and an update whi
 starts over:
 
 ```javascript
-yield function* view({ userId }) {
+yield function* profile({ userId }) {
 	yield html`<p>Loading…</p>`;
 	const user = yield fetchUser(userId);
 	yield html`<p>${user.name}</p>`;
@@ -90,78 +93,110 @@ yield function* view({ userId }) {
   at runtime.
 
 `options.props`, the schema
-  `{ propName: entry }`, where an entry is a FUNCTION taking whatever arrived and returning
-  the value, or `undefined` to REFUSE it:
-  `(incoming) => incoming instanceof Quote ? incoming : undefined`. `String`, `Number`, `BigInt` and `Boolean` are shorthands for the
-  four shipped functions. `[entry, fallback]` supplies what the function is called with when
-  nothing was supplied. That is the whole schema. There is no separate optional or required
-  shape, and no type guard: a prop is its function.
+  `{ propName: definition }`, built from the `prop` namespace. A definition says where the
+  value comes from and who must supply it:
 
-  The function is the ONE place a value is parsed or validated, and it serves the attribute
-  and the property mode. A string means the value came from markup and needs parsing; anything
-  else came from JS and is already itself:
-  `(incoming) => typeof incoming === "string" ? incoming.split(" ") : incoming`.
+  ```javascript
+  import { prop } from "grundlage";
+
+  const props = {
+  	habit: prop.property(), // set from JavaScript only, required
+  	checkIns: prop.property([]), // set from JavaScript only, with a fallback
+  	today: prop.attribute(String), // set from markup or JavaScript, required
+  	headingLevel: prop.attribute(Number, 2), // with a fallback
+  	open: prop.attribute(Boolean), // false while absent
+  	variant: prop.attribute(prop.oneOf("primary", "secondary"), "primary"),
+  	note: prop.optional(prop.property()), // may stay undefined
+  	value: prop.unreflected(prop.attribute(Number, 0)), // markup keeps the default
+  };
+  ```
+
+  - `prop.property(fallback?)`: a value only JavaScript sets (an object, an array, a function).
+    It observes NO attribute and never reflects. Every value is taken as it is, `null`
+    included; only `undefined` is absence. TypeScript names the type:
+    `prop.property<Habit>()`. `prop.property(schema, fallback?)` takes any Standard Schema (Zod,
+    Valibot, ArkType), types the prop by it and validates every write; a refusal warns with the
+    schema's own message, and an asynchronous schema throws.
+  - `prop.attribute(parser, fallback?)`: a value markup can set. It observes the LOWERCASED
+    prop name (`userId` observes `userid`, and either spelling binds in markup), and a property
+    write reflects back to it. `parser` is `String`, `Number`, `BigInt`, `Boolean`,
+    `prop.oneOf(…)` or a function taking whatever arrived and returning the value, or
+    `undefined` to REFUSE it. A string came from markup and needs parsing; anything else came
+    from JavaScript and is already itself:
+    `(incoming) => typeof incoming === "string" ? incoming.split(" ") : incoming`. `null` (the
+    attribute's removal) and `undefined` are absence. `prop.attribute(Boolean)` is `false` while
+    absent, so it never needs a fallback.
+  - `prop.unreflected(prop.attribute(…))`: a property write does not reflect. The attribute
+    stays what the markup wrote, the default, like a native input's `value`; a form reset reads
+    it back with `prop.read(host, props).value`.
+  - `prop.optional(definition)`: may stay `undefined`. Only for a definition without a
+    fallback, and always outermost: `prop.optional(prop.unreflected(prop.attribute(Number)))`.
+  - `prop.oneOf("a", "b")`: a parser that accepts exactly those strings, typed as their union.
+
+  REQUIRED is the default: a definition with neither a fallback nor `prop.optional` must be
+  supplied. The component body does not run until every required prop holds a value, so it
+  never reads `undefined` there, and all writes of one task land before it starts. Later, a
+  write of `undefined` or the removal of a required attribute is refused with a warning. A
+  required prop still missing a frame after connection warns in development. On the SERVER
+  nothing arrives after connection, so a required prop nothing supplied ends the component with
+  an error naming the fix: give it a fallback, or render the element inside a component that
+  binds it.
 
   Five rules cover the whole model:
 
   1. ONE VALUE PER PROP, in one store the element owns. Last write wins, whichever mode it
      came from, and nothing is compared across modes.
-  2. EVERY INCOMING VALUE runs through the prop's function: markup, a property assignment, a
-     parent's binding, `setProp`, the fallback at construction.
+  2. EVERY INCOMING VALUE runs through the prop's parser or schema: markup, a property
+     assignment, a parent's binding, `setProp`, the fallback at construction.
   3. A REFUSAL IS IGNORED. The previous value stays and the console warns; nothing throws and
      nothing updates.
-  4. ABSENCE IS A WRITE OF THE FALLBACK. `removeAttribute`, `el.x = undefined`, `el.x = null`
-     and element construction are one code path, so NOTHING is required and no read fails.
-     The fallback is not restored: the function is asked the same question and gives the same
-     answer, whenever it is asked.
-  5. A PROPERTY ASSIGNMENT REFLECTS when the value it settled on has a string spelling. An
-     attribute arriving from markup does not: `count="007"` stays as written while `el.count`
-     reads `7`.
+  4. ABSENCE IS A WRITE OF THE FALLBACK. `el.x = undefined`, an attribute's removal, a binding
+     a later paint drops, and element construction are one code path. A required prop refuses
+     absence instead, and an optional one reads `undefined`.
+  5. A PROPERTY ASSIGNMENT to a `prop.attribute` REFLECTS when the value it settled on has a
+     string spelling. An attribute arriving from markup does not: `count="007"` stays as
+     written while `el.count` reads `7`.
 
-  Every prop observes an attribute: the LOWERCASED prop name. `userId` observes `userid`,
-  and either spelling binds in markup. Prop names must match `/^[a-z][a-zA-Z0-9_-]*$/` and
-  two props differing only in case throw at define time. Every declared prop becomes an
-  accessor on the element class, so a name already on the prototype chain (`title`, `id`,
-  `lang`, `hidden`, `update`, `setProp`, `internals`) throws at define time, as does `host`,
-  which the props object reserves, and any name starting with `on-`, which markup reads as a
-  custom event binding.
+  Prop names must match `/^[a-z][a-zA-Z0-9_-]*$/` and two props differing only in case throw at
+  define time. Every declared prop becomes an accessor on the element class, so a name already
+  on the prototype chain (`title`, `id`, `lang`, `hidden`, `update`, `setProp`, `internals`)
+  throws at define time, as does `host`, which the props object reserves, and any name starting
+  with `on-`, which markup reads as a custom event binding. A schema entry that is not a `prop.*`
+  definition (`String`, `[Number, 0]`, a bare function) throws at define time and names the
+  `prop.attribute` spelling.
 
   A fallback is COPIED per element with `structuredClone` for anything object-shaped (deeply:
   a nested object is a fresh one too), and SHARED for a primitive, a function and a
   `Template`. A value `structuredClone` cannot reproduce (a class instance, an object
-  holding a function) throws at define time and names the remedy: put the default inside the
-  function, `(incoming) => incoming ?? new Value()`, which runs once per element. So does a
-  fallback the prop's own function refuses; the check calls the function once, before any
-  element exists.
+  holding a function) throws at define time and asks for plain data. So does a fallback the
+  parser or schema refuses; the check runs once, before any element exists.
 
   Reflection writes the value's own spelling: a string as itself, a number or bigint through
   `String(value)`, `true` as `""`. A value with no spelling (an object, `undefined`) takes a
   stale attribute OFF and touches nothing when there was none. `false` removes the attribute
-  too, unless absence for that prop reads `true` (`[Boolean, true]`), where removing would
-  say the opposite and it writes `"false"` instead. Reading is symmetric: `x`, `x=""` and
-  `x="true"` are `true`, `x="false"` is `false`.
+  too, unless absence for that prop reads `true` (`prop.attribute(Boolean, true)`), where
+  removing would say the opposite and it writes `"false"` instead. Reading is symmetric: `x`,
+  `x=""` and `x="true"` are `true`, `x="false"` is `false`.
 
-  The type layer sees the shape, not the function: a bare entry is `T | undefined`, and a
-  `[entry, fallback]` is `T`. The visible fallback is the only way to promise a value. A
-  bare `Boolean` is the exception, typed `boolean`, since absence is one of its two states.
-  The fallback ITSELF is not type-checked against the entry: a wrong one is a define-time
-  throw with a readable message rather than a compile error.
+  Types come from the definitions, and a schema hoisted into a `const` needs no annotation.
+  A fallback is checked against what the parser returns. `PropsOf<typeof props>` is the body's
+  view, where only an optional prop may be missing; `PassedPropsOf<typeof props>` is a
+  caller's, where a prop with a fallback or `prop.optional` may be left out.
 
 `` html`...` `` => `Template` (opaque)
   Tagged template literal. Each distinct literal is parsed once and cached (keyed by its
   strings array); later paints only touch dynamic parts. Yield it, or embed it inside
   another `html` template.
 
-`props(element, schema) => typed object`
-  The same schema, read once from a plain `HTMLElement` that never went through `component`,
-  or for reading something deliberately left unobserved. NOT the primary spelling: a
-  component declares its props in `component(gen, { props })` and receives them as its one
-  argument. The returned object is a SNAPSHOT; the schema is normalized once per schema object,
-  so hoist it rather than writing it inline at the call. An own property under the prop name
-  wins over the attribute (case intact: `element.userTags`, not `usertags`); with neither, the
-  prop's function answers absence. A value the function refuses warns and reads as absent, the
-  same as everywhere else. The export collides with the conventional `const props = {…}`
-  schema name, so a module using both renames one (`import { props as readProps }`).
+`prop.read(element, schema) => typed object`
+  The same schema, read once from an element that never went through `component`, or the
+  markup default of a `prop.unreflected` prop. NOT the primary spelling: a component declares
+  its props in `component(gen, { props })` and receives them as its one argument. The returned
+  object is a SNAPSHOT; the schema is normalized once per schema object, so hoist it rather
+  than writing it inline at the call. An own property under the prop name wins over the
+  attribute (case intact: `element.userTags`, not `usertags`), and a `prop.property` reads only
+  the own property. With neither, the fallback answers; a required prop reads `undefined`. A
+  value the parser refuses warns and reads as absent, the same as everywhere else.
 
 `yield* load(fetcher)` and `yield* load(key, fetcher)` => the fetcher's awaited result
   Data needed before the first paint:
@@ -189,6 +224,11 @@ yield function* view({ userId }) {
   again. The body runs once, so a `load` there runs once; inside an update generator a
   `load` runs on every update.
 
+`yield* awaited(promise)` => the promise's resolved value, typed
+  The TypeScript spelling of `yield promise`: the same wait, a rejection throws at the
+  `yield*`, and the value carries the promise's type instead of `unknown`. JavaScript can use
+  either.
+
 `host.update() => Promise<void>`
   The update trigger. See Rules for what it re-fires and when it resolves. On the server an
   update asked for during the paint (a host binding writing an own prop, a synchronous
@@ -200,8 +240,8 @@ yield function* view({ userId }) {
 `host.setProp(name, value, oldValue?) => void`
   Imperative counterpart to a markup binding, for a framework/interop driver feeding props
   from outside. A DECLARED name is assigned through its own accessor, so it runs the prop's
-  function, reflects and schedules, and `null`/`undefined` is the absence that writes the
-  fallback back. An undeclared name resolves the same way a dynamic attribute does:
+  parser, reflects and schedules, and `undefined` is the absence that writes the fallback back
+  (`null` too, for a `prop.attribute`). An undeclared name resolves the same way a dynamic attribute does:
   stringable → attribute, non-stringable → property, `on*`/`on-*` plus a function → event
   listener. Pass `oldValue` so a previously bound listener is removed; the other mode is
   cleared either way.
@@ -210,8 +250,8 @@ yield function* view({ userId }) {
   Lazily attached on first read, on every component, not only form-associated ones. `null`
   on the server.
 
-Types: `BaseComponent`, `Cleanup`, `ComponentOptions`, `ComponentProps`, `DeclaredProps`,
-`Resolve`, `Schema`, `Template`, `UpdateGenerator`, `YieldableValue`.
+Types: `BaseComponent`, `Cleanup`, `ComponentOptions`, `ComponentProps`, `PassedPropsOf`,
+`PropsOf`, `Resolve`, `Schema`, `Template`, `UpdateGenerator`, `YieldableValue`.
 
 ## Bindings
 
@@ -248,7 +288,7 @@ yield function* view({ role }) {
 - Event handlers bind here too (e.g. `on-form-*` for form components).
 - Attributes dropped by a later paint are reverted on the host.
 - A host binding that writes one of the host's OWN declared props is a write like any other: it
-  runs the prop's function, reflects, and updates when the value changed, at mount, at
+  runs the prop's parser, reflects, and updates when the value changed, at mount, at
   hydration and on every patch alike. The next paint binds the same value, the change gate
   skips it, and the component settles, so `<template theme=${x}>` with `componentProps.theme`
   painted inside shows `x` in the same frame, at the cost of one extra update generator run. A
@@ -264,9 +304,17 @@ An array in a content hole paints one row per entry. Rows are matched by the row
 identity and a content hash, which covers most reorders and edits without extra work. For
 explicit identity, put a dynamic comment in the row: the FIRST dynamic comment of a template
 is consumed as its key, never reaches the DOM, and binds that row's DOM (focus, scroll,
-input state) to the value. Text around the expression is fine, it is constant across the
-rows of one template, so only the expression tells rows apart: `<!--${id}-->` and
-`<!-- key: ${id} -->` work the same way.
+input state, a child component's own state) to the value. Text around the expression is fine,
+it is constant across the rows of one template, so only the expression tells rows apart:
+`<!--${id}-->` and `<!-- key: ${id} -->` work the same way. The comment may sit anywhere in
+the row, top level included, which is how a row that is one component gets its key:
+``html`<!--${user.id}--><user-card user=${user}></user-card>` ``.
+
+Without a key, a row whose content changed is matched by POSITION, so its DOM state (and a
+component's own state) stays at its index while it paints another entry. Two cases make that
+visible: a reorder that also edits rows, and a row holding an INLINE HANDLER, which changes on
+every paint (`onClick=${() => select(id)}` is a new function each time, and functions compare
+by reference), so that list never matches by content at all. Key the rows in both cases.
 
 A row matched to the previous paint is PATCHED when its template is the same literal. A
 KEYED row can also be matched ACROSS a template change, since the key is its whole identity
@@ -295,7 +343,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   exists once `connectedCallback` has run.
 - Updates are triggered by `host.update()`, by `host.setProp(…)`, by assigning a declared
   prop a value it did not already hold (`el.items = […]`, `el.label = "x"`), and by a change
-  to a DECLARED attribute. A write the prop's function refuses, and a re-write of the same
+  to a DECLARED attribute. A write the prop's parser refuses, and a re-write of the same
   primitive, schedule nothing. A component's own host binding writing one of its own props
   schedules like any other write (Host attributes). Undeclared attributes are not observed at
   all. There is no other reactivity.
@@ -413,7 +461,9 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
     };
     ```
 - Warnings exist only in the development build, which bundlers pick through the `development`
-  export condition. An exception a cleanup throws goes to `reportError`, not the console.
+  export condition. An import map cannot pick a condition: without a bundler, map `grundlage`
+  to `dist/development/index.mjs` while developing and to `dist/index.mjs` in production. An
+  exception a cleanup throws goes to `reportError`, not the console.
 - In a CONTENT hole `null`, `undefined`, `false` and `true` paint nothing, since a boolean is a
   condition result, not a value. Numbers, bigints and strings always paint, `0`, `0n`,
   `NaN` and `""` included. So ``${isOpen && html`…`}`` is safe, but ``${items.length &&
@@ -424,11 +474,19 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   attribute and `true` sets it to `"true"`; a non-stringable value (object, array, function)
   is assigned as a PROPERTY instead, which is how data reaches a nested custom element.
   A name the target element DECLARES skips all of that and is assigned through that prop's
-  accessor, whatever the value: `null` and `undefined` are the absence that writes the child's
-  fallback back, and a value the child's function refuses warns from the PARENT's paint
+  accessor, whatever the value: `undefined`, and a binding a later paint drops, are the absence
+  that writes the child's fallback back, `null` is absence for a `prop.attribute` and a value
+  for a `prop.property`, and a value the child's parser refuses warns from the PARENT's paint
   and leaves the child's previous value standing. Where the child's definition has not loaded
-  yet, nothing knows the name is declared: a stringable value rides the attribute the prop
-  observes, anything else lands as an own property, and both reach the store at upgrade.
+  yet, nothing knows the name is declared: a stringable value writes the attribute (so CSS sees
+  it) and an own property, anything else lands as an own property, and the own property
+  reaches the store at upgrade, which takes the attribute off again for a `prop.property`. On
+  the SERVER a binding to a `prop.property` marks the child `defer-hydration`, since the value
+  never reaches the markup: the child waits for its parent's paint in the browser.
+- A FUNCTION passed to a `prop.property` from an inline arrow
+  (`onPick=${(item) => select(item)}`) is a new reference on every paint, so the child updates
+  on every paint of its parent. Define the function once in the body, or have the child
+  dispatch an event instead.
 - Those rules are for a value that is exactly ONE hole, which is what picks that lane, whatever
   the NAME is made of: `${name}=${value}` and `on${eventName}=${handler}` get them too. A value
   with anything else in it (`class="card ${extra}"`, `style="top:${y}px"`) is COMPOSED to a
@@ -460,11 +518,16 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 - Events bind as `onEventName=${handler}`. The name is matched case-insensitively against the
   element's own `on*` properties, so `onClick` and `onclick` both bind `click`; a name with no
   matching property is assigned as a dead property and warns on the console. A name the target
-  DECLARES is a prop first and is never matched as an event, so `once: String` is settable,
+  DECLARES is a prop first and is never matched as an event, so `once: prop.attribute(String)`
+  is settable,
   while `on-*` is refused at define time because markup has already claimed it. Custom events
   need the `on-` prefix (`on-swatch-select=${handler}`) and keep their hyphenated name
   verbatim. The name may itself hold a hole (`on${eventName}=${handler}`), which is resolved
   from what it composes to on every paint. A quoted string (`onclick="…"`) is never a binding.
+  An inline handler, `onClick=${() => select(week)}`, is a new function on every paint, so its
+  listener is removed and added again on each paint: two calls, no style or layout work. In a
+  list it also defeats matching rows by content, so key those rows (see Lists and keys)
+  rather than building event delegation. A handler defined once in the body is bound once.
 - Components paint into SHADOW DOM by default. Light-DOM selectors won't reach inside.
 - Don't write literal `<!--^.^ …-->` or `<!--*.*-->` comments in template HTML: those
   prefixes are the internal markers and a collision silently misaligns hydration.
@@ -477,6 +540,9 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   `el.items = el.items` does, because a value that could have been mutated behind its
   reference is never called unchanged.
   It lands on the next paint from any cause, where these hashes pick the new contents up.
+- A `<style>` with no holes is written at mount and never touched again, inline or hoisted:
+  ``const styles = html`<style>…</style>` `` at module scope, embedded as `${styles}`, is an
+  unchanged nested template on every later paint.
 - A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the mounted (and
   server-rendered) sheet text carries the real literal values, and every later update is a
   `setProperty` on this element's OWN CSSOM sheet, never a reparse, never a write to the
@@ -491,7 +557,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   (`getHTML`) reflects the last full-text write, not later CSSOM updates.
 - Declare inputs in `component(gen, { props })` and read them off the object the component body
   and its update generators receive. Don't read attributes directly: they're strings, they skip
-  the parsing, defaults and refusal the schema gives, and an undeclared attribute does not
+  the parsing, fallbacks and refusal the schema gives, and an undeclared attribute does not
   trigger an update.
 - The props object IS the store, so it is live rather than a snapshot: a value read after a
   yielded promise settles is current rather than the one the run started with. WHERE YOU
@@ -506,31 +572,29 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   outside caller uses (`element.count = 5`).
 - `load` reuses the server's result only while hydrating and runs the fetcher everywhere else;
   don't add a fetch-once cache around it.
-- TypeScript only: a yielded promise evaluates to `any`, because one generator has one resume
-  type for all of its yields. Annotate the binding, `const user: User = yield fetchUser(id)`,
-  or delegate to a typed helper whose `yield*` returns `T`:
+- TypeScript only: one generator has one resume type for all of its yields, so a bare
+  `yield promise` evaluates to `unknown`, and annotating it (`const user: User = yield …`) is a
+  compile error. Wait with the exported delegate instead, typed by the promise:
 
   ```typescript
-  function* awaited<T>(promise: Promise<T>): Generator<Promise<T>, T, T> {
-  	return yield promise;
-  }
+  import { awaited } from "grundlage";
   const user = yield* awaited(fetchUser(id)); // User
   ```
 
-  `yield* load(() => fetchUser(id))` is typed the same way, by its fetcher.
-- TypeScript only: a schema hoisted out of the `component(…)` call needs `satisfies Schema`.
-  Inline, `{ count: [Number, 0] }` is contextually typed; hoisted, `[Number, 0]` widens to
-  `(NumberConstructor | number)[]` and stops being a valid entry. A function entry also needs
-  its parameter annotated, `[(incoming: unknown) => …, fallback]`, because an entry may be a
-  function or one of four constructors and all five are callable. An update generator or
-  `yield*` helper typed by hand annotates as `Generator<YieldableValue>`, not bare `Generator`,
-  and takes the SHAPE it reads (`{ host: BaseComponent; readonly userId: string | undefined }`),
+  It is the same wait (the driver still holds the promise, so an update drops it as usual),
+  only with a type. `yield* load(() => fetchUser(id))` is typed the same way, by its fetcher.
+  Don't cast a bare yield (`(yield p) as User`): the cast checks nothing.
+- TypeScript only: a parser function annotates its parameter as `unknown`,
+  `prop.attribute((incoming: unknown) => …)`, because markup and JavaScript both reach it. An
+  update generator or `yield*` helper typed by hand annotates as
+  `Generator<YieldableValue, Result, unknown>`, not bare `Generator`, and takes the SHAPE it
+  reads (`{ host: BaseComponent; readonly userId: string }`),
   never `ComponentProps<typeof someSchema>`: that type claims the host carries those accessors,
   and a delegating parent's host carries its own instead. The component generator's return
   position is `Cleanup | void` (`Cleanup` is exported), so a wrong return is a compile error,
   not a silent drop. An update generator's return position is `unknown` (the exported
   `UpdateGenerator` type), since it returns a value to the body; its `yield` in the body
-  evaluates to `any`, like a promise's.
+  evaluates to `unknown`, like a bare promise's.
 - Form components: `component(gen, { formAssociated: true })` re-dispatches the four form
   callbacks as host events `form-associated` `{form}`, `form-disabled` `{disabled}`,
   `form-reset` (no detail) and `form-state-restore` `{state, mode}`, bindable declaratively

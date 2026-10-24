@@ -30,7 +30,12 @@ export const removeWrittenAttribute = (
 	name: string,
 ): void => {
 	if (isSingleHoleValue(liveBinding.staticBinding.valueParts))
-		applyAttributeValue(liveBinding.anchor, name, null, liveBinding.lastValue);
+		applyAttributeValue(
+			liveBinding.anchor,
+			name,
+			undefined,
+			liveBinding.lastValue,
+		);
 	else liveBinding.anchor.removeAttribute(name);
 };
 

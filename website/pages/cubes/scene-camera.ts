@@ -1,5 +1,4 @@
-import { html, component } from "../../../lib/src";
-import type { Schema } from "../../../lib/src/types";
+import { html, component, prop } from "../../../lib/src";
 
 // <scene-camera> — the navigation wrapper. It owns the camera state and every input that
 // moves it, and nothing else. It renders transparently, so the world it wraps keeps its
@@ -15,7 +14,7 @@ import type { Schema } from "../../../lib/src/types";
 // wheel and derives the position from yaw/pitch/radius. Switching tears one down and sets
 // the other up, so neither carries the other's listeners or a mode check.
 
-const props = { mode: [String, "free"] } satisfies Schema;
+const props = { mode: prop.attribute(String, "free") };
 
 // px advanced per animation frame while a movement key is held.
 const MOVE_SPEED = 12;

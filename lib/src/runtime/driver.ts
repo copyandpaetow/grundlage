@@ -49,6 +49,7 @@ interface ComponentRunnerSetup {
 	root: ComponentRoot;
 	componentProps: ComponentProps;
 	componentGenerator: ComponentGenerator;
+	requiredPropNames: ReadonlyArray<string>;
 }
 
 export interface ComponentRunner extends ComponentRunnerSetup, OrderedRunner {
@@ -259,6 +260,14 @@ const runOnePass = (): void => {
 	}
 };
 
+const isMissingRequiredProp = (runner: ComponentRunner): boolean => {
+	//the props object has no index signature; a required prop is read by its runtime name
+	const values = runner.componentProps as unknown as Record<string, unknown>;
+	for (let index = 0; index < runner.requiredPropNames.length; index++)
+		if (values[runner.requiredPropNames[index]] === undefined) return true;
+	return false;
+};
+
 //derived, never stored: every field it reads is written by the driver itself, so a stored phase
 //would be a second source of truth to keep in step
 const phaseOf = (runner: ComponentRunner): ValueOf<typeof RUNNER_PHASE> => {
@@ -271,6 +280,9 @@ const phaseOf = (runner: ComponentRunner): ValueOf<typeof RUNNER_PHASE> => {
 	if (runner.bodyRun !== null) return RUNNER_PHASE.RUNNING;
 	//the server writes the mark while the child sits in the parent's detached fragment, so it is
 	//already present when that fragment is connected and the child would otherwise paint its own run
+	//a required prop that has not arrived holds the start the same way a parent's mark does
+	if (isMissingRequiredProp(runner))
+		return RUNNER_PHASE.WAITING_FOR_PARENT_VALUES;
 	return !isServer() && runner.root.host.hasAttribute(DEFER_HYDRATION_ATTRIBUTE)
 		? RUNNER_PHASE.WAITING_FOR_PARENT_VALUES
 		: RUNNER_PHASE.READY_TO_START;

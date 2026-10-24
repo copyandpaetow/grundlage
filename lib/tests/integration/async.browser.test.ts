@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, component } from "../../src/index";
+import { awaited, html, component } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -682,5 +682,63 @@ describe("a superseded update generator run", () => {
 		expect(resumed).toBe(true);
 		expect(element.shadowRoot?.textContent).toContain("resumed");
 		cleanup(element);
+	});
+});
+
+describe("yield* awaited(promise)", () => {
+	let tagId = 0;
+	const mountComponent = (generator: Parameters<typeof component>[0]) => {
+		const tag = `test-awaited-${tagId++}-${Date.now()}`;
+		customElements.define(tag, component(generator));
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+		return element;
+	};
+
+	test("evaluates to the resolved value, in the body and in an update generator", async () => {
+		const element = mountComponent(function* () {
+			const greeting = yield* awaited(Promise.resolve("hello"));
+			yield function* view() {
+				const name = yield* awaited(sleep().then(() => "world"));
+				yield html`<p>${greeting} ${name}</p>`;
+			};
+		});
+		await sleep(10);
+		expect(element.shadowRoot?.textContent).toBe("hello world");
+		element.remove();
+	});
+
+	test("a rejection throws at the yield*, where a try/catch takes it", async () => {
+		const element = mountComponent(function* () {
+			try {
+				yield* awaited(Promise.reject(new Error("offline")));
+			} catch (error) {
+				yield html`<p>${(error as Error).message}</p>`;
+			}
+		});
+		await sleep(10);
+		expect(element.shadowRoot?.textContent).toBe("offline");
+		element.remove();
+	});
+
+	test("an update while it waits starts over, so the superseded value never lands", async () => {
+		const pending: Array<PromiseWithResolvers<string>> = [];
+		const element = mountComponent(function* () {
+			yield function* view() {
+				const waited = Promise.withResolvers<string>();
+				pending.push(waited);
+				const value = yield* awaited(waited.promise);
+				yield html`<p>${value}</p>`;
+			};
+		}) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		const updated = element.update();
+		await sleep();
+		pending[0]!.resolve("superseded");
+		pending[1]!.resolve("newest");
+		await updated;
+		await sleep();
+		expect(element.shadowRoot?.textContent).toBe("newest");
+		element.remove();
 	});
 });

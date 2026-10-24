@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
+	awaited,
 	component,
 	html,
 	load,
 	type BaseComponent,
 	type Template,
+	prop,
 } from "../../src/index";
 
 //How updates line up across components, however they start: a parent updates before its children
@@ -154,7 +156,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							};
 							return unsubscribe;
 						},
-						{ props: { selected: String } },
+						{ props: { selected: prop.optional(prop.attribute(String)) } },
 					),
 				);
 				//subscribes after its first paint, so the store notifies the card before the page
@@ -195,7 +197,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							runCount++;
 							const userId = componentProps.userId;
 							if (userId !== loadedUserId) {
-								const user: { name: string } = yield fetchUser(userId);
+								const user = yield* awaited(fetchUser(userId));
 								loadedUserName = user.name;
 								loadedUserId = userId;
 								loadCount++;
@@ -205,7 +207,12 @@ describe.skipIf("happyDOM" in globalThis)(
 							>`;
 						};
 					},
-					{ props: { userId: String, loadCount: [Number, 0] } },
+					{
+						props: {
+							userId: prop.optional(prop.attribute(String)),
+							loadCount: prop.attribute(Number, 0),
+						},
+					},
 				);
 				customElements.define(tag, UserPanel);
 
@@ -247,7 +254,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								yield html`<p>${componentProps.label}</p>`;
 							};
 						},
-						{ props: { label: [String, ""] } },
+						{ props: { label: prop.attribute(String, "") } },
 					),
 				);
 
@@ -281,7 +288,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							yield html`<p>${width}</p>`;
 						};
 					},
-					{ props: { width: [String, ""] } },
+					{ props: { width: prop.attribute(String, "") } },
 				);
 				customElements.define(tag, SizedBox);
 
@@ -321,7 +328,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								>`;
 							};
 						},
-						{ props: { value: [Number, 0] } },
+						{ props: { value: prop.attribute(Number, 0) } },
 					),
 				);
 
@@ -357,7 +364,7 @@ describe.skipIf("happyDOM" in globalThis)(
 						};
 						return unsubscribe;
 					},
-					{ props: { cartCount: [Number, 0] } },
+					{ props: { cartCount: prop.attribute(Number, 0) } },
 				);
 				customElements.define(writtenHeaderTag, WrittenHeader);
 				//updates once per publish, so its mutation count is what a single paint writes
@@ -422,7 +429,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							yield html`<p>${componentProps.tabCount} tabs</p><${tabGroupTag}></${tabGroupTag}>`;
 						};
 					},
-					{ props: { tabCount: [Number, 0] } },
+					{ props: { tabCount: prop.attribute(Number, 0) } },
 				);
 				customElements.define(tabListTag, TabList);
 				customElements.define(
@@ -547,7 +554,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								yield html`<i>${componentProps.label}</i>`;
 							};
 						},
-						{ props: { label: String } },
+						{ props: { label: prop.optional(prop.attribute(String)) } },
 					),
 				);
 				customElements.define(
@@ -558,7 +565,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								yield html`<${leafTag} label=${componentProps.label}></${leafTag}>`;
 							};
 						},
-						{ props: { label: String } },
+						{ props: { label: prop.optional(prop.attribute(String)) } },
 					),
 				);
 				const Root = component(function* () {
@@ -614,7 +621,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							};
 							return unsubscribe;
 						},
-						{ props: { personName: String } },
+						{ props: { personName: prop.optional(prop.attribute(String)) } },
 					),
 				);
 				customElements.define(
@@ -622,9 +629,7 @@ describe.skipIf("happyDOM" in globalThis)(
 					component(function* ({ host }) {
 						const unsubscribe = store.subscribe(() => host.update());
 						yield function* () {
-							const matches: Array<string> = yield searchPeople(
-								store.state.query,
-							);
+							const matches = yield* awaited(searchPeople(store.state.query));
 							yield html`<ul>
 								${matches.map((personName) => html`<${rowTag} personName=${personName}></${rowTag}>`)}
 							</ul>`;
@@ -705,16 +710,19 @@ describe.skipIf("happyDOM" in globalThis)(
 						function* (componentProps) {
 							yield function* () {
 								if (componentProps.source === undefined) return;
-								const points: Array<number> = yield componentProps.source;
+								const points = yield* awaited(componentProps.source);
 								yield html`<p>${points?.length} points</p>`;
 							};
 						},
 						{
 							props: {
-								source: (incoming: unknown) =>
-									incoming instanceof Promise
-										? (incoming as Promise<Array<number>>)
-										: undefined,
+								source: prop.optional(
+									prop.attribute((incoming: unknown) =>
+										incoming instanceof Promise
+											? (incoming as Promise<Array<number>>)
+											: undefined,
+									),
+								),
 							},
 						},
 					),
@@ -754,7 +762,12 @@ describe.skipIf("happyDOM" in globalThis)(
 							yield html`<p>${documentText} at ${zoomLevel}</p>`;
 						};
 					},
-					{ props: { documentText: [String, ""], zoomLevel: [Number, 1] } },
+					{
+						props: {
+							documentText: prop.attribute(String, ""),
+							zoomLevel: prop.attribute(Number, 1),
+						},
+					},
 				);
 				customElements.define(previewTag, PreviewPane);
 				const ZoomSlider = component(function* ({ host }) {
@@ -816,7 +829,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							yield html`<h2>${user.name}</h2>`;
 						};
 					},
-					{ props: { userId: [Number, 0] } },
+					{ props: { userId: prop.attribute(Number, 0) } },
 				);
 				customElements.define(profileTag, UserProfile);
 				let selectedUserId = 7;
@@ -895,7 +908,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							yield html`<b>${componentProps.displayName}</b>`;
 						};
 					},
-					{ props: { displayName: String } },
+					{ props: { displayName: prop.optional(prop.attribute(String)) } },
 				);
 			const userAvatarComponent = (runLog: Array<string>) =>
 				component(
@@ -907,10 +920,13 @@ describe.skipIf("happyDOM" in globalThis)(
 					},
 					{
 						props: {
-							user: (incoming: unknown) =>
-								typeof incoming === "object" && incoming !== null
-									? (incoming as User)
-									: undefined,
+							user: prop.optional(
+								prop.attribute((incoming: unknown) =>
+									typeof incoming === "object" && incoming !== null
+										? (incoming as User)
+										: undefined,
+								),
+							),
 						},
 					},
 				);
@@ -1043,7 +1059,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								</button>`;
 							};
 						},
-						{ props: { sku: String } },
+						{ props: { sku: prop.optional(prop.attribute(String)) } },
 					);
 				const productPageComponent = (contentTemplate: () => Template) =>
 					component(function* () {
@@ -1108,7 +1124,7 @@ describe.skipIf("happyDOM" in globalThis)(
 									yield html`<b>${componentProps.text}</b>`;
 								};
 							},
-							{ props: { text: [String, ""] } },
+							{ props: { text: prop.attribute(String, "") } },
 						),
 					);
 					customElements.define(
@@ -1208,7 +1224,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							};
 							return unsubscribe;
 						},
-						{ props: { level: [Number, 0] } },
+						{ props: { level: prop.attribute(Number, 0) } },
 					),
 				);
 
@@ -1258,7 +1274,7 @@ describe.skipIf("happyDOM" in globalThis)(
 									yield html`<${relayTag} partner=${partnerName} carried=${{ count: componentProps.count }}></${relayTag}>`;
 								};
 							},
-							{ props: { count: [Number, 0] } },
+							{ props: { count: prop.attribute(Number, 0) } },
 						),
 					);
 				defineWriter(leftTag, "right");
@@ -1375,7 +1391,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								yield html`<b>${componentProps.label}</b>`;
 							};
 						},
-						{ props: { label: [String, "first"] } },
+						{ props: { label: prop.attribute(String, "first") } },
 					),
 				);
 
@@ -1494,7 +1510,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							};
 							return unsubscribe;
 						},
-						{ props: { heading: [String, ""] } },
+						{ props: { heading: prop.attribute(String, "") } },
 					),
 				);
 				customElements.define(
@@ -1505,7 +1521,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								yield html`<${leafTag} heading=${componentProps.heading}></${leafTag}>`;
 							};
 						},
-						{ props: { heading: [String, ""] } },
+						{ props: { heading: prop.attribute(String, "") } },
 					),
 				);
 				customElements.define(
@@ -1561,7 +1577,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							yield html`<b>${componentProps.label}</b>`;
 						};
 					},
-					{ props: { label: [String, ""] } },
+					{ props: { label: prop.attribute(String, "") } },
 				),
 			);
 
@@ -1592,7 +1608,7 @@ describe.skipIf("happyDOM" in globalThis)(
 									sawTheLabelItJustWrote(childTag, componentProps),
 								);
 							},
-							{ props: { label: [String, "first"] } },
+							{ props: { label: prop.attribute(String, "first") } },
 						),
 					),
 			},
@@ -1611,7 +1627,7 @@ describe.skipIf("happyDOM" in globalThis)(
 									);
 								};
 							},
-							{ props: { label: [String, "first"] } },
+							{ props: { label: prop.attribute(String, "first") } },
 						),
 					),
 			},
@@ -1630,7 +1646,7 @@ describe.skipIf("happyDOM" in globalThis)(
 									sawTheLabelItJustWrote(childTag, componentProps),
 								);
 							},
-							{ props: { label: [String, "first"] } },
+							{ props: { label: prop.attribute(String, "first") } },
 						),
 					),
 			},
@@ -1696,7 +1712,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							);
 						};
 					},
-					{ props: { label: [String, "first"] } },
+					{ props: { label: prop.attribute(String, "first") } },
 				),
 			);
 
@@ -1751,7 +1767,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							yield html`<${nestedParentTag} label=${componentProps.label}></${nestedParentTag}>`;
 						};
 					},
-					{ props: { label: [String, "first"] } },
+					{ props: { label: prop.attribute(String, "first") } },
 				),
 			);
 			const wrapper = mount<HTMLElement & { label: string }>(wrapperTag);
@@ -1792,7 +1808,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							yield html`<b>${componentProps.entry}</b>`;
 						};
 					},
-					{ props: { entry: [String, ""] } },
+					{ props: { entry: prop.attribute(String, "") } },
 				),
 			);
 			customElements.define(
@@ -1806,7 +1822,7 @@ describe.skipIf("happyDOM" in globalThis)(
 							rowTextsAfterThePaint.push(rowTexts(componentProps.host));
 						};
 					},
-					{ props: { entries: [String, "a"] } },
+					{ props: { entries: prop.attribute(String, "a") } },
 				),
 			);
 
@@ -1972,7 +1988,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								yield html`<b>${componentProps.value}</b>`;
 							};
 						},
-						{ props: { value: [String, ""] } },
+						{ props: { value: prop.attribute(String, "") } },
 					),
 				);
 				customElements.define(
@@ -2024,7 +2040,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								yield html`<b>${componentProps.label}</b>`;
 							};
 						},
-						{ props: { label: [String, "first"] } },
+						{ props: { label: prop.attribute(String, "first") } },
 					),
 				);
 
@@ -2165,7 +2181,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								yield html`<b>${componentProps.label}</b>`;
 							};
 						},
-						{ props: { label: [String, ""] } },
+						{ props: { label: prop.attribute(String, "") } },
 					),
 				);
 				customElements.define(
@@ -2182,7 +2198,7 @@ describe.skipIf("happyDOM" in globalThis)(
 								);
 							};
 						},
-						{ props: { label: [String, "first"] } },
+						{ props: { label: prop.attribute(String, "first") } },
 					),
 				);
 				return {

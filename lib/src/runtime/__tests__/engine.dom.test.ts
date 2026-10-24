@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { html, component, ComponentErrorEvent } from "../../index";
+import { html, component, ComponentErrorEvent, prop } from "../../index";
 
 //engine-level invariants that are narrower than the integration oracles but are not pure-step
 //properties: the terminal logs exactly once along the linear recover-then-fail path, and a
@@ -253,7 +253,7 @@ describe("a prop resolver that throws", () => {
 						yield html`<p>alive</p>`;
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		) as HTMLElement & { label: unknown };
 	//a child writing back into the component that paints it: user code in the middle of that paint
@@ -303,7 +303,7 @@ describe("a prop resolver that throws", () => {
 					host.label = "refused";
 					yield html`<p>painted after the error</p>`;
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -328,7 +328,7 @@ describe("a prop resolver that throws", () => {
 						hasFinallyRun = true;
 					}
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -350,7 +350,7 @@ describe("a prop resolver that throws", () => {
 						return cleanup;
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -369,7 +369,7 @@ describe("a prop resolver that throws", () => {
 					host.label = "refused";
 					throw new Error("thrown after the error");
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		const element = document.createElement(tag);
@@ -398,7 +398,7 @@ describe("a prop resolver that throws", () => {
 						yield html`<p>painted after the error</p>`;
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -423,7 +423,7 @@ describe("a prop resolver that throws", () => {
 						}
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		const hasFinallyGoneOnDuringMount = hasFinallyGoneOn;
@@ -445,7 +445,7 @@ describe("a prop resolver that throws", () => {
 						>`;
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -467,7 +467,7 @@ describe("a prop resolver that throws", () => {
 						>`;
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		) as HTMLElement & { update(): Promise<void> };
 		await sleep();
@@ -501,7 +501,7 @@ describe("a prop resolver that throws", () => {
 						>`;
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -535,7 +535,7 @@ describe("a prop resolver that throws", () => {
 					};
 					yield html`<p>${paintedRows()}</p>`;
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -560,7 +560,7 @@ describe("a prop resolver that throws", () => {
 						};
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		) as HTMLElement & { update(): Promise<void> };
 		await sleep();
@@ -586,7 +586,7 @@ describe("a prop resolver that throws", () => {
 						yield html`<p>painted after the error</p>`;
 					};
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -621,7 +621,7 @@ describe("a prop resolver that throws", () => {
 						isCaughtByBody = true;
 					}
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		const element = document.createElement(tag);
@@ -661,7 +661,7 @@ describe("a prop resolver that throws", () => {
 						isCaughtByBody = true;
 					}
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		const element = document.createElement(tag);
@@ -690,7 +690,7 @@ describe("a prop resolver that throws", () => {
 					};
 					hasBodyGoneOn = true;
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -719,7 +719,7 @@ describe("a prop resolver that throws", () => {
 						finallyOrder.push("body");
 					}
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -735,7 +735,7 @@ describe("a prop resolver that throws", () => {
 				function* ({ host }, _refusal = (host.label = "refused")) {
 					yield html`<p>painted after the error</p>`;
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();
@@ -769,7 +769,7 @@ describe("a prop resolver that throws", () => {
 						hasFinallyGoneOn = true;
 					}
 				},
-				{ props: { label: refusingResolver } },
+				{ props: { label: prop.optional(prop.attribute(refusingResolver)) } },
 			),
 		);
 		await sleep();

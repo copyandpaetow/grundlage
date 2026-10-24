@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { component, html } from "../index";
+import { component, html, prop } from "../index";
 import * as grundlage from "../index";
 import { DECLARED_PROP_NAMES } from "../rendering/constants";
 import {
@@ -7,7 +7,7 @@ import {
 	ComponentOptions,
 	ComponentProps,
 	Schema,
-	PropEntry,
+	PropDefinition,
 	Template,
 } from "../types";
 
@@ -18,8 +18,8 @@ import {
 //neither export exists yet; typed as the schema entry each one will be, so these suites typecheck
 //against the target API instead of around it
 const { Slot, DefaultSlot } = grundlage as typeof grundlage & {
-	Slot: PropEntry;
-	DefaultSlot: PropEntry;
+	Slot: PropDefinition<unknown, "optional">;
+	DefaultSlot: PropDefinition<unknown, "optional">;
 };
 const slotsShip =
 	(Slot as unknown) !== undefined && (DefaultSlot as unknown) !== undefined;
@@ -106,7 +106,10 @@ describe("R8—R9 — a slot is a prop", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				light({ heading: Slot, hEading: String }),
+				light({
+					heading: Slot,
+					hEading: prop.optional(prop.attribute(String)),
+				}),
 			),
 		).toThrow();
 	});

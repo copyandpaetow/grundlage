@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { component, html } from "../../../index";
+import { component, html, prop } from "../../../index";
 import { DECLARED_PROP_NAMES } from "../../constants";
 import {
 	applyAttributeValue,
@@ -58,7 +58,12 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 			},
 			//`once` guards the event sniff: a declared name starting with "on" must not be read
 			//as a listener
-			{ props: { variant: asVariant, once: asVariant } },
+			{
+				props: {
+					variant: prop.optional(prop.attribute(asVariant)),
+					once: prop.optional(prop.attribute(asVariant)),
+				},
+			},
 		),
 	);
 

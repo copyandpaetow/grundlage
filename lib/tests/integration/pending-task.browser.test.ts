@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { component, html, load } from "../../src/index";
+import { awaited, component, html, load } from "../../src/index";
 
 const sleep = (milliseconds = 0) =>
 	new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -56,7 +56,7 @@ describe("pending-task on the server", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				const value: string = yield waited;
+				const value = yield* awaited(waited);
 				yield html`<p>${value}</p>`;
 			}),
 		);
@@ -177,7 +177,7 @@ describe("pending-task in the browser", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				const value: string = yield Promise.resolve("value");
+				const value = yield* awaited(Promise.resolve("value"));
 				yield html`<p>${value}</p>`;
 			}),
 		);

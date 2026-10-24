@@ -2,7 +2,7 @@
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test } from "vitest";
-import { component, html, type YieldableValue } from "../../src/index";
+import { component, html, type YieldableValue, prop } from "../../src/index";
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -31,8 +31,11 @@ const childTagPaintingItsQuote = (): string => {
 			},
 			{
 				props: {
-					quote: (incoming: unknown) =>
-						incoming instanceof Quote ? incoming : new Quote("…"),
+					quote: prop.optional(
+						prop.attribute((incoming: unknown) =>
+							incoming instanceof Quote ? incoming : new Quote("…"),
+						),
+					),
 				},
 			},
 		),
@@ -134,8 +137,11 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 				},
 				{
 					props: {
-						quote: (incoming: unknown) =>
-							incoming instanceof Quote ? incoming : new Quote("…"),
+						quote: prop.optional(
+							prop.attribute((incoming: unknown) =>
+								incoming instanceof Quote ? incoming : new Quote("…"),
+							),
+						),
 					},
 				},
 			),

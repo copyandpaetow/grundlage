@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { component, html } from "../index";
+import { component, html, prop } from "../index";
 import { DEFER_HYDRATION_ATTRIBUTE } from "../rendering/constants";
 import { releaseDeferredChildren } from "../rendering/defer-hydration";
 
@@ -32,7 +32,7 @@ const defineCountingComponent = (): {
 					yield html`<p>${componentProps.label ?? "nothing yet"}</p>`;
 				};
 			},
-			{ props: { label: String } },
+			{ props: { label: prop.optional(prop.attribute(String)) } },
 		),
 	);
 	return { tag, bodyRunsOf: () => bodyRuns };
@@ -165,7 +165,9 @@ describe("defer-hydration: a marked child waits for its parent", () => {
 
 	test("defer-hydration is refused as a prop name", () => {
 		expect(() =>
-			component(function* () {}, { props: { "defer-hydration": String } }),
+			component(function* () {}, {
+				props: { "defer-hydration": prop.optional(prop.attribute(String)) },
+			}),
 		).toThrow(/reserved/);
 	});
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, component } from "../../src/index";
+import { html, component, prop } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -165,7 +165,7 @@ describe("BaseComponent.setProp on a declared prop", () => {
 						yield html`<span>painted</span>`;
 					};
 				},
-				{ props: { label: [String, "start"] as const } },
+				{ props: { label: prop.attribute(String, "start") } },
 			),
 		);
 		const element = document.createElement(tag);
@@ -188,11 +188,11 @@ describe("BaseComponent.setProp on a declared prop", () => {
 				},
 				{
 					props: {
-						evenOnly: [
+						evenOnly: prop.attribute(
 							(incoming: unknown) =>
 								Number(incoming) % 2 === 0 ? Number(incoming) : undefined,
 							0,
-						] as const,
+						),
 					},
 				},
 			),

@@ -1,8 +1,8 @@
 //type-level fixture. It is never executed — `tsc --noEmit` is the assertion. A negative case is
 //pinned with @ts-expect-error, which fails the build if the error goes away, unless it has to
 //survive an API that has not landed yet: those read assignability as a value instead
-import { component, html } from "../index";
-import { ComponentOptions, Template } from "../types";
+import { awaited, component, html, prop } from "../index";
+import { ComponentOptions, Template, YieldableValue } from "../types";
 
 type IsAny<Type> = 0 extends 1 & Type ? true : false;
 
@@ -37,10 +37,10 @@ export const everyEntryShape = component(
 	},
 	{
 		props: {
-			start: [Number, 0],
-			label: String,
-			disabled: Boolean,
-			header: asTemplate,
+			start: prop.attribute(Number, 0),
+			label: prop.optional(prop.attribute(String)),
+			disabled: prop.attribute(Boolean),
+			header: prop.optional(prop.attribute(asTemplate)),
 		},
 	},
 );
@@ -56,7 +56,7 @@ export const fallbackSubtractsUndefined = component(
 			yield html`<p>x</p>`;
 		};
 	},
-	{ props: { header: [asTemplate, {} as Template] } },
+	{ props: { header: prop.attribute(asTemplate, {} as Template) } },
 );
 
 //the two halves read alike and write apart: the props object is the store, so assigning to it
@@ -73,7 +73,7 @@ export const writingGoesThroughHost = component(
 			yield html`<p>x</p>`;
 		};
 	},
-	{ props: { start: [Number, 0] } },
+	{ props: { start: prop.attribute(Number, 0) } },
 );
 
 //a prop used at the wrong type
@@ -86,7 +86,7 @@ export const wrongUse = component(
 			yield html`<p>x</p>`;
 		};
 	},
-	{ props: { start: [Number, 0] } },
+	{ props: { start: prop.attribute(Number, 0) } },
 );
 
 //a key the schema does not declare
@@ -98,7 +98,7 @@ export const undeclaredKey = component(
 			yield html`<p>x</p>`;
 		};
 	},
-	{ props: { start: [Number, 0] } },
+	{ props: { start: prop.attribute(Number, 0) } },
 );
 
 //options omitted: the object is just { host }
@@ -117,8 +117,12 @@ export const narrowParameter = component(
 			yield html`<p>x</p>`;
 		};
 	},
-	//@ts-expect-error every incoming value arrives as unknown
-	{ props: { variant: (incoming: string) => incoming } },
+	{
+		props: {
+			//@ts-expect-error every incoming value arrives as unknown
+			variant: prop.optional(prop.attribute((incoming: string) => incoming)),
+		},
+	},
 );
 
 //an entry that is not callable at all
@@ -129,7 +133,7 @@ export const notAFunction = component(
 		};
 	},
 	//@ts-expect-error a schema entry is a token or a function
-	{ props: { variant: "solid" } },
+	{ props: { variant: prop.optional(prop.attribute("solid")) } },
 );
 
 //a predicate is not a special shape — it is a function whose value happens to be a boolean
@@ -141,21 +145,30 @@ export const predicateEntry = component(
 			yield html`<p>x</p>`;
 		};
 	},
-	{ props: { variant: (incoming: unknown) => typeof incoming === "string" } },
+	{
+		props: {
+			variant: prop.optional(
+				prop.attribute((incoming: unknown) => typeof incoming === "string"),
+			),
+		},
+	},
 );
 
-//deliberately allowed: a fallback of the wrong type is a define-time throw, not a compile error,
-//which is what keeps the schema's own error messages readable
-export const fallbackIsNotTypeChecked = component(
-	function* ({ label, variant }) {
-		const stillItsOwnType: Exact<typeof label, string> = true;
-		const guardedType: Exact<typeof variant, Variant> = true;
-		void [stillItsOwnType, guardedType];
+//a fallback is checked against what the parser produces
+export const fallbackIsTypeChecked = component(
+	function* () {
 		yield function* () {
 			yield html`<p>x</p>`;
 		};
 	},
-	{ props: { label: [String, []], variant: [asVariant, "nope"] } },
+	{
+		props: {
+			//@ts-expect-error a String prop's fallback is a string
+			label: prop.attribute(String, []),
+			//@ts-expect-error a fallback is one of the values the parser returns
+			variant: prop.attribute(asVariant, "nope"),
+		},
+	},
 );
 
 //light mode's type-level half, R1. The union PLAN §1 specifies rejects `delegatesFocus` by
@@ -189,3 +202,30 @@ export const shadowStillTakesFocus = component(
 	},
 	{ mode: "open", delegatesFocus: true },
 );
+
+type User = { name: string };
+declare const fetchUser: () => Promise<User>;
+
+//a generator has one resume type, so a bare yield cannot name the promise's value: it reads as
+//unknown rather than any, and `yield* awaited` is the typed spelling
+export const waitedValues = component(function* () {
+	const bare = yield fetchUser();
+	const bareIsUnknown: Exact<typeof bare, unknown> = true;
+	const bareNotAny: Exact<IsAny<typeof bare>, false> = true;
+	//@ts-expect-error an annotation on a bare yield is not checked, so it is refused
+	const annotated: User = yield fetchUser();
+	const user = yield* awaited(fetchUser());
+	const typed: Exact<typeof user, User> = true;
+	void [bareIsUnknown, bareNotAny, annotated, typed];
+	yield function* view() {
+		const inUpdateGenerator = yield* awaited(fetchUser());
+		const typedInUpdateGenerator: Exact<typeof inUpdateGenerator, User> = true;
+		void typedInUpdateGenerator;
+		yield html`<p>${inUpdateGenerator.name}</p>`;
+	};
+});
+
+//a helper typed by hand sends unknown, which a delegate expecting its own value type would refuse
+export function* readUserInHelper(): Generator<YieldableValue, User, unknown> {
+	return yield* awaited(fetchUser());
+}

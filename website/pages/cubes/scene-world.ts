@@ -1,4 +1,4 @@
-import { html, component, type Schema } from "../../../lib/src";
+import { html, component, prop } from "../../../lib/src";
 
 // <scene-world> — projection only: the perspective, the single inverse-camera transform
 // the whole scene inherits through, and the viewport box it renders into. Authored
@@ -14,13 +14,13 @@ import { html, component, type Schema } from "../../../lib/src";
 // are the default view. A wrapping <scene-camera> writes the same variables inline on
 // this element, which beats our :host rule.
 const props = {
-	"camera-x": [String, "0px"],
-	"camera-y": [String, "0px"],
-	"camera-z": [String, "600px"],
-	"camera-yaw": [String, "0deg"],
-	"camera-pitch": [String, "0deg"],
-	"camera-perspective": [String, "800px"],
-} satisfies Schema;
+	"camera-x": prop.attribute(String, "0px"),
+	"camera-y": prop.attribute(String, "0px"),
+	"camera-z": prop.attribute(String, "600px"),
+	"camera-yaw": prop.attribute(String, "0deg"),
+	"camera-pitch": prop.attribute(String, "0deg"),
+	"camera-perspective": prop.attribute(String, "800px"),
+};
 
 customElements.define(
 	"scene-world",

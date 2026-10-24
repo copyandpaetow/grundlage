@@ -169,5 +169,5 @@ export const revertHostBinding = (
 		return;
 	}
 	for (const [name, entry] of liveBinding.appliedAttributes)
-		applyAttributeValue(liveBinding.anchor, name, null, entry.value);
+		applyAttributeValue(liveBinding.anchor, name, undefined, entry.value);
 };

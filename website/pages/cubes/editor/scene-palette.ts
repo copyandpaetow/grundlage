@@ -1,4 +1,4 @@
-import { html, component, type Schema } from "../../../../lib/src";
+import { html, component, prop } from "../../../../lib/src";
 
 // <scene-palette> — the editor's 2D chrome: the toolbar and the transform inspector. It
 // is pure presentation and owns no editor state: the editor renders it with an
@@ -29,22 +29,11 @@ export type InspectorState = {
 	sized: boolean;
 };
 
-// An object never arrives as an attribute, so this only checks what JS handed over.
-const asInspectorState = (incoming: unknown): InspectorState | undefined =>
-	typeof incoming === "object" &&
-	incoming !== null &&
-	Array.isArray((incoming as InspectorState).position)
-		? (incoming as InspectorState)
-		: undefined;
-
-const asCameraMode = (incoming: unknown): CameraMode | undefined =>
-	incoming === "free" || incoming === "orbit" ? incoming : undefined;
-
 // `cameraMode` stays absent when the scene has no <scene-camera>, which hides the button.
 const props = {
-	inspector: asInspectorState,
-	cameraMode: asCameraMode,
-} satisfies Schema;
+	inspector: prop.optional(prop.property<InspectorState>()),
+	cameraMode: prop.optional(prop.attribute(prop.oneOf("free", "orbit"))),
+};
 
 const COMMAND_BY_ACTION: Record<string, PaletteCommand> = {
 	export: { kind: "export" },

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, component } from "../../src/index";
+import { html, component, prop } from "../../src/index";
 
 const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
@@ -177,7 +177,7 @@ describe("component lifecycle", () => {
 					yield html`<span>${el.getAttribute("data-label") ?? "none"}</span>`;
 				};
 			},
-			{ props: { "data-label": String } },
+			{ props: { "data-label": prop.optional(prop.attribute(String)) } },
 		);
 
 		customElements.define(tag, MyElement);
@@ -437,7 +437,7 @@ describe.skipIf("happyDOM" in globalThis)(
 						yield html`<span>${componentProps["data-label"] ?? "none"}</span>`;
 					};
 				},
-				{ props: { "data-label": String } },
+				{ props: { "data-label": prop.optional(prop.attribute(String)) } },
 			);
 			customElements.define(tag, MyElement);
 
@@ -513,7 +513,7 @@ describe("MutationObserver and update() interleaving", () => {
 					yield html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
 				};
 			},
-			{ props: { "data-label": String } },
+			{ props: { "data-label": prop.optional(prop.attribute(String)) } },
 		);
 		customElements.define(tag, MyElement);
 
@@ -550,7 +550,7 @@ describe("MutationObserver and update() interleaving", () => {
 					yield html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
 				};
 			},
-			{ props: { "data-label": String } },
+			{ props: { "data-label": prop.optional(prop.attribute(String)) } },
 		);
 		customElements.define(tag, MyElement);
 

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { component, html } from "../index";
+import { component, html, prop } from "../index";
 import { BaseComponent } from "../types";
 
 //happy-dom neither upgrades an element in place — it builds a fresh instance and swaps it in,
@@ -52,7 +52,7 @@ describe("props the attribute cannot carry", () => {
 						</p>`;
 					};
 				},
-				{ props: { tags: [asList, ["a"]] } },
+				{ props: { tags: prop.attribute(asList, ["a"]) } },
 			),
 		);
 		const element = mount(tag);
@@ -76,7 +76,7 @@ describe("props the attribute cannot carry", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { tags: [asList, ["a"]] } },
+				{ props: { tags: prop.attribute(asList, ["a"]) } },
 			),
 		);
 		const element = mount(tag);
@@ -102,7 +102,7 @@ describe("props the attribute cannot carry", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { count: [Number, 0] } },
+				{ props: { count: prop.attribute(Number, 0) } },
 			),
 		);
 		const element = document.createElement(tag) as BaseComponent;
@@ -134,7 +134,7 @@ describe("props the attribute cannot carry", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { tags: [asList, ["default"]] } },
+				{ props: { tags: prop.attribute(asList, ["default"]) } },
 			),
 		);
 		const element = mount(tag);
@@ -156,7 +156,7 @@ describe("props the attribute cannot carry", () => {
 						yield html`<p>${String(readProp(host, "tags"))}</p>`;
 					};
 				},
-				{ props: { tags: asList } },
+				{ props: { tags: prop.optional(prop.attribute(asList)) } },
 			),
 		);
 		const element = mount(tag);
@@ -177,7 +177,7 @@ describe("fallbacks", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { tags: [asList, []] } },
+				{ props: { tags: prop.attribute(asList, []) } },
 			),
 		);
 		const first = mount(tag);
@@ -202,7 +202,7 @@ describe("fallbacks", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { tags: [parse, ["seed"]] } },
+				{ props: { tags: prop.attribute(parse, ["seed"]) } },
 			),
 		);
 		const element = mount(tag);
@@ -224,7 +224,7 @@ describe("fallbacks", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { onSelect: [asCallback, noop] } },
+				{ props: { onSelect: prop.attribute(asCallback, noop) } },
 			),
 		);
 		const element = mount(tag);
@@ -243,7 +243,13 @@ describe("fallbacks", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { openedAt: (incoming: unknown) => incoming ?? new Date() } },
+				{
+					props: {
+						openedAt: prop.optional(
+							prop.attribute((incoming: unknown) => incoming ?? new Date()),
+						),
+					},
+				},
 			),
 		);
 		const first = mount(tag);
@@ -266,7 +272,7 @@ describe("define-time checks", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { title: String } },
+				{ props: { title: prop.optional(prop.attribute(String)) } },
 			),
 		).toThrow(/already a property on the element/);
 	});
@@ -279,7 +285,7 @@ describe("define-time checks", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { host: String } },
+				{ props: { host: prop.optional(prop.attribute(String)) } },
 			),
 		).toThrow(/"host" is reserved/);
 	});
@@ -292,7 +298,12 @@ describe("define-time checks", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { userId: String, userid: String } },
+				{
+					props: {
+						userId: prop.optional(prop.attribute(String)),
+						userid: prop.optional(prop.attribute(String)),
+					},
+				},
 			),
 		).toThrow(/both map to the attribute "userid"/);
 	});
@@ -305,9 +316,13 @@ describe("define-time checks", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { tags: [asList, "nope"] } },
+				{
+					props: {
+						tags: prop.attribute(asList, "nope" as unknown as Array<unknown>),
+					},
+				},
 			),
-		).toThrow(/is not a value the prop accepts/);
+		).toThrow(/is not a value its parser accepts/);
 	});
 
 	test("a fallback that cannot be copied is rejected", () => {
@@ -323,7 +338,10 @@ describe("define-time checks", () => {
 				},
 				{
 					props: {
-						quote: [(incoming: unknown) => incoming, new Quote("hi")],
+						quote: prop.attribute(
+							(incoming: unknown) => incoming,
+							new Quote("hi"),
+						),
 					},
 				},
 			),
@@ -342,7 +360,7 @@ describe("mount", () => {
 						yield html`<p>${readProp(host, "label")}</p>`;
 					};
 				},
-				{ props: { label: [String, "anon"] } },
+				{ props: { label: prop.attribute(String, "anon") } },
 			),
 		);
 		const element = document.createElement(tag) as BaseComponent;
@@ -373,7 +391,7 @@ describe("mount", () => {
 							</p>`;
 						};
 					},
-					{ props: { tags: parse } },
+					{ props: { tags: prop.optional(prop.attribute(parse)) } },
 				),
 			);
 			await sleep();
@@ -404,11 +422,13 @@ describe("mount", () => {
 					},
 					{
 						props: {
-							tags: (incoming: unknown) => {
-								if (incoming === "boom")
-									throw new Error("grundlage-test: the prop threw");
-								return incoming;
-							},
+							tags: prop.optional(
+								prop.attribute((incoming: unknown) => {
+									if (incoming === "boom")
+										throw new Error("grundlage-test: the prop threw");
+									return incoming;
+								}),
+							),
 						},
 					},
 				),
@@ -434,7 +454,7 @@ describe("mount", () => {
 					yield html`<p>x</p>`;
 				};
 			},
-			{ props: { label: [String, "anon"] } },
+			{ props: { label: prop.attribute(String, "anon") } },
 		);
 		class Extended extends Base {
 			static observedAttributes = [
@@ -483,7 +503,7 @@ describe.skipIf(!isRealBrowser)(
 							yield html`<p>${String(readProp(host, "closable"))}</p>`;
 						};
 					},
-					{ props: { closable: [Boolean, true] } },
+					{ props: { closable: prop.attribute(Boolean, true) } },
 				),
 			);
 			const parentTag = uniqueTag();
@@ -517,7 +537,7 @@ describe.skipIf(!isRealBrowser)(
 							yield html`<p>${String(readProp(host, "tags"))}</p>`;
 						};
 					},
-					{ props: { tags: asList } },
+					{ props: { tags: prop.optional(prop.attribute(asList)) } },
 				),
 			);
 			const parentTag = uniqueTag();
@@ -554,7 +574,7 @@ describe.skipIf(!isRealBrowser)(
 							</p>`;
 						};
 					},
-					{ props: { tags: [asList, ["default"]] } },
+					{ props: { tags: prop.attribute(asList, ["default"]) } },
 				),
 			);
 			const parentTag = uniqueTag();
@@ -603,7 +623,7 @@ describe.skipIf(!isRealBrowser)(
 							yield html`<p>${readProp(host, "slug")}</p>`;
 						};
 					},
-					{ props: { slug: [asSlug, "anon"] } },
+					{ props: { slug: prop.attribute(asSlug, "anon") } },
 				),
 			);
 			await sleep();
@@ -636,7 +656,7 @@ describe.skipIf(!isRealBrowser)(
 							yield html`<p>${String(readProp(host, "closable"))}</p>`;
 						};
 					},
-					{ props: { closable: [Boolean, true] } },
+					{ props: { closable: prop.attribute(Boolean, true) } },
 				),
 			);
 			await sleep();

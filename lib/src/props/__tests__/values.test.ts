@@ -7,6 +7,7 @@ import {
 	recoverPreUpgradeAssignments,
 	claimPropValueChange,
 } from "../values";
+import { prop } from "../../index";
 
 const setUp = (schema: Schema) => {
 	const props = normalizeSchema(schema);
@@ -33,7 +34,7 @@ const asQuote = (incoming: unknown) =>
 
 describe("the write flow", () => {
 	test("a string is parsed and anything else is taken as it is", () => {
-		const { values, propOf } = setUp({ tags: [parseTags, []] });
+		const { values, propOf } = setUp({ tags: prop.attribute(parseTags, []) });
 		claimPropValueChange(values, propOf("tags"), "a b");
 		expect(values.tags).toEqual(["a", "b"]);
 		claimPropValueChange(values, propOf("tags"), ["x"]);
@@ -42,7 +43,9 @@ describe("the write flow", () => {
 
 	test("a refusal is ignored, warns once, and leaves the previous value alone", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const { values, propOf } = setUp({ quote: asQuote });
+		const { values, propOf } = setUp({
+			quote: prop.optional(prop.attribute(asQuote)),
+		});
 		const quote = new Quote("hi");
 		claimPropValueChange(values, propOf("quote"), quote);
 
@@ -55,7 +58,9 @@ describe("the write flow", () => {
 	});
 
 	test("absence rewrites the fallback, as a fresh copy", () => {
-		const { values, propOf } = setUp({ tags: [parseTags, ["seed"]] });
+		const { values, propOf } = setUp({
+			tags: prop.attribute(parseTags, ["seed"]),
+		});
 		const atConstruction = values.tags;
 
 		claimPropValueChange(values, propOf("tags"), ["x"]);
@@ -66,7 +71,7 @@ describe("the write flow", () => {
 
 	test("null is absence, the same as undefined", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		const { values, propOf } = setUp({ count: [Number, 0] });
+		const { values, propOf } = setUp({ count: prop.attribute(Number, 0) });
 		claimPropValueChange(values, propOf("count"), 7);
 		expect(claimPropValueChange(values, propOf("count"), null)).toBe(true);
 		expect(values.count).toBe(0);
@@ -75,7 +80,7 @@ describe("the write flow", () => {
 	});
 
 	test("an unchanged primitive reports no change; a changed one does", () => {
-		const { values, propOf } = setUp({ count: [Number, 0] });
+		const { values, propOf } = setUp({ count: prop.attribute(Number, 0) });
 		expect(claimPropValueChange(values, propOf("count"), "6")).toBe(true);
 		expect(claimPropValueChange(values, propOf("count"), 6)).toBe(false);
 		expect(claimPropValueChange(values, propOf("count"), "6")).toBe(false);
@@ -83,7 +88,7 @@ describe("the write flow", () => {
 	});
 
 	test("re-assigning the same object always reports a change, because it may have been mutated", () => {
-		const { values, propOf } = setUp({ tags: [parseTags, []] });
+		const { values, propOf } = setUp({ tags: prop.attribute(parseTags, []) });
 		const items = ["a"];
 		expect(claimPropValueChange(values, propOf("tags"), items)).toBe(true);
 		items.push("b");
@@ -93,10 +98,10 @@ describe("the write flow", () => {
 	test("an empty attribute is refused by Number and BigInt, and is a value for String and Boolean", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const { values, propOf } = setUp({
-			count: [Number, 0],
-			total: BigInt,
-			label: String,
-			open: Boolean,
+			count: prop.attribute(Number, 0),
+			total: prop.optional(prop.attribute(BigInt)),
+			label: prop.optional(prop.attribute(String)),
+			open: prop.attribute(Boolean),
 		});
 		claimPropValueChange(values, propOf("count"), "");
 		claimPropValueChange(values, propOf("total"), "");
@@ -111,13 +116,17 @@ describe("the write flow", () => {
 	});
 
 	test("an assignment is parsed rather than type-checked", () => {
-		const { values, propOf } = setUp({ label: String });
+		const { values, propOf } = setUp({
+			label: prop.optional(prop.attribute(String)),
+		});
 		claimPropValueChange(values, propOf("label"), 5);
 		expect(values.label).toBe("5");
 	});
 
 	test("the NaN the library itself writes reads back", () => {
-		const { values, propOf } = setUp({ count: Number });
+		const { values, propOf } = setUp({
+			count: prop.optional(prop.attribute(Number)),
+		});
 		claimPropValueChange(values, propOf("count"), "NaN");
 		expect(values.count).toBeNaN();
 	});
@@ -130,30 +139,46 @@ describe("the attribute spelling", () => {
 	};
 
 	test("a string, number and bigint spell themselves", () => {
-		expect(spellingOf({ label: String }, "ada")).toBe("ada");
-		expect(spellingOf({ count: Number }, 7)).toBe("7");
-		expect(spellingOf({ total: BigInt }, 10n)).toBe("10");
+		expect(
+			spellingOf({ label: prop.optional(prop.attribute(String)) }, "ada"),
+		).toBe("ada");
+		expect(
+			spellingOf({ count: prop.optional(prop.attribute(Number)) }, 7),
+		).toBe("7");
+		expect(
+			spellingOf({ total: prop.optional(prop.attribute(BigInt)) }, 10n),
+		).toBe("10");
 	});
 
 	test("true is presence and false takes the attribute off", () => {
-		expect(spellingOf({ open: Boolean }, true)).toBe("");
-		expect(spellingOf({ open: Boolean }, false)).toBe(null);
-		expect(spellingOf({ open: [Boolean, false] }, false)).toBe(null);
+		expect(spellingOf({ open: prop.attribute(Boolean) }, true)).toBe("");
+		expect(spellingOf({ open: prop.attribute(Boolean) }, false)).toBe(null);
+		expect(spellingOf({ open: prop.attribute(Boolean, false) }, false)).toBe(
+			null,
+		);
 	});
 
 	test("false spells itself out where absence would read true", () => {
-		expect(spellingOf({ open: [Boolean, true] }, false)).toBe("false");
+		expect(spellingOf({ open: prop.attribute(Boolean, true) }, false)).toBe(
+			"false",
+		);
 	});
 
 	test("a value with no string spelling has no attribute half", () => {
-		expect(spellingOf({ tags: parseTags }, ["a"])).toBe(null);
-		expect(spellingOf({ tags: parseTags }, undefined)).toBe(null);
+		expect(
+			spellingOf({ tags: prop.optional(prop.attribute(parseTags)) }, ["a"]),
+		).toBe(null);
+		expect(
+			spellingOf({ tags: prop.optional(prop.attribute(parseTags)) }, undefined),
+		).toBe(null);
 	});
 });
 
 describe("pre-upgrade recovery", () => {
 	test("an own property is deleted and written back through the accessor", () => {
-		const props = normalizeSchema({ label: String });
+		const props = normalizeSchema({
+			label: prop.optional(prop.attribute(String)),
+		});
 		const written: Array<unknown> = [];
 		const prototype = {};
 		Object.defineProperty(prototype, "label", {

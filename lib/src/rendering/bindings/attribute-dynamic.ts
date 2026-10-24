@@ -45,7 +45,7 @@ const removeDroppedAttributes = (
 			appliedEntry !== undefined,
 			"a key read while iterating the map has an entry",
 		);
-		applyAttributeValue(element, name, null, appliedEntry.value);
+		applyAttributeValue(element, name, undefined, appliedEntry.value);
 		appliedAttributes.delete(name);
 	}
 };

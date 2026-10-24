@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { component, html } from "../index";
+import { component, html, prop } from "../index";
 import { BaseComponent } from "../types";
 
 const sleep = (duration = 0) =>
@@ -27,7 +27,7 @@ describe("what an attribute write reaches", () => {
 						yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -57,7 +57,7 @@ describe("what an attribute write reaches", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -85,7 +85,7 @@ describe("what an attribute write reaches", () => {
 						</p>`;
 					};
 				},
-				{ props: { label: [String, "anon"] } },
+				{ props: { label: prop.attribute(String, "anon") } },
 			),
 		);
 		const element = mount(tag);
@@ -111,7 +111,12 @@ describe("what an attribute write reaches", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { label: String, other: String } },
+				{
+					props: {
+						label: prop.optional(prop.attribute(String)),
+						other: prop.optional(prop.attribute(String)),
+					},
+				},
 			),
 		);
 		const element = mount(tag);
@@ -135,7 +140,7 @@ describe("what an attribute write reaches", () => {
 						yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -168,7 +173,7 @@ describe("the update window before the first paint", () => {
 						yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -205,7 +210,7 @@ describe("the update window before the first paint", () => {
 						yield html`<p>${label}</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -240,7 +245,7 @@ describe("a component writing its own host attributes", () => {
 						yield html`<template label="${label}!"><p>${label}</p></template>`;
 					};
 				},
-				{ props: { label: [String, ""] } },
+				{ props: { label: prop.attribute(String, "") } },
 			),
 		);
 		const consoleError = vi
@@ -270,7 +275,7 @@ describe("a component writing its own host attributes", () => {
 						>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -303,7 +308,7 @@ describe("a server run", () => {
 							yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 						};
 					},
-					{ props: { label: String } },
+					{ props: { label: prop.optional(prop.attribute(String)) } },
 				),
 			);
 			const element = mount(tag);

@@ -1,8 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, component } from "../../src/index";
+import { awaited, html, component, prop } from "../../src/index";
 import {
 	BaseComponent,
 	ComponentGenerator,
+	PropDefinition,
 	ComponentProps,
 } from "../../src/types";
 
@@ -625,10 +626,11 @@ describe("identity and isolation", () => {
 		//held inside it does not survive an update. Isolation here is about
 		//per-instance shadow roots, not retained inner state
 		const tag = uniqueTag("isolated");
-		const innerGen: ComponentGenerator<{ label: StringConstructor }> =
-			function* ({ host: element }) {
-				yield html`<span>${element.getAttribute("label") ?? "?"}</span>`;
-			};
+		const innerGen: ComponentGenerator<{
+			label: PropDefinition<string, "optional">;
+		}> = function* ({ host: element }) {
+			yield html`<span>${element.getAttribute("label") ?? "?"}</span>`;
+		};
 
 		customElements.define(
 			tag,
@@ -636,7 +638,7 @@ describe("identity and isolation", () => {
 				function* () {
 					yield innerGen;
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 
@@ -1028,7 +1030,7 @@ describe("the outer painting over a live inner generator abandons it", () => {
 			component(function* () {
 				yield function* () {
 					yield html`<p>inner</p>`;
-					const late: string = yield gate;
+					const late = yield* awaited(gate);
 					yield html`<p>${late}</p>`;
 				};
 				yield html`<p>outer took over</p>`;

@@ -1,0 +1,13 @@
+export const TAG_OPEN = "<";
+export const TAG_CLOSE = ">";
+export const END_TAG_OPEN = "</";
+export const COMMENT_OPEN = "<!--";
+export const COMMENT_CLOSE = "-->";
+export const EMPTY_COMMENT = "<!---->";
+export const ATTRIBUTE_SEPARATOR = " ";
+export const ATTRIBUTE_ASSIGN = "=";
+export const ATTRIBUTE_QUOTE = "'";
+export const COMMENT_IDENTIFIER = "^.^";
+export const LIST_MARKER_DATA = "*.*";
+export const EVENT_PREFIX = "on";
+export const CUSTOM_EVENT_PREFIX = "on-";

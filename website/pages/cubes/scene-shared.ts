@@ -1,4 +1,4 @@
-import type { Resolve, Schema } from "../../../lib/src";
+import { prop, type Resolve } from "../../../lib/src";
 
 // Geometry constants and the authoring contract shared by every scene element:
 // attributes are the committed, serializable state; --block-* variables are the
@@ -55,25 +55,25 @@ const asSizeTriple = asTriple(1);
 const asOriginTriple = asTriple(0);
 
 const sizeProps = {
-	size: [asSizeTriple, [1, 1, 1]],
-	width: Number,
-	height: Number,
-	depth: Number,
-} satisfies Schema;
+	size: prop.attribute(asSizeTriple, [1, 1, 1]),
+	width: prop.optional(prop.attribute(Number)),
+	height: prop.optional(prop.attribute(Number)),
+	depth: prop.optional(prop.attribute(Number)),
+};
 
 const positionProps = {
-	position: [asOriginTriple, [0, 0, 0]],
-	x: Number,
-	y: Number,
-	z: Number,
-} satisfies Schema;
+	position: prop.attribute(asOriginTriple, [0, 0, 0]),
+	x: prop.optional(prop.attribute(Number)),
+	y: prop.optional(prop.attribute(Number)),
+	z: prop.optional(prop.attribute(Number)),
+};
 
 const rotationProps = {
-	rotation: [asOriginTriple, [0, 0, 0]],
-	"rotate-x": Number,
-	"rotate-y": Number,
-	"rotate-z": Number,
-} satisfies Schema;
+	rotation: prop.attribute(asOriginTriple, [0, 0, 0]),
+	"rotate-x": prop.optional(prop.attribute(Number)),
+	"rotate-y": prop.optional(prop.attribute(Number)),
+	"rotate-z": prop.optional(prop.attribute(Number)),
+};
 
 // Declaring these is what makes a scene element react to its own markup: a plain
 // setAttribute re-renders it, so the editor writes attributes and awaits the paint
@@ -82,14 +82,14 @@ export const geometryProps = {
 	...sizeProps,
 	...positionProps,
 	...rotationProps,
-} satisfies Schema;
+};
 
 export const carrierProps = {
 	...positionProps,
 	...rotationProps,
-} satisfies Schema;
+};
 
-export const ghostProps = { ...positionProps } satisfies Schema;
+export const ghostProps = { ...positionProps };
 
 export type BlockTransform = {
 	size: Vector3;

@@ -1,4 +1,4 @@
-import { component, html } from "../../../lib/src";
+import { awaited, component, html } from "../../../lib/src";
 
 const mockFetch = () =>
 	new Promise<{ name: string; lastName: string; age: string }>(
@@ -19,7 +19,7 @@ customElements.define(
 		yield html`<p>loading</p>`;
 
 		try {
-			const data: { name: string; age: string } = yield mockFetch();
+			const data = yield* awaited(mockFetch());
 			yield html`<p>name:${data.name} ${data.name}, age: ${data.age}</p>`;
 		} catch (error) {
 			yield html`<p>error: ${error}</p>`;

@@ -11,15 +11,26 @@
 - The build targets ES2025: Chrome 122, Firefox 131, Safari 18.4.
 - `load` runs with the star and takes no host: `yield load(host, fetcher)` → `yield* load(fetcher)`, keyed `yield* load("key", fetcher)`.
 - `load`'s `skipSSR` option and the `LoadOptions` type are removed.
+- Props are declared with the `prop` namespace: `String` → `prop.optional(prop.attribute(String))`, `[Number, 0]` → `prop.attribute(Number, 0)`, a JS-only object → `prop.property<Type>()`; the old entries throw.
+- A prop without a fallback or `prop.optional` is required: the body waits until it is set, and the server throws when nothing sets it.
+- `props(element, schema)` → `prop.read(element, schema)`.
+- A binding a later paint drops passes `undefined`, not `null`, so a `prop.property` can hold `null`.
 
 ### Types
 
 - `YieldableValue` is `Template | Promise<unknown> | UpdateGenerator` or a `load()` request; `UpdateGenerator` is exported.
 - `yield* load(…)` evaluates to the fetcher's awaited type.
-- A waited value is `any`; annotate it: `const user: User = yield fetchUser(id)`.
+- A bare `yield promise` evaluates to `unknown`; `yield* awaited(promise)` types it: `const user: User = yield …` → `const user = yield* awaited(…)`.
+- A hoisted schema needs no `satisfies Schema`, and a fallback is type-checked against its parser.
+- `PropsOf<typeof props>` and `PassedPropsOf<typeof props>` replace `DeclaredProps`.
 
 ### Added
 
+- `awaited(promise)`: `yield*` it to wait with the promise's type.
+- `prop.property(standardSchema, fallback?)` validates every write with a Standard Schema (Zod, Valibot, ArkType).
+- `prop.unreflected(prop.attribute(…))` keeps the attribute as the markup default, like a native input's `value`.
+- `prop.oneOf("a", "b")` parses a union of strings.
+- On the server, a binding to a `prop.property` marks the child `defer-hydration`.
 - An iterator in a content hole paints as a list.
 - A `load` result JSON cannot carry (a `Date`, a class instance, a template) throws and names the fix.
 - A `load` key used twice in one element throws on the server.

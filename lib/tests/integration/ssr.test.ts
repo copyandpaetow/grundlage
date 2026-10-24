@@ -2,7 +2,7 @@
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { html, component } from "../../src/index";
+import { html, component, prop } from "../../src/index";
 import { ComponentConstructor } from "../../src/types";
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -499,7 +499,7 @@ describe("SSR: server stops at the first paint", () => {
 					yield html`<template theme=${"dark"}><p>${theme}</p></template>`;
 				};
 			},
-			{ props: { theme: [String, "light"] } },
+			{ props: { theme: prop.attribute(String, "light") } },
 		);
 
 		const element = track(await mount(tag, Component));
@@ -600,7 +600,7 @@ describe("SSR: an attribute write after the server paint schedules nothing", () 
 					yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 				};
 			},
-			{ props: { label: String } },
+			{ props: { label: prop.optional(prop.attribute(String)) } },
 		);
 
 		const element = track(await mount(tag, Component));

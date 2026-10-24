@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, props, component, type Template } from "../../src/index";
+import { html, prop, component, type Template } from "../../src/index";
 import { hashValue } from "../../src/rendering/value-hashing";
 import {
 	BaseComponent,
@@ -68,7 +68,7 @@ describe("nested components", () => {
 						>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 
@@ -195,7 +195,7 @@ describe("nested components", () => {
 						yield html`<span>${element.getAttribute("label") ?? "none"}</span>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 
@@ -992,8 +992,8 @@ describe("framework-parity patterns", () => {
 	test("props helper coerces attributes, properties, and fallbacks", async () => {
 		const tag = uniqueTag("props-helper");
 		type ValidatedProps = {
-			label: string | undefined;
-			count: number | undefined;
+			label?: string;
+			count?: number;
 			disabled: boolean;
 			missing: string;
 		};
@@ -1003,11 +1003,11 @@ describe("framework-parity patterns", () => {
 			//assigned through a local: `captured`'s annotation would contextually type the call and
 			//widen [String, "fallback"] to an array, which the schema rejects. Inferring first and
 			//assigning after is also the stronger check — ValidatedProps gates what was inferred
-			const resolved = props(element, {
-				label: String,
-				count: Number,
-				disabled: Boolean,
-				missing: [String, "fallback"],
+			const resolved = prop.read(element, {
+				label: prop.optional(prop.attribute(String)),
+				count: prop.optional(prop.attribute(Number)),
+				disabled: prop.attribute(Boolean),
+				missing: prop.attribute(String, "fallback"),
 			});
 			captured = resolved;
 			yield function* () {

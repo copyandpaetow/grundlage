@@ -4,8 +4,7 @@ import * as grundlage from "../../src/index";
 import {
 	ComponentConstructor,
 	ComponentOptions,
-	Schema,
-	PropEntry,
+	PropDefinition,
 } from "../../src/types";
 
 //The claim that reads the server's slot markers back (light-dom/PLAN.md §3.5, §4.5, §4.6, R20—R27).
@@ -16,14 +15,13 @@ import {
 //neither export exists yet; typed as the schema entry each one will be, so these suites typecheck
 //against the target API instead of around it
 const { Slot, DefaultSlot } = grundlage as typeof grundlage & {
-	Slot: PropEntry;
-	DefaultSlot: PropEntry;
+	Slot: PropDefinition<unknown, "optional">;
+	DefaultSlot: PropDefinition<unknown, "optional">;
 };
 
-const light = <DeclaredSchema extends Schema>(
-	props?: DeclaredSchema,
-): ComponentOptions<DeclaredSchema> =>
-	({ mode: "light", props }) as unknown as ComponentOptions<DeclaredSchema>;
+//a slot entry with a fallback is the target API, which the schema types do not know yet
+const light = (props?: Record<string, unknown>): ComponentOptions<any> =>
+	({ mode: "light", props }) as unknown as ComponentOptions<any>;
 
 //read off the class, never an instance: constructing one today throws inside
 //`attachShadow({ mode: "light" })`, and a constructor's throw is reported to the page whether or
