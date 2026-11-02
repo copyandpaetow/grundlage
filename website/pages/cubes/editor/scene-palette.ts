@@ -1,9 +1,7 @@
 import { html, component, prop } from "../../../../lib/src";
+import type { WrapperTagName } from "./grouping";
 
-// <scene-palette> — the editor's 2D chrome: the toolbar and the transform inspector. It
-// is pure presentation and owns no editor state: the editor renders it with an
-// `inspector` snapshot and a `cameraMode`, and it answers with one `palette-command`
-// event per intent.
+// Owns no editor state: it answers with one `palette-command` event per intent
 
 export type InspectorField = "position" | "rotation" | "size";
 
@@ -13,8 +11,8 @@ export type PaletteCommand =
 	| { kind: "add"; tag: string }
 	| { kind: "export" }
 	| { kind: "delete" }
-	| { kind: "group" }
-	| { kind: "ungroup" }
+	| { kind: "wrap"; wrapperTagName: WrapperTagName }
+	| { kind: "unwrap" }
 	| { kind: "toggle-camera" }
 	| { kind: "edit-field"; field: InspectorField; axis: number; value: number };
 
@@ -38,8 +36,9 @@ const props = {
 const COMMAND_BY_ACTION: Record<string, PaletteCommand> = {
 	export: { kind: "export" },
 	delete: { kind: "delete" },
-	group: { kind: "group" },
-	ungroup: { kind: "ungroup" },
+	group: { kind: "wrap", wrapperTagName: "scene-group" },
+	"wrap-in-cube": { kind: "wrap", wrapperTagName: "scene-cube" },
+	ungroup: { kind: "unwrap" },
 	camera: { kind: "toggle-camera" },
 };
 
@@ -58,7 +57,6 @@ customElements.define(
 				);
 			};
 
-			// One delegated listener for the whole toolbar, dispatching on the buttons' data-*.
 			const onClick = (event: Event): void => {
 				const target = event.target;
 				if (!(target instanceof HTMLElement)) return;
@@ -71,9 +69,8 @@ customElements.define(
 				if (command !== undefined) sendCommand(command);
 			};
 
-			// Commits on `change` (Enter, blur, arrows), never per keystroke: the editor echoes a
-			// normalized number back, which would rewrite a half-typed "-0.5" or "1.23456".
-			// Position and rotation take any value; only size must stay positive.
+			// On `change`, not per keystroke: the echoed normalized number would rewrite a
+			// half-typed "-0.5"
 			const onFieldCommit = (event: Event): void => {
 				const target = event.target;
 				if (!(target instanceof HTMLInputElement)) return;
@@ -175,6 +172,7 @@ customElements.define(
 							<button data-add="scene-ramp">+ Ramp</button>
 							<span class="spacer"></span>
 							<button data-action="group">Group</button>
+							<button data-action="wrap-in-cube">Wrap in cube</button>
 							<button data-action="ungroup">Ungroup</button>
 							<button data-action="delete">Delete</button>
 							<span class="spacer"></span>

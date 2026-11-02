@@ -1,19 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import "./scene-camera";
 
-// Behaviour tests for the navigation wrapper. The camera is a pure input device: it never
-// renders anything of its own beyond a transparent shell, and its whole observable output
-// is the five --camera-* custom properties it writes onto the element assigned to its
-// slot. So every assertion here reads that element's inline style.
-//
-// `mode` picks which body runs. Free-fly owns the movement keys and the step loop; orbit
-// owns the wheel and derives the position from yaw/pitch/radius. The switch is what these
-// tests are mostly about: entering must freeze the distance, leaving must keep the pose,
-// and neither branch may keep the other's listeners alive.
-//
-// We slot a plain <div> rather than a <scene-world>: the camera drives whatever it
-// projects and reads nothing off it, so a div is a faithful stand-in and keeps the world's
-// own rendering out of the picture.
+// A plain <div> stands in for the world: the camera reads nothing off it, and the world's
+// own rendering stays out of the picture.
 
 // The pose the camera starts at, and the distance from the origin it implies.
 const START = { x: 0, y: -160, z: 600 };
@@ -37,13 +26,11 @@ afterEach(async () => {
 	await flush();
 });
 
-// --- helpers ----------------------------------------------------------------
-
 const flush = (): Promise<void> =>
 	new Promise((resolve) => queueMicrotask(resolve));
 
 const readCamera = (name: string): number =>
-	parseFloat(world.style.getPropertyValue(`--camera-${name}`));
+	parseFloat(world.getAttribute(`camera-${name}`) ?? "");
 
 // The step loop runs on rAF, so a movement key needs real frames to show up.
 const holdKeyForTwoFrames = async (key: string): Promise<void> => {
@@ -95,8 +82,8 @@ describe("mounting", () => {
 		wrapper.append(stray, projected);
 		document.body.appendChild(wrapper);
 
-		expect(stray.style.getPropertyValue("--camera-z")).toBe("");
-		expect(projected.style.getPropertyValue("--camera-z")).toBe("600px");
+		expect(stray.hasAttribute("camera-z")).toBe(false);
+		expect(projected.getAttribute("camera-z")).toBe("600px");
 		wrapper.remove();
 	});
 
@@ -163,20 +150,21 @@ describe("free-fly", () => {
 });
 
 describe("orbit", () => {
-	test("entering freezes the current distance and snaps onto the orbit", async () => {
+	test("entering freezes the current distance as the radius and centres the camera", async () => {
 		await setMode("orbit");
-		expect(readCamera("x")).toBeCloseTo(0, 5);
-		expect(readCamera("y")).toBeCloseTo(0, 5);
-		expect(readCamera("z")).toBeCloseTo(START_DISTANCE, 5);
+		expect(readCamera("orbit-radius")).toBeCloseTo(START_DISTANCE, 5);
+		expect(readCamera("x")).toBe(0);
+		expect(readCamera("y")).toBe(0);
+		expect(readCamera("z")).toBe(0);
 	});
 
-	test("the wheel zooms, and the pose stays on the orbit", async () => {
+	test("the wheel zooms by changing the radius", async () => {
 		await setMode("orbit");
-		const radius = readCamera("z");
+		const radius = readCamera("orbit-radius");
 		camera.dispatchEvent(
 			new WheelEvent("wheel", { deltaY: 100, cancelable: true }),
 		);
-		expect(readCamera("z")).toBeCloseTo(radius + 100, 5);
+		expect(readCamera("orbit-radius")).toBeCloseTo(radius + 100, 5);
 	});
 
 	test("zoom is clamped so the camera can neither reach the target nor leave", async () => {
@@ -184,53 +172,60 @@ describe("orbit", () => {
 		camera.dispatchEvent(
 			new WheelEvent("wheel", { deltaY: -99999, cancelable: true }),
 		);
-		expect(readCamera("z")).toBeCloseTo(120, 5);
+		expect(readCamera("orbit-radius")).toBeCloseTo(120, 5);
 
 		camera.dispatchEvent(
 			new WheelEvent("wheel", { deltaY: 99999, cancelable: true }),
 		);
-		expect(readCamera("z")).toBeCloseTo(4000, 5);
+		expect(readCamera("orbit-radius")).toBeCloseTo(4000, 5);
 	});
 
 	test("movement keys are inert: the position is derived, not flown", async () => {
 		await setMode("orbit");
-		const radius = readCamera("z");
+		const radius = readCamera("orbit-radius");
 		await holdKeyForTwoFrames("w");
-		expect(readCamera("z")).toBeCloseTo(radius, 5);
+		expect(readCamera("orbit-radius")).toBeCloseTo(radius, 5);
+		expect(readCamera("z")).toBe(0);
 	});
 
 	test("a look drag swings around the target at a constant radius", async () => {
 		await setMode("orbit");
-		const radius = readCamera("z");
+		const radius = readCamera("orbit-radius");
 		lookDrag(100, 0);
 
 		expect(readCamera("yaw")).toBeLessThan(0);
-		const swung = Math.hypot(readCamera("x"), readCamera("y"), readCamera("z"));
-		expect(swung).toBeCloseTo(radius, 5);
-		expect(readCamera("z")).toBeLessThan(radius);
+		expect(readCamera("orbit-radius")).toBeCloseTo(radius, 5);
 	});
 });
 
 describe("switching modes", () => {
-	test("leaving orbit keeps the pose and hands the keys back", async () => {
+	test("leaving orbit resolves the pose it implied and hands the keys back", async () => {
 		await setMode("orbit");
-		const orbitZ = readCamera("z");
+		lookDrag(100, 0);
+		const radius = readCamera("orbit-radius");
 
 		await setMode("free");
-		expect(readCamera("z")).toBeCloseTo(orbitZ, 5);
+		expect(readCamera("orbit-radius")).toBe(0);
+		const resolvedDistance = Math.hypot(
+			readCamera("x"),
+			readCamera("y"),
+			readCamera("z"),
+		);
+		expect(resolvedDistance).toBeCloseTo(radius, 5);
+		expect(readCamera("x")).toBeLessThan(0);
 
+		const resolvedZ = readCamera("z");
 		await holdKeyForTwoFrames("w");
-		expect(readCamera("z")).toBeLessThan(orbitZ);
+		expect(readCamera("z")).toBeLessThan(resolvedZ);
 	});
 
 	test("the wheel stops zooming once orbit is left", async () => {
 		await setMode("orbit");
 		await setMode("free");
-		const settled = readCamera("z");
 		camera.dispatchEvent(
 			new WheelEvent("wheel", { deltaY: 100, cancelable: true }),
 		);
-		expect(readCamera("z")).toBeCloseTo(settled, 5);
+		expect(readCamera("orbit-radius")).toBe(0);
 	});
 
 	test("re-entering orbit freezes the distance the free flight left behind", async () => {
@@ -242,12 +237,7 @@ describe("switching modes", () => {
 		);
 
 		await setMode("orbit");
-		const onOrbit = Math.hypot(
-			readCamera("x"),
-			readCamera("y"),
-			readCamera("z"),
-		);
-		expect(onOrbit).toBeCloseTo(flownDistance, 5);
+		expect(readCamera("orbit-radius")).toBeCloseTo(flownDistance, 5);
 	});
 });
 

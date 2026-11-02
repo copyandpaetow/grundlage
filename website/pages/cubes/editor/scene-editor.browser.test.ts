@@ -1,34 +1,19 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import "./scene-editor";
+import "../shapes/scene-cube";
+import "../wrappers/scene-group";
 
-// Behaviour tests for the editing spine. The editor is the outermost wrapper:
-// `<scene-editor><scene-camera><scene-world>…geometry…</scene-world></scene-camera>`.
-// We mount that real nesting, then dispatch real pointer/keyboard events, click palette
-// buttons, and assert on the observable result: the wrapper structure selection
-// produces, the attributes grouping/ungrouping write, DOM order after deselect, the
-// camera mode the toggle flips, etc. We never reach into the editor's private closures.
-//
-// The blocks the editor reads — scene-cube / scene-wall / scene-ramp / scene-group — and
-// the scene-world / scene-camera wrappers are never imported here, so they stay inert and
-// carry only their tagName + attributes, which is all selection / grouping / serialization
-// and the mode toggle read. The chrome the editor mounts IS the framework, though:
-// scene-editor renders a scene-palette into its own shadow at connect (hence the palette
-// helpers below reach a shadow deeper, and the inspector, which the editor feeds through a
-// prop, settles a microtask after selection). The placement grid, scene-ground, is mounted
-// only while a block is being placed — it rides the world's `ground` slot in and out.
+// scene-cube and scene-group are defined, because wrapping measures rendered bounds. The
+// other shapes and wrappers stay inert: selection, serialization and the mode toggle read
+// only tag names and attributes.
 
-// `world` is the <scene-world>: where geometry lives, where the editor drops the ground
-// while placing, and where placed blocks land. `sceneCamera` is the wrapper whose `mode`
-// the camera button toggles.
 let editor: HTMLElement;
 let sceneCamera: HTMLElement;
 let world: HTMLElement;
 let dispose: () => void;
 
 beforeEach(() => {
-	// Build the real nesting detached, then connect it in one shot so the editor's
-	// generator sees its wrapped world/camera at connect. The generator runs
-	// synchronously, so the palette and listeners are live straight away.
+	// Connected in one shot, so the editor sees its world and camera at connect
 	editor = document.createElement("scene-editor");
 	sceneCamera = document.createElement("scene-camera");
 	world = document.createElement("scene-world");
@@ -46,8 +31,6 @@ afterEach(async () => {
 	world.remove();
 });
 
-// --- helpers ----------------------------------------------------------------
-
 const addBlock = (
 	tag: string,
 	attributes: Record<string, string> = {},
@@ -60,8 +43,7 @@ const addBlock = (
 	return block;
 };
 
-// A pointerdown is what the editor listens for; the handler only reads MouseEvent
-// fields + composedPath, so a MouseEvent of that type is a faithful stand-in.
+// The handler reads only MouseEvent fields and composedPath
 const pointerDown = (target: EventTarget, meta = false): void => {
 	target.dispatchEvent(
 		new MouseEvent("pointerdown", { bubbles: true, button: 0, metaKey: meta }),
@@ -72,8 +54,6 @@ const pressKey = (key: string): void => {
 	window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 };
 
-// Stand in for the pointer crossing the placement grid: the real scene-ground emits
-// this when moved over, in world units. The editor snaps it and fixes the drop point.
 const moveOverFloor = (x: number, z: number): void => {
 	world
 		.querySelector("scene-ground")
@@ -82,14 +62,11 @@ const moveOverFloor = (x: number, z: number): void => {
 		);
 };
 
-// The palette is a <scene-palette> the editor mounts into its OWN shadow, so its
-// toolbar and inspector live one shadow deeper, under the editor.
 const paletteShadow = (): ShadowRoot | null =>
 	(editor.shadowRoot?.querySelector("scene-palette") as HTMLElement | null)
 		?.shadowRoot ?? null;
 
-// The editor hands the palette its inspector state through a prop; the lib re-renders
-// on the next microtask, so let that settle before asserting on the panel.
+// The palette re-renders a microtask after the editor sets its inspector prop
 const flush = (): Promise<void> =>
 	new Promise((resolve) => queueMicrotask(resolve));
 
@@ -116,8 +93,6 @@ const fieldInput = (field: string, axis: number): HTMLInputElement | null =>
 	paletteShadow()?.querySelector(
 		`input[data-field="${field}"][data-axis="${axis}"]`,
 	) as HTMLInputElement | null;
-
-// --- selection --------------------------------------------------------------
 
 describe("selection wrapping", () => {
 	test("clicking a block wraps it in scene-gizmo > scene-select", () => {
@@ -214,8 +189,6 @@ describe("delete", () => {
 	});
 });
 
-// --- grouping ---------------------------------------------------------------
-
 describe("grouping", () => {
 	test("'g' wraps ≥2 blocks in a group at their centroid with rebased children", () => {
 		const a = addBlock("scene-cube", { position: "2 0 0" });
@@ -236,8 +209,33 @@ describe("grouping", () => {
 		expect(b.getAttribute("position")).toBe("1 0 0");
 		expect(a.hasAttribute("x")).toBe(false);
 
-		// The new group is what's now selected.
 		expect(selectedBlocks()).toEqual([group]);
+	});
+
+	test("'Wrap in cube' sizes the cube to the selection's bounds", () => {
+		const a = addBlock("scene-cube", { position: "2 0 0" });
+		const b = addBlock("scene-cube", { position: "4 0 0" });
+		pointerDown(a);
+		pointerDown(b, true);
+		clickPaletteButton('[data-action="wrap-in-cube"]');
+
+		const wrapper = selectedBlocks()[0];
+		expect(wrapper.tagName.toLowerCase()).toBe("scene-cube");
+		expect(wrapper.getAttribute("position")).toBe("3 0 0");
+		expect(wrapper.getAttribute("size")).toBe("3 1 1");
+		expect(a.parentElement).toBe(wrapper);
+		expect(a.getAttribute("position")).toBe("-1 0 0");
+	});
+
+	test("'Wrap in cube' wraps a single block, which a group would not", () => {
+		const a = addBlock("scene-cube", { position: "2 0 0" });
+		pointerDown(a);
+		clickPaletteButton('[data-action="wrap-in-cube"]');
+
+		const wrapper = selectedBlocks()[0];
+		expect(wrapper.tagName.toLowerCase()).toBe("scene-cube");
+		expect(wrapper.getAttribute("size")).toBe("1 1 1");
+		expect(a.parentElement).toBe(wrapper);
 	});
 
 	test("'g' with fewer than two blocks selected does nothing", () => {
@@ -285,9 +283,7 @@ describe("ungrouping", () => {
 	});
 
 	test("'u' honours a group rotated about X, not only yaw", () => {
-		// The old rebase used rotateAroundY only, so an X/Z-rotated group placed its
-		// children wrong. A group tilted 90° about X turns "2 units toward the viewer"
-		// (+z) into "2 units up" (+y): child at [0,0,2] lands at world [0,2,0].
+		// A group tilted 90° about X turns +z into +y: [0,0,2] lands at world [0,2,0]
 		const group = addBlock("scene-group", {
 			position: "0 0 0",
 			rotation: "90 0 0",
@@ -304,7 +300,93 @@ describe("ungrouping", () => {
 	});
 });
 
-// --- placement --------------------------------------------------------------
+describe("nesting", () => {
+	// A group turned 90° about Y, holding two cubes in its own frame.
+	const addTurnedGroup = (): {
+		group: HTMLElement;
+		first: HTMLElement;
+		second: HTMLElement;
+	} => {
+		const group = addBlock("scene-group", {
+			position: "10 0 0",
+			rotation: "0 90 0",
+		});
+		const first = document.createElement("scene-cube");
+		first.setAttribute("position", "2 0 0");
+		const second = document.createElement("scene-cube");
+		second.setAttribute("position", "4 0 0");
+		group.append(first, second);
+		return { group, first, second };
+	};
+
+	test("clicking a selected block again selects the block inside it", () => {
+		const { group, first } = addTurnedGroup();
+		pointerDown(first);
+		expect(selectedBlocks()).toEqual([group]);
+		pointerDown(first);
+		expect(selectedBlocks()).toEqual([first]);
+	});
+
+	test("export keeps a block selected inside another block", () => {
+		const outer = addBlock("scene-cube", { position: "1 0 0" });
+		const inner = document.createElement("scene-cube");
+		inner.setAttribute("position", "0 2 0");
+		outer.appendChild(inner);
+		pointerDown(inner);
+		pointerDown(inner);
+		expect(selectedBlocks()).toEqual([inner]);
+
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		clickPaletteButton('[data-action="export"]');
+		const markup = log.mock.calls[0]?.[0];
+		log.mockRestore();
+		expect(markup).toBe(
+			[
+				"<scene-world>",
+				'\t<scene-cube position="1 0 0">',
+				'\t\t<scene-cube position="0 2 0"></scene-cube>',
+				"\t</scene-cube>",
+				"</scene-world>",
+			].join("\n"),
+		);
+	});
+
+	test("wrapping blocks inside a turned group keeps them in that group's frame", () => {
+		const { group, first, second } = addTurnedGroup();
+		pointerDown(first);
+		pointerDown(first);
+		pointerDown(second, true);
+		pressKey("g");
+
+		const inner = selectedBlocks()[0];
+		pressKey("Escape");
+		expect(inner.parentElement).toBe(group);
+		expect(inner.getAttribute("position")).toBe("3 0 0");
+		expect(first.getAttribute("position")).toBe("-1 0 0");
+	});
+
+	test("unwrapping a nested group lifts its children into the outer group only", () => {
+		const { group } = addTurnedGroup();
+		const inner = document.createElement("scene-group");
+		inner.setAttribute("position", "0 0 0");
+		inner.setAttribute("rotation", "0 90 0");
+		const child = document.createElement("scene-cube");
+		child.setAttribute("position", "2 0 0");
+		inner.appendChild(child);
+		group.appendChild(inner);
+
+		pointerDown(child);
+		pointerDown(child);
+		expect(selectedBlocks()).toEqual([inner]);
+		pressKey("u");
+
+		// Lifted through the inner group's 90° alone: [2,0,0] → [0,0,-2], still inside
+		// the outer group, which keeps adding its own frame on screen.
+		expect(child.parentElement).toBe(group);
+		expect(child.getAttribute("position")).toBe("0 0 -2");
+		expect(child.getAttribute("rotation")).toBe("0 90 0");
+	});
+});
 
 describe("placement", () => {
 	test("adding then dropping creates a selected block and discards the ghost", () => {
@@ -325,9 +407,7 @@ describe("placement", () => {
 		clickPaletteButton('[data-add="scene-cube"]');
 		pointerDown(world); // click without ever moving over the floor
 
-		// The ghost is still up (placement continues) and nothing was committed at the
-		// origin — the no-floor-point guard, not a block stranded at 0,0,0. The only
-		// cube in the tree is the ghost's preview child, never a placed sibling.
+		// The only cube left is the ghost's preview child, so nothing landed at the origin
 		expect(world.querySelector("scene-ghost")).not.toBeNull();
 		expect(world.querySelector(":scope > scene-cube")).toBeNull();
 		expect(selectedBlocks()).toEqual([]);
@@ -341,8 +421,6 @@ describe("placement", () => {
 	});
 });
 
-// --- camera -----------------------------------------------------------------
-
 describe("camera", () => {
 	test("the camera button flips the wrapped scene-camera's mode attribute", () => {
 		expect(sceneCamera.getAttribute("mode")).toBeNull();
@@ -354,8 +432,6 @@ describe("camera", () => {
 		expect(sceneCamera.getAttribute("mode")).toBe("free");
 	});
 });
-
-// --- inspector --------------------------------------------------------------
 
 describe("inspector", () => {
 	test("reflects the selected block and writes edits back to its attribute", async () => {

@@ -1,12 +1,20 @@
-import {
-	blockTransformFromAttributes,
-	formatNumber,
-	isBlock,
-} from "../scene-shared";
+import { blockTransformFromAttributes, formatNumber } from "../scene-shared";
+import { isBlock } from "../scene-geometry";
 
-// Serialize the live scene to portable markup: skip editor-only overlays, recurse into
-// groups, and normalize each block's shorthand-vs-specific attributes to one concrete
-// triple so a reader never implements precedence. Round-trips back into an equal scene.
+// Shorthand and per-axis attributes collapse into one triple, so a reader never resolves
+// precedence
+
+// A selected block sits inside scene-gizmo > scene-select, at any depth; the placement
+// ghost is a transient preview and stays out.
+const childBlocksOf = (parent: Element): Element[] =>
+	Array.from(parent.children).flatMap((child) => {
+		if (isBlock(child)) return [child];
+		const tag = child.tagName.toLowerCase();
+		return tag === "scene-gizmo" || tag === "scene-select"
+			? childBlocksOf(child)
+			: [];
+	});
+
 const serializeBlock = (
 	block: Element,
 	depth: number,
@@ -26,8 +34,8 @@ const serializeBlock = (
 		attributes.push(`size="${size.map(formatNumber).join(" ")}"`);
 	const suffix = attributes.length > 0 ? ` ${attributes.join(" ")}` : "";
 
-	const childBlocks = Array.from(block.children).filter(isBlock);
-	if (isGroup && childBlocks.length > 0) {
+	const childBlocks = childBlocksOf(block);
+	if (childBlocks.length > 0) {
 		lines.push(`${indent}<${tag}${suffix}>`);
 		for (const child of childBlocks) serializeBlock(child, depth + 1, lines);
 		lines.push(`${indent}</${tag}>`);
@@ -38,16 +46,7 @@ const serializeBlock = (
 
 export const exportScene = (world: HTMLElement): void => {
 	const lines: string[] = ["<scene-world>"];
-	// A selected block sits inside a scene-select inside a gizmo, so reach through both
-	// wrappers. The placement ghost is a transient preview and is deliberately skipped.
-	const walk = (parent: Element): void => {
-		for (const child of Array.from(parent.children)) {
-			const tag = child.tagName.toLowerCase();
-			if (isBlock(child)) serializeBlock(child, 1, lines);
-			else if (tag === "scene-gizmo" || tag === "scene-select") walk(child);
-		}
-	};
-	walk(world);
+	for (const block of childBlocksOf(world)) serializeBlock(block, 1, lines);
 	lines.push("</scene-world>");
 	const markup = lines.join("\n");
 

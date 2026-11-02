@@ -2,10 +2,7 @@ import { formatNumber, snapToGrid } from "../scene-shared";
 import type { EditorState } from "./context";
 import "./scene-ground";
 
-// Placement chrome is transient, like the selection wrappers: its existence IS the
-// "placing" state. We drop a translucent ghost of the geometry and a <scene-ground> grid
-// into the world — the ground rides the world's `ground` slot into its 3D floor space —
-// and remove both when placement ends, so there is no visibility flag to keep.
+// The ghost and the ground exist only while placing, so there is no visibility flag
 
 export type PlacementDeps = {
 	select: (block: HTMLElement) => void;
@@ -46,9 +43,7 @@ export const createPlacement = (
 		state.placement = { tag, ghost, child, ground, position: null };
 	};
 
-	// The ground reports where the pointer sits on the floor in world units; we snap it
-	// to the authoring lattice (the floor stays policy-free) and write the ghost's
-	// position, which re-renders it.
+	// Snapped here, so the floor stays policy-free
 	const onFloorPoint = (event: Event): void => {
 		if (state.placement === null) return;
 		const { x, z } = (event as CustomEvent<{ x: number; z: number }>).detail;
@@ -62,8 +57,7 @@ export const createPlacement = (
 	};
 
 	const dropPlacement = (): void => {
-		// No floor point means the pointer never crossed the grid — ignore the drop rather
-		// than stranding the block at the origin.
+		// The pointer never crossed the grid, so the block would land at the origin
 		if (state.placement === null || state.placement.position === null) return;
 		const { child, position } = state.placement;
 		child.setAttribute("position", position.map(formatNumber).join(" "));

@@ -1,29 +1,15 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { blockCornersPx, blocksBoundsPx } from "./scene-shared";
+import { blockCornersPx, blocksBoundsPx } from "./scene-geometry";
 
-// These exercise the SELECTION-CAGE behaviour: what volume the cage has to enclose
-// for a given block. blockCornersPx reads the block's resolved `transform` matrix
-// (the single source of truth — what the browser composed from the geometry's
-// translate · rotate · scale) and pushes the block's pre-scale half-extents through
-// it. We drive it the way the browser does: set an inline `transform` (the exact
-// string the geometry's :host rule produces) plus the `--block-extent-*` the leaf
-// publishes, attach the element, and read the result. We never touch component
-// internals, only the observable result: a world-axis-aligned box that is tight
-// when a block is axis-aligned and grows as it turns.
-//
-// happy-dom resolves an inline `transform` through getComputedStyle and parses it
-// with DOMMatrix exactly as a browser does, so the matrix math runs here unchanged.
+// happy-dom resolves an inline `transform` through getComputedStyle and DOMMatrix as a
+// browser does, so the matrix math runs here unchanged.
 
-// Half-extent of a default unit cube in px (UNIT_SIZE / 2). We hard-code it here so
-// the test states the expected geometry rather than re-deriving it from the source.
+// Hard-coded, so the test states the geometry rather than re-deriving it from the source
 const HALF_UNIT = 60;
 
 const created: HTMLElement[] = [];
 
-// A leaf block: an inline `transform` (the resolved matrix the matrix math reads)
-// plus `--block-extent-*` (so blockCornersPx takes the leaf branch). The extents
-// default to a unit cube unless a test overrides them; they are PRE-scale, because
-// the transform's own scale3d already scales them.
+// The extents already include the size, which scales only the faces, never the matrix
 const makeLeaf = (
 	transform: string,
 	extent: readonly [number, number, number] = [HALF_UNIT, HALF_UNIT, HALF_UNIT],
@@ -38,9 +24,7 @@ const makeLeaf = (
 	return element;
 };
 
-// A transform carrier: an inline `transform` but NO extent, so blockCornersPx
-// recurses into its leaf children and composes their corners through the group's
-// own matrix.
+// No extent, so blockCornersPx recurses into its children
 const makeGroup = (transform: string, children: HTMLElement[]): HTMLElement => {
 	const group = document.createElement("scene-group");
 	if (transform !== "") group.style.transform = transform;
@@ -75,9 +59,9 @@ describe("blockCornersPx — leaf geometry", () => {
 		}
 	});
 
-	test("scale stretches the corners per axis", () => {
-		// scale3d(2, 1, 0.5) over the unit cube → half-extents 120 / 60 / 30.
-		const bounds = blocksBoundsPx([makeLeaf("scale3d(2, 1, 0.5)")]);
+	test("the scaled extents set the corners per axis", () => {
+		// size="2 1 0.5" publishes half-extents 120 / 60 / 30 and leaves the matrix unscaled.
+		const bounds = blocksBoundsPx([makeLeaf("", [120, 60, 30])]);
 		expect(bounds).not.toBeNull();
 		expectVectorClose(bounds!.center, [0, 0, 0]);
 		expectVectorClose(bounds!.half, [120, 60, 30]);
@@ -135,5 +119,18 @@ describe("blockCornersPx — group recursion", () => {
 		expect(bounds).not.toBeNull();
 		expectVectorClose(bounds!.center, [160, 0, 0]);
 		expectVectorClose(bounds!.half, [HALF_UNIT, HALF_UNIT, HALF_UNIT]);
+	});
+});
+
+describe("blockCornersPx — a block with its own geometry and child blocks", () => {
+	test("unions its own corners with its children's", () => {
+		// The cube spans -60…60; its child, 3 units up in its frame, spans y -420…-300.
+		const child = makeLeaf("translate3d(0px, -360px, 0px)");
+		const parent = makeLeaf("translate3d(120px, 0px, 0px)");
+		parent.appendChild(child);
+		const bounds = blocksBoundsPx([parent]);
+		expect(bounds).not.toBeNull();
+		expectVectorClose(bounds!.center, [120, -180, 0]);
+		expectVectorClose(bounds!.half, [HALF_UNIT, 240, HALF_UNIT]);
 	});
 });

@@ -1,15 +1,10 @@
+import { blockTransformFromAttributes, type Vector3 } from "../scene-shared";
 import {
-	blockTransformFromAttributes,
 	eulerFromMatrix,
 	fromScreenPoint,
 	rotationMatrix,
 	toScreenPoint,
-	type Vector3,
-} from "../scene-shared";
-
-// Vector and transform helpers the editor's subsystems share. The matrix maths itself
-// lives in scene-shared, because the gizmo composes transforms the same way when it
-// drives its direct child.
+} from "../scene-geometry";
 
 export const addVectors = (a: Vector3, b: Vector3): Vector3 => [
 	a[0] + b[0],
@@ -29,11 +24,8 @@ export const readPosition = (block: Element): Vector3 =>
 export const readRotation = (block: Element): Vector3 =>
 	blockTransformFromAttributes(block).rotation;
 
-// Lift a child's authored position and rotation out of a parent's local space into world
-// space: push the position through the parent FRAME and compose the rotation with the
-// parent's BY MATRIX, so it is correct for any parent rotation, not only yaw. Shared by
-// ungroup (parent = group) and flatten (parent = cage); each caller applies its own
-// snapping policy to the raw result.
+// Rotations compose by matrix, so any parent rotation lifts correctly, not only a yaw.
+// Unsnapped: each caller applies its own snapping.
 export const liftThroughFrame = (
 	child: Element,
 	frame: DOMMatrix,

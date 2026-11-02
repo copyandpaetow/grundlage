@@ -35,12 +35,14 @@ of truth.
   its committed carrier transform and MEASURES its blocks at render time, emitting the box
   size as bindings — no `writeBounds()` method, no imperative style writes, no observer.
 - The live drag is a declared, inherited custom property, not a cross-element write. The
-  Gizmo DECLARES `--carrier-live: matrix3d(…)` on its own `:host`; it inherits across the
-  slot to the direct child, whose `:host` pulls it (`transform: var(--carrier-live,
-<committed>)`). The child and its contents ride the drag by pure CSS inheritance — the
-  Gizmo touches nothing inside the child. Commit writes the child's authored attributes,
-  clears `--carrier-live` (once the child has re-rendered against them, so no flash), and
-  fires `scene-commit`.
+  Gizmo writes only the gesture's one number (`--drag-x/y/z` in world units or `--drag-yaw`
+  in degrees) and composes `--carrier-drag` from it in CSS on its own `:host`; it inherits
+  across the slot to the direct child, whose `:host` prepends it (`transform:
+var(--carrier-drag,) var(--placement)`). The child and its contents ride the drag by pure
+  CSS inheritance — the Gizmo touches nothing inside the child. Commit reads the transform
+  the browser composed back off the child, writes the child's authored attributes, resets
+  the drag (once the child has re-rendered against them, so no flash), and fires
+  `scene-commit`.
 - The editor Flattens on each `scene-commit` (reusing the matrix compose / Euler
   decompose already written for ungroup), keeping Blocks the single source of truth and
   the "unwrapping needs no bake-back" invariant intact.

@@ -12,6 +12,8 @@
     nothing else in it; "changing" adds compose plus the write.
 */
 
+import { DECLARED_PROP_NAMES } from "../../lib/src/rendering/constants";
+
 export type CommitLane =
 	| "staticNameAttribute"
 	| "composedNameAttribute"
@@ -41,8 +43,10 @@ export interface GeneratedShape {
 /*
     A plain custom element, not a grundlage component: assignDeclaredProp on a
     component would schedule a render per binding per commit and the pass would
-    be measuring the driver. declaredPropNames is the only thing the write path
-    reads off the constructor.
+    be measuring the driver. The DECLARED_PROP_NAMES static is the only thing the
+    write path reads off the constructor. It also marks a component, whose update()
+    the write path calls for an undeclared object; this lane writes only the
+    declared name.
 */
 export const PLAIN_CUSTOM_ELEMENT_NAME = "probe-plain";
 export const DECLARED_PROP_ELEMENT_NAME = "probe-declared";
@@ -57,7 +61,7 @@ export const defineProbeElements = (): void => {
 	customElements.define(
 		DECLARED_PROP_ELEMENT_NAME,
 		class extends HTMLElement {
-			static declaredPropNames: ReadonlySet<string> = new Set([
+			static [DECLARED_PROP_NAMES]: ReadonlySet<string> = new Set([
 				DECLARED_PROP_NAME,
 			]);
 		},

@@ -1,17 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import "./wrappers/scene-select";
 
-// Behaviour tests for the selection cage. Its whole observable output is the box geometry
-// it publishes as :host custom properties, measured from the blocks assigned to its slot.
-//
-// The measurement is the point of these tests. Blocks only assign once the <slot> is in
-// the shadow tree, so the cage paints twice per render: once to put the slot up, then
-// again with the box that measuring produced. A cage that measured before painting would
-// always be one render behind, and a freshly mounted one would show nothing at all.
-//
-// Both paints come from the same template, so the second is a CSSOM patch rather than a
-// remount. That is why assertions read the live sheet and not the <style> text: the text
-// is the mount-time write (the first paint), the CSSOM rule is where later paints land.
+// Assertions read the live sheet, not the <style> text: the text is the first paint, and
+// the measured box lands as a CSSOM patch in the second.
 
 const HALF_UNIT = 60;
 const CAGE_MARGIN = 6;
@@ -21,9 +12,7 @@ let cage: HTMLElement & { update: () => Promise<void> };
 const flush = (): Promise<void> =>
 	new Promise((resolve) => queueMicrotask(resolve));
 
-// A leaf block the way the geometries render one: a resolved `transform` matrix plus the
-// pre-scale half-extents. Left un-upgraded on purpose, so the cage measures a stand-in and
-// nothing depends on the shapes' own rendering.
+// Left un-upgraded, so nothing depends on the shapes' own rendering
 const makeLeaf = (offsetX: number): HTMLElement => {
 	const leaf = document.createElement("scene-cube");
 	leaf.style.transform = `translate3d(${offsetX}px, 0px, 0px)`;
@@ -33,17 +22,26 @@ const makeLeaf = (offsetX: number): HTMLElement => {
 	return leaf;
 };
 
-const hostRule = (): CSSStyleDeclaration => {
-	const sheet = cage.shadowRoot?.querySelector("style")?.sheet;
-	for (const rule of Array.from(sheet?.cssRules ?? [])) {
-		const styleRule = rule as CSSStyleRule;
-		if (styleRule.selectorText === ":host") return styleRule.style;
+// The cage paints the shared placement sheets first, so the box lives in whichever
+// :host rule declares the variable.
+const boxVariable = (name: string): string => {
+	for (const style of Array.from(
+		cage.shadowRoot?.querySelectorAll("style") ?? [],
+	)) {
+		for (const rule of Array.from(style.sheet?.cssRules ?? [])) {
+			const styleRule = rule as CSSStyleRule;
+			if (styleRule.selectorText !== ":host") continue;
+			const value = styleRule.style.getPropertyValue(name).trim();
+			if (value !== "") return value;
+		}
 	}
-	throw new Error("the cage published no :host rule");
+	throw new Error(`the cage published no ${name}`);
 };
 
-const boxVariable = (name: string): string =>
-	hostRule().getPropertyValue(name).trim();
+const boxStyleText = (): string =>
+	Array.from(cage.shadowRoot?.querySelectorAll("style") ?? [])
+		.map((style) => style.textContent)
+		.join("");
 
 beforeEach(() => {
 	cage = document.createElement("scene-select") as typeof cage;
@@ -72,7 +70,7 @@ describe("measuring what it just painted", () => {
 		document.body.appendChild(cage);
 		await flush();
 
-		const text = cage.shadowRoot?.querySelector("style")?.textContent ?? "";
+		const text = boxStyleText();
 		expect(text).toContain("--box-display: none");
 		expect(boxVariable("--box-display")).toBe("block");
 	});
@@ -129,6 +127,6 @@ describe("the slot survives the measure", () => {
 		document.body.appendChild(cage);
 		await flush();
 
-		expect(boxVariable("--block-x")).toBe("120px");
+		expect(boxVariable("--position-x")).toBe("1");
 	});
 });

@@ -1,30 +1,17 @@
 import { html, component, prop } from "../../../lib/src";
 
-// <scene-camera> — the navigation wrapper. It owns the camera state and every input that
-// moves it, and nothing else. It renders transparently, so the world it wraps keeps its
-// own perspective box.
-//
-// The camera is a pure INPUT device: it writes --camera-* onto its direct child, the
-// world, never onto its own host or document.head. So the variables LIVE ON the world and
-// the camera only edits them — fly to a view, copy the world element (its inline
-// --camera-* come with it), paste it anywhere bare, and it renders that exact view as a
-// static scene. Several cameras can coexist and any of them can drop out cleanly.
-//
-// `mode` picks which body runs: free-fly owns the keys and the step loop, orbit owns the
-// wheel and derives the position from yaw/pitch/radius. Switching tears one down and sets
-// the other up, so neither carries the other's listeners or a mode check.
+// The pose is written as the world's camera-* attributes, so a copied world carries the
+// flown view with it. Each mode is its own update generator, so switching tears down
+// the other's listeners and neither needs a mode check.
 
-const props = { mode: prop.attribute(String, "free") };
+const props = { mode: prop.attribute(prop.oneOf("free", "orbit"), "free") };
 
-// px advanced per animation frame while a movement key is held.
-const MOVE_SPEED = 12;
-// degrees of rotation per pixel of pointer movement while looking.
-const LOOK_SENSITIVITY = 0.18;
+const MOVE_PIXELS_PER_FRAME = 12;
+const LOOK_DEGREES_PER_PIXEL = 0.18;
 const MAX_PITCH = 89;
 const DEFAULT_ORBIT_RADIUS = 600;
 
-// Each movement key as a unit step in camera space: [right, up, forward]. Screen-space
-// +Y is down, so "up" (space) is -1.
+// [right, up, forward] in camera space. Screen +Y is down, so up is -1.
 const MOVE_AXES: Record<string, [number, number, number]> = {
 	w: [0, 0, 1],
 	s: [0, 0, -1],
@@ -40,8 +27,7 @@ const clamp = (value: number, minimum: number, maximum: number): number =>
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
-// We add navigation, not a box: the wrapped world keeps its own perspective box and we
-// only write its --camera-* from the outside.
+// No box of its own, so the world keeps its perspective box
 const transparentShell = html`
 	<style>
 		:host {
@@ -58,41 +44,38 @@ customElements.define(
 	"scene-camera",
 	component(
 		function* ({ host: element }) {
-			const camera = { x: 0, y: -160, z: 600, yaw: 0, pitch: 0 };
-			// The element assigned to our slot, resolved after the first yield. We drive
-			// what we actually project, so a stray non-slotted child is never mistaken for
-			// the world.
+			const camera = {
+				x: 0,
+				y: -160,
+				z: 600,
+				yaw: 0,
+				pitch: 0,
+				orbitRadius: 0,
+			};
+			// The slotted element, so a stray unslotted child is never taken for the world
 			let world: HTMLElement | null = null;
-			// Orbit installs its derivation here; free-fly leaves the pose as authored.
-			let deriveCameraPosition: (() => void) | null = null;
 
-			// The only place camera state reaches CSS, and it is write-only, so no forced
-			// synchronous layout.
+			// Write-only, so it never forces a synchronous layout
 			const writeCameraVariables = (): void => {
 				if (world === null) return;
-				const style = world.style;
-				style.setProperty("--camera-x", `${camera.x}px`);
-				style.setProperty("--camera-y", `${camera.y}px`);
-				style.setProperty("--camera-z", `${camera.z}px`);
-				style.setProperty("--camera-yaw", `${camera.yaw}deg`);
-				style.setProperty("--camera-pitch", `${camera.pitch}deg`);
-			};
-
-			const commitCameraPose = (): void => {
-				deriveCameraPosition?.();
-				writeCameraVariables();
+				world.setAttribute("camera-x", `${camera.x}px`);
+				world.setAttribute("camera-y", `${camera.y}px`);
+				world.setAttribute("camera-z", `${camera.z}px`);
+				world.setAttribute("camera-yaw", `${camera.yaw}deg`);
+				world.setAttribute("camera-pitch", `${camera.pitch}deg`);
+				world.setAttribute("camera-orbit-radius", `${camera.orbitRadius}px`);
 			};
 
 			const onLookMove = (event: PointerEvent): void => {
 				// The world applies rotateY(-yaw), so dragging right must DECREASE yaw to
 				// face +X; dragging down looks down.
-				camera.yaw -= event.movementX * LOOK_SENSITIVITY;
+				camera.yaw -= event.movementX * LOOK_DEGREES_PER_PIXEL;
 				camera.pitch = clamp(
-					camera.pitch + event.movementY * LOOK_SENSITIVITY,
+					camera.pitch + event.movementY * LOOK_DEGREES_PER_PIXEL,
 					-MAX_PITCH,
 					MAX_PITCH,
 				);
-				commitCameraPose();
+				writeCameraVariables();
 			};
 
 			const onLookUp = (): void => {
@@ -112,11 +95,10 @@ customElements.define(
 				const pressedKeys = new Set<string>();
 				let animationFrame = 0;
 
-				// Translate along the heading derived from yaw, so "forward" follows where
-				// we look. The world applies rotateY(-yaw), so our forward is
-				// rotateY(yaw)·(0,0,-1) and our right is rotateY(yaw)·(1,0,0); getting
-				// these signs to agree with the world is what keeps WASD from inverting
-				// after a turn.
+				// The world applies rotateY(-yaw), so the heading is its inverse:
+				//   forward = Ry(yaw)·(0, 0, -1) = (-sin yaw, 0, -cos yaw)
+				//   right   = Ry(yaw)·(1, 0, 0)  = (cos yaw, 0, -sin yaw)
+				// Other signs invert WASD after a turn.
 				const stepWhileKeysHeld = (): void => {
 					const yawRadians = toRadians(camera.yaw);
 					const forwardX = -Math.sin(yawRadians);
@@ -129,13 +111,15 @@ customElements.define(
 						if (axis === undefined) continue;
 						const [alongRight, alongUp, alongForward] = axis;
 						camera.x +=
-							MOVE_SPEED * (alongRight * rightX + alongForward * forwardX);
+							MOVE_PIXELS_PER_FRAME *
+							(alongRight * rightX + alongForward * forwardX);
 						camera.z +=
-							MOVE_SPEED * (alongRight * rightZ + alongForward * forwardZ);
-						camera.y += MOVE_SPEED * alongUp;
+							MOVE_PIXELS_PER_FRAME *
+							(alongRight * rightZ + alongForward * forwardZ);
+						camera.y += MOVE_PIXELS_PER_FRAME * alongUp;
 					}
 
-					commitCameraPose();
+					writeCameraVariables();
 					animationFrame =
 						pressedKeys.size > 0 ? requestAnimationFrame(stepWhileKeysHeld) : 0;
 				};
@@ -167,48 +151,49 @@ customElements.define(
 				};
 			}
 
-			// The constrained camera: it pivots around the origin instead of flying free,
-			// so the position is derived and only yaw/pitch/radius are input. Entering
-			// freezes the current distance as the radius, so the view snaps onto the orbit
-			// without jumping.
+			// Entering keeps the current distance as the radius, so the view does not zoom
 			function* orbitCamera() {
-				let orbitRadius =
+				camera.orbitRadius =
 					Math.hypot(camera.x, camera.y, camera.z) || DEFAULT_ORBIT_RADIUS;
-
-				const placeCameraBehindTarget = (): void => {
-					const yawRadians = toRadians(camera.yaw);
-					const pitchRadians = toRadians(camera.pitch);
-					camera.x =
-						orbitRadius * Math.sin(yawRadians) * Math.cos(pitchRadians);
-					camera.y = -orbitRadius * Math.sin(pitchRadians);
-					camera.z =
-						orbitRadius * Math.cos(yawRadians) * Math.cos(pitchRadians);
-				};
+				camera.x = 0;
+				camera.y = 0;
+				camera.z = 0;
 
 				const onWheel = (event: WheelEvent): void => {
-					orbitRadius = clamp(orbitRadius + event.deltaY, 120, 4000);
-					commitCameraPose();
+					camera.orbitRadius = clamp(
+						camera.orbitRadius + event.deltaY,
+						120,
+						4000,
+					);
+					writeCameraVariables();
 					event.preventDefault();
 				};
 
-				deriveCameraPosition = placeCameraBehindTarget;
-
 				yield transparentShell;
 
-				commitCameraPose();
+				writeCameraVariables();
 				element.addEventListener("wheel", onWheel, { passive: false });
 
+				// Free flight moves a position, so leaving resolves the eye the orbit implied:
+				//   r·(sin yaw·cos pitch, -sin pitch, cos yaw·cos pitch)
 				return () => {
-					deriveCameraPosition = null;
+					const yawRadians = toRadians(camera.yaw);
+					const pitchRadians = toRadians(camera.pitch);
+					camera.x =
+						camera.orbitRadius * Math.sin(yawRadians) * Math.cos(pitchRadians);
+					camera.y = -camera.orbitRadius * Math.sin(pitchRadians);
+					camera.z =
+						camera.orbitRadius * Math.cos(yawRadians) * Math.cos(pitchRadians);
+					camera.orbitRadius = 0;
+					writeCameraVariables();
 					element.removeEventListener("wheel", onWheel);
 				};
 			}
 
 			yield transparentShell;
 
-			// Everything below runs only on the client: on the server the generator stops
-			// at the yield, so the camera ships no JS and the world renders at its default
-			// angle.
+			// Client only: the server stops at the yield above, so the world renders at its
+			// default angle
 			const slot = element.shadowRoot?.querySelector("slot");
 			world = (slot?.assignedElements()[0] as HTMLElement | undefined) ?? null;
 			writeCameraVariables();

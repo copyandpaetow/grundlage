@@ -1,19 +1,13 @@
 import { html, component } from "../../../../lib/src";
 import { GROUND_HALF_UNITS, GROUND_SIZE, UNIT_SIZE } from "../scene-shared";
 
-// <scene-ground> — the placement floor. A flat grid sheet on Y=0 that the editor drops
-// into the world's `ground` slot while a block is being placed and removes when placement
-// ends, so its mere existence is the grid being shown. Editor-only, never serialized.
-//
-// Because the sheet lies axis-flat, the browser hands us the local hit as offsetX/offsetY
-// with the perspective already inverted; we know our own extent, so we map that to a world
-// cell here and emit `scene-floor-point`. No projection maths leaks outward.
+// The sheet lies axis-flat, so offsetX/offsetY arrive with the perspective already
+// inverted and no projection math is needed
 
 customElements.define(
 	"scene-ground",
 	component(function* ({ host: element }) {
-		// The raw, unsnapped point: snapping to the authoring lattice is the editor's
-		// policy, not the floor's.
+		// Unsnapped: snapping is the editor's policy
 		const onPointerMove = (event: PointerEvent): void => {
 			const half = GROUND_HALF_UNITS * UNIT_SIZE;
 			element.dispatchEvent(

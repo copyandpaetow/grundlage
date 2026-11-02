@@ -23,20 +23,10 @@ import { createPlacement } from "./placement";
 import { createGrouping } from "./grouping";
 import { exportScene } from "./serialization";
 
-// <scene-editor> — the authoring spine and the outermost wrapper. It wraps the navigable
-// scene (`<scene-editor><scene-camera><scene-world>…`) and reaches DOWN into the world to
-// author it, without ever becoming the source of truth: selection is DOM-native and
-// manipulation lives in the <scene-gizmo> that wraps the selected block, writing the
-// block's own attributes. The editor does selection, placement, grouping, the palette and
-// serialization, and toggles the camera through its `mode` attribute. The only thing it
-// renders is the palette chrome, anchored over the slotted viewport.
-//
-// The behaviour is split across cohesive modules; this file is the coordinator. It
-// resolves the wrapped scene, builds the shared state, wires the subsystems together,
-// answers the palette's commands, and routes raw pointer and keyboard input into them.
+// The editor is never the source of truth: selection is DOM-native and the gizmo writes
+// the block's own attributes, so the world's markup is the whole scene
 
-// Geometry that has a size of its own: everything except the group carrier, which would
-// distort its children if scaled.
+// A scaled group would distort its children
 const SIZED_TAGS = new Set(["scene-cube", "scene-wall", "scene-ramp"]);
 
 // Editing a shorthand clears the per-axis override it would otherwise lose to.
@@ -49,9 +39,7 @@ const FIELD_SPECIFIC: Record<
 	size: SIZE_SPECIFIC,
 };
 
-// :host is a positioned block so the absolutely-placed palette anchors to the viewport;
-// the slot keeps the wrapped camera and world in flow. One literal for both paints, so
-// adding the palette patches the shell instead of rebuilding the slot.
+// One literal for both paints, so adding the palette patches the shell, not the slot
 const editorShell = (palette: Template | null) => html`
 	<style>
 		:host {
@@ -74,9 +62,7 @@ customElements.define(
 	component(function* ({ host }) {
 		yield editorShell(null);
 
-		// Everything below runs only on the client, so a server render emits just the
-		// slotted scene with no editor chrome. The camera is optional, and its absence is
-		// what hides the camera button.
+		// Client only, so a server render emits the scene without editor chrome
 		const world = host.querySelector<HTMLElement>("scene-world");
 		if (world === null) return;
 		const cameraElement = host.querySelector("scene-camera");
@@ -90,13 +76,13 @@ customElements.define(
 			placement: null,
 		};
 
-		// Null while zero or many blocks are selected, which hides the panel.
-		let inspector: InspectorState | null = null;
+		// Undefined while zero or many blocks are selected, which hides the panel.
+		let inspector: InspectorState | undefined;
 
 		const updateInspector = (): void => {
 			const block = primaryBlock(state);
 			if (block === null) {
-				inspector = null;
+				inspector = undefined;
 			} else {
 				const { position, rotation, size } =
 					blockTransformFromAttributes(block);
@@ -110,8 +96,7 @@ customElements.define(
 			void host.update();
 		};
 
-		// Injecting the cross-cutting glue keeps any two subsystems from importing each
-		// other.
+		// Injected, so no two subsystems import each other
 		const selection = createSelection(state, { updateInspector });
 		const placement = createPlacement(state, {
 			select: selection.select,
@@ -169,11 +154,11 @@ customElements.define(
 				case "delete":
 					selection.deleteSelection();
 					return;
-				case "group":
-					grouping.groupSelection();
+				case "wrap":
+					grouping.wrapSelection(command.wrapperTagName);
 					return;
-				case "ungroup":
-					grouping.ungroupSelection();
+				case "unwrap":
+					grouping.unwrapSelection();
 					return;
 				case "toggle-camera":
 					toggleCamera();
@@ -206,7 +191,7 @@ customElements.define(
 		};
 
 		const onKeyDown = (event: KeyboardEvent): void => {
-			// Inputs live in shadow DOM; at window scope the real target is composedPath[0].
+			// At window scope the target is retargeted to the input's shadow host
 			if (event.composedPath()[0] instanceof HTMLInputElement) return;
 			if (event.key === "Escape") {
 				placement.cancelPlacement();
@@ -215,11 +200,11 @@ customElements.define(
 			}
 			if (event.key === "Delete" || event.key === "Backspace")
 				selection.deleteSelection();
-			if (event.key.toLowerCase() === "g") grouping.groupSelection();
-			if (event.key.toLowerCase() === "u") grouping.ungroupSelection();
+			if (event.key.toLowerCase() === "g")
+				grouping.wrapSelection("scene-group");
+			if (event.key.toLowerCase() === "u") grouping.unwrapSelection();
 		};
 
-		// After a gizmo drag, flatten the cage's rigid move down into the leaf blocks.
 		const onGizmoCommit = (): void => {
 			grouping.flattenSelection();
 			updateInspector();

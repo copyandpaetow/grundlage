@@ -1,26 +1,27 @@
 import {
 	formatNumber,
-	frameMatrix,
-	isBlock,
-	rotationMatrix,
 	sceneElementRendered,
 	snapToGrid,
+	UNIT_SIZE,
 	type Vector3,
 } from "../scene-shared";
+import {
+	blocksBoundsPx,
+	frameMatrix,
+	fromScreenPoint,
+	isBlock,
+	rotationMatrix,
+} from "../scene-geometry";
 import { primaryBlock, type EditorState } from "./context";
 import {
-	addVectors,
 	liftThroughFrame,
 	readPosition,
 	readRotation,
 	subtractVectors,
 } from "./transforms";
 
-// Grouping bakes structure into the geometry itself, never into a hidden wrapper:
-// grouping rebases children into a new <scene-group>'s local space, ungrouping lifts them
-// back into world space, and flatten (after a gizmo commit) bakes the cage's rigid move
-// down into its leaf blocks so the cage returns to identity. All three share the matrix
-// lift in transforms.liftThroughFrame.
+// Structure is baked into the geometry, never into a hidden wrapper, so exported markup is
+// the whole scene
 
 export type GroupingDeps = {
 	select: (block: HTMLElement) => void;
@@ -29,9 +30,11 @@ export type GroupingDeps = {
 	updateInspector: () => void;
 };
 
+export type WrapperTagName = "scene-group" | "scene-cube";
+
 export type GroupingApi = {
-	groupSelection: () => void;
-	ungroupSelection: () => void;
+	wrapSelection: (wrapperTagName: WrapperTagName) => void;
+	unwrapSelection: () => void;
 	flattenSelection: () => void;
 };
 
@@ -39,57 +42,83 @@ export const createGrouping = (
 	state: EditorState,
 	deps: GroupingDeps,
 ): GroupingApi => {
-	const groupSelection = (): void => {
+	const wrapSelection = (wrapperTagName: WrapperTagName): void => {
 		const members = [...state.selection];
-		if (members.length < 2) return;
+		const isWorthWrapping =
+			members.length >= 2 ||
+			(members.length === 1 && wrapperTagName === "scene-cube");
+		if (!isWorthWrapping) return;
 
 		deps.clearSelection();
 
-		const centroid = members
-			.map((block) => readPosition(block))
-			.reduce(addVectors, [0, 0, 0] as Vector3)
-			.map((sum) => sum / members.length) as Vector3;
+		// Every member has to sit in one parent's frame, or one rebase cannot hold them all
+		const parent = members[0].parentElement;
+		if (
+			parent === null ||
+			members.some((block) => block.parentElement !== parent)
+		)
+			throw new Error(
+				"Wrap blocks that share one parent; these sit in different ones.",
+			);
 
-		const group = document.createElement("scene-group");
-		group.setAttribute("position", centroid.map(formatNumber).join(" "));
-		state.world.appendChild(group);
+		// Measured after clearSelection, so the bounds are in the parent's frame, not the cage's
+		const bounds = blocksBoundsPx(members);
+		if (bounds === null)
+			throw new Error(
+				"Wrap blocks that have rendered; these have no bounds yet.",
+			);
+		const center = fromScreenPoint(new DOMPoint(...bounds.center));
+
+		const wrapper = document.createElement(wrapperTagName);
+		wrapper.setAttribute("position", center.map(formatNumber).join(" "));
+		if (wrapperTagName === "scene-cube")
+			wrapper.setAttribute(
+				"size",
+				bounds.half
+					.map((halfPx) => formatNumber((halfPx * 2) / UNIT_SIZE))
+					.join(" "),
+			);
+		parent.insertBefore(wrapper, members[0]);
 		for (const block of members) {
-			const rebased = subtractVectors(readPosition(block), centroid);
+			const rebased = subtractVectors(readPosition(block), center);
 			block.setAttribute("position", rebased.map(formatNumber).join(" "));
 			block.removeAttribute("x");
 			block.removeAttribute("y");
 			block.removeAttribute("z");
-			group.appendChild(block);
+			wrapper.appendChild(block);
 		}
-		deps.select(group);
+		deps.select(wrapper);
 	};
 
-	const ungroupSelection = (): void => {
-		const group = primaryBlock(state);
-		if (group === null || group.tagName.toLowerCase() !== "scene-group") return;
+	// A cube keeps its own geometry when its children leave; a group is nothing without them.
+	const unwrapSelection = (): void => {
+		const wrapper = primaryBlock(state);
+		if (wrapper === null) return;
+		const childBlocks = [...wrapper.children].filter(
+			(child): child is HTMLElement =>
+				child instanceof HTMLElement && isBlock(child),
+		);
+		if (childBlocks.length === 0) return;
 
 		deps.clearSelection();
-		const frame = frameMatrix(readPosition(group), readRotation(group));
-		const groupRotation = rotationMatrix(readRotation(group));
-		for (const child of [...group.children]) {
-			if (!(child instanceof HTMLElement) || !isBlock(child)) continue;
+		const frame = frameMatrix(readPosition(wrapper), readRotation(wrapper));
+		const wrapperRotation = rotationMatrix(readRotation(wrapper));
+		for (const child of childBlocks) {
 			const { position, rotation } = liftThroughFrame(
 				child,
 				frame,
-				groupRotation,
+				wrapperRotation,
 			);
 			child.setAttribute("position", position.map(formatNumber).join(" "));
 			child.setAttribute("rotation", rotation.map(formatNumber).join(" "));
-			state.world.appendChild(child);
+			wrapper.before(child);
 		}
-		group.remove();
+		if (wrapper.tagName.toLowerCase() === "scene-group") wrapper.remove();
 		deps.updateInspector();
 	};
 
-	// The gizmo bubbles "scene-commit" once it has written a dragged transform onto its
-	// direct child, our cage, as one rigid move. We flatten that down into the leaf blocks
-	// so the blocks stay the single source of truth and the cage returns to identity. The
-	// gizmo knows nothing of this; it just transformed its child.
+	// The blocks stay the single source of truth, so the gizmo's move on the cage is baked
+	// into them
 	const flattenSelection = (): void => {
 		if (state.sceneSelect === null) return;
 		const cage = state.sceneSelect;
@@ -104,7 +133,13 @@ export const createGrouping = (
 				frame,
 				cageRotation,
 			);
-			const world = position.map(snapToGrid) as Vector3;
+			// The move snaps, not the pose, so an off-grid block stays off-grid on axes the drag never touched
+			const positionBeforeDrag = readPosition(block);
+			const world = position.map(
+				(coordinate, axis) =>
+					positionBeforeDrag[axis] +
+					snapToGrid(coordinate - positionBeforeDrag[axis]),
+			) as Vector3;
 			const rounded = rotation.map((degrees) => Math.round(degrees)) as Vector3;
 			block.setAttribute("position", world.map(formatNumber).join(" "));
 			block.setAttribute("rotation", rounded.map(formatNumber).join(" "));
@@ -112,9 +147,7 @@ export const createGrouping = (
 			block.removeAttribute("y");
 			block.removeAttribute("z");
 		}
-		// The blocks now hold the full transform, so the cage returns to identity. Until
-		// both sides re-render the visible pose is unchanged (cage-frame · block-local ==
-		// the new world transform), so flipping the pair in one batch shows no flash.
+		// Both flip in one batch and cage · block equals the new pose, so nothing flashes
 		cage.setAttribute("position", "0 0 0");
 		cage.setAttribute("rotation", "0 0 0");
 		void Promise.all(
@@ -122,5 +155,5 @@ export const createGrouping = (
 		).then(deps.repaintSelection);
 	};
 
-	return { groupSelection, ungroupSelection, flattenSelection };
+	return { wrapSelection, unwrapSelection, flattenSelection };
 };

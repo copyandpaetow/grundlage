@@ -1,3 +1,4 @@
+import { DECLARED_PROP_NAMES } from "../../../lib/src/rendering/constants";
 import { lightModeShips, slotsShip } from "../../src/components/light-card";
 import "../../src/components/navbar";
 
@@ -86,11 +87,11 @@ const checks: Array<Check> = [
 		run: ({ tag }) => {
 			const definition = customElements.get(tag) as CustomElementConstructor & {
 				observedAttributes: Array<string>;
-				declaredPropNames: ReadonlySet<string>;
+				[DECLARED_PROP_NAMES]: ReadonlySet<string>;
 			};
 			return (
 				!definition.observedAttributes.includes("heading") &&
-				definition.declaredPropNames.has("heading")
+				definition[DECLARED_PROP_NAMES].has("heading")
 			);
 		},
 	},

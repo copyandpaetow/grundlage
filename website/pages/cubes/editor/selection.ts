@@ -1,10 +1,9 @@
-import { isBlock, sceneElementRendered } from "../scene-shared";
+import { sceneElementRendered } from "../scene-shared";
+import { isBlock } from "../scene-geometry";
 import type { EditorState } from "./context";
 
-// Selection is DOM-native: choosing blocks wraps them in ONE
-// `<scene-gizmo><scene-select>…</scene-select></scene-gizmo>`. Every selected block is a
-// sibling inside that one cage, so single- and multi-block selections share one structure
-// and the gizmo moves them all with one logic. The wrappers' existence IS the selection.
+// Every selected block sits in one cage, so one and many blocks share one structure and
+// the gizmo moves them alike
 
 export type SelectionDeps = {
 	updateInspector: () => void;
@@ -27,9 +26,8 @@ export const createSelection = (
 ): SelectionApi => {
 	const { updateInspector } = deps;
 
-	// The gizmo and cage pull their content at render time rather than observing it, so
-	// the coordinator that changed that content is the one that re-renders them. This
-	// re-pins the handles and re-fits the box to whatever the selection now holds.
+	// The gizmo and cage read their content only when rendering, so whoever changes it
+	// re-renders them
 	const repaintSelection = (): void => {
 		if (state.gizmo !== null) void sceneElementRendered(state.gizmo);
 		if (state.sceneSelect !== null)
@@ -43,9 +41,7 @@ export const createSelection = (
 		repaintSelection();
 	};
 
-	// Pulling a block into the cage leaves a comment anchor at its original spot, so
-	// deselecting drops it back exactly where it was and DOM (and Export) order stays
-	// stable across repeated gather/release.
+	// The anchor keeps DOM order, and so Export, stable across gather and release
 	const foldIn = (block: HTMLElement): void => {
 		if (state.sceneSelect === null) return;
 		const anchor = document.createComment("scene-selection-anchor");
@@ -99,8 +95,6 @@ export const createSelection = (
 		updateInspector();
 	};
 
-	// Cmd/Ctrl-click folds a block into the existing cage or lifts it back out, so the
-	// gizmo operates on the whole set at once.
 	const toggleSelect = (block: HTMLElement): void => {
 		if (state.gizmo === null || state.sceneSelect === null) {
 			select(block);
@@ -132,13 +126,31 @@ export const createSelection = (
 	};
 
 	// Outermost selectable in the path, so a grouped child resolves to its group and a
-	// wrapped block resolves to the block (the gizmo is not selectable).
+	// wrapped block resolves to the block (the gizmo is not selectable). Clicking a
+	// selected block again picks the block one level inside it. While the selection sits
+	// inside a block, clicks within that block pick among its contents.
 	const pickBlock = (event: PointerEvent): HTMLElement | null => {
-		let block: HTMLElement | null = null;
-		for (const node of event.composedPath()) {
-			if (node instanceof HTMLElement && isBlock(node)) block = node;
-		}
-		return block;
+		const blocksOutermostFirst = event
+			.composedPath()
+			.filter(
+				(node): node is HTMLElement =>
+					node instanceof HTMLElement && isBlock(node),
+			)
+			.reverse();
+		const selectionParent = state.gizmo?.parentElement ?? null;
+		const selectionParentIndex =
+			selectionParent === null
+				? -1
+				: blocksOutermostFirst.indexOf(selectionParent);
+		const candidates = blocksOutermostFirst.slice(selectionParentIndex + 1);
+
+		const selectedIndex = candidates.findIndex((block) =>
+			state.selection.has(block),
+		);
+		const isTogglingSelection = event.metaKey || event.ctrlKey;
+		if (selectedIndex === -1 || isTogglingSelection)
+			return candidates[0] ?? null;
+		return candidates[selectedIndex + 1] ?? candidates[selectedIndex];
 	};
 
 	return {

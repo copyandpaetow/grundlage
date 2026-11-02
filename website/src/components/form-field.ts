@@ -37,11 +37,7 @@ const FormField = component(
 				<template on-form-reset="${onReset}" on-form-disabled="${onDisabled}">
 					<label>
 						nickname
-						<input
-							type="text"
-							oninput="${onInput}"
-							${disabled ? "disabled" : ""}
-						/>
+						<input type="text" oninput="${onInput}" disabled=${disabled} />
 					</label>
 					<p>value seen by the form: <strong>${value || "(empty)"}</strong></p>
 				</template>
