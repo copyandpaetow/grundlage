@@ -190,6 +190,17 @@ describe("html parser — void and self-closing elements", () => {
 		expect(br.children).toHaveLength(0);
 	});
 
+	//`</br>` reads as a second <br>
+	test("a self-closed void element gets no end tag", () => {
+		const parsed = parse`<br /><img/>`;
+		expect(parsed.htmlWithMarkers).toBe("<br><img>");
+	});
+
+	test("a void element without a slash closes inside a dynamic tag", () => {
+		const tag = "section";
+		expect(() => parse`<${tag}><img><hr></${tag}>`).not.toThrow();
+	});
+
 	test("static comment inside a template is preserved alongside a dynamic binding", () => {
 		const parsed = parse`<div><!-- author note -->${"payload"}</div>`;
 		const div = buildFragment(parsed.htmlWithMarkers).querySelector("div")!;
@@ -202,6 +213,28 @@ describe("html parser — void and self-closing elements", () => {
 		}
 		expect(commentNodes).toHaveLength(3);
 		expect(commentNodes.some((c) => c.data === " author note ")).toBe(true);
+	});
+});
+
+describe("html parser — a `<` that opens no markup", () => {
+	test("a `<` before a space is text", () => {
+		const parsed = parse`<p>${1} < ${2}</p>`;
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.CONTENT,
+			BINDING.CONTENT,
+		]);
+		expect(parsed.htmlWithMarkers).toContain(" < ");
+	});
+
+	test("a `<` before a digit or `=` is text", () => {
+		const parsed = parse`<p>1<2 and a<=b</p>`;
+		expect(parsed.htmlWithMarkers).toBe("<p>1<2 and a<=b</p>");
+	});
+
+	test("a `<!` that opens no comment names the fix", () => {
+		expect(() => parse`<!DOCTYPE html><p>${1}</p>`).toThrow(
+			/Write a comment as <!-- … -->/,
+		);
 	});
 });
 

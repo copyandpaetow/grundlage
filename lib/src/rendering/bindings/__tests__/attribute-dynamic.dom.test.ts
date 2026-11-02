@@ -5,7 +5,11 @@ import { commitDynamic } from "../attribute-dynamic";
 import { DynamicAttributeLiveBinding } from "../types";
 
 const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
-	staticBinding: { type: BINDING.DYNAMIC_ATTRIBUTE, valueIndex: 0 },
+	staticBinding: {
+		type: BINDING.DYNAMIC_ATTRIBUTE,
+		elementName: "div",
+		valueIndex: 0,
+	},
 	anchor: document.createElement("div"),
 	appliedAttributes: new Map(),
 	lastValueHash: UNSET_HASH,

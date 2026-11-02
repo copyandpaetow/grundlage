@@ -7,7 +7,7 @@ import {
 } from "../parse-context";
 import { libraryMessage } from "../../utils/diagnostics";
 import { isSingleHoleValue } from "./attribute";
-import { reapplyValueOnSwap } from "./attribute-apply";
+import { namedBindingErrorOf, reapplyValueOnSwap } from "./attribute-apply";
 import {
 	isAttributeBinding,
 	isDynamicAttributeBinding,
@@ -43,7 +43,15 @@ export const commitTag = (
 		focusedNode && element.contains(focusedNode) ? focusedNode : null;
 
 	//the placeholder was parsed in the namespace of its position, which an SVG or MathML tag needs
-	const newElement = document.createElementNS(element.namespaceURI, newTag);
+	let newElement: Element;
+	try {
+		newElement = document.createElementNS(element.namespaceURI, newTag);
+	} catch (error) {
+		throw namedBindingErrorOf(
+			error,
+			`a dynamic tag <\${…}> composed "${newTag}", which is not a valid tag name. Bind a name such as "section" or "my-card".`,
+		);
+	}
 	warnWhenParsingWouldSplitParagraph(newTag, element.parentNode);
 	for (let index = 0; index < element.attributes.length; index++) {
 		const attribute = element.attributes[index];

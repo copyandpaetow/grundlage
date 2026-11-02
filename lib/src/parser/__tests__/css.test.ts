@@ -1,19 +1,34 @@
 import { describe, test, expect } from "vitest";
 import { STYLE_SHEET_NOT_COMPILED } from "../constants";
 import { compileStyleSheet } from "../css";
+import { NO_REINSERTION } from "../constants";
 import { CompiledStyleSheet, Part } from "../types";
 
-const compileOrThrow = (parts: Array<Part>): CompiledStyleSheet => {
+const compiledOrThrow = (parts: Array<Part>): CompiledStyleSheet => {
 	const compiled = compileStyleSheet(parts);
 	if (compiled === STYLE_SHEET_NOT_COMPILED)
 		throw new Error("expected the sheet to compile");
 	return compiled;
 };
 
-describe("dynamic declarations", () => {
+//one entry per declaration, with the path of the block that holds it
+const compileOrThrow = (parts: Array<Part>) => {
+	const compiled = compiledOrThrow(parts);
+	return {
+		declarations: compiled.holedRules.flatMap((holedRule) =>
+			holedRule.declarations.map((declaration) => ({
+				rulePath: holedRule.rulePath,
+				...declaration,
+			})),
+		),
+		ruleCountChecks: compiled.ruleCountChecks,
+	};
+};
+
+describe("holed declarations", () => {
 	test("single value hole addresses its rule and property", () => {
 		const plan = compileOrThrow([".box { color: ", 0, "; }"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "color",
@@ -34,7 +49,7 @@ describe("dynamic declarations", () => {
 			1,
 			"px); }",
 		]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "transform",
@@ -46,7 +61,7 @@ describe("dynamic declarations", () => {
 
 	test("two declarations in one rule share the rule path", () => {
 		const plan = compileOrThrow([".a{width:", 0, ";height:", 1, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 			{ rulePath: [0], propertyName: "height", priority: "", valueParts: [1] },
 		]);
@@ -54,14 +69,14 @@ describe("dynamic declarations", () => {
 
 	test("hole-free declarations produce no entries", () => {
 		const plan = compileOrThrow([".a{color: red; width:", 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
 	});
 
 	test("consecutive holes stay one declaration entry", () => {
 		const plan = compileOrThrow([".a{margin:", 0, "", 1, "px}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "margin",
@@ -73,7 +88,7 @@ describe("dynamic declarations", () => {
 
 	test("rules are indexed in source order", () => {
 		const plan = compileOrThrow([".a{color:", 0, "}.b{color:", 1, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [0] },
 			{ rulePath: [1], propertyName: "color", priority: "", valueParts: [1] },
 		]);
@@ -92,22 +107,22 @@ describe("dynamic declarations", () => {
 describe("property names", () => {
 	test("an uppercase property name is lowercased for setProperty", () => {
 		const plan = compileOrThrow(["div{COLOR:", 0, "}"]);
-		expect(plan.dynamicDeclarations[0].propertyName).toBe("color");
+		expect(plan.declarations[0].propertyName).toBe("color");
 	});
 
 	test("a custom property keeps its case", () => {
 		const plan = compileOrThrow(["div{--myVar:", 0, "}"]);
-		expect(plan.dynamicDeclarations[0].propertyName).toBe("--myVar");
+		expect(plan.declarations[0].propertyName).toBe("--myVar");
 	});
 
 	test("a vendor-prefixed property is addressable", () => {
 		const plan = compileOrThrow(["div{-webkit-line-clamp:", 0, "}"]);
-		expect(plan.dynamicDeclarations[0].propertyName).toBe("-webkit-line-clamp");
+		expect(plan.declarations[0].propertyName).toBe("-webkit-line-clamp");
 	});
 
 	test("a comment before the property name is stripped", () => {
 		const plan = compileOrThrow(["div{/* hi */width:", 0, "}"]);
-		expect(plan.dynamicDeclarations[0].propertyName).toBe("width");
+		expect(plan.declarations[0].propertyName).toBe("width");
 	});
 
 	test("a malformed holed property name bails", () => {
@@ -141,6 +156,12 @@ describe("duplicate properties", () => {
 		expect(plan).not.toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
+	test("an escaped static name that spells a holed property bails", () => {
+		expect(compileStyleSheet(["div{color:", 0, ";c\\olor:red}"])).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
+	});
+
 	test("static duplicates without any hole are the browser's business", () => {
 		const plan = compileOrThrow(["div{color:red;color:blue;width:", 0, "}"]);
 		expect(plan).not.toBe(STYLE_SHEET_NOT_COMPILED);
@@ -150,7 +171,7 @@ describe("duplicate properties", () => {
 describe("nesting", () => {
 	test("a nested style rule gets a two-step path", () => {
 		const plan = compileOrThrow(["div{.b{color:", 0, "}}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0, 0],
 				propertyName: "color",
@@ -166,7 +187,7 @@ describe("nesting", () => {
 
 	test("declarations before a nested rule stay on the style rule itself", () => {
 		const plan = compileOrThrow(["div{width:", 0, ";.b{color:red}}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
 		expect(plan.ruleCountChecks).toEqual([
@@ -176,7 +197,7 @@ describe("nesting", () => {
 
 	test("declarations after a nested rule land in an implicit nested-declarations rule", () => {
 		const plan = compileOrThrow(["div{.b{color:red}width:", 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0, 1],
 				propertyName: "width",
@@ -190,8 +211,18 @@ describe("nesting", () => {
 		]);
 	});
 
-	test("a nested selector with a pseudo-class bails", () => {
-		expect(compileStyleSheet(["div{&:hover{color:red}width:", 0, "}"])).toBe(
+	test("a nested selector with a pseudo-class is a rule, as the browser reads it", () => {
+		const plan = compileOrThrow(["div{&:hover{color:red}width:", 0, "}"]);
+		expect(plan.declarations[0].rulePath).toEqual([0, 1]);
+	});
+
+	test("a nested selector starting with a letter is a rule too", () => {
+		const plan = compileOrThrow(["div{a:hover{color:", 0, "}}"]);
+		expect(plan.declarations[0].rulePath).toEqual([0, 0]);
+	});
+
+	test("a custom property whose value opens a block bails", () => {
+		expect(compileStyleSheet(["div{--x:{a:b};width:", 0, "}"])).toBe(
 			STYLE_SHEET_NOT_COMPILED,
 		);
 	});
@@ -204,7 +235,7 @@ describe("at-rules", () => {
 			0,
 			"}}",
 		]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0, 0],
 				propertyName: "color",
@@ -220,7 +251,7 @@ describe("at-rules", () => {
 
 	test("an at-rule nested inside a style rule holds an implicit nested-declarations rule", () => {
 		const plan = compileOrThrow(["div{@media (hover:hover){color:", 0, "}}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0, 0, 0],
 				propertyName: "color",
@@ -241,7 +272,7 @@ describe("at-rules", () => {
 			0,
 			"deg)}}",
 		]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0, 0],
 				propertyName: "transform",
@@ -257,7 +288,7 @@ describe("at-rules", () => {
 
 	test("a prelude-less @scope scopes rules with distinct per-instance sheets", () => {
 		const plan = compileOrThrow(["@scope{.dot{background:", 0, "}}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0, 0],
 				propertyName: "background",
@@ -269,7 +300,7 @@ describe("at-rules", () => {
 
 	test("a statement at-rule occupies a rule slot", () => {
 		const plan = compileOrThrow(["@import url(x.css);.a{color:", 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [1], propertyName: "color", priority: "", valueParts: [0] },
 		]);
 		expect(plan.ruleCountChecks).toEqual([
@@ -279,7 +310,7 @@ describe("at-rules", () => {
 
 	test("a @layer statement occupies a rule slot", () => {
 		const plan = compileOrThrow(["@layer a, b;.x{color:", 0, "}"]);
-		expect(plan.dynamicDeclarations[0].rulePath).toEqual([1]);
+		expect(plan.declarations[0].rulePath).toEqual([1]);
 	});
 
 	test("a bare holed declaration directly inside top-level @media bails", () => {
@@ -306,13 +337,19 @@ describe("at-rules", () => {
 		);
 	});
 
+	test("a holed !important inside a keyframe bails: the browser drops it", () => {
+		expect(
+			compileStyleSheet(["@keyframes spin{to{opacity:", 0, " !important}}"]),
+		).toBe(STYLE_SHEET_NOT_COMPILED);
+	});
+
 	test("a hole after a closed descriptor block is fast again", () => {
 		const plan = compileOrThrow([
 			"@font-face{src:url(x.woff2)}.a{color:",
 			0,
 			"}",
 		]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [1], propertyName: "color", priority: "", valueParts: [0] },
 		]);
 		expect(plan.ruleCountChecks).toEqual([
@@ -330,7 +367,7 @@ describe("value edge whitespace", () => {
 			1,
 			"px \t\n}",
 		]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "--offset",
@@ -342,14 +379,14 @@ describe("value edge whitespace", () => {
 
 	test("only CSS whitespace is trimmed, a no-break space is value text", () => {
 		const plan = compileOrThrow(["div{content: ", 0, "}"]);
-		expect(plan.dynamicDeclarations[0].valueParts).toEqual([" ", 0]);
+		expect(plan.declarations[0].valueParts).toEqual([" ", 0]);
 	});
 });
 
 describe("!important", () => {
 	test("a static trailing !important becomes the priority argument", () => {
 		const plan = compileOrThrow(["div{color:", 0, " !important}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "color",
@@ -379,7 +416,7 @@ describe("!important", () => {
 
 	test("a bang in a hole-free declaration is fine", () => {
 		const plan = compileOrThrow(["div{color: red !important; width:", 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
 	});
@@ -442,7 +479,7 @@ describe("strings and comments", () => {
 
 	test("a semicolon inside a string is not a terminator", () => {
 		const plan = compileOrThrow(['div{content:"a;b";width:', 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
 	});
@@ -455,14 +492,14 @@ describe("strings and comments", () => {
 
 	test("braces inside a comment are inert", () => {
 		const plan = compileOrThrow(["div{/* } */width:", 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
 	});
 
 	test('"/*/" does not close its own comment', () => {
 		const plan = compileOrThrow(["div{/*/ width:red*/height:", 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "height", priority: "", valueParts: [0] },
 		]);
 	});
@@ -475,14 +512,14 @@ describe("strings and comments", () => {
 
 	test("an escaped backslash does not swallow the closing quote", () => {
 		const plan = compileOrThrow(['div{content:"a\\\\";width:', 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
 	});
 
 	test("a comment inside a holed value is kept in the value parts", () => {
 		const plan = compileOrThrow(["div{color:/* c */", 0, "}"]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "color",
@@ -500,7 +537,7 @@ describe("parentheses", () => {
 			0,
 			"}",
 		]);
-		expect(plan.dynamicDeclarations).toEqual([
+		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
 	});
@@ -510,18 +547,108 @@ describe("parentheses", () => {
 			STYLE_SHEET_NOT_COMPILED,
 		);
 	});
+
+	//the browser reads `({)` as a block still open, so the `;` and what follows join the value
+	test("a brace opened inside parentheses swallows the next declaration", () => {
+		expect(
+			compileStyleSheet([
+				".a{transform:translateX(",
+				0,
+				"px {);opacity:",
+				1,
+				"}",
+			]),
+		).toBe(STYLE_SHEET_NOT_COMPILED);
+	});
+
+	test("a bracket closes only its own block", () => {
+		const plan = compileOrThrow([".a{grid-area:[a);b];width:", 0, "}"]);
+		expect(plan.declarations.map(({ propertyName }) => propertyName)).toEqual([
+			"width",
+		]);
+	});
+
+	test("a backslash that ends the sheet bails instead of reading past the end", () => {
+		expect(compileStyleSheet([".a{width:", 0, "}\\"])).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
+	});
+
+	test("an escaped semicolon stays inside the value", () => {
+		const plan = compileOrThrow([".a{--v:", 0, " \\;}"]);
+		expect(plan.declarations[0].valueParts).toEqual([0, " \\;"]);
+	});
 });
 
 describe("parser reuse", () => {
 	test("two compilations do not share state", () => {
 		const firstPlan = compileOrThrow(["div{.b{color:red}width:", 0, "}"]);
 		const secondPlan = compileOrThrow(["p{color:", 0, "}"]);
-		expect(firstPlan.dynamicDeclarations[0].rulePath).toEqual([0, 1]);
-		expect(secondPlan.dynamicDeclarations).toEqual([
+		expect(firstPlan.declarations[0].rulePath).toEqual([0, 1]);
+		expect(secondPlan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [0] },
 		]);
 		expect(secondPlan.ruleCountChecks).toEqual([
 			{ rulePath: [], expectedRuleCount: 1 },
 		]);
+	});
+});
+
+describe("holed rules", () => {
+	test("declarations of one block share one holed rule", () => {
+		const compiled = compiledOrThrow([
+			".a{width:",
+			0,
+			";color:red;height:",
+			1,
+			"}",
+		]);
+		expect(compiled.holedRules).toHaveLength(1);
+		expect(compiled.holedRules[0].declarations).toHaveLength(2);
+		expect(compiled.declarationCount).toBe(2);
+	});
+
+	test("a rule's own block and its nested-declarations run are two holed rules", () => {
+		const compiled = compiledOrThrow([
+			"div{width:",
+			0,
+			";.b{color:red}height:",
+			1,
+			"}",
+		]);
+		expect(compiled.holedRules.map((holedRule) => holedRule.rulePath)).toEqual([
+			[0],
+			[0, 1],
+		]);
+	});
+
+	test("a rule that cannot match the host is never re-inserted", () => {
+		const compiled = compiledOrThrow([".inner{--x:", 0, "}"]);
+		expect(compiled.holedRules[0].reinsertedRulePath).toBe(NO_REINSERTION);
+	});
+
+	test("a :host rule is re-inserted at its own path", () => {
+		const compiled = compiledOrThrow(["@media all{:host{--x:", 0, "}}"]);
+		expect(compiled.holedRules[0].reinsertedRulePath).toEqual([0, 0]);
+	});
+
+	test("a run inside a :host rule re-inserts the :host rule", () => {
+		const compiled = compiledOrThrow([":host{.b{color:red}--x:", 0, "}"]);
+		expect(compiled.holedRules[0].rulePath).toEqual([0, 1]);
+		expect(compiled.holedRules[0].reinsertedRulePath).toEqual([0]);
+	});
+
+	test(":scope can match the host, so it is re-inserted", () => {
+		const compiled = compiledOrThrow(["@scope{:scope{--x:", 0, "}}"]);
+		expect(compiled.holedRules[0].reinsertedRulePath).toEqual([0, 0]);
+	});
+
+	test("holes keep the value indexes they were given", () => {
+		const compiled = compiledOrThrow([".a{width:", 3, ";height:", 7, "}"]);
+		expect(
+			compiled.holedRules[0].declarations.map(
+				(declaration) => declaration.valueParts,
+			),
+		).toEqual([[3], [7]]);
 	});
 });

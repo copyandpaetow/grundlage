@@ -2,6 +2,7 @@ import { combinedPartsHash, composeParts } from "../compose";
 import { combineOrderedHash } from "../../utils/hashing";
 import { AttributeStaticBinding, Part } from "../../parser/types";
 import {
+	applyAttributeText,
 	applyAttributeValue,
 	applyLiveState,
 	applyLiveStateDefault,
@@ -62,7 +63,7 @@ export const commitAttribute = (
 	if (!isSingleHoleValue(valueParts)) {
 		const composedValue = composeParts(valueParts, values);
 		if (element.getAttribute(name) !== composedValue)
-			element.setAttribute(name, composedValue);
+			applyAttributeText(element, name, composedValue);
 		return;
 	}
 	const value = values[valueParts[0]];

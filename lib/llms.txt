@@ -333,6 +333,11 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 
 ## Rules (get these right)
 
+- Markup must nest the way HTML allows. `/>` closes ANY element (`<my-icon />` is
+  `<my-icon></my-icon>`, unlike plain HTML), but a bound element the HTML parser would move,
+  such as a `<div>` in a `<p>`, a `<p>` in a `<table>` or a bare `<tr>` without `<tbody>`,
+  throws "Fix the nesting", as does a bound `<b>`/`<i>`/`<a>` the parser would copy past a block
+  or a misnested end tag. A `<p>` holds phrasing content only.
 - The component body runs ONCE per mount and runs to completion, no `while (true)`. State
   declared in the body persists across updates (the update generator closes over it), so
   mutable state belongs there rather than being re-derived.
@@ -545,8 +550,11 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   unchanged nested template on every later paint.
 - A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the mounted (and
   server-rendered) sheet text carries the real literal values, and every later update is a
-  `setProperty` on this element's OWN CSSOM sheet, never a reparse, never a write to the
-  host. Each instance owns a private sheet, so duplicates never collide. Structural holes
+  `setProperty` on this element's OWN CSSOM sheet, never a write to the host. A changed rule
+  that can match the host (`:host`, `:scope`) is then re-inserted from its own text, because
+  Safari keeps the host's old style otherwise; that costs about a third more than a plain
+  `setProperty`, so a value only children need belongs on a child rule. Each instance owns a
+  private sheet, so duplicates never collide. Structural holes
   (selector, property name, at-rule prelude), the same holed property declared twice in one
   block, an ambiguous `!important`, and a sheet the browser parses differently than the
   library expects (e.g. it drops a rule it can't parse) fall back to a full text rewrite that is

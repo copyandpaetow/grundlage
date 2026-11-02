@@ -5,10 +5,15 @@ import { STYLE_SHEET_NOT_COMPILED } from "../constants";
 import * as BINDING from "../binding";
 import { RawContentStaticBinding } from "../types";
 
-const dynamicDeclarationsOf = (binding: RawContentStaticBinding) =>
+const addressedDeclarationsOf = (binding: RawContentStaticBinding) =>
 	binding.compiledStyleSheet === STYLE_SHEET_NOT_COMPILED
 		? undefined
-		: binding.compiledStyleSheet.dynamicDeclarations;
+		: binding.compiledStyleSheet.holedRules.flatMap((holedRule) =>
+				holedRule.declarations.map((declaration) => ({
+					rulePath: holedRule.rulePath,
+					...declaration,
+				})),
+			);
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
@@ -169,7 +174,7 @@ describe("html parser — css plan attachment", () => {
 		const color = "red";
 		const parsed = parse`<style>div { color: ${color}; }</style>`;
 
-		expect(dynamicDeclarationsOf(rawContentBinding(parsed))).toEqual([
+		expect(addressedDeclarationsOf(rawContentBinding(parsed))).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "color",
@@ -243,7 +248,7 @@ describe("html parser — css plan attachment", () => {
 
 		const [firstBinding, secondBinding] =
 			parsed.bindings as Array<RawContentStaticBinding>;
-		expect(dynamicDeclarationsOf(firstBinding)).toEqual([
+		expect(addressedDeclarationsOf(firstBinding)).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "color",
@@ -251,7 +256,7 @@ describe("html parser — css plan attachment", () => {
 				valueParts: [0],
 			},
 		]);
-		expect(dynamicDeclarationsOf(secondBinding)).toEqual([
+		expect(addressedDeclarationsOf(secondBinding)).toEqual([
 			{
 				rulePath: [0],
 				propertyName: "width",

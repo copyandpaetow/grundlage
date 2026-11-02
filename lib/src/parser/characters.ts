@@ -8,3 +8,7 @@ export const isWhitespaceCode = (code: number) =>
 
 export const isQuoteCode = (code: number) =>
 	code === CHARACTER_CODE.SINGLE_QUOTE || code === CHARACTER_CODE.DOUBLE_QUOTE;
+
+export const isLetterCode = (code: number) =>
+	(code >= CHARACTER_CODE.LOWERCASE_A && code <= CHARACTER_CODE.LOWERCASE_Z) ||
+	(code >= CHARACTER_CODE.UPPERCASE_A && code <= CHARACTER_CODE.UPPERCASE_Z);

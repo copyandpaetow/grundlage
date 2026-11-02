@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import * as BINDING from "../../../parser/binding";
+import { NO_REINSERTION } from "../../../parser/constants";
 import {
 	CompiledStyleSheet,
 	RawContentStaticBinding,
@@ -28,6 +29,7 @@ describe("css demotion to the full-text lane", () => {
 
 		const staticBinding: RawContentStaticBinding = {
 			type: BINDING.RAW_CONTENT,
+			elementName: "style",
 			parts: ["p { color: ", 0, "; }"],
 			compiledStyleSheet,
 		};
@@ -43,9 +45,16 @@ describe("css demotion to the full-text lane", () => {
 	//expectedRuleCount can never match the one rule the browser parses, so the first
 	//connected commit re-resolves, fails, and demotes — the exact path that crashed
 	const mismatchingCompiled: CompiledStyleSheet = {
-		dynamicDeclarations: [
-			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [0] },
+		holedRules: [
+			{
+				rulePath: [0],
+				reinsertedRulePath: NO_REINSERTION,
+				declarations: [
+					{ propertyName: "color", priority: "", valueParts: [0] },
+				],
+			},
 		],
+		declarationCount: 1,
 		ruleCountChecks: [{ rulePath: [], expectedRuleCount: 99 }],
 	};
 

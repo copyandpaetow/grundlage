@@ -1,6 +1,6 @@
 import { PROPERTY_PROP_NAMES } from "../constants";
 import * as MARKUP from "../../parser/markup";
-import { warnDuringDevelopment } from "../../utils/diagnostics";
+import { libraryMessage, warnDuringDevelopment } from "../../utils/diagnostics";
 import { isStringable } from "../../utils/guards";
 import { ValueOf } from "../../utils/types";
 import { DECLARED_PROP_NAMES } from "../constants";
@@ -13,6 +13,30 @@ const attributeModeOf = (value: unknown): ValueOf<typeof ATTRIBUTE_MODE> => {
 		return ATTRIBUTE_MODE.ABSENT;
 	if (isStringable(value)) return ATTRIBUTE_MODE.ATTRIBUTE;
 	return ATTRIBUTE_MODE.PROPERTY;
+};
+
+//the platform decides which names are valid, and its error does not say which binding composed one
+export const namedBindingErrorOf = (
+	error: unknown,
+	message: string,
+): unknown =>
+	error instanceof DOMException && error.name === "InvalidCharacterError"
+		? new Error(libraryMessage(message), { cause: error })
+		: error;
+
+export const applyAttributeText = (
+	element: Element,
+	name: string,
+	text: string,
+): void => {
+	try {
+		element.setAttribute(name, text);
+	} catch (error) {
+		throw namedBindingErrorOf(
+			error,
+			`a binding composed the attribute name "${name}", which the browser refuses. Bind a name without whitespace, quotes or any of < > / =.`,
+		);
+	}
 };
 
 const NO_DECLARED_PROP_NAMES: ReadonlySet<string> = new Set();
@@ -179,7 +203,7 @@ export const applyAttributeValue = (
 				(element as unknown as Record<string, unknown>)[key] = value;
 			const attributeValue = String(value);
 			if (element.getAttribute(key) !== attributeValue)
-				element.setAttribute(key, attributeValue);
+				applyAttributeText(element, key, attributeValue);
 			break;
 		}
 		case ATTRIBUTE_MODE.PROPERTY:

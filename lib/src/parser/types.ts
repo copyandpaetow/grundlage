@@ -1,13 +1,18 @@
-import { NO_KEY, STYLE_SHEET_NOT_COMPILED } from "./constants";
+import { NO_KEY, NO_REINSERTION, STYLE_SHEET_NOT_COMPILED } from "./constants";
 import * as BINDING from "./binding";
 
 export type Part = string | number;
 
-export interface DynamicDeclaration {
-	readonly rulePath: ReadonlyArray<number>;
+export interface HoledDeclaration {
 	readonly propertyName: string;
 	readonly priority: string;
 	readonly valueParts: ReadonlyArray<Part>;
+}
+
+export interface HoledRule {
+	readonly rulePath: ReadonlyArray<number>;
+	readonly reinsertedRulePath: ReadonlyArray<number> | typeof NO_REINSERTION;
+	readonly declarations: ReadonlyArray<HoledDeclaration>;
 }
 
 export interface RuleCountCheck {
@@ -16,8 +21,9 @@ export interface RuleCountCheck {
 }
 
 export interface CompiledStyleSheet {
-	readonly dynamicDeclarations: ReadonlyArray<DynamicDeclaration>;
+	readonly holedRules: ReadonlyArray<HoledRule>;
 	readonly ruleCountChecks: ReadonlyArray<RuleCountCheck>;
+	readonly declarationCount: number;
 }
 
 export interface TagStaticBinding {
@@ -25,14 +31,18 @@ export interface TagStaticBinding {
 	readonly parts: ReadonlyArray<Part>;
 }
 
+//elementName is the tag as written, so a fragment check can tell the bound element from one the
+//HTML parser put in its place (the <tbody> around a bare <tr>)
 export interface AttributeStaticBinding {
 	readonly type: typeof BINDING.ATTRIBUTE;
+	readonly elementName: string;
 	readonly nameParts: ReadonlyArray<Part>;
 	readonly valueParts: ReadonlyArray<Part>;
 }
 
 export interface DynamicAttributeStaticBinding {
 	readonly type: typeof BINDING.DYNAMIC_ATTRIBUTE;
+	readonly elementName: string;
 	readonly valueIndex: number;
 }
 
@@ -44,6 +54,7 @@ export interface ContentStaticBinding {
 
 export interface RawContentStaticBinding {
 	readonly type: typeof BINDING.RAW_CONTENT;
+	readonly elementName: string;
 	readonly parts: ReadonlyArray<Part>;
 	readonly compiledStyleSheet:
 		CompiledStyleSheet | typeof STYLE_SHEET_NOT_COMPILED;

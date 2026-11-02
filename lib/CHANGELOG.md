@@ -47,6 +47,8 @@
 - A `load` the server failed runs again in the browser, and the loads after it keep their order.
 - Unused server `load` results are removed at hydration, and only unkeyed ones warn.
 - The production build is 43.9 KB minified and 16.8 KB gzip (0.8.0: 54.7 KB, 18.0 KB): enums are inlined and internal property names shortened.
+- A template with an unclosed comment, tag, attribute value or `<style>`/`<script>`/`<textarea>` throws naming what to close, instead of dropping the rest; U+E000 in a template throws and asks for `&#xE000;`.
+- A dynamic `<style>` whose nested selectors contain `:` (`&:hover`, `a:hover`) updates through CSSOM instead of rewriting the sheet text.
 
 ### Fixed
 
@@ -60,6 +62,15 @@
 - A component body's `this` is `undefined`, as an update generator's is, instead of an internal object.
 - A component body whose parameter default throws ends the component through the error event instead of escaping the library.
 - An object or array bound to another library's custom element no longer calls its `update()`, which for a Lit element threw before it was connected and skipped `updated()` after.
+- A `<![CDATA[…]]>` section keeps the markup after it instead of dropping the rest of the template; a hole inside it throws with a remedy.
+- In Safari, a `:host` value hole in a dynamic `<style>` updates the host and its shadow tree after the first change, instead of keeping the old value.
+- A hole in an `!important` declaration inside `@keyframes`, which the browser drops, no longer gets a CSSOM update.
+- `<br />` paints one line break instead of two, and a void element written without a slash inside `<${tag}>` no longer throws "asymmetric tag".
+- A `<` that opens no tag (`${a} < ${b}`) is text instead of an internal error; a `<!` that opens no comment throws with a remedy.
+- A bound element the HTML parser moves (a `<div>` in a `<p>`, a `<p>` or `<textarea>` in a `<table>`) throws "Fix the nesting" instead of breaking the component; a bound bare `<tr>` no longer binds the implied `<tbody>`.
+- A bound formatting element the HTML parser copies (`<p><b class=${x}><div>`) throws "Fix the nesting" instead of leaving the copies without the value.
+- A tag or attribute name composed from a value the browser refuses (`<${"my box"}>`) throws a library error naming the binding instead of a bare `DOMException`.
+- A dynamic `<style>` with a `{` or `[` inside parentheses, an escaped property name or a trailing `\` falls back to a full text rewrite instead of updating the wrong declaration or hanging.
 
 ## 0.8.0
 

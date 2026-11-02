@@ -169,10 +169,7 @@ export const cloneTemplateFragment = (
 	let cloneSource = cloneSources[parseContext];
 	if (cloneSource === undefined) {
 		cloneSource = buildFragment(parsed.htmlWithMarkers, parseContext);
-		ensureFragmentKeptEveryBinding(
-			cloneSource,
-			parsed.bindings.length - parsed.hostBindingCount,
-		);
+		ensureFragmentKeptEveryBinding(cloneSource, parsed);
 		for (const element of cloneSource.children)
 			warnWhenParsingWouldSplitParagraph(element.localName, insertionParent);
 		cloneSources[parseContext] = cloneSource;

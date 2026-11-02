@@ -7,7 +7,7 @@ import {
 import * as BINDING from "./binding";
 import * as OPEN_CONSTRUCT from "./open-construct";
 import { ParsedTemplate, Part, StaticBinding } from "./types";
-import { isQuoteCode, isWhitespaceCode } from "./characters";
+import { isLetterCode, isQuoteCode, isWhitespaceCode } from "./characters";
 import * as MARKUP from "./markup";
 import * as CHARACTER_CODE from "./character-code";
 import { compileStyleSheet } from "./css";
@@ -18,266 +18,149 @@ import {
 	libraryMessage,
 	warnDuringDevelopment,
 } from "../utils/diagnostics";
-import * as STATE from "./html-state";
 import * as PARSE_MODE from "./parse-mode";
 import * as ROOT_TEMPLATE from "./root-template";
 
-type StateKind = ValueOf<typeof STATE>;
+//the strings are joined with a reserved character, so no construct is ever cut by a hole and each
+//reader runs from its opener to its end
+
+//a private-use character: markup has no reason to contain one, so a written one throws
+const HOLE = "";
+const HOLE_CODE = HOLE.charCodeAt(0);
 
 const TEMPLATE_TAG = "template";
 const SCRIPT_TAG = "script";
 const TEXTAREA_TAG = "textarea";
 const SELECT_TAG = "select";
 const STYLE_TAG = "style";
-const COMMENT_OPEN_LENGTH = MARKUP.COMMENT_OPEN.length;
-const COMMENT_CLOSE_LENGTH = MARKUP.COMMENT_CLOSE.length;
-const COMMENT_DASHES_LENGTH = "--".length;
-const END_TAG_OPEN_LENGTH = MARKUP.END_TAG_OPEN.length;
-const NO_OPEN_CONSTRUCT = -1;
-type OpenConstructKind =
-	ValueOf<typeof OPEN_CONSTRUCT> | typeof NO_OPEN_CONSTRUCT;
-const parsesContentAsRaw = (parser: ParserState, tag: string) => {
-	if (tag === TEMPLATE_TAG)
-		return parser.rootTemplate !== ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
-	return tag === STYLE_TAG || tag === TEXTAREA_TAG || tag === SCRIPT_TAG;
-};
+//elements without content or end tag: `</br>` even reads as a second <br>
+const VOID_TAGS = new Set([
+	"area",
+	"base",
+	"br",
+	"col",
+	"embed",
+	"hr",
+	"img",
+	"input",
+	"link",
+	"meta",
+	"source",
+	"track",
+	"wbr",
+]);
+const CHARACTER_DATA_OPEN = "<![CDATA[";
+const CHARACTER_DATA_CLOSE = "]]>";
 
-type BindingStartingState = Exclude<
-	StateKind,
-	typeof STATE.ELEMENT | typeof STATE.END_TAG
->;
-
-//TEXT starts a binding but captures no parts: its hole becomes a marker pair, not a slice
-type HoleCapturingState = Exclude<BindingStartingState, typeof STATE.TEXT>;
-
-type HoleCapturingParts = [
-	comment: Array<Part>,
-	rawContent: Array<Part>,
-	tagName: Array<Part>,
-	attributeName: Array<Part>,
-	attributeValue: Array<Part>,
-];
-
-const OPEN_CONSTRUCT_FOR_STATE: Record<
-	BindingStartingState,
-	ValueOf<typeof OPEN_CONSTRUCT>
-> = [
-	OPEN_CONSTRUCT.COMMENT,
-	OPEN_CONSTRUCT.RAW_CONTENT,
-	OPEN_CONSTRUCT.TAG,
-	OPEN_CONSTRUCT.ATTRIBUTE,
-	OPEN_CONSTRUCT.ATTRIBUTE,
-	OPEN_CONSTRUCT.CONTENT,
-];
-
+type OpenConstructKind = ValueOf<typeof OPEN_CONSTRUCT>;
 type ParseModeKind = ValueOf<typeof PARSE_MODE>;
-
 type RootTemplateKind = ValueOf<typeof ROOT_TEMPLATE>;
 
-//scan helpers write this struct directly: each moves three or four cursor fields, and returning
-//them costs an object per character or one loop of every scanner. Parsing runs once per template
-interface ParserState {
-	scanState: StateKind;
+interface TemplateReader {
+	source: string;
+	index: number;
+	readHoleCount: number;
+	//holes are read in source order, so the next one is found once instead of from every construct
+	nextHoleIndex: number;
+	resultMarkup: string;
 	bindings: Array<StaticBinding>;
 	startedBindingCount: number;
-	openConstructKind: OpenConstructKind;
-	templateStrings: TemplateStringsArray;
-	stringIndex: number;
-	activeString: string;
-	characterIndex: number;
-	splitIndex: number;
 	hostBindingCount: number;
-	attributeQuoteCode: number;
-	currentTagName: string;
-	isSelfClosing: boolean;
+	keyValueParts: Array<Part> | typeof NO_KEY;
+	hasStyleSheetBinding: boolean;
 	rootTemplate: RootTemplateKind;
 	hasSeenTopLevelSibling: boolean;
-	hasStyleSheetBinding: boolean;
-	keyValueParts: Array<Part> | typeof NO_KEY;
-	parts: HoleCapturingParts;
+	//one entry per open element, innermost last: whether its tag name holds a hole
 	openTagIsDynamic: Array<boolean>;
-	resultMarkup: string;
-	elementMarkup: string;
-	contentMarkup: string;
-	endTagMarkup: string;
 }
 
-const createParser = (
+const createTemplateReader = (
 	strings: TemplateStringsArray,
 	mode: ParseModeKind,
-): ParserState => ({
-	scanState: STATE.TEXT,
-	bindings: [],
-	startedBindingCount: 0,
-	openConstructKind: NO_OPEN_CONSTRUCT,
-	templateStrings: strings,
-	stringIndex: 0,
-	activeString: strings[0],
-	characterIndex: 0,
-	splitIndex: 0,
-	hostBindingCount: 0,
-	attributeQuoteCode: 0,
-	currentTagName: "",
-	isSelfClosing: false,
-	rootTemplate:
-		mode === PARSE_MODE.NO_ROOT_TEMPLATE
-			? ROOT_TEMPLATE.RULED_OUT
-			: ROOT_TEMPLATE.UNDECIDED,
-	hasSeenTopLevelSibling: false,
-	hasStyleSheetBinding: false,
-	keyValueParts: NO_KEY,
-	parts: [[], [], [], [], []],
-	openTagIsDynamic: [],
-	resultMarkup: "",
-	elementMarkup: "",
-	contentMarkup: "",
-	endTagMarkup: "",
-});
+): TemplateReader => {
+	for (const text of strings)
+		if (text.includes(HOLE))
+			throw new Error(
+				libraryMessage(
+					"the template contains U+E000, which the parser reserves for holes. Write it as &#xE000;.",
+				),
+			);
+	const source = strings.join(HOLE);
+	return {
+		source,
+		index: 0,
+		readHoleCount: 0,
+		nextHoleIndex: holeIndexFrom(source, 0),
+		resultMarkup: "",
+		bindings: [],
+		startedBindingCount: 0,
+		hostBindingCount: 0,
+		keyValueParts: NO_KEY,
+		hasStyleSheetBinding: false,
+		rootTemplate:
+			mode === PARSE_MODE.NO_ROOT_TEMPLATE
+				? ROOT_TEMPLATE.RULED_OUT
+				: ROOT_TEMPLATE.UNDECIDED,
+		hasSeenTopLevelSibling: false,
+		openTagIsDynamic: [],
+	};
+};
+
+//the end of the source stands for "no hole left": every range ends at or before it
+const holeIndexFrom = (source: string, start: number) => {
+	const holeIndex = source.indexOf(HOLE, start);
+	return holeIndex === -1 ? source.length : holeIndex;
+};
+
+const unclosedError = (construct: string) =>
+	new Error(libraryMessage(`${construct} is never closed. Close it.`));
+
+//every hole passes through here exactly once and in order, which is what numbers it
+const partsOfRange = (
+	reader: TemplateReader,
+	start: number,
+	end: number,
+): Array<Part> => {
+	assertDuringDevelopment(
+		reader.nextHoleIndex >= start,
+		"ranges are read in source order, so no hole before this range is left unread",
+	);
+	const parts: Array<Part> = [];
+	let sliceStart = start;
+	while (reader.nextHoleIndex < end) {
+		if (reader.nextHoleIndex > sliceStart)
+			parts.push(reader.source.slice(sliceStart, reader.nextHoleIndex));
+		parts.push(reader.readHoleCount++);
+		sliceStart = reader.nextHoleIndex + 1;
+		reader.nextHoleIndex = holeIndexFrom(reader.source, sliceStart);
+	}
+	if (end > sliceStart) parts.push(reader.source.slice(sliceStart, end));
+	return parts;
+};
+
+const hasHole = (parts: ReadonlyArray<Part>) =>
+	parts.some((part) => typeof part === "number");
 
 const asComment = (markerData: string) =>
 	`${MARKUP.COMMENT_OPEN}${markerData}${MARKUP.COMMENT_CLOSE}`;
 
-const openMarkerData = (parser: ParserState) =>
-	`${MARKUP.COMMENT_IDENTIFIER} ${parser.openConstructKind}-${parser.startedBindingCount - 1}`;
-
-const closeMarkerData = (parser: ParserState) =>
-	`${MARKUP.COMMENT_IDENTIFIER} /${parser.openConstructKind}-${parser.startedBindingCount - 1}`;
-
-const openMarkerComment = (parser: ParserState) =>
-	asComment(openMarkerData(parser));
-
-const hasOpenConstruct = (parser: ParserState) =>
-	parser.openConstructKind !== NO_OPEN_CONSTRUCT;
-
-const takeParts = (parser: ParserState, state: HoleCapturingState) => {
-	const taken = parser.parts[state];
-	parser.parts[state] = [];
-	return taken;
-};
-
-const recordHole = (parser: ParserState) => {
-	if (parser.scanState === STATE.TEXT) {
-		const closeMarker = closeMarkerData(parser);
-		parser.contentMarkup +=
-			sliceActiveString(parser, parser.splitIndex) +
-			openMarkerComment(parser) +
-			asComment(closeMarker);
-		parser.bindings.push({
-			type: BINDING.CONTENT,
-			valueIndex: parser.stringIndex,
-			closeMarkerData: closeMarker,
-		});
-		parser.openConstructKind = NO_OPEN_CONSTRUCT;
-		if (parser.openTagIsDynamic.length === 0)
-			parser.hasSeenTopLevelSibling = true;
-		return;
-	}
-
-	if (parser.scanState === STATE.END_TAG) {
-		parser.endTagMarkup += sliceActiveString(parser, parser.splitIndex);
-		return;
-	}
-
-	assertDuringDevelopment(
-		parser.scanState !== STATE.ELEMENT,
-		"a hole right after a quoted attribute value throws before it starts a binding",
+const openMarkerComment = (
+	openConstructKind: OpenConstructKind,
+	bindingIndex: number,
+) =>
+	asComment(
+		`${MARKUP.COMMENT_IDENTIFIER} ${openConstructKind}-${bindingIndex}`,
 	);
-	const parts = parser.parts[parser.scanState];
-	appendSlice(parser, parts, parser.splitIndex);
-	parts.push(parser.stringIndex);
-};
 
-const createEmptyBinding = (
-	openConstructKind: Exclude<
-		OpenConstructKind,
-		typeof OPEN_CONSTRUCT.CONTENT | typeof NO_OPEN_CONSTRUCT
-	>,
-): StaticBinding => {
-	switch (openConstructKind) {
-		case OPEN_CONSTRUCT.COMMENT:
-			return { type: BINDING.COMMENT, parts: [] };
-		case OPEN_CONSTRUCT.RAW_CONTENT:
-			return {
-				type: BINDING.RAW_CONTENT,
-				parts: [],
-				compiledStyleSheet: STYLE_SHEET_NOT_COMPILED,
-			};
-		case OPEN_CONSTRUCT.TAG:
-			return { type: BINDING.TAG, parts: [] };
-		case OPEN_CONSTRUCT.ATTRIBUTE:
-			return { type: BINDING.ATTRIBUTE, nameParts: [], valueParts: [""] };
-		default:
-			return openConstructKind satisfies never;
-	}
-};
+const isTopLevel = (reader: TemplateReader) =>
+	reader.openTagIsDynamic.length === 0;
 
-const sliceActiveString = (
-	parser: ParserState,
-	start: number,
-	end?: number,
-) => {
-	if (end !== undefined && end <= start) return "";
-	return parser.activeString.slice(start, end);
-};
-
-const appendSlice = (
-	parser: ParserState,
-	parts: Array<Part>,
-	start: number,
-	end?: number,
-) => {
-	const slice = sliceActiveString(parser, start, end);
-	if (slice) parts.push(slice);
-};
-
-const drainPartsAsMarkup = (parts: Array<Part>) => {
-	const markup = parts.join("");
-	parts.length = 0;
-	return markup;
-};
-
-const completeComment = (parser: ParserState) => {
-	if (!hasOpenConstruct(parser)) {
-		parser.contentMarkup += asComment(
-			drainPartsAsMarkup(parser.parts[STATE.COMMENT]),
-		);
-		return;
-	}
-	//the first dynamic comment is the list key: it never reaches the DOM, so its binding is
-	//dropped here and the marker walkers never have to account for a binding index without a marker
-	if (parser.keyValueParts === NO_KEY) {
-		parser.keyValueParts = takeParts(parser, STATE.COMMENT);
-		parser.startedBindingCount--;
-		return;
-	}
-	parser.contentMarkup += openMarkerComment(parser) + MARKUP.EMPTY_COMMENT;
-	parser.bindings.push({
-		type: BINDING.COMMENT,
-		parts: takeParts(parser, STATE.COMMENT),
-	});
-};
-
-const completeRawContent = (parser: ParserState) => {
-	if (!hasOpenConstruct(parser)) {
-		parser.contentMarkup += drainPartsAsMarkup(parser.parts[STATE.RAW_CONTENT]);
-		return;
-	}
-	parser.resultMarkup += openMarkerComment(parser);
-	const parts = takeParts(parser, STATE.RAW_CONTENT);
-	if (parser.currentTagName === TEXTAREA_TAG) decodeTextareaParts(parts);
-	//the sheet text is composed with literal values at first commit, while the clone is
-	//still detached — the cached markup deliberately carries an empty <style>
-	const compiledStyleSheet =
-		parser.currentTagName === STYLE_TAG
-			? compileStyleSheet(parts)
-			: STYLE_SHEET_NOT_COMPILED;
-	if (compiledStyleSheet !== STYLE_SHEET_NOT_COMPILED)
-		parser.hasStyleSheetBinding = true;
-	parser.bindings.push({
-		type: BINDING.RAW_CONTENT,
-		parts,
-		compiledStyleSheet,
-	});
+const parsesContentAsRaw = (reader: TemplateReader, tagName: string) => {
+	if (tagName === TEMPLATE_TAG)
+		return reader.rootTemplate !== ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
+	return (
+		tagName === STYLE_TAG || tagName === TEXTAREA_TAG || tagName === SCRIPT_TAG
+	);
 };
 
 const rootTemplateAfterNonRootTag = (
@@ -293,129 +176,168 @@ const rootTemplateAfterNonRootTag = (
 	}
 };
 
-const completeTag = (parser: ParserState) => {
-	//in the second pass the root template is already ruled out, and nothing there reads a sibling
-	const isFirstTag = parser.rootTemplate === ROOT_TEMPLATE.UNDECIDED;
-
-	const isTopLevelSibling = !isFirstTag && parser.openTagIsDynamic.length === 0;
-	if (isTopLevelSibling) parser.hasSeenTopLevelSibling = true;
-
-	if (hasOpenConstruct(parser)) {
-		parser.currentTagName = DYNAMIC_TAG_PLACEHOLDER;
-		parser.elementMarkup += DYNAMIC_TAG_PLACEHOLDER;
-		parser.resultMarkup += openMarkerComment(parser);
-		parser.bindings.push({
-			type: BINDING.TAG,
-			parts: takeParts(parser, STATE.TAG),
-		});
-		parser.openTagIsDynamic.push(true);
-		parser.rootTemplate = rootTemplateAfterNonRootTag(parser.rootTemplate);
-		return;
-	}
-
-	const tagNameParts = parser.parts[STATE.TAG];
-	const staticTagName = tagNameParts[0];
-	assertDuringDevelopment(
-		typeof staticTagName === "string",
-		"a tag name without a hole is captured as one text part",
-	);
-	parser.currentTagName = staticTagName;
-
-	const isRoot =
-		parser.rootTemplate === ROOT_TEMPLATE.UNDECIDED &&
-		!parser.hasSeenTopLevelSibling &&
-		parser.currentTagName === TEMPLATE_TAG;
-
-	if (isRoot) {
-		parser.rootTemplate = ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
-		tagNameParts.length = 0;
-	} else {
-		parser.rootTemplate = rootTemplateAfterNonRootTag(parser.rootTemplate);
-		parser.elementMarkup += drainPartsAsMarkup(tagNameParts);
-	}
-	parser.openTagIsDynamic.push(false);
+const hasNonWhitespace = (text: string) => {
+	for (let index = 0; index < text.length; index++)
+		if (!isWhitespaceCode(text.charCodeAt(index))) return true;
+	return false;
 };
 
-const completeEndTag = (parser: ParserState) => {
-	const openerIsDynamic = parser.openTagIsDynamic.pop();
-	const rootTemplateIsOpen =
-		parser.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG ||
-		parser.rootTemplate === ROOT_TEMPLATE.CONTENT_OPEN;
-	const closesRootTemplate =
-		rootTemplateIsOpen && parser.openTagIsDynamic.length === 0;
-	if (closesRootTemplate) {
-		parser.rootTemplate = ROOT_TEMPLATE.CLOSED;
-		parser.endTagMarkup = "";
+const readText = (reader: TemplateReader, end: number) => {
+	const { source } = reader;
+	for (const part of partsOfRange(reader, reader.index, end)) {
+		if (typeof part === "string") {
+			reader.resultMarkup += part;
+			const isTopLevelText = isTopLevel(reader) && hasNonWhitespace(part);
+			if (isTopLevelText) reader.hasSeenTopLevelSibling = true;
+			continue;
+		}
+		const bindingIndex = reader.startedBindingCount++;
+		const closeMarkerData = `${MARKUP.COMMENT_IDENTIFIER} /${OPEN_CONSTRUCT.CONTENT}-${bindingIndex}`;
+		reader.resultMarkup +=
+			openMarkerComment(OPEN_CONSTRUCT.CONTENT, bindingIndex) +
+			asComment(closeMarkerData);
+		reader.bindings.push({
+			type: BINDING.CONTENT,
+			valueIndex: part,
+			closeMarkerData,
+		});
+		if (isTopLevel(reader)) reader.hasSeenTopLevelSibling = true;
+	}
+	reader.index = end;
+	assertDuringDevelopment(
+		source.charCodeAt(end) !== HOLE_CODE,
+		"text ends on a tag opener or the end of the template, never on a hole",
+	);
+};
+
+//the close is searched from the opener's dashes, so `<!-->` closes itself
+const readComment = (reader: TemplateReader) => {
+	if (!reader.source.startsWith(MARKUP.COMMENT_OPEN, reader.index))
+		throw new Error(
+			libraryMessage(
+				"a `<!` opens neither a comment nor <![CDATA[. Write a comment as <!-- … -->, or a literal `<` as &lt;.",
+			),
+		);
+	const contentStart = reader.index + MARKUP.COMMENT_OPEN.length;
+	const commentClose = reader.source.indexOf(
+		MARKUP.COMMENT_CLOSE,
+		reader.index + "<!".length,
+	);
+	if (commentClose === -1) throw unclosedError("a comment");
+	const parts = partsOfRange(
+		reader,
+		contentStart,
+		Math.max(contentStart, commentClose),
+	);
+	reader.index = commentClose + MARKUP.COMMENT_CLOSE.length;
+
+	if (!hasHole(parts)) {
+		reader.resultMarkup += asComment(parts.join(""));
 		return;
 	}
-	const isDynamicClose = hasOpenConstruct(parser);
+	//the first dynamic comment is the list key: it never reaches the DOM and owns no binding index
+	if (reader.keyValueParts === NO_KEY) {
+		reader.keyValueParts = parts;
+		return;
+	}
+	reader.resultMarkup +=
+		openMarkerComment(OPEN_CONSTRUCT.COMMENT, reader.startedBindingCount++) +
+		MARKUP.EMPTY_COMMENT;
+	reader.bindings.push({ type: BINDING.COMMENT, parts });
+};
+
+//foreign content only; the HTML parser reads what is inside as text, so a marker there never binds
+const readCharacterData = (reader: TemplateReader) => {
+	const contentStart = reader.index + CHARACTER_DATA_OPEN.length;
+	const characterDataClose = reader.source.indexOf(
+		CHARACTER_DATA_CLOSE,
+		contentStart,
+	);
+	if (characterDataClose === -1) throw unclosedError("a <![CDATA[ section");
+	const parts = partsOfRange(reader, contentStart, characterDataClose);
+	if (hasHole(parts))
+		throw new Error(
+			libraryMessage(
+				"a ${…} hole sits where the HTML parser reads markup as plain text, such as inside <![CDATA[…]]>. Move the hole outside of it.",
+			),
+		);
+	reader.index = characterDataClose + CHARACTER_DATA_CLOSE.length;
+	reader.resultMarkup += reader.source.slice(
+		contentStart - CHARACTER_DATA_OPEN.length,
+		reader.index,
+	);
+};
+
+const readEndTag = (reader: TemplateReader) => {
+	const nameStart = reader.index + MARKUP.END_TAG_OPEN.length;
+	const tagClose = reader.source.indexOf(MARKUP.TAG_CLOSE, nameStart);
+	if (tagClose === -1) throw unclosedError("an end tag");
+	const parts = partsOfRange(reader, nameStart, tagClose);
+	reader.index = tagClose + MARKUP.TAG_CLOSE.length;
+
+	const isDynamicClose = hasHole(parts);
+	const openerIsDynamic =
+		reader.openTagIsDynamic[reader.openTagIsDynamic.length - 1];
 	if (isDynamicClose && !openerIsDynamic)
 		throw new Error(
 			libraryMessage(
-				"asymmetric tag: a dynamic </${...}> close cannot pair with a static open tag. Make the open dynamic too.",
+				"asymmetric tag: a dynamic </${...}> close has no matching dynamic open tag. Pair `<${tag}>` with `</${tag}>`.",
 			),
 		);
+	reader.openTagIsDynamic.pop();
+
+	const rootTemplateIsOpen =
+		reader.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG ||
+		reader.rootTemplate === ROOT_TEMPLATE.CONTENT_OPEN;
+	if (rootTemplateIsOpen && isTopLevel(reader)) {
+		reader.rootTemplate = ROOT_TEMPLATE.CLOSED;
+		return;
+	}
 	if (!isDynamicClose && openerIsDynamic)
 		throw new Error(
 			libraryMessage(
 				"asymmetric tag: a static end tag cannot pair with a dynamic <${...}> open tag. Make the close dynamic too.",
 			),
 		);
-	if (isDynamicClose) parser.endTagMarkup = DYNAMIC_TAG_PLACEHOLDER;
-	parser.resultMarkup +=
-		MARKUP.END_TAG_OPEN + parser.endTagMarkup + MARKUP.TAG_CLOSE;
-	parser.endTagMarkup = "";
+	const tagName = isDynamicClose ? DYNAMIC_TAG_PLACEHOLDER : parts.join("");
+	reader.resultMarkup += MARKUP.END_TAG_OPEN + tagName + MARKUP.TAG_CLOSE;
 };
 
-const rangeHasNonWhitespace = (
-	parser: ParserState,
-	start: number,
-	end: number,
-) => {
-	for (let scanIndex = start; scanIndex < end; scanIndex++)
-		if (!isWhitespaceCode(parser.activeString.charCodeAt(scanIndex)))
-			return true;
-	return false;
+const startsSelfClosingEnd = (source: string, index: number) =>
+	source.charCodeAt(index) === CHARACTER_CODE.SLASH &&
+	source.charCodeAt(index + 1) === CHARACTER_CODE.GREATER_THAN;
+
+const endsTagName = (source: string, index: number) => {
+	const code = source.charCodeAt(index);
+	return code === CHARACTER_CODE.GREATER_THAN || isWhitespaceCode(code);
 };
 
-const appendTextAndMarkTopLevelSibling = (
-	parser: ParserState,
-	start: number,
-	end: number,
-) => {
-	parser.contentMarkup += sliceActiveString(parser, start, end);
-	const isTopLevelText =
-		parser.openTagIsDynamic.length === 0 &&
-		rangeHasNonWhitespace(parser, start, end);
-	if (isTopLevelText) parser.hasSeenTopLevelSibling = true;
+const endsAttributeName = (source: string, index: number) => {
+	const code = source.charCodeAt(index);
+	return (
+		code === CHARACTER_CODE.EQUALS ||
+		code === CHARACTER_CODE.GREATER_THAN ||
+		isWhitespaceCode(code) ||
+		startsSelfClosingEnd(source, index)
+	);
 };
 
-const takeAttributeBinding = (parser: ParserState): StaticBinding => {
-	const nameParts = takeParts(parser, STATE.ATTRIBUTE_KEY);
-	const valueParts = takeParts(parser, STATE.ATTRIBUTE_VALUE);
-	const isExpandableSpread =
-		valueParts.length === 0 &&
-		nameParts.length === 1 &&
-		typeof nameParts[0] === "number";
-
-	if (isExpandableSpread)
-		return {
-			type: BINDING.DYNAMIC_ATTRIBUTE,
-			valueIndex: nameParts[0] as number,
-		};
-	return {
-		type: BINDING.ATTRIBUTE,
-		nameParts,
-		valueParts: valueParts.length > 0 ? valueParts : [""],
-	};
+//HTML reads the slash of `width=2/>` into the value; SVG markup means the self-closing end
+const endsUnquotedValue = (source: string, index: number) => {
+	const code = source.charCodeAt(index);
+	return (
+		code === CHARACTER_CODE.GREATER_THAN ||
+		isWhitespaceCode(code) ||
+		startsSelfClosingEnd(source, index)
+	);
 };
 
 //<select> has no value attribute, and its options are not there yet when its own bindings commit
 const warnOnSelectValueBinding = (
-	parser: ParserState,
+	tagName: string,
 	binding: StaticBinding,
 ): void => {
-	if (parser.currentTagName !== SELECT_TAG) return;
+	if (tagName !== SELECT_TAG) return;
 	if (binding.type !== BINDING.ATTRIBUTE) return;
 	const [name] = binding.nameParts;
 	const isValueName =
@@ -428,446 +350,307 @@ const warnOnSelectValueBinding = (
 		);
 };
 
-const completeAttribute = (parser: ParserState) => {
-	const isOnRootTemplate =
-		parser.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
-	if (hasOpenConstruct(parser)) {
-		const binding = takeAttributeBinding(parser);
-		warnOnSelectValueBinding(parser, binding);
-		parser.bindings.push(binding);
-		if (isOnRootTemplate) parser.hostBindingCount++;
-		else parser.resultMarkup += openMarkerComment(parser);
-		return;
-	}
-	if (parser.parts[STATE.ATTRIBUTE_KEY].length === 0) return;
-	if (isOnRootTemplate) {
-		//a static host attribute emits no marker but still owns a binding index, and every marker
-		//after it is numbered from this count
-		parser.startedBindingCount++;
-		parser.bindings.push(takeAttributeBinding(parser));
-		parser.hostBindingCount++;
-		return;
-	}
-	parser.elementMarkup +=
-		MARKUP.ATTRIBUTE_SEPARATOR +
-		drainPartsAsMarkup(parser.parts[STATE.ATTRIBUTE_KEY]);
-	if (parser.parts[STATE.ATTRIBUTE_VALUE].length)
-		parser.elementMarkup +=
-			MARKUP.ATTRIBUTE_ASSIGN +
-			MARKUP.ATTRIBUTE_QUOTE +
-			drainPartsAsMarkup(parser.parts[STATE.ATTRIBUTE_VALUE]) +
-			MARKUP.ATTRIBUTE_QUOTE;
+const attributeBindingOf = (
+	elementName: string,
+	nameParts: Array<Part>,
+	valueParts: Array<Part>,
+): StaticBinding => {
+	const isExpandableSpread =
+		valueParts.length === 0 &&
+		nameParts.length === 1 &&
+		typeof nameParts[0] === "number";
+	if (isExpandableSpread)
+		return {
+			type: BINDING.DYNAMIC_ATTRIBUTE,
+			elementName,
+			valueIndex: nameParts[0] as number,
+		};
+	return {
+		type: BINDING.ATTRIBUTE,
+		elementName,
+		nameParts,
+		valueParts: valueParts.length > 0 ? valueParts : [""],
+	};
 };
 
-const resetElementScope = (parser: ParserState) => {
-	parser.isSelfClosing = false;
-	parser.currentTagName = "";
-	parser.parts[STATE.TAG].length = 0;
-};
+//reads up to just past the `>` or `/>`; static attributes come back as markup, bound ones as markers
+const readAttributes = (
+	reader: TemplateReader,
+	tagName: string,
+	isOnRootTemplate: boolean,
+): {
+	attributeMarkup: string;
+	markerMarkup: string;
+	isSelfClosing: boolean;
+} => {
+	const { source } = reader;
+	let attributeMarkup = "";
+	let markerMarkup = "";
 
-const flushElement = (parser: ParserState) => {
-	if (parser.elementMarkup === "") {
-		parser.resultMarkup += parser.contentMarkup;
-		parser.contentMarkup = "";
-		resetElementScope(parser);
-		return;
-	}
+	while (reader.index < source.length) {
+		while (isWhitespaceCode(source.charCodeAt(reader.index))) reader.index++;
 
-	parser.resultMarkup +=
-		MARKUP.TAG_OPEN + parser.elementMarkup + MARKUP.TAG_CLOSE;
-	parser.elementMarkup = "";
-	if (parser.isSelfClosing)
-		parser.resultMarkup +=
-			MARKUP.END_TAG_OPEN + parser.currentTagName + MARKUP.TAG_CLOSE;
-	parser.resultMarkup += parser.contentMarkup;
-	parser.contentMarkup = "";
-
-	resetElementScope(parser);
-};
-
-const closeOpenTag = (parser: ParserState) => {
-	parser.splitIndex = parser.characterIndex + 1;
-	const endsWithSlash =
-		parser.activeString.charCodeAt(parser.characterIndex - 1) ===
-		CHARACTER_CODE.SLASH;
-	if (endsWithSlash) {
-		parser.openTagIsDynamic.pop();
-		parser.isSelfClosing = true;
-		flushElement(parser);
-		parser.scanState = STATE.TEXT;
-		return;
-	}
-	parser.scanState = parsesContentAsRaw(parser, parser.currentTagName)
-		? STATE.RAW_CONTENT
-		: STATE.TEXT;
-};
-
-const endAttribute = (parser: ParserState, parts: Array<Part>) => {
-	appendSlice(parser, parts, parser.splitIndex, parser.characterIndex);
-	completeAttribute(parser);
-	parser.openConstructKind = NO_OPEN_CONSTRUCT;
-	parser.attributeQuoteCode = 0;
-	parser.scanState = STATE.ELEMENT;
-};
-
-const scanText = (parser: ParserState) => {
-	const tagStart = parser.activeString.indexOf(
-		MARKUP.TAG_OPEN,
-		parser.characterIndex,
-	);
-	if (tagStart === -1) {
-		parser.characterIndex = parser.activeString.length;
-		return;
-	}
-	parser.characterIndex = tagStart;
-	appendTextAndMarkTopLevelSibling(
-		parser,
-		parser.splitIndex,
-		parser.characterIndex,
-	);
-	parser.splitIndex = parser.characterIndex + 1;
-
-	const nextCode = parser.activeString.charCodeAt(parser.characterIndex + 1);
-
-	if (nextCode === CHARACTER_CODE.BANG) {
-		parser.scanState = STATE.COMMENT;
-		parser.splitIndex = parser.characterIndex + COMMENT_OPEN_LENGTH;
-		//resume on the "--" so an empty <!----> still matches its "-->"
-		parser.characterIndex += COMMENT_OPEN_LENGTH - COMMENT_DASHES_LENGTH;
-		return;
-	}
-
-	if (nextCode === CHARACTER_CODE.SLASH) {
-		parser.scanState = STATE.END_TAG;
-		parser.splitIndex = parser.characterIndex + END_TAG_OPEN_LENGTH;
-		parser.characterIndex++;
-		return;
-	}
-
-	flushElement(parser);
-	parser.scanState = STATE.ELEMENT;
-	parser.characterIndex--;
-};
-
-const scanComment = (parser: ParserState) => {
-	//searching from the opener's dashes is what lets the abrupt "<!-->" close on them
-	const commentClose = parser.activeString.indexOf(
-		MARKUP.COMMENT_CLOSE,
-		parser.characterIndex - COMMENT_DASHES_LENGTH,
-	);
-	if (commentClose === -1) {
-		parser.characterIndex = parser.activeString.length;
-		return;
-	}
-
-	//on the closing ">", which the loop's own step moves past
-	parser.characterIndex = commentClose + COMMENT_CLOSE_LENGTH - 1;
-	appendSlice(
-		parser,
-		parser.parts[STATE.COMMENT],
-		parser.splitIndex,
-		commentClose,
-	);
-	parser.splitIndex = parser.characterIndex + 1;
-	completeComment(parser);
-	parser.openConstructKind = NO_OPEN_CONSTRUCT;
-	parser.scanState = STATE.TEXT;
-};
-
-const scanRawContent = (parser: ParserState) => {
-	const closeTagStart = parser.activeString.indexOf(
-		MARKUP.END_TAG_OPEN,
-		parser.characterIndex,
-	);
-	if (closeTagStart === -1) {
-		parser.characterIndex = parser.activeString.length;
-		return;
-	}
-
-	parser.characterIndex = closeTagStart;
-	const closesCurrentElement = parser.activeString.startsWith(
-		parser.currentTagName,
-		parser.characterIndex + END_TAG_OPEN_LENGTH,
-	);
-	if (!closesCurrentElement) return;
-	appendSlice(
-		parser,
-		parser.parts[STATE.RAW_CONTENT],
-		parser.splitIndex,
-		parser.characterIndex,
-	);
-	parser.splitIndex =
-		parser.characterIndex + END_TAG_OPEN_LENGTH + parser.currentTagName.length;
-	parser.characterIndex += 1;
-	completeRawContent(parser);
-	parser.openConstructKind = NO_OPEN_CONSTRUCT;
-	parser.scanState = STATE.END_TAG;
-	parser.endTagMarkup += parser.currentTagName;
-};
-
-const scanTagName = (parser: ParserState, code: number) => {
-	const endsTagName =
-		code === CHARACTER_CODE.GREATER_THAN || isWhitespaceCode(code);
-	if (!endsTagName) return;
-
-	const isSelfClosing =
-		code === CHARACTER_CODE.GREATER_THAN &&
-		parser.activeString.charCodeAt(parser.characterIndex - 1) ===
-			CHARACTER_CODE.SLASH;
-	const tagEnd = isSelfClosing
-		? parser.characterIndex - 1
-		: parser.characterIndex;
-	appendSlice(parser, parser.parts[STATE.TAG], parser.splitIndex, tagEnd);
-	parser.splitIndex = parser.characterIndex;
-	completeTag(parser);
-	parser.openConstructKind = NO_OPEN_CONSTRUCT;
-
-	if (code !== CHARACTER_CODE.GREATER_THAN) {
-		parser.scanState = STATE.ELEMENT;
-		parser.characterIndex--;
-		return;
-	}
-
-	closeOpenTag(parser);
-};
-
-const scanBetweenAttributes = (parser: ParserState, code: number) => {
-	if (code === CHARACTER_CODE.LESS_THAN) {
-		parser.scanState = STATE.TAG;
-		return;
-	}
-
-	if (code === CHARACTER_CODE.GREATER_THAN) {
-		closeOpenTag(parser);
-		return;
-	}
-
-	parser.scanState = STATE.ATTRIBUTE_KEY;
-	if (!isWhitespaceCode(code)) {
-		parser.splitIndex = parser.characterIndex;
-		parser.characterIndex--;
-		return;
-	}
-
-	//an indented tag separates its attributes with a whole run of whitespace,
-	//and every character of it would otherwise open and close an empty attribute
-	const templateLength = parser.activeString.length;
-	let attributeStart = parser.characterIndex + 1;
-	while (
-		attributeStart < templateLength &&
-		isWhitespaceCode(parser.activeString.charCodeAt(attributeStart))
-	)
-		attributeStart++;
-	parser.splitIndex = attributeStart;
-	parser.characterIndex = attributeStart - 1;
-};
-
-const scanAttributeKey = (parser: ParserState, code: number) => {
-	if (code === CHARACTER_CODE.EQUALS) {
-		appendSlice(
-			parser,
-			parser.parts[STATE.ATTRIBUTE_KEY],
-			parser.splitIndex,
-			parser.characterIndex,
-		);
-		parser.splitIndex = parser.characterIndex + 1;
-		parser.scanState = STATE.ATTRIBUTE_VALUE;
-		return;
-	}
-	if (isWhitespaceCode(code)) {
-		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
-		parser.splitIndex = parser.characterIndex;
-		parser.characterIndex--;
-		return;
-	}
-	const startsSelfClosingEnd =
-		code === CHARACTER_CODE.SLASH &&
-		parser.activeString.charCodeAt(parser.characterIndex + 1) ===
-			CHARACTER_CODE.GREATER_THAN;
-	if (startsSelfClosingEnd) {
-		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
-		return;
-	}
-	if (code !== CHARACTER_CODE.GREATER_THAN) return;
-	endAttribute(parser, parser.parts[STATE.ATTRIBUTE_KEY]);
-	parser.characterIndex--;
-};
-
-const scanAttributeValue = (parser: ParserState, code: number) => {
-	const isInsideQuotes = parser.attributeQuoteCode !== 0;
-	if (isInsideQuotes) {
-		if (code !== parser.attributeQuoteCode) return;
-		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-		parser.splitIndex = parser.characterIndex + 1;
-		return;
-	}
-	if (isQuoteCode(code)) {
-		parser.attributeQuoteCode = code;
-		parser.splitIndex = parser.characterIndex + 1;
-		//nothing between the quotes can end the value, so the scan is a search
-		const closingQuote = parser.activeString.indexOf(
-			String.fromCharCode(code),
-			parser.splitIndex,
-		);
-		if (closingQuote === -1) {
-			parser.characterIndex = parser.activeString.length;
-			return;
+		if (source.charCodeAt(reader.index) === CHARACTER_CODE.GREATER_THAN) {
+			reader.index++;
+			return { attributeMarkup, markerMarkup, isSelfClosing: false };
 		}
-		parser.characterIndex = closingQuote;
-		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-		parser.splitIndex = parser.characterIndex + 1;
-		return;
+		if (startsSelfClosingEnd(source, reader.index)) {
+			reader.index += 2;
+			return { attributeMarkup, markerMarkup, isSelfClosing: true };
+		}
+		if (reader.index >= source.length) break;
+
+		const nameStart = reader.index;
+		let nameEnd = nameStart + 1;
+		while (nameEnd < source.length && !endsAttributeName(source, nameEnd))
+			nameEnd++;
+		const nameParts = partsOfRange(reader, nameStart, nameEnd);
+		reader.index = nameEnd;
+
+		let valueParts: Array<Part> = [];
+		if (source.charCodeAt(nameEnd) === CHARACTER_CODE.EQUALS) {
+			const valueStart = nameEnd + 1;
+			const quoteCode = source.charCodeAt(valueStart);
+			if (isQuoteCode(quoteCode)) {
+				//nothing between the quotes can end the value, holes included, so the scan is a search
+				const closingQuote = source.indexOf(
+					String.fromCharCode(quoteCode),
+					valueStart + 1,
+				);
+				if (closingQuote === -1) throw unclosedError("an attribute value");
+				valueParts = partsOfRange(reader, valueStart + 1, closingQuote);
+				reader.index = closingQuote + 1;
+				if (source.charCodeAt(reader.index) === HOLE_CODE)
+					throw new Error(
+						libraryMessage(
+							'a ${…} right after a quoted attribute value belongs to no attribute. Put a space before it: a="1" ${…}',
+						),
+					);
+			} else {
+				let valueEnd = valueStart;
+				while (valueEnd < source.length && !endsUnquotedValue(source, valueEnd))
+					valueEnd++;
+				valueParts = partsOfRange(reader, valueStart, valueEnd);
+				reader.index = valueEnd;
+			}
+		}
+
+		const isBound = hasHole(nameParts) || hasHole(valueParts);
+		if (isBound) {
+			const bindingIndex = reader.startedBindingCount++;
+			const binding = attributeBindingOf(tagName, nameParts, valueParts);
+			warnOnSelectValueBinding(tagName, binding);
+			reader.bindings.push(binding);
+			if (isOnRootTemplate) reader.hostBindingCount++;
+			else
+				markerMarkup += openMarkerComment(
+					OPEN_CONSTRUCT.ATTRIBUTE,
+					bindingIndex,
+				);
+			continue;
+		}
+		//a static host attribute emits no markup but still owns a binding index, and every marker
+		//after it is numbered from this count
+		if (isOnRootTemplate) {
+			reader.startedBindingCount++;
+			reader.bindings.push(attributeBindingOf(tagName, nameParts, valueParts));
+			reader.hostBindingCount++;
+			continue;
+		}
+		attributeMarkup += MARKUP.ATTRIBUTE_SEPARATOR + nameParts.join("");
+		if (valueParts.length > 0)
+			attributeMarkup +=
+				MARKUP.ATTRIBUTE_ASSIGN +
+				MARKUP.ATTRIBUTE_QUOTE +
+				valueParts.join("") +
+				MARKUP.ATTRIBUTE_QUOTE;
 	}
-	if (isWhitespaceCode(code)) {
-		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-		parser.splitIndex = parser.characterIndex;
-		parser.characterIndex--;
-		return;
-	}
-	//HTML reads the slash of `width=2/>` into the value; SVG markup means the self-closing end
-	const startsSelfClosingEnd =
-		code === CHARACTER_CODE.SLASH &&
-		parser.activeString.charCodeAt(parser.characterIndex + 1) ===
-			CHARACTER_CODE.GREATER_THAN;
-	if (startsSelfClosingEnd) {
-		endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-		return;
-	}
-	if (code !== CHARACTER_CODE.GREATER_THAN) return;
-	endAttribute(parser, parser.parts[STATE.ATTRIBUTE_VALUE]);
-	parser.characterIndex--;
+	throw unclosedError("an open tag");
 };
 
-const scanEndTag = (parser: ParserState, code: number) => {
-	if (code !== CHARACTER_CODE.GREATER_THAN) return;
-	parser.endTagMarkup += sliceActiveString(
-		parser,
-		parser.splitIndex,
-		parser.characterIndex,
-	);
-	parser.splitIndex = parser.characterIndex + 1;
-	flushElement(parser);
-	completeEndTag(parser);
-	parser.openConstructKind = NO_OPEN_CONSTRUCT;
-	parser.scanState = STATE.TEXT;
-};
-
-const startBindingAtHole = (parser: ParserState) => {
-	if (parser.scanState === STATE.END_TAG) {
-		const openerIsDynamic =
-			parser.openTagIsDynamic[parser.openTagIsDynamic.length - 1];
-		if (!openerIsDynamic)
-			throw new Error(
-				libraryMessage(
-					"asymmetric tag: a dynamic </${...}> close has no matching dynamic open tag. Pair `<${tag}>` with `</${tag}>`.",
-				),
-			);
-		parser.openConstructKind = OPEN_CONSTRUCT.TAG;
-		return;
-	}
-	//a quoted value ends its attribute on the quote, so a hole right after it belongs to no attribute
-	if (parser.scanState === STATE.ELEMENT)
-		throw new Error(
-			libraryMessage(
-				'a ${…} right after a quoted attribute value belongs to no attribute. Put a space before it: a="1" ${…}',
-			),
+//raw content ends at the first `</` followed by its own tag name
+const readRawContent = (
+	reader: TemplateReader,
+	tagName: string,
+): { contentMarkup: string; markerMarkup: string } => {
+	let closeTagStart = reader.source.indexOf(MARKUP.END_TAG_OPEN, reader.index);
+	while (
+		closeTagStart !== -1 &&
+		!reader.source.startsWith(
+			tagName,
+			closeTagStart + MARKUP.END_TAG_OPEN.length,
+		)
+	)
+		closeTagStart = reader.source.indexOf(
+			MARKUP.END_TAG_OPEN,
+			closeTagStart + 1,
 		);
-	parser.startedBindingCount++;
-	parser.openConstructKind = OPEN_CONSTRUCT_FOR_STATE[parser.scanState];
+	if (closeTagStart === -1) throw unclosedError(`<${tagName}>`);
+	const parts = partsOfRange(reader, reader.index, closeTagStart);
+	reader.index = closeTagStart;
+
+	if (!hasHole(parts))
+		return { contentMarkup: parts.join(""), markerMarkup: "" };
+	if (tagName === TEXTAREA_TAG) decodeTextareaParts(parts);
+	//the sheet text is composed with literal values at first commit, while the clone is
+	//still detached — the cached markup deliberately carries an empty <style>
+	const compiledStyleSheet =
+		tagName === STYLE_TAG ? compileStyleSheet(parts) : STYLE_SHEET_NOT_COMPILED;
+	if (compiledStyleSheet !== STYLE_SHEET_NOT_COMPILED)
+		reader.hasStyleSheetBinding = true;
+	const bindingIndex = reader.startedBindingCount++;
+	reader.bindings.push({
+		type: BINDING.RAW_CONTENT,
+		elementName: tagName,
+		parts,
+		compiledStyleSheet,
+	});
+	return {
+		contentMarkup: "",
+		markerMarkup: openMarkerComment(OPEN_CONSTRUCT.RAW_CONTENT, bindingIndex),
+	};
+};
+
+//every marker of an element goes in front of it: tag, then attributes, then raw content
+const readElement = (reader: TemplateReader) => {
+	const { source } = reader;
+	const nameStart = reader.index + MARKUP.TAG_OPEN.length;
+	let nameEnd = nameStart;
+	while (nameEnd < source.length && !endsTagName(source, nameEnd)) nameEnd++;
+	if (nameEnd >= source.length) throw unclosedError("an open tag");
+	const endsWithSlash =
+		source.charCodeAt(nameEnd) === CHARACTER_CODE.GREATER_THAN &&
+		source.charCodeAt(nameEnd - 1) === CHARACTER_CODE.SLASH;
+	const nameParts = partsOfRange(
+		reader,
+		nameStart,
+		endsWithSlash ? nameEnd - 1 : nameEnd,
+	);
+	reader.index = nameEnd;
+
+	//in the second pass the root template is already ruled out, and nothing there reads a sibling
+	const isFirstTag = reader.rootTemplate === ROOT_TEMPLATE.UNDECIDED;
+	if (!isFirstTag && isTopLevel(reader)) reader.hasSeenTopLevelSibling = true;
+
+	const isDynamicTag = hasHole(nameParts);
+	let tagName: string;
+	let tagMarkerMarkup = "";
+	let isOnRootTemplate = false;
+	if (isDynamicTag) {
+		tagName = DYNAMIC_TAG_PLACEHOLDER;
+		tagMarkerMarkup = openMarkerComment(
+			OPEN_CONSTRUCT.TAG,
+			reader.startedBindingCount++,
+		);
+		reader.bindings.push({ type: BINDING.TAG, parts: nameParts });
+		reader.rootTemplate = rootTemplateAfterNonRootTag(reader.rootTemplate);
+	} else {
+		const [staticTagName] = nameParts;
+		assertDuringDevelopment(
+			typeof staticTagName === "string",
+			"a tag name without a hole is captured as one text part",
+		);
+		tagName = staticTagName;
+		isOnRootTemplate =
+			isFirstTag && !reader.hasSeenTopLevelSibling && tagName === TEMPLATE_TAG;
+		reader.rootTemplate = isOnRootTemplate
+			? ROOT_TEMPLATE.IS_THE_CURRENT_TAG
+			: rootTemplateAfterNonRootTag(reader.rootTemplate);
+	}
+	reader.openTagIsDynamic.push(isDynamicTag);
+
+	let attributes = {
+		attributeMarkup: "",
+		markerMarkup: "",
+		isSelfClosing: endsWithSlash,
+	};
+	if (source.charCodeAt(nameEnd) === CHARACTER_CODE.GREATER_THAN)
+		reader.index++;
+	else attributes = readAttributes(reader, tagName, isOnRootTemplate);
+
+	const openTagMarkup = isOnRootTemplate
+		? ""
+		: MARKUP.TAG_OPEN + tagName + attributes.attributeMarkup + MARKUP.TAG_CLOSE;
+	reader.resultMarkup += tagMarkerMarkup + attributes.markerMarkup;
+
+	if (VOID_TAGS.has(tagName.toLowerCase())) {
+		reader.openTagIsDynamic.pop();
+		reader.resultMarkup += openTagMarkup;
+		return;
+	}
+	if (attributes.isSelfClosing) {
+		reader.openTagIsDynamic.pop();
+		if (!isOnRootTemplate)
+			reader.resultMarkup +=
+				openTagMarkup + MARKUP.END_TAG_OPEN + tagName + MARKUP.TAG_CLOSE;
+		return;
+	}
+	if (!parsesContentAsRaw(reader, tagName)) {
+		reader.resultMarkup += openTagMarkup;
+		return;
+	}
+	const rawContent = readRawContent(reader, tagName);
+	reader.resultMarkup +=
+		rawContent.markerMarkup + openTagMarkup + rawContent.contentMarkup;
+	readEndTag(reader);
+};
+
+const startsTagName = (source: string, index: number) => {
+	const code = source.charCodeAt(index);
+	return code === HOLE_CODE || isLetterCode(code);
+};
+
+//`<` opens markup only before a letter, `/` and a letter, `!` or a hole; anywhere else it is text,
+//as in `a < b`, the way the browser reads it
+const markupStartFrom = (source: string, index: number) => {
+	let tagStart = source.indexOf(MARKUP.TAG_OPEN, index);
+	while (tagStart !== -1) {
+		const nextCode = source.charCodeAt(tagStart + 1);
+		const opensMarkup =
+			nextCode === CHARACTER_CODE.BANG ||
+			startsTagName(source, tagStart + 1) ||
+			(nextCode === CHARACTER_CODE.SLASH &&
+				startsTagName(source, tagStart + 2));
+		if (opensMarkup) return tagStart;
+		tagStart = source.indexOf(MARKUP.TAG_OPEN, tagStart + 1);
+	}
+	return tagStart;
 };
 
 const parse = (
 	strings: TemplateStringsArray,
 	mode: ParseModeKind = PARSE_MODE.OPTIMISTIC_ROOT,
 ): ParsedTemplate => {
-	const parser = createParser(strings, mode);
+	const reader = createTemplateReader(strings, mode);
+	const { source } = reader;
 
-	for (
-		parser.stringIndex = 0;
-		parser.stringIndex < parser.templateStrings.length;
-		parser.stringIndex++
-	) {
-		parser.activeString = parser.templateStrings[parser.stringIndex];
-		parser.splitIndex = 0;
-		const templateLength = parser.activeString.length;
+	while (reader.index < source.length) {
+		const tagStart = markupStartFrom(source, reader.index);
+		readText(reader, tagStart === -1 ? source.length : tagStart);
+		if (tagStart === -1) break;
 
-		for (
-			parser.characterIndex = 0;
-			parser.characterIndex < templateLength;
-			parser.characterIndex++
-		) {
-			const code = parser.activeString.charCodeAt(parser.characterIndex);
-
-			switch (parser.scanState) {
-				case STATE.TEXT:
-					scanText(parser);
-					break;
-				case STATE.COMMENT:
-					scanComment(parser);
-					break;
-				case STATE.RAW_CONTENT:
-					scanRawContent(parser);
-					break;
-				case STATE.TAG:
-					scanTagName(parser, code);
-					break;
-				case STATE.ELEMENT:
-					scanBetweenAttributes(parser, code);
-					break;
-				case STATE.ATTRIBUTE_KEY:
-					scanAttributeKey(parser, code);
-					break;
-				case STATE.ATTRIBUTE_VALUE:
-					scanAttributeValue(parser, code);
-					break;
-				case STATE.END_TAG:
-					scanEndTag(parser, code);
-					break;
-				default:
-					return parser.scanState satisfies never;
-			}
-		}
-
-		if (parser.stringIndex + 1 >= parser.templateStrings.length) break;
-		if (!hasOpenConstruct(parser)) startBindingAtHole(parser);
-		recordHole(parser);
-	}
-	const hasTrailingText =
-		parser.scanState === STATE.TEXT &&
-		parser.splitIndex < parser.activeString.length;
-	if (hasTrailingText)
-		appendTextAndMarkTopLevelSibling(
-			parser,
-			parser.splitIndex,
-			parser.activeString.length,
-		);
-	flushElement(parser);
-
-	//a started binding that never reached its completion is still owed a binding index
-	if (parser.bindings.length < parser.startedBindingCount) {
-		const { openConstructKind } = parser;
-		assertDuringDevelopment(
-			openConstructKind !== OPEN_CONSTRUCT.CONTENT &&
-				openConstructKind !== NO_OPEN_CONSTRUCT,
-			"a content hole completes as it starts, so only another construct is left open",
-		);
-		parser.bindings.push(createEmptyBinding(openConstructKind));
+		const nextCode = source.charCodeAt(tagStart + 1);
+		if (source.startsWith(CHARACTER_DATA_OPEN, tagStart))
+			readCharacterData(reader);
+		else if (nextCode === CHARACTER_CODE.BANG) readComment(reader);
+		else if (nextCode === CHARACTER_CODE.SLASH) readEndTag(reader);
+		else readElement(reader);
 	}
 
 	const hasRootTemplate =
-		parser.rootTemplate !== ROOT_TEMPLATE.UNDECIDED &&
-		parser.rootTemplate !== ROOT_TEMPLATE.RULED_OUT;
+		reader.rootTemplate !== ROOT_TEMPLATE.UNDECIDED &&
+		reader.rootTemplate !== ROOT_TEMPLATE.RULED_OUT;
 	const isFirstPass = mode === PARSE_MODE.OPTIMISTIC_ROOT;
-	if (isFirstPass && hasRootTemplate && parser.hasSeenTopLevelSibling)
+	if (isFirstPass && hasRootTemplate && reader.hasSeenTopLevelSibling)
 		return parse(strings, PARSE_MODE.NO_ROOT_TEMPLATE);
 
 	return {
-		htmlWithMarkers: parser.resultMarkup,
-		bindings: parser.bindings,
+		htmlWithMarkers: reader.resultMarkup,
+		bindings: reader.bindings,
 		templateHash: stringListHash(strings),
-		hostBindingCount: parser.hostBindingCount,
-		keyValueParts: parser.keyValueParts,
-		hasStyleSheetBinding: parser.hasStyleSheetBinding,
+		hostBindingCount: reader.hostBindingCount,
+		keyValueParts: reader.keyValueParts,
+		hasStyleSheetBinding: reader.hasStyleSheetBinding,
 	};
 };
 

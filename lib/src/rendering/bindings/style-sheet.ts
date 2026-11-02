@@ -1,3 +1,4 @@
+import { NO_REINSERTION } from "../../parser/constants";
 import { CompiledStyleSheet } from "../../parser/types";
 import { BaseComponent } from "../../types";
 import { assertDuringDevelopment } from "../../utils/diagnostics";
@@ -23,7 +24,7 @@ export const createCSSOMStyleSheetLane = (
 	compiledStyleSheet,
 	styleElement,
 	declarationValueHashes: new Array<number>(
-		compiledStyleSheet.dynamicDeclarations.length,
+		compiledStyleSheet.declarationCount,
 	).fill(UNSET_HASH),
 	boundSheet: null,
 });
@@ -36,10 +37,11 @@ const childRulesOf = (rule: CSSRule | null): CSSRuleList | undefined =>
 const findRuleAtPath = (
 	sheet: CSSStyleSheet,
 	rulePath: ReadonlyArray<number>,
+	depth: number,
 ): CSSRule | null => {
 	let childRules: CSSRuleList | undefined = sheet.cssRules;
 	let rule: CSSRule | null = null;
-	for (let index = 0; index < rulePath.length; index++) {
+	for (let index = 0; index < depth; index++) {
 		if (childRules === undefined) return null;
 		const nextRule: CSSRule | undefined = childRules[rulePath[index]];
 		if (nextRule === undefined) return null;
@@ -48,6 +50,14 @@ const findRuleAtPath = (
 	}
 	return rule;
 };
+
+const declarationBlockAtPath = (
+	sheet: CSSStyleSheet,
+	rulePath: ReadonlyArray<number>,
+): CSSStyleDeclaration | undefined =>
+	//a style, keyframe and nested-declarations rule all carry .style; nothing else does
+	(findRuleAtPath(sheet, rulePath, rulePath.length) as CSSStyleRule | null)
+		?.style;
 
 export const RULE_STRUCTURE_MISMATCH: unique symbol = Symbol(
 	"rule structure mismatch",
@@ -59,27 +69,70 @@ export const matchCompiledStyleSheet = (
 	compiled: CompiledStyleSheet,
 	sheet: CSSStyleSheet,
 ): BoundStyleSheet | typeof RULE_STRUCTURE_MISMATCH => {
-	const { ruleCountChecks, dynamicDeclarations } = compiled;
+	const { ruleCountChecks, holedRules } = compiled;
 	for (let index = 0; index < ruleCountChecks.length; index++) {
-		const check = ruleCountChecks[index];
+		const { rulePath, expectedRuleCount } = ruleCountChecks[index];
 		const childRules =
-			check.rulePath.length === 0
+			rulePath.length === 0
 				? sheet.cssRules
-				: childRulesOf(findRuleAtPath(sheet, check.rulePath));
+				: childRulesOf(findRuleAtPath(sheet, rulePath, rulePath.length));
 		const hasExpectedRuleCount =
-			childRules !== undefined && childRules.length === check.expectedRuleCount;
+			childRules !== undefined && childRules.length === expectedRuleCount;
 		if (!hasExpectedRuleCount) return RULE_STRUCTURE_MISMATCH;
 	}
 	const ruleDeclarations: Array<CSSStyleDeclaration> = new Array(
-		dynamicDeclarations.length,
+		holedRules.length,
 	);
-	for (let index = 0; index < dynamicDeclarations.length; index++) {
-		const rule = findRuleAtPath(sheet, dynamicDeclarations[index].rulePath);
-		const declarationBlock = (rule as CSSStyleRule | null)?.style;
+	for (let index = 0; index < holedRules.length; index++) {
+		const declarationBlock = declarationBlockAtPath(
+			sheet,
+			holedRules[index].rulePath,
+		);
 		if (declarationBlock === undefined) return RULE_STRUCTURE_MISMATCH;
 		ruleDeclarations[index] = declarationBlock;
 	}
 	return { sheet, ruleDeclarations };
+};
+
+const isPathPrefix = (
+	prefix: ReadonlyArray<number>,
+	rulePath: ReadonlyArray<number>,
+) => {
+	if (prefix.length > rulePath.length) return false;
+	for (let index = 0; index < prefix.length; index++)
+		if (prefix[index] !== rulePath[index]) return false;
+	return true;
+};
+
+//a rule re-inserted from its own text parses to the same structure, so only the blocks inside
+//it change identity
+const reinsertRule = (
+	compiled: CompiledStyleSheet,
+	boundSheet: BoundStyleSheet,
+	rulePath: ReadonlyArray<number>,
+): void => {
+	const { sheet, ruleDeclarations } = boundSheet;
+	const parentDepth = rulePath.length - 1;
+	//a rule that holds a rule is a grouping or style rule, and both carry insertRule
+	const parent =
+		parentDepth === 0
+			? sheet
+			: (findRuleAtPath(sheet, rulePath, parentDepth) as CSSGroupingRule);
+	const ruleIndex = rulePath[parentDepth];
+	//inserted before the old copy is deleted, so a text the browser refuses loses nothing
+	parent.insertRule(parent.cssRules[ruleIndex].cssText, ruleIndex);
+	parent.deleteRule(ruleIndex + 1);
+	const { holedRules } = compiled;
+	for (let index = 0; index < holedRules.length; index++) {
+		const holedRulePath = holedRules[index].rulePath;
+		if (!isPathPrefix(rulePath, holedRulePath)) continue;
+		const declarationBlock = declarationBlockAtPath(sheet, holedRulePath);
+		assertDuringDevelopment(
+			declarationBlock !== undefined,
+			"a re-inserted rule keeps the structure its own text describes",
+		);
+		ruleDeclarations[index] = declarationBlock;
+	}
 };
 
 export const commitChangedDeclarations = (
@@ -87,19 +140,29 @@ export const commitChangedDeclarations = (
 	boundSheet: BoundStyleSheet,
 	values: Array<unknown>,
 ): void => {
-	const { dynamicDeclarations } = lane.compiledStyleSheet;
-	const { declarationValueHashes } = lane;
-	const { ruleDeclarations } = boundSheet;
-	for (let index = 0; index < dynamicDeclarations.length; index++) {
-		const declaration = dynamicDeclarations[index];
-		const valueHash = combinedPartsHash(declaration.valueParts, values);
-		if (valueHash === declarationValueHashes[index]) continue;
-		declarationValueHashes[index] = valueHash;
-		ruleDeclarations[index].setProperty(
-			declaration.propertyName,
-			composeParts(declaration.valueParts, values),
-			declaration.priority,
-		);
+	const { compiledStyleSheet, declarationValueHashes } = lane;
+	const { holedRules } = compiledStyleSheet;
+	let declarationIndex = 0;
+	for (let ruleIndex = 0; ruleIndex < holedRules.length; ruleIndex++) {
+		const { declarations, reinsertedRulePath } = holedRules[ruleIndex];
+		let hasChangedDeclaration = false;
+		for (let index = 0; index < declarations.length; index++) {
+			const declaration = declarations[index];
+			const valueHash = combinedPartsHash(declaration.valueParts, values);
+			const hashIndex = declarationIndex++;
+			if (valueHash === declarationValueHashes[hashIndex]) continue;
+			declarationValueHashes[hashIndex] = valueHash;
+			hasChangedDeclaration = true;
+			boundSheet.ruleDeclarations[ruleIndex].setProperty(
+				declaration.propertyName,
+				composeParts(declaration.valueParts, values),
+				declaration.priority,
+			);
+		}
+		const needsReinsertion =
+			hasChangedDeclaration && reinsertedRulePath !== NO_REINSERTION;
+		if (needsReinsertion)
+			reinsertRule(compiledStyleSheet, boundSheet, reinsertedRulePath);
 	}
 };
 
@@ -107,13 +170,17 @@ export const seedDeclarationValueHashes = (
 	lane: CSSOMStyleSheetLane,
 	values: Array<unknown>,
 ): void => {
-	const { dynamicDeclarations } = lane.compiledStyleSheet;
+	const { holedRules } = lane.compiledStyleSheet;
 	const { declarationValueHashes } = lane;
-	for (let index = 0; index < dynamicDeclarations.length; index++)
-		declarationValueHashes[index] = combinedPartsHash(
-			dynamicDeclarations[index].valueParts,
-			values,
-		);
+	let declarationIndex = 0;
+	for (let ruleIndex = 0; ruleIndex < holedRules.length; ruleIndex++) {
+		const { declarations } = holedRules[ruleIndex];
+		for (let index = 0; index < declarations.length; index++)
+			declarationValueHashes[declarationIndex++] = combinedPartsHash(
+				declarations[index].valueParts,
+				values,
+			);
+	}
 };
 
 //copies each hole's serialized value/priority off the orphaned pre-move sheet — no paint
@@ -143,15 +210,19 @@ export const rebindStyleSheet = (liveBinding: RawContentLiveBinding): void => {
 		host.update();
 		return;
 	}
-	const { dynamicDeclarations } = lane.compiledStyleSheet;
-	for (let index = 0; index < dynamicDeclarations.length; index++) {
-		const { propertyName } = dynamicDeclarations[index];
-		const orphanedDeclaration = orphanedSheet.ruleDeclarations[index];
-		matchedSheet.ruleDeclarations[index].setProperty(
-			propertyName,
-			orphanedDeclaration.getPropertyValue(propertyName),
-			orphanedDeclaration.getPropertyPriority(propertyName),
-		);
+	const { holedRules } = lane.compiledStyleSheet;
+	for (let ruleIndex = 0; ruleIndex < holedRules.length; ruleIndex++) {
+		const { declarations } = holedRules[ruleIndex];
+		const orphanedDeclarations = orphanedSheet.ruleDeclarations[ruleIndex];
+		const liveDeclarations = matchedSheet.ruleDeclarations[ruleIndex];
+		for (let index = 0; index < declarations.length; index++) {
+			const { propertyName } = declarations[index];
+			liveDeclarations.setProperty(
+				propertyName,
+				orphanedDeclarations.getPropertyValue(propertyName),
+				orphanedDeclarations.getPropertyPriority(propertyName),
+			);
+		}
 	}
 	lane.boundSheet = matchedSheet;
 };
