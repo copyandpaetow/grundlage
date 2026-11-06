@@ -71,6 +71,9 @@
 - A bound formatting element the HTML parser copies (`<p><b class=${x}><div>`) throws "Fix the nesting" instead of leaving the copies without the value.
 - A tag or attribute name composed from a value the browser refuses (`<${"my box"}>`) throws a library error naming the binding instead of a bare `DOMException`.
 - A dynamic `<style>` with a `{` or `[` inside parentheses, an escaped property name or a trailing `\` falls back to a full text rewrite instead of updating the wrong declaration or hanging.
+- Change detection no longer reads a changed value as unchanged because two hashes collided.
+- Data with a reference back to an enclosing object (a `parent` link) no longer freezes a paint; a very large value, or one shared the way a graph is, throws instead.
+- A symbol inside a bound object or array no longer ends the component with a `TypeError`.
 
 ## 0.8.0
 

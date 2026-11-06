@@ -1,20 +1,47 @@
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { describe, expect, test } from "vitest";
 import { hashValue } from "../../rendering/value-hashing";
+import * as TAG from "../../rendering/value-hashing-tag";
+import { html } from "../../template";
 import { stringHash } from "../hashing";
 
+const createRandom = (seed: number) => {
+	let randomState = seed;
+	return (below: number) => {
+		randomState = (Math.imul(randomState, 1103515245) + 12345) >>> 0;
+		return (randomState >>> 8) % below;
+	};
+};
+
+const collectGarbageInANewJob = async (): Promise<void> => {
+	setFlagsFromString("--expose-gc");
+	//a WeakRef keeps its target until the current job ends
+	await new Promise((resolve) => setTimeout(resolve));
+	const collectGarbage: () => void = runInNewContext("gc");
+	collectGarbage();
+};
+
 describe("stringHash", () => {
-	test("empty string hashes to 0", () => {
-		expect(stringHash("")).toBe(0);
+	//two code units go into each step, so without the length a trailing NUL would vanish
+	test("a trailing NUL hashes apart from the string without it", () => {
+		expect(stringHash("a\0")).not.toBe(stringHash("a"));
+	});
+
+	//the second code unit of a pair fills the high half of its word, where a multiply alone never
+	//carries a difference down
+	test("strings that differ only in the high half of their words hash apart", () => {
+		expect(stringHash("aAaAa䁁")).not.toBe(stringHash("aAa䁁aA"));
 	});
 
 	test("is deterministic for the same input", () => {
 		expect(stringHash("hello")).toBe(stringHash("hello"));
 	});
 
-	test("returns a 32-bit signed integer", () => {
+	test("returns a whole number below 2^53", () => {
 		const result = stringHash("a".repeat(500));
-		expect(Number.isInteger(result)).toBe(true);
-		expect(result).toBe(result | 0);
+		expect(Number.isSafeInteger(result)).toBe(true);
+		expect(result).toBeGreaterThanOrEqual(0);
 	});
 
 	test("different inputs usually produce different hashes", () => {
@@ -152,6 +179,20 @@ describe("hashValue - reference types", () => {
 		expect(hashValue(firstInstance)).not.toBe(hashValue(secondInstance));
 	});
 
+	test("a Symbol.for symbol hashes by identity instead of throwing", () => {
+		const order = Symbol.for("order");
+		expect(hashValue({ kind: order })).toBe(
+			hashValue({ kind: Symbol.for("order") }),
+		);
+		expect(hashValue({ kind: order })).not.toBe(
+			hashValue({ kind: Symbol.for("invoice") }),
+		);
+	});
+
+	test("two symbols with the same description hash apart", () => {
+		expect(hashValue(Symbol("order"))).not.toBe(hashValue(Symbol("order")));
+	});
+
 	test("same Map instance hashes equal across reads", () => {
 		const map = new Map<string, number>([["a", 1]]);
 		expect(hashValue(map)).toBe(hashValue(map));
@@ -230,7 +271,7 @@ describe("hashValue - depth", () => {
 		return value;
 	};
 
-	test("a cycle truncates instead of overflowing the stack", () => {
+	test("a cycle ends at its back-reference instead of overflowing the stack", () => {
 		const cyclic: Record<string, unknown> = { name: "root" };
 		cyclic.self = cyclic;
 
@@ -238,7 +279,7 @@ describe("hashValue - depth", () => {
 		expect(hashValue(cyclic)).toBe(hashValue(cyclic));
 	});
 
-	test("two cycles that differ above the limit still hash apart", () => {
+	test("two cycles that differ in content hash apart", () => {
 		const first: Record<string, unknown> = { name: "a" };
 		first.self = first;
 		const second: Record<string, unknown> = { name: "b" };
@@ -256,18 +297,179 @@ describe("hashValue - depth", () => {
 	});
 });
 
+describe("hashValue - shared and cyclic data", () => {
+	const userWithPosts = (titles: Array<string>) => {
+		const user = {
+			name: "ada",
+			posts: [] as Array<{ title: string; author: unknown }>,
+		};
+		for (const title of titles) user.posts.push({ title, author: user });
+		return user;
+	};
+
+	//walked again at every back-reference, three posts take about 3^21 steps
+	test("posts pointing back at their user hash in a few steps", () => {
+		expect(() => hashValue(userWithPosts(["a", "b", "c"]))).not.toThrow();
+	});
+
+	test("equal cyclic data hashes alike, whatever its identity", () => {
+		expect(hashValue(userWithPosts(["a", "b", "c"]))).toBe(
+			hashValue(userWithPosts(["a", "b", "c"])),
+		);
+	});
+
+	test("a change behind a back-reference is still seen", () => {
+		expect(hashValue(userWithPosts(["a", "b", "c"]))).not.toBe(
+			hashValue(userWithPosts(["a", "x", "c"])),
+		);
+	});
+
+	//under `F(accumulator) ^ value`, the same shape nested in itself added its part twice and cancelled
+	test("a shape nested in itself still depends on what it holds", () => {
+		const chain = (name: string) => ({ name, next: { name, next: null } });
+		expect(hashValue(chain("a"))).not.toBe(hashValue(chain("b")));
+	});
+
+	test("a template wrapped in itself hashes apart from the bare value", () => {
+		const paragraph = (content: unknown) => html`<p>${content}</p>`;
+		expect(hashValue(paragraph(paragraph("a")))).not.toBe(hashValue("a"));
+	});
+
+	test("a value that reaches the same objects too often throws and names the fix", () => {
+		let shared: Record<string, unknown> = { leaf: true };
+		for (let level = 0; level < 22; level++)
+			shared = { left: shared, right: shared };
+		expect(() => hashValue(shared)).toThrow(/class instance/);
+	});
+
+	test("a finished walk keeps none of the value", async () => {
+		let value: object | null = { rows: [{ label: "a" }] };
+		const valueReference = new WeakRef(value);
+		hashValue(value);
+		value = null;
+		await collectGarbageInANewJob();
+		expect(valueReference.deref()).toBeUndefined();
+	});
+
+	test("a walk ended by a throw keeps none of the value", async () => {
+		let value: object | null = {
+			rows: [
+				{
+					get label() {
+						throw new Error("a getter that throws");
+					},
+				},
+			],
+		};
+		const valueReference = new WeakRef(value);
+		expect(() => hashValue(value)).toThrow("a getter that throws");
+		value = null;
+		await collectGarbageInANewJob();
+		expect(valueReference.deref()).toBeUndefined();
+	});
+});
+
+//the walk reads a value as a sequence of words; each case below would read the same without the
+//tag, count or end word that tells the two apart
+describe("hashValue - where one value ends and the next begins", () => {
+	test("an integer never reads as the word that starts another kind of value", () => {
+		expect(hashValue((TAG.BOOLEAN << 24) | 1)).not.toBe(hashValue(true));
+		expect(hashValue(TAG.NULLISH << 24)).not.toBe(hashValue(null));
+	});
+
+	test("integers on both sides of the one-word range hash apart", () => {
+		const limit = 2 ** 23;
+		const integers = [-limit - 1, -limit, limit - 1, limit, limit + 1];
+		const hashes = new Set(integers.map(hashValue));
+		expect(hashes.size).toBe(integers.length);
+	});
+
+	test("an array's length tells nesting apart", () => {
+		expect(hashValue([[1], 2])).not.toBe(hashValue([[1, 2]]));
+	});
+
+	test("an object's end tells nesting apart", () => {
+		expect(hashValue({ outer: { inner: 1 } })).not.toBe(
+			hashValue({ outer: {}, inner: 1 }),
+		);
+	});
+
+	test("a string's length tells a trailing NUL apart", () => {
+		expect(hashValue("a\0")).not.toBe(hashValue("a"));
+	});
+});
+
+describe("hashValue - changes that cancel out", () => {
+	//the words of {}, null and false differ only in their top byte, and a multiply carries a difference
+	//only upward: without a fold back down, this rotation read as unchanged
+	test("values that differ only in their tag words hash apart", () => {
+		expect(hashValue({ g: [{}, null, false] })).not.toBe(
+			hashValue({ g: [null, false, {}] }),
+		);
+	});
+
+	//a weighted sum, C + a·M + b with 4181·M = 2584·2^32 + 423877, read every move from (a, b) to
+	//(a − 4181, b + 423877) as unchanged
+	test("the pair that left a row stale hashes apart", () => {
+		const row = (first: number, second: number) =>
+			html`<li>${first}: ${second}</li>`;
+		expect(hashValue(row(4182, 0))).not.toBe(hashValue(row(1, 423877)));
+	});
+
+	test("the same trade hashes apart from any starting values", () => {
+		const random = createRandom(11);
+		let collisions = 0;
+		for (let draw = 0; draw < 1_000; draw++) {
+			const first = 4181 + random(1_000_000);
+			const second = random(1_000_000);
+			if (
+				hashValue([first, second]) ===
+				hashValue([first - 4181, second + 423877])
+			)
+				collisions++;
+		}
+		expect(collisions).toBe(0);
+	});
+
+	//a list matches each new row against every old one: 10,000 rows replacing 10,000 others falsely
+	//match in 2% of replaces under 32 bits, which also expect 4.7 collisions among these values
+	test("200,000 distinct pairs of numbers hash without a collision", () => {
+		const random = createRandom(13);
+		const pairByHash = new Map<number, string>();
+		let collisions = 0;
+		for (let draw = 0; draw < 200_000; draw++) {
+			const pair = [random(2 ** 30), random(2 ** 30)];
+			const spelling = pair.join();
+			const hash = hashValue(pair);
+			const earlier = pairByHash.get(hash);
+			if (earlier === undefined) pairByHash.set(hash, spelling);
+			else if (earlier !== spelling) collisions++;
+		}
+		expect(collisions).toBe(0);
+	});
+
+	test("200,000 distinct random strings hash without a collision", () => {
+		const random = createRandom(17);
+		const textByHash = new Map<number, string>();
+		let collisions = 0;
+		for (let draw = 0; draw < 200_000; draw++) {
+			let text = "";
+			const length = 6 + random(7);
+			for (let index = 0; index < length; index++)
+				text += String.fromCharCode(65 + random(58));
+			const hash = hashValue(text);
+			const earlier = textByHash.get(hash);
+			if (earlier === undefined) textByHash.set(hash, text);
+			else if (earlier !== text) collisions++;
+		}
+		expect(collisions).toBe(0);
+	});
+});
+
 describe("hashValue - seeded random inputs", () => {
 	//sequential values never collide, so they cannot tell a sound hash from one that lets
-	//inputs trade places; 5,000 inputs in 32 bits expect 0.003 collisions
+	//inputs trade places; 5,000 inputs in 53 bits expect no collision
 	const INPUT_COUNT = 5_000;
-
-	const createRandom = (seed: number) => {
-		let randomState = seed;
-		return (below: number) => {
-			randomState = (Math.imul(randomState, 1103515245) + 12345) >>> 0;
-			return (randomState >>> 8) % below;
-		};
-	};
 
 	const randomText = (random: (below: number) => number) => {
 		let text = "";

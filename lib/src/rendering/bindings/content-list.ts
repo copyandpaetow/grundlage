@@ -28,14 +28,15 @@ const END_OF_CHAIN = -1;
 //a claimed row has left its chain, so its link entry is free to say so
 const CLAIMED = -2;
 const UNUSED_TABLE_ENTRY = -3;
-//the table index is taken from the high bits: combineOrderedHash is imul plus add, whose low bits
+//the table index is taken from the high bits: combineOrderedHash multiplies and xors, whose low bits
 //depend only on the low bits of its inputs
 const FIBONACCI_MULTIPLIER = 0x9e3779b1 | 0;
 const END_OF_SUBSEQUENCE = -1;
 
-//one instance for every list: at length zero nothing can be written into it, and each pass regrows
-//it before its first write
+//one instance of each for every list: at length zero nothing can be written into it, and each pass
+//regrows it before its first write
 export const EMPTY_LIST_SCRATCH = new Int32Array(0);
+export const EMPTY_HASH_SCRATCH = new Float64Array(0);
 
 const shapeOrKeyHashOf = (
 	value: TemplateValue,
@@ -213,7 +214,7 @@ const matchUnsettledRows = (
 	const indexBitCount = 32 - Math.clz32(unsettledPreviousRowCount * 2 - 1);
 	const tableCapacity = 1 << indexBitCount;
 	if (list.chainHeadAtTableIndex.length < tableCapacity) {
-		list.hashAtTableIndex = new Int32Array(tableCapacity);
+		list.hashAtTableIndex = new Float64Array(tableCapacity);
 		list.chainHeadAtTableIndex = new Int32Array(tableCapacity);
 	}
 	list.tableIndexShift = 32 - indexBitCount;

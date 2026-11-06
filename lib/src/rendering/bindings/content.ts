@@ -16,6 +16,7 @@ import {
 import { clearRange, warnOnRejectedServerRange } from "../markers";
 import {
 	aggregateHashOfItems,
+	EMPTY_HASH_SCRATCH,
 	EMPTY_LIST_SCRATCH,
 	hydrateListItems,
 	commitList,
@@ -63,7 +64,7 @@ const createContentState = (
 				nextRowWithSameHash: EMPTY_LIST_SCRATCH,
 				subsequenceStarts: EMPTY_LIST_SCRATCH,
 				nextInSubsequence: EMPTY_LIST_SCRATCH,
-				hashAtTableIndex: EMPTY_LIST_SCRATCH,
+				hashAtTableIndex: EMPTY_HASH_SCRATCH,
 				chainHeadAtTableIndex: EMPTY_LIST_SCRATCH,
 				tableIndexShift: 0,
 				spareRows: [],

@@ -86,7 +86,7 @@ export interface ListContentState {
 	nextRowWithSameHash: Int32Array;
 	subsequenceStarts: Int32Array;
 	nextInSubsequence: Int32Array;
-	hashAtTableIndex: Int32Array;
+	hashAtTableIndex: Float64Array;
 	chainHeadAtTableIndex: Int32Array;
 	tableIndexShift: number;
 	//alternates with items: placeRows returns the array it was given

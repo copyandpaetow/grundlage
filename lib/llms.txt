@@ -538,7 +538,11 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   prefixes are the internal markers and a collision silently misaligns hydration.
 - Change detection is HASH-BASED for strings, numbers, bigints, booleans, plain objects,
   arrays, `Map`, `Set` and nested templates: mutate-then-`update()` is detected (object
-  graphs are walked to a depth of 64). Class instances, `Date`, typed arrays and functions
+  graphs are walked to a depth of 64). A reference back to an enclosing object (a `parent`
+  link) ends the walk there. A walk past 1,000,000 objects and arrays throws, whether the
+  value is that large or reaches the same objects again and again the way a graph does: pass
+  such data inside a class instance.
+  Class instances, `Date`, typed arrays and functions
   are compared by REFERENCE identity, so mutating one in place reads as unchanged and is
   skipped. Pass plain data, or replace the reference to signal a change. A declared prop is
   the one place that does not skip: `el.items.push(x)` alone does not trigger an update, but

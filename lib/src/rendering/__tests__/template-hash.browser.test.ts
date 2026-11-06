@@ -6,7 +6,7 @@ const sleep = (duration = 0) =>
 	new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("template value hashing", () => {
-	test("a cycle that passes through a template ends at the depth limit", () => {
+	test("a cycle that passes through a template ends at its back-reference", () => {
 		const cycle: Array<unknown> = [];
 		cycle.push(html`<p>${cycle}</p>`);
 		expect(typeof hashValue(cycle)).toBe("number");
