@@ -167,9 +167,11 @@ yield function* profile({ userId }) {
 
   A fallback is COPIED per element with `structuredClone` for anything object-shaped (deeply:
   a nested object is a fresh one too), and SHARED for a primitive, a function and a
-  `Template`. A value `structuredClone` cannot reproduce (a class instance, an object
-  holding a function) throws at define time and asks for plain data. So does a fallback the
-  parser or schema refuses; the check runs once, before any element exists.
+  `Template`. A template NESTED inside an object fallback is copied too, and a copy is no
+  template (see Rules): make the template the whole fallback. A value `structuredClone` cannot
+  reproduce (a class instance, an object holding a function) throws at define time and asks
+  for plain data. So does a fallback the parser or schema refuses; the check runs once, before
+  any element exists.
 
   Reflection writes the value's own spelling: a string as itself, a number or bigint through
   `String(value)`, `true` as `""`. A value with no spelling (an object, `undefined`) takes a
@@ -266,7 +268,8 @@ list           <ul>${items.map((i) => html`<li>${i}</li>`)}</ul>
 list key       <li><!--${item.id}-->…</li>          // first dynamic comment = row identity
 nested         <div>${show && html`<details>…</details>`}</div>
 dynamic tag    <${tagName}>content</${tagName}>
-raw            <style>${css}</style>                // style/script/textarea
+raw            <style>${css}</style>                // style/script/textarea/title
+template       <template><li>${label}</li></template>  // content rebuilt on change, see Rules
 comment        <!-- note ${value} -->               // second and later dynamic comments
 ```
 
@@ -296,7 +299,8 @@ yield function* view({ role }) {
   ``) never settles: it is the update loop below and ends in a visible error. Derive the bound
   value from something the paint does not write (a local, another prop).
 - A `<template>` WITH attributes in a nested position (content hole, list row) throws. A
-  `<template>` that has top-level siblings is parsed as an ordinary element instead.
+  `<template>` that has top-level siblings is parsed as an ordinary element instead. A
+  `<template>` written inside other markup is a NESTED template (see Rules).
 
 ## Lists and keys
 
@@ -534,6 +538,39 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   list it also defeats matching rows by content, so key those rows (see Lists and keys)
   rather than building event delegation. A handler defined once in the body is bound once.
 - Components paint into SHADOW DOM by default. Light-DOM selectors won't reach inside.
+- Only an `html` call makes a TEMPLATE. An object shaped like one that came from JSON or
+  `structuredClone` is plain data, so it throws in a content hole instead of painting markup.
+- A value that would END ITS ELEMENT EARLY in server markup throws at the paint, in the browser
+  too, so both sides agree: `</style` in a `<style>` hole; `</script` or `<!--` in a `<script>`
+  hole; `-->`, `--!>`, or a leading `>` or `->` in a dynamic comment. The HTML serializer writes
+  those texts verbatim, so no escaping can save them. For JSON in a script, write every `<` as
+  `\u003c`: `JSON.stringify(data).replaceAll("<", "\\u003c")`. Text, attribute, `<textarea>`
+  and `<title>` holes are escaped by every serializer and accept any string. A `<title>` with a
+  hole is TEXT like a `<textarea>`, also inside `<svg>`: markup in it stays literal. Beside a
+  hole in either element, only numeric references and `&amp;`, `&lt;`, `&gt;`, `&quot;`,
+  `&apos;` and `&nbsp;` decode; any other name throws, so write the character itself.
+- A HOLE INSIDE `<noscript>`, `<xmp>`, `<iframe>`, `<noembed>` or `<noframes>`, or anywhere after
+  `<plaintext>`, THROWS when the template is parsed, an attribute hole on an element inside them
+  too. A page's parser reads their content as text (`<noscript>` whenever scripting is on) and
+  serializers such as the browser's `getHTML()` write that text verbatim, so a value could end
+  the element in server markup. Static content inside them and holes on the element's own
+  attributes (`<noscript class=${c}>`) are fine. Put a dynamic fallback outside the element.
+- A NESTED `<template>` (one inside other markup, not the host wrapper) fills its CONTENT like
+  any other template: text stays text and attributes stay attributes, so a value never becomes
+  markup, and `<template>${html`…`}</template>` works the same way. The content is inert and
+  only ever COPIED (`importNode(template.content, true)`), so it holds no library markers and
+  is REBUILT whole, inside the same `<template>` element, whenever one of its values changes.
+  Copies made before a change keep the old content. A copy keeps attributes and text only, so
+  inside the content a LISTENER (`onClick=${fn}`), a value without a text form (an object, an
+  array or a function, which would become a property) and a PROP the element declares all
+  THROW: set those on each copy, or listen on the element the copies go into. Holes on the
+  `<template>` element itself (`<template id=${id}>`) are ordinary attribute bindings.
+  `shadowrootmode` on a nested `<template>` THROWS: a paint keeps it a plain `<template>`,
+  while the browser turns server markup into a shadow root, so the two would disagree. Let the
+  element attach its own shadow root.
+- TRUSTED TYPES: under `require-trusted-types-for 'script'` the library writes its own template
+  markup through one policy named `grundlage`. A `trusted-types` directive lists it, plus
+  `'allow-duplicates'` when two copies of the library share the page.
 - Don't write literal `<!--^.^ …-->` or `<!--*.*-->` comments in template HTML: those
   prefixes are the internal markers and a collision silently misaligns hydration.
 - Change detection is HASH-BASED for strings, numbers, bigints, booleans, plain objects,

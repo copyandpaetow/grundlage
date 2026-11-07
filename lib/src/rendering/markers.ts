@@ -100,7 +100,8 @@ export const ensureFragmentKeptEveryBinding = (
 		const bindsElement =
 			binding.type === BINDING.ATTRIBUTE ||
 			binding.type === BINDING.DYNAMIC_ATTRIBUTE ||
-			binding.type === BINDING.RAW_CONTENT;
+			binding.type === BINDING.RAW_CONTENT ||
+			binding.type === BINDING.TEMPLATE_CONTENT;
 		if (!bindsElement) continue;
 		const element = elementAfterMarkerRun(node);
 		const isBoundElement =
@@ -173,6 +174,19 @@ export const nextOpenMarker = (
 		if (isOpenMarkerData(node.data)) return node;
 	}
 	return null;
+};
+
+const isMarkerData = (data: string): boolean =>
+	data.startsWith(MARKER_PREFIX) || data === MARKUP.LIST_MARKER_DATA;
+
+//the instance bound to this fragment can no longer patch it
+export const removeMarkers = (fragment: DocumentFragment): void => {
+	const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT);
+	const markers: Array<Comment> = [];
+	let node: Comment | null;
+	while ((node = walker.nextNode() as Comment | null))
+		if (isMarkerData(node.data)) markers.push(node);
+	for (let index = 0; index < markers.length; index++) markers[index].remove();
 };
 
 export const NO_LIST_TAIL: unique symbol = Symbol("no list tail");

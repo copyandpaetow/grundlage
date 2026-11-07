@@ -1176,6 +1176,49 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
+		test("a <title> hydrates onto the server's text, then updates it", async () => {
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+
+			const makeComponent = () =>
+				component(function* ({ host }) {
+					let name = "Salt & <pepper>";
+					(host as HTMLElement & { rename?: () => void }).rename = () => {
+						name = "Sugar";
+						host.update();
+					};
+					yield function* () {
+						yield html`<title>${name}</title>`;
+					};
+				});
+
+			const serialized = await serverRender(serverTag, makeComponent());
+			expect(serialized).toContain("<title>Salt &amp; &lt;pepper&gt;</title>");
+
+			const clientHTML = serialized.replace(
+				new RegExp(serverTag, "g"),
+				clientTag,
+			);
+			const element = hydrateFromHTML(clientHTML) as HTMLElement & {
+				rename: () => void;
+			};
+			const title = element.shadowRoot!.querySelector("title")!;
+			const serverText = title.firstChild;
+
+			customElements.define(clientTag, makeComponent());
+			await sleep();
+
+			expect(title.firstChild).toBe(serverText);
+			expect(title.textContent).toBe("Salt & <pepper>");
+
+			element.rename();
+			await sleep();
+
+			expect(title.textContent).toBe("Sugar");
+
+			cleanup(element);
+		});
+
 		test("a dynamic style sheet hydrates without touching the CSSOM, then updates through it", async () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();

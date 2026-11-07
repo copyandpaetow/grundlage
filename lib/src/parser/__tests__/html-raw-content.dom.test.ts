@@ -49,12 +49,19 @@ describe("html parser — raw content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
-	test("dynamic content inside non-root template element", () => {
+	test("a hole inside a nested template binds the template, with its content parsed as markup", () => {
 		const content = "<p>slot</p>";
-		const parsed = parse` <div><template>${content}</template></div>`;
+		const parsed = parse` <div><template><p class=${"a"}>${content}</p></template></div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
+		const [binding] = parsed.bindings;
+		if (binding.type !== BINDING.TEMPLATE_CONTENT)
+			throw new Error("expected a template binding");
+		expect(binding.valueIndices).toEqual([0, 1]);
+		expect(binding.content.bindings.map((inner) => inner.type)).toEqual([
+			BINDING.ATTRIBUTE,
+			BINDING.CONTENT,
+		]);
 	});
 
 	test("multiple expressions in style element share one binding", () => {
@@ -214,15 +221,6 @@ describe("html parser — css plan attachment", () => {
 			STYLE_SHEET_NOT_COMPILED,
 		);
 		expect(rawContentBinding(textareaParsed).compiledStyleSheet).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
-	});
-
-	test("a nested template hole gets no css plan", () => {
-		const content = "div { color: red; }";
-		const parsed = parse`<div><template>${content}</template></div>`;
-
-		expect(rawContentBinding(parsed).compiledStyleSheet).toBe(
 			STYLE_SHEET_NOT_COMPILED,
 		);
 	});

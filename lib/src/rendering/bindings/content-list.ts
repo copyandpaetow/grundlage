@@ -17,7 +17,7 @@ import {
 } from "../instance";
 import { clearRange, NO_LIST_TAIL, nextListTail } from "../markers";
 import {
-	StyleSheetMoveState,
+	TreeState,
 	ContentLiveBinding,
 	ListContentState,
 	ListItem,
@@ -50,7 +50,7 @@ export const commitList = (
 	liveBinding: ContentLiveBinding,
 	list: ListContentState,
 	itemValues: Array<unknown>,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 ): void => {
 	const count = itemValues.length;
 	if (list.itemHashes.length < count) list.itemHashes = new Array(count);
@@ -103,7 +103,7 @@ export const commitList = (
 		removeUnclaimedRows(list, firstUnsettledIndex, endOfUnsettledPreviousRows);
 	}
 
-	placeRows(list, liveBinding.openMarker, resolvedRows, itemValues, moveState);
+	placeRows(list, liveBinding.openMarker, resolvedRows, itemValues, treeState);
 	//placeRows mounted a row into every index the match left empty
 	list.items = resolvedRows as Array<ListItem>;
 	//emptied so the removed rows, and their detached DOM, are not kept alive until the next patch
@@ -293,7 +293,7 @@ const placeRows = (
 	openMarker: Comment,
 	resolvedRows: Array<ListItem | undefined>,
 	itemValues: Array<unknown>,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 ): void => {
 	//still the previous rows: commitList replaces them once this has placed the new ones
 	const previousRowCount = list.items.length;
@@ -315,7 +315,7 @@ const placeRows = (
 				index,
 				itemValues[index],
 				itemHashes[index],
-				moveState,
+				treeState,
 			);
 		else {
 			//every other row the match found was already equal in content
@@ -330,7 +330,12 @@ const placeRows = (
 						parsed,
 						row.tailMarker.parentNode,
 					);
-					const instance = mountInstance(fragment, value, parsed, moveState);
+					const instance = mountInstance(
+						fragment,
+						value.values,
+						parsed,
+						treeState,
+					);
 					clearRange(row.startNode, row.tailMarker);
 					row.startNode = fragment.firstChild ?? row.tailMarker;
 					row.tailMarker.before(fragment);
@@ -355,12 +360,12 @@ const mountRowAfter = (
 	placedAtIndex: number,
 	rawValue: unknown,
 	itemHash: number,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 ): ListItem => {
 	const value = coerceToTemplate(rawValue);
 	const parsed = parseNestedTemplate(value);
 	const fragment = cloneTemplateFragment(parsed, after.parentNode);
-	const instance = mountInstance(fragment, value, parsed, moveState);
+	const instance = mountInstance(fragment, value.values, parsed, treeState);
 	const tailMarker = document.createComment(MARKUP.LIST_MARKER_DATA);
 	const startNode = fragment.firstChild ?? tailMarker;
 	after.after(fragment, tailMarker);
@@ -396,7 +401,7 @@ export const aggregateHashOfItems = (items: Array<ListItem>): number => {
 export const hydrateListItems = (
 	liveBinding: ContentLiveBinding,
 	itemValues: Array<unknown>,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 	walker: TreeWalker,
 ): Array<ListItem> | typeof HYDRATION_MISMATCH => {
 	const count = itemValues.length;
@@ -414,7 +419,7 @@ export const hydrateListItems = (
 			value,
 			parsed,
 			liveBinding.closeMarker,
-			moveState,
+			treeState,
 		);
 		if (instance === HYDRATION_MISMATCH) return HYDRATION_MISMATCH;
 		const tailMarker = nextListTail(walker, liveBinding.closeMarker);

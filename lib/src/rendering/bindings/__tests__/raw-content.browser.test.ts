@@ -166,6 +166,59 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
+	test("paints dynamic content inside a title element", async () => {
+		const tag = uniqueTag();
+		let content = "Salt & <pepper>";
+
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<title>Shop: ${content}</title>`;
+			};
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const title = element.shadowRoot?.querySelector("title")!;
+		expect(title.textContent).toBe("Shop: Salt & <pepper>");
+
+		content = "Sugar";
+		await element.update();
+		await sleep();
+
+		expect(title.textContent).toBe("Shop: Sugar");
+
+		cleanup(element);
+	});
+
+	test("paints dynamic content inside an SVG title element", async () => {
+		const tag = uniqueTag();
+		let label = "Close";
+
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<svg role="img"><title>${label} &amp; save</title></svg>`;
+			};
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const title = element.shadowRoot?.querySelector("svg > title")!;
+		expect(title.namespaceURI).toBe("http://www.w3.org/2000/svg");
+		expect(title.textContent).toBe("Close & save");
+
+		label = "Open";
+		await element.update();
+		await sleep();
+
+		expect(title.textContent).toBe("Open & save");
+
+		cleanup(element);
+	});
+
 	test("paints multiple dynamic expressions in a style element", async () => {
 		const tag = uniqueTag();
 		let color = "red";

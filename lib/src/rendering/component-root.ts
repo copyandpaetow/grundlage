@@ -6,7 +6,7 @@ import {
 import {
 	AttributeLaneLiveBinding,
 	Instance,
-	StyleSheetMoveState,
+	TreeState,
 } from "./bindings/types";
 import { getParsedTemplate } from "../parser/html";
 import {
@@ -34,7 +34,7 @@ export interface ComponentRoot {
 	host: BaseComponent;
 	//held rather than read from the host: for mode "closed" host.shadowRoot is null
 	shadowRoot: ShadowRoot;
-	styleSheetMoveState: StyleSheetMoveState;
+	treeState: TreeState;
 	//the root holds the server's markup, which the first paint hydrates instead of mounting
 	isHydrationPending: boolean;
 	instance: Instance | null;
@@ -47,7 +47,7 @@ export const createComponentRoot = (
 ): ComponentRoot => ({
 	host,
 	shadowRoot,
-	styleSheetMoveState: { needsStyleSheetRefreshOnMove: false },
+	treeState: { needsStyleSheetRefreshOnMove: false, isTemplateContent: false },
 	isHydrationPending,
 	instance: null,
 });
@@ -93,9 +93,9 @@ const mountOrPatchRoot = (
 	const fragment = cloneTemplateFragment(parsed, root.shadowRoot);
 	const instance = mountInstance(
 		fragment,
-		value,
+		value.values,
 		parsed,
-		root.styleSheetMoveState,
+		root.treeState,
 	);
 	mountHostBindings(root, instance, value.values);
 	root.shadowRoot.replaceChildren(fragment);
@@ -122,7 +122,7 @@ export const paintComponentRoot = (
 			templateValue,
 			getParsedTemplate(templateValue.__templateStrings),
 			null,
-			root.styleSheetMoveState,
+			root.treeState,
 		);
 		if (hydrated === HYDRATION_MISMATCH) {
 			warnOnRejectedServerRange();

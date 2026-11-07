@@ -22,6 +22,10 @@ import {
 import { commitRawContent } from "./content-raw";
 import { commitTag } from "./tag";
 import {
+	commitTemplateContent,
+	hydrateTemplateContent,
+} from "./content-template";
+import {
 	AttributeLaneLiveBinding,
 	AttributeLiveBinding,
 	CommentLiveBinding,
@@ -30,9 +34,11 @@ import {
 	Instance,
 	isAttributeBinding,
 	isRawContentBinding,
+	isTemplateContentBinding,
 	LiveBinding,
 	RawContentLiveBinding,
 	TagLiveBinding,
+	TemplateContentLiveBinding,
 } from "./types";
 import { assertDuringDevelopment } from "../../utils/diagnostics";
 
@@ -82,6 +88,8 @@ export const createMarkedLiveBinding = (
 			return { staticBinding, openMarker, lastValueHash: UNSET_HASH };
 		case BINDING.COMMENT:
 			return { staticBinding, openMarker, lastValueHash: UNSET_HASH };
+		case BINDING.TEMPLATE_CONTENT:
+			return { staticBinding, openMarker, lastValueHash: UNSET_HASH };
 		case BINDING.ATTRIBUTE:
 		case BINDING.DYNAMIC_ATTRIBUTE:
 			return createAttributeLaneLiveBinding(
@@ -119,16 +127,24 @@ export const commitLiveBinding = (
 			commitTag(liveBinding as TagLiveBinding, values, instance.liveBindings);
 			break;
 		case BINDING.ATTRIBUTE:
-			commitAttribute(liveBinding as AttributeLiveBinding, values);
+			commitAttribute(
+				liveBinding as AttributeLiveBinding,
+				values,
+				instance.treeState,
+			);
 			break;
 		case BINDING.DYNAMIC_ATTRIBUTE:
-			commitDynamic(liveBinding as DynamicAttributeLiveBinding, values);
+			commitDynamic(
+				liveBinding as DynamicAttributeLiveBinding,
+				values,
+				instance.treeState,
+			);
 			break;
 		case BINDING.CONTENT:
 			commitContent(
 				liveBinding as ContentLiveBinding,
 				values,
-				instance.moveState,
+				instance.treeState,
 			);
 			break;
 		case BINDING.RAW_CONTENT:
@@ -136,6 +152,9 @@ export const commitLiveBinding = (
 			break;
 		case BINDING.COMMENT:
 			commitComment(liveBinding as CommentLiveBinding, values);
+			break;
+		case BINDING.TEMPLATE_CONTENT:
+			commitTemplateContent(liveBinding as TemplateContentLiveBinding, values);
 			break;
 		default:
 			return liveBinding.staticBinding satisfies never;
@@ -147,6 +166,10 @@ export const hydrateLiveBinding = (
 	liveBinding: LiveBinding,
 	values: Array<unknown>,
 ): void => {
+	if (isTemplateContentBinding(liveBinding)) {
+		hydrateTemplateContent(liveBinding, values);
+		return;
+	}
 	//the server sheet text already carries these values, so seeding here is what makes the first
 	//CSSOM bind inside the commit below find every declaration unchanged
 	if (

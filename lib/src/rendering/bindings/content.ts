@@ -24,7 +24,7 @@ import {
 import {
 	ContentLiveBinding,
 	ContentState,
-	StyleSheetMoveState,
+	TreeState,
 	TextContentState,
 	UnresolvedContentState,
 } from "./types";
@@ -118,7 +118,7 @@ const commitText = (
 export const commitContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 ): void => {
 	const value = readContentValue(liveBinding, values);
 	const contentKind = contentKindOf(value);
@@ -143,14 +143,19 @@ export const commitContent = (
 				parsed,
 				liveBinding.openMarker.parentNode,
 			);
-			const instance = mountInstance(fragment, template, parsed, moveState);
+			const instance = mountInstance(
+				fragment,
+				template.values,
+				parsed,
+				treeState,
+			);
 			clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
 			liveBinding.openMarker.after(fragment);
 			content.instance = instance;
 			break;
 		}
 		case CONTENT_KIND.LIST:
-			commitList(liveBinding, content, value as Array<unknown>, moveState);
+			commitList(liveBinding, content, value as Array<unknown>, treeState);
 			break;
 		default:
 			return content satisfies never;
@@ -173,7 +178,7 @@ const isAdoptableTextRange = ({
 export const hydrateContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 	walker: TreeWalker,
 ): void => {
 	const value = readContentValue(liveBinding, values);
@@ -195,7 +200,7 @@ export const hydrateContent = (
 				template,
 				parseNestedTemplate(template),
 				liveBinding.closeMarker,
-				moveState,
+				treeState,
 			);
 			if (hydrated === HYDRATION_MISMATCH) break;
 			content.instance = hydrated;
@@ -205,7 +210,7 @@ export const hydrateContent = (
 			const hydratedItems = hydrateListItems(
 				liveBinding,
 				value as Array<unknown>,
-				moveState,
+				treeState,
 				walker,
 			);
 			if (hydratedItems === HYDRATION_MISMATCH) break;
@@ -219,5 +224,5 @@ export const hydrateContent = (
 
 	warnOnRejectedServerRange();
 	clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
-	commitContent(liveBinding, values, moveState);
+	commitContent(liveBinding, values, treeState);
 };

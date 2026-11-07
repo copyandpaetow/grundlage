@@ -65,13 +65,22 @@ export interface CommentStaticBinding {
 	readonly parts: ReadonlyArray<Part>;
 }
 
+//valueIndices point into the outer template's values
+export interface TemplateContentStaticBinding {
+	readonly type: typeof BINDING.TEMPLATE_CONTENT;
+	readonly elementName: string;
+	readonly content: ParsedTemplate;
+	readonly valueIndices: ReadonlyArray<number>;
+}
+
 export type StaticBinding =
 	| TagStaticBinding
 	| AttributeStaticBinding
 	| DynamicAttributeStaticBinding
 	| ContentStaticBinding
 	| RawContentStaticBinding
-	| CommentStaticBinding;
+	| CommentStaticBinding
+	| TemplateContentStaticBinding;
 
 export interface ParsedTemplate {
 	readonly htmlWithMarkers: string;

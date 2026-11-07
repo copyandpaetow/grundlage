@@ -2,7 +2,12 @@ import { describe, expect, test } from "vitest";
 import * as BINDING from "../../../parser/binding";
 import { UNSET_HASH } from "../../constants";
 import { commitDynamic } from "../attribute-dynamic";
-import { DynamicAttributeLiveBinding } from "../types";
+import { DynamicAttributeLiveBinding, TreeState } from "../types";
+
+const treeState: TreeState = {
+	needsStyleSheetRefreshOnMove: false,
+	isTemplateContent: false,
+};
 
 const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
 	staticBinding: {
@@ -18,7 +23,7 @@ const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
 const attributesAfterCommitting = (...spreadValues: Array<unknown>) => {
 	const liveBinding = createSpreadBinding();
 	for (const spreadValue of spreadValues)
-		commitDynamic(liveBinding, [spreadValue]);
+		commitDynamic(liveBinding, [spreadValue], treeState);
 	return liveBinding.anchor
 		.getAttributeNames()
 		.map((name) => [name, liveBinding.anchor.getAttribute(name)]);
@@ -74,7 +79,7 @@ describe("spread binding - across commits", () => {
 		//an object goes to the property mode, which has no read-before-write of its own
 		const settings = { theme: "dark" };
 		const liveBinding = createSpreadBinding();
-		commitDynamic(liveBinding, [{ id: "x", settings }]);
+		commitDynamic(liveBinding, [{ id: "x", settings }], treeState);
 		const { anchor } = liveBinding;
 		const writtenNames: Array<string> = [];
 		const setAttribute = anchor.setAttribute.bind(anchor);
@@ -87,7 +92,7 @@ describe("spread binding - across commits", () => {
 			writtenNames.push(name);
 			removeAttribute(name);
 		};
-		commitDynamic(liveBinding, [{ id: "y", settings }]);
+		commitDynamic(liveBinding, [{ id: "y", settings }], treeState);
 		expect(writtenNames).toEqual(["id"]);
 	});
 

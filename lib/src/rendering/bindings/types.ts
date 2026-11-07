@@ -8,6 +8,7 @@ import {
 	ParsedTemplate,
 	RawContentStaticBinding,
 	TagStaticBinding,
+	TemplateContentStaticBinding,
 } from "../../parser/types";
 import * as STYLE_SHEET_LANE from "../style-sheet-lane";
 import * as CONTENT_KIND from "../content-kind";
@@ -16,11 +17,13 @@ export interface Instance {
 	parsed: ParsedTemplate;
 	//empty slots while the bind walk fills it; the one reader during the walk is the tag swap
 	liveBindings: Array<LiveBinding>;
-	moveState: StyleSheetMoveState;
+	treeState: TreeState;
 }
 
-export interface StyleSheetMoveState {
+/** Shared by every instance of one mounted tree: the root template's, each nested value's and each row's. */
+export interface TreeState {
 	needsStyleSheetRefreshOnMove: boolean;
+	readonly isTemplateContent: boolean;
 }
 
 export interface TagLiveBinding {
@@ -126,13 +129,20 @@ export interface CommentLiveBinding {
 	lastValueHash: number;
 }
 
+export interface TemplateContentLiveBinding {
+	staticBinding: TemplateContentStaticBinding;
+	openMarker: Comment;
+	lastValueHash: number;
+}
+
 export type LiveBinding =
 	| TagLiveBinding
 	| AttributeLiveBinding
 	| DynamicAttributeLiveBinding
 	| ContentLiveBinding
 	| RawContentLiveBinding
-	| CommentLiveBinding;
+	| CommentLiveBinding
+	| TemplateContentLiveBinding;
 
 export type AttributeLaneLiveBinding =
 	AttributeLiveBinding | DynamicAttributeLiveBinding;
@@ -158,6 +168,11 @@ export const isRawContentBinding = (
 	liveBinding: LiveBinding,
 ): liveBinding is RawContentLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.RAW_CONTENT;
+
+export const isTemplateContentBinding = (
+	liveBinding: LiveBinding,
+): liveBinding is TemplateContentLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.TEMPLATE_CONTENT;
 
 export interface ListItem {
 	tailMarker: Comment;

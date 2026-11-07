@@ -585,6 +585,48 @@ describe("SSR: server stops at the first paint", () => {
 	});
 });
 
+describe("SSR: values stay inside their element", () => {
+	test("a <script> value with </script fails the server paint instead of reaching the markup", async () => {
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const tag = uniqueTag();
+		const note = JSON.stringify({
+			note: "</script><img src=x onerror=alert(1)>",
+		});
+
+		const Component = component(function* () {
+			yield html`<script type="application/json">
+				${note}
+			</script>`;
+		});
+
+		const element = track(await mount(tag, Component));
+
+		expect(element.shadowRoot!.innerHTML).not.toContain("<img");
+		expect(element.shadowRoot!.textContent).toContain("</script");
+		errorSpy.mockRestore();
+	});
+});
+
+describe("SSR: a nested <template>", () => {
+	test("the server writes its content with the values escaped and no markers", async () => {
+		const tag = uniqueTag();
+		const Component = component(function* () {
+			yield function* view() {
+				yield html`<div>
+					<template><p title=${'x" onerror="y'}>${"<img src=x>"}</p></template>
+				</div>`;
+			};
+		});
+
+		const element = track(await mount(tag, Component));
+		const template = element.shadowRoot!.querySelector("template")!;
+
+		expect(template.innerHTML).toBe(
+			'<p title="x&quot; onerror=&quot;y">&lt;img src=x&gt;</p>',
+		);
+	});
+});
+
 describe("SSR: an attribute write after the server paint schedules nothing", () => {
 	test("attributeChangedCallback fires on the server and reaches no update", async () => {
 		//isServer() is `typeof window === "undefined"`, so there is a real DOM here and aCC does

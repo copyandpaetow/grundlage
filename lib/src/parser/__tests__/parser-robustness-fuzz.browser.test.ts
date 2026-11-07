@@ -152,6 +152,9 @@ const holeIndexesOf = (parsed: ParsedTemplate): Array<number> => {
 			case BINDING.CONTENT:
 				indexes.push(binding.valueIndex);
 				break;
+			case BINDING.TEMPLATE_CONTENT:
+				indexes.push(...holeIndexesOf(binding.content));
+				break;
 			default:
 				binding satisfies never;
 		}

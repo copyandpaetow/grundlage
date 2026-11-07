@@ -144,6 +144,42 @@ export const applyLiveStateDefault = (
 	if (element.defaultValue !== text) element.defaultValue = text;
 };
 
+const copiedContentError = (
+	element: Element,
+	{ key, writeKind, fix }: { key: string; writeKind: string; fix: string },
+): Error =>
+	new Error(
+		libraryMessage(
+			`a <template>'s content expects attributes and text, which every copy of it keeps, not the ${writeKind} "${key}" on <${element.localName}>. ${fix}`,
+		),
+	);
+
+//checked in applyAttributeValue's order, so the message names the write it would make
+export const ensureKeptByCopies = (
+	element: Element,
+	key: string,
+	value: unknown,
+): void => {
+	if (isDeclaredPropName(element, key))
+		throw copiedContentError(element, {
+			key,
+			writeKind: "prop",
+			fix: "Set the prop on each copy.",
+		});
+	if (eventNameOf(key, element, value) !== NO_EVENT_NAME)
+		throw copiedContentError(element, {
+			key,
+			writeKind: "listener",
+			fix: "Listen on the element the copies go into.",
+		});
+	if (attributeModeOf(value) === ATTRIBUTE_MODE.PROPERTY)
+		throw copiedContentError(element, {
+			key,
+			writeKind: "property",
+			fix: "Bind text, or set the property on each copy.",
+		});
+};
+
 //Element has no index signature; props are read and written by their runtime name
 const clearPropertyValue = (element: Element, key: string): void => {
 	if (!Object.hasOwn(element, key)) return;

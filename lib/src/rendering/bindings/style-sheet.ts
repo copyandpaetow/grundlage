@@ -11,6 +11,7 @@ import {
 	RawContentLiveBinding,
 	TextStyleSheetLane,
 } from "./types";
+import { ensureStyleText } from "./verbatim-text";
 
 export const TEXT_STYLE_SHEET_LANE: Readonly<TextStyleSheetLane> = {
 	kind: STYLE_SHEET_LANE.TEXT,
@@ -151,11 +152,14 @@ export const commitChangedDeclarations = (
 			const valueHash = combinedPartsHash(declaration.valueParts, values);
 			const hashIndex = declarationIndex++;
 			if (valueHash === declarationValueHashes[hashIndex]) continue;
+			//the sheet's text never sees this value, but the same value would throw on the text lane
+			const value = composeParts(declaration.valueParts, values);
+			ensureStyleText(value);
 			declarationValueHashes[hashIndex] = valueHash;
 			hasChangedDeclaration = true;
 			boundSheet.ruleDeclarations[ruleIndex].setProperty(
 				declaration.propertyName,
-				composeParts(declaration.valueParts, values),
+				value,
 				declaration.priority,
 			);
 		}

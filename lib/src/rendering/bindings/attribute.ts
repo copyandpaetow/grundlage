@@ -6,10 +6,11 @@ import {
 	applyAttributeValue,
 	applyLiveState,
 	applyLiveStateDefault,
+	ensureKeptByCopies,
 	isLiveStatePropertyOf,
 } from "./attribute-apply";
 import { NO_ATTRIBUTE_WRITTEN } from "../constants";
-import { AttributeLiveBinding } from "./types";
+import { AttributeLiveBinding, TreeState } from "./types";
 
 //one hole is the whole value and keeps its type; any text around a hole makes a string
 export const isSingleHoleValue = (
@@ -43,6 +44,7 @@ export const removeWrittenAttribute = (
 export const commitAttribute = (
 	liveBinding: AttributeLiveBinding,
 	values: Array<unknown>,
+	treeState: TreeState,
 ): void => {
 	const hash = attributeGateHash(liveBinding.staticBinding, values);
 	if (hash === liveBinding.lastValueHash) return;
@@ -67,6 +69,7 @@ export const commitAttribute = (
 		return;
 	}
 	const value = values[valueParts[0]];
+	if (treeState.isTemplateContent) ensureKeptByCopies(element, name, value);
 	//the first write is markup and sets the default; every later one drives what is shown
 	const isLiveState = isLiveStatePropertyOf(element, name);
 	if (isLiveState && keepsSameName) applyLiveState(element, name, value);

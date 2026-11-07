@@ -15,6 +15,7 @@
 - A prop without a fallback or `prop.optional` is required: the body waits until it is set, and the server throws when nothing sets it.
 - `props(element, schema)` → `prop.read(element, schema)`.
 - A binding a later paint drops passes `undefined`, not `null`, so a `prop.property` can hold `null`.
+- A template nested inside an object fallback is copied per element and no longer paints: make the template the whole fallback.
 
 ### Types
 
@@ -28,6 +29,7 @@
 
 - `awaited(promise)`: `yield*` it to wait with the promise's type.
 - `prop.property(standardSchema, fallback?)` validates every write with a Standard Schema (Zod, Valibot, ArkType).
+- Pages that enforce Trusted Types paint: the library writes its template markup through a policy named `grundlage`.
 - `prop.unreflected(prop.attribute(…))` keeps the attribute as the markup default, like a native input's `value`.
 - `prop.oneOf("a", "b")` parses a union of strings.
 - On the server, a binding to a `prop.property` marks the child `defer-hydration`.
@@ -49,6 +51,8 @@
 - The production build is 43.9 KB minified and 16.8 KB gzip (0.8.0: 54.7 KB, 18.0 KB): enums are inlined and internal property names shortened.
 - A template with an unclosed comment, tag, attribute value or `<style>`/`<script>`/`<textarea>` throws naming what to close, instead of dropping the rest; U+E000 in a template throws and asks for `&#xE000;`.
 - A dynamic `<style>` whose nested selectors contain `:` (`&:hover`, `a:hover`) updates through CSSOM instead of rewriting the sheet text.
+- Holes inside a nested `<template>` bind like any other hole and rebuild its content when a value changes; a listener, a property or a prop there throws, since copies of the content keep none.
+- `shadowrootmode` on a nested `<template>` throws: let the element attach its own shadow root.
 
 ### Fixed
 
@@ -74,6 +78,11 @@
 - Change detection no longer reads a changed value as unchanged because two hashes collided.
 - Data with a reference back to an enclosing object (a `parent` link) no longer freezes a paint; a very large value, or one shared the way a graph is, throws instead.
 - A symbol inside a bound object or array no longer ends the component with a `TypeError`.
+- A value that would end its `<style>`, `<script>` or comment early in server markup (`</style`, `</script`, `-->`) throws instead of injecting markup.
+- A hole inside `<noscript>`, `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>` or `<plaintext>` throws when the template is parsed, since serializers write their text unescaped and a value could inject markup.
+- A hole inside `<title>` paints as text, like one in `<textarea>`, instead of throwing in the browser and writing markers into server markup.
+- An object shaped like a template, from JSON or `structuredClone`, no longer paints as markup.
+- A value inside a nested `<template>` no longer becomes markup, and such a template paints under Trusted Types.
 
 ## 0.8.0
 

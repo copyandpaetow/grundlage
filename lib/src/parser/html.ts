@@ -11,7 +11,7 @@ import { isLetterCode, isQuoteCode, isWhitespaceCode } from "./characters";
 import * as MARKUP from "./markup";
 import * as CHARACTER_CODE from "./character-code";
 import { compileStyleSheet } from "./css";
-import { decodeTextareaParts } from "./rcdata";
+import { decodeRCDATAParts, dropLeadingLineFeed } from "./rcdata";
 import { ValueOf } from "../utils/types";
 import {
 	assertDuringDevelopment,
@@ -29,10 +29,20 @@ const HOLE = "";
 const HOLE_CODE = HOLE.charCodeAt(0);
 
 const TEMPLATE_TAG = "template";
-const SCRIPT_TAG = "script";
 const TEXTAREA_TAG = "textarea";
+const TITLE_TAG = "title";
 const SELECT_TAG = "select";
-const STYLE_TAG = "style";
+const PLAINTEXT_TAG = "plaintext";
+const SHADOW_ROOT_MODE_ATTRIBUTE = "shadowrootmode";
+//<noscript> too: a page parses with scripting on, which reads its content as text
+const UNESCAPED_TEXT_TAGS = new Set([
+	"noscript",
+	"xmp",
+	"iframe",
+	"noembed",
+	"noframes",
+	PLAINTEXT_TAG,
+]);
 //elements without content or end tag: `</br>` even reads as a second <br>
 const VOID_TAGS = new Set([
 	"area",
@@ -72,6 +82,7 @@ interface TemplateReader {
 	hasSeenTopLevelSibling: boolean;
 	//one entry per open element, innermost last: whether its tag name holds a hole
 	openTagIsDynamic: Array<boolean>;
+	isTemplateContent: boolean;
 }
 
 const createTemplateReader = (
@@ -103,6 +114,7 @@ const createTemplateReader = (
 				: ROOT_TEMPLATE.UNDECIDED,
 		hasSeenTopLevelSibling: false,
 		openTagIsDynamic: [],
+		isTemplateContent: false,
 	};
 };
 
@@ -155,11 +167,12 @@ const openMarkerComment = (
 const isTopLevel = (reader: TemplateReader) =>
 	reader.openTagIsDynamic.length === 0;
 
-const parsesContentAsRaw = (reader: TemplateReader, tagName: string) => {
-	if (tagName === TEMPLATE_TAG)
-		return reader.rootTemplate !== ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
+const parsesContentAsRaw = (tagName: string) => {
 	return (
-		tagName === STYLE_TAG || tagName === TEXTAREA_TAG || tagName === SCRIPT_TAG
+		tagName === MARKUP.STYLE_TAG ||
+		tagName === TEXTAREA_TAG ||
+		tagName === TITLE_TAG ||
+		tagName === MARKUP.SCRIPT_TAG
 	);
 };
 
@@ -236,7 +249,9 @@ const readComment = (reader: TemplateReader) => {
 		return;
 	}
 	//the first dynamic comment is the list key: it never reaches the DOM and owns no binding index
-	if (reader.keyValueParts === NO_KEY) {
+	const isListKey =
+		reader.keyValueParts === NO_KEY && !reader.isTemplateContent;
+	if (isListKey) {
 		reader.keyValueParts = parts;
 		return;
 	}
@@ -373,6 +388,15 @@ const attributeBindingOf = (
 	};
 };
 
+const isShadowRootModeName = (nameParts: ReadonlyArray<Part>): boolean => {
+	const [name] = nameParts;
+	return (
+		nameParts.length === 1 &&
+		typeof name === "string" &&
+		name.toLowerCase() === SHADOW_ROOT_MODE_ATTRIBUTE
+	);
+};
+
 //reads up to just past the `>` or `/>`; static attributes come back as markup, bound ones as markers
 const readAttributes = (
 	reader: TemplateReader,
@@ -406,6 +430,16 @@ const readAttributes = (
 			nameEnd++;
 		const nameParts = partsOfRange(reader, nameStart, nameEnd);
 		reader.index = nameEnd;
+		const isNestedShadowRoot =
+			tagName === TEMPLATE_TAG &&
+			!isOnRootTemplate &&
+			isShadowRootModeName(nameParts);
+		if (isNestedShadowRoot)
+			throw new Error(
+				libraryMessage(
+					"a nested <template> expects no shadowrootmode: a paint keeps it a plain <template>, while the browser turns it into a shadow root in server markup, so the two disagree. Let the element attach its own shadow root.",
+				),
+			);
 
 		let valueParts: Array<Part> = [];
 		if (source.charCodeAt(nameEnd) === CHARACTER_CODE.EQUALS) {
@@ -491,11 +525,15 @@ const readRawContent = (
 
 	if (!hasHole(parts))
 		return { contentMarkup: parts.join(""), markerMarkup: "" };
-	if (tagName === TEXTAREA_TAG) decodeTextareaParts(parts);
+	if (tagName === TEXTAREA_TAG || tagName === TITLE_TAG)
+		decodeRCDATAParts(parts, tagName);
+	if (tagName === TEXTAREA_TAG) dropLeadingLineFeed(parts);
 	//the sheet text is composed with literal values at first commit, while the clone is
 	//still detached — the cached markup deliberately carries an empty <style>
 	const compiledStyleSheet =
-		tagName === STYLE_TAG ? compileStyleSheet(parts) : STYLE_SHEET_NOT_COMPILED;
+		tagName === MARKUP.STYLE_TAG
+			? compileStyleSheet(parts)
+			: STYLE_SHEET_NOT_COMPILED;
 	if (compiledStyleSheet !== STYLE_SHEET_NOT_COMPILED)
 		reader.hasStyleSheetBinding = true;
 	const bindingIndex = reader.startedBindingCount++;
@@ -509,6 +547,23 @@ const readRawContent = (
 		contentMarkup: "",
 		markerMarkup: openMarkerComment(OPEN_CONSTRUCT.RAW_CONTENT, bindingIndex),
 	};
+};
+
+const textEndOf = (source: string, start: number, lowercaseName: string) => {
+	if (lowercaseName === PLAINTEXT_TAG) return source.length;
+	const endTag = new RegExp(`</${lowercaseName}[\\t\\n\\f\\r />]`, "gi");
+	endTag.lastIndex = start;
+	return endTag.exec(source)?.index ?? source.length;
+};
+
+const ensureStaticContent = (reader: TemplateReader, tagName: string) => {
+	const end = textEndOf(reader.source, reader.index, tagName.toLowerCase());
+	if (reader.nextHoleIndex >= end) return;
+	throw new Error(
+		libraryMessage(
+			`<${tagName}> expects no \${…} in its content, which a page's HTML parser reads as text and a serializer writes unescaped. Move the hole out of <${tagName}>.`,
+		),
+	);
 };
 
 //every marker of an element goes in front of it: tag, then attributes, then raw content
@@ -585,7 +640,18 @@ const readElement = (reader: TemplateReader) => {
 				openTagMarkup + MARKUP.END_TAG_OPEN + tagName + MARKUP.TAG_CLOSE;
 		return;
 	}
-	if (!parsesContentAsRaw(reader, tagName)) {
+	if (tagName === TEMPLATE_TAG && !isOnRootTemplate) {
+		const templateContent = readTemplateContent(reader);
+		reader.resultMarkup +=
+			templateContent.markerMarkup +
+			openTagMarkup +
+			templateContent.contentMarkup;
+		readEndTag(reader);
+		return;
+	}
+	if (UNESCAPED_TEXT_TAGS.has(tagName.toLowerCase()))
+		ensureStaticContent(reader, tagName);
+	if (!parsesContentAsRaw(tagName)) {
 		reader.resultMarkup += openTagMarkup;
 		return;
 	}
@@ -617,17 +683,23 @@ const markupStartFrom = (source: string, index: number) => {
 	return tagStart;
 };
 
-const parse = (
-	strings: TemplateStringsArray,
-	mode: ParseModeKind = PARSE_MODE.OPTIMISTIC_ROOT,
-): ParsedTemplate => {
-	const reader = createTemplateReader(strings, mode);
-	const { source } = reader;
+const TEMPLATE_END_TAG = MARKUP.END_TAG_OPEN + TEMPLATE_TAG;
 
+const startsTemplateEndTag = (source: string, index: number) =>
+	source.startsWith(TEMPLATE_END_TAG, index) &&
+	endsTagName(source, index + TEMPLATE_END_TAG.length);
+
+const readMarkup = (reader: TemplateReader): void => {
+	const { source } = reader;
 	while (reader.index < source.length) {
 		const tagStart = markupStartFrom(source, reader.index);
 		readText(reader, tagStart === -1 ? source.length : tagStart);
 		if (tagStart === -1) break;
+		const endsTemplateContent =
+			reader.isTemplateContent &&
+			isTopLevel(reader) &&
+			startsTemplateEndTag(source, tagStart);
+		if (endsTemplateContent) return;
 
 		const nextCode = source.charCodeAt(tagStart + 1);
 		if (source.startsWith(CHARACTER_DATA_OPEN, tagStart))
@@ -636,6 +708,63 @@ const parse = (
 		else if (nextCode === CHARACTER_CODE.SLASH) readEndTag(reader);
 		else readElement(reader);
 	}
+	if (reader.isTemplateContent) throw unclosedError("<template>");
+};
+
+//the HTML parser puts a nested <template>'s children into its content, where no marker walk of the
+//outer template reaches, so the content is read as a template of its own and bound as one hole
+const readTemplateContent = (
+	reader: TemplateReader,
+): { contentMarkup: string; markerMarkup: string } => {
+	const firstValueIndex = reader.readHoleCount;
+	const contentReader: TemplateReader = {
+		...reader,
+		resultMarkup: "",
+		bindings: [],
+		startedBindingCount: 0,
+		hostBindingCount: 0,
+		hasStyleSheetBinding: false,
+		rootTemplate: ROOT_TEMPLATE.RULED_OUT,
+		hasSeenTopLevelSibling: false,
+		openTagIsDynamic: [],
+		isTemplateContent: true,
+	};
+	readMarkup(contentReader);
+	reader.index = contentReader.index;
+	reader.readHoleCount = contentReader.readHoleCount;
+	reader.nextHoleIndex = contentReader.nextHoleIndex;
+	if (contentReader.bindings.length === 0)
+		return { contentMarkup: contentReader.resultMarkup, markerMarkup: "" };
+
+	const valueIndices: Array<number> = [];
+	for (let index = firstValueIndex; index < reader.readHoleCount; index++)
+		valueIndices.push(index);
+	const bindingIndex = reader.startedBindingCount++;
+	reader.bindings.push({
+		type: BINDING.TEMPLATE_CONTENT,
+		elementName: TEMPLATE_TAG,
+		content: {
+			htmlWithMarkers: contentReader.resultMarkup,
+			bindings: contentReader.bindings,
+			templateHash: stringListHash([contentReader.resultMarkup]),
+			hostBindingCount: 0,
+			hasStyleSheetBinding: contentReader.hasStyleSheetBinding,
+			keyValueParts: NO_KEY,
+		},
+		valueIndices,
+	});
+	return {
+		contentMarkup: "",
+		markerMarkup: openMarkerComment(OPEN_CONSTRUCT.RAW_CONTENT, bindingIndex),
+	};
+};
+
+const parse = (
+	strings: TemplateStringsArray,
+	mode: ParseModeKind = PARSE_MODE.OPTIMISTIC_ROOT,
+): ParsedTemplate => {
+	const reader = createTemplateReader(strings, mode);
+	readMarkup(reader);
 
 	const hasRootTemplate =
 		reader.rootTemplate !== ROOT_TEMPLATE.UNDECIDED &&

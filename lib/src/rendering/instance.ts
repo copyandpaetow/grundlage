@@ -13,7 +13,7 @@ import {
 import { commitContent, hydrateContent } from "./bindings/content";
 import { rebindStyleSheet } from "./bindings/style-sheet";
 import {
-	StyleSheetMoveState,
+	TreeState,
 	Instance,
 	isContentBinding,
 	isRawContentBinding,
@@ -58,7 +58,7 @@ export const commitHostBindings = (
 //a DOM move reparses every <style> in the moved subtree from its stale text; nested components
 //refresh their own shadow trees in connectedCallback, so this walk stays within one instance tree
 export const refreshStyleSheetsAfterMove = (instance: Instance): void => {
-	if (!instance.moveState.needsStyleSheetRefreshOnMove) return;
+	if (!instance.treeState.needsStyleSheetRefreshOnMove) return;
 	const { liveBindings } = instance;
 	for (let index = 0; index < liveBindings.length; index++) {
 		const liveBinding = liveBindings[index];
@@ -99,11 +99,11 @@ export const parseNestedTemplate = (value: TemplateValue): ParsedTemplate => {
 
 const createInstance = (
 	parsed: ParsedTemplate,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 ): Instance => ({
 	parsed,
 	liveBindings: new Array(parsed.bindings.length),
-	moveState,
+	treeState,
 });
 
 const bindFreshClone = (
@@ -144,7 +144,7 @@ const bindFreshClone = (
 			openMarker,
 			closeMarker,
 		);
-		commitContent(liveBinding, values, instance.moveState);
+		commitContent(liveBinding, values, instance.treeState);
 		liveBindings[bindingIndex++] = liveBinding;
 	}
 };
@@ -181,19 +181,19 @@ export const cloneTemplateFragment = (
 //binds a fresh clone from cloneTemplateFragment; the caller inserts it
 export const mountInstance = (
 	fragment: DocumentFragment,
-	value: TemplateValue,
+	values: Array<unknown>,
 	parsed: ParsedTemplate,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 ): Instance => {
 	//never reset: counting style bindings down would add a write to every teardown to spare a walk on a
 	//move, which is rare
-	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
-	const instance = createInstance(parsed, moveState);
+	treeState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
+	const instance = createInstance(parsed, treeState);
 
 	bindFreshClone(
 		document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT),
 		instance,
-		value.values,
+		values,
 	);
 	return instance;
 };
@@ -205,10 +205,10 @@ export const hydrateInstance = (
 	value: TemplateValue,
 	parsed: ParsedTemplate,
 	rangeEnd: Comment | null,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 ): Instance | typeof HYDRATION_MISMATCH => {
-	moveState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
-	const instance = createInstance(parsed, moveState);
+	treeState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
+	const instance = createInstance(parsed, treeState);
 	const { bindings, hostBindingCount } = parsed;
 	const { liveBindings } = instance;
 	const { values } = value;
@@ -240,7 +240,7 @@ export const hydrateInstance = (
 		//the scan left the walker on the close marker, so a nested hydration would start past its
 		//own range; this puts it back inside, and the line after the call undoes the descent
 		walker.currentNode = openMarker;
-		hydrateContent(liveBinding, values, instance.moveState, walker);
+		hydrateContent(liveBinding, values, instance.treeState, walker);
 		liveBindings[bindingIndex++] = liveBinding;
 		walker.currentNode = closeMarker;
 	}

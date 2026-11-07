@@ -37,6 +37,10 @@ const NAMES_NOT_TO_MANGLE = [
 	"isHydrationPending",
 	//the switch a server renderer sets on globalThis
 	"__grundlage_ssr__",
+	//Trusted Types, which the platform typings do not mention yet
+	"trustedTypes",
+	"createPolicy",
+	"createHTML",
 ];
 
 //every name the platform's typings mention keeps its spelling too, so no call into the DOM or the

@@ -398,13 +398,13 @@ describe("html parser — root template misdetection and reparse", () => {
 		expect(parsed.hostBindingCount).toBe(0);
 	});
 
-	test("misdetected template's dynamic content becomes raw content", () => {
+	test("misdetected template's dynamic content binds the template", () => {
 		const content = "<p>raw</p>";
 		const parsed = parse`<template>${content}</template>
 			<div></div>`;
 
 		expect(parsed.bindings).toHaveLength(1);
-		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
+		expect(parsed.bindings[0].type).toBe(BINDING.TEMPLATE_CONTENT);
 		expect(
 			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
 		).not.toBeNull();
@@ -480,7 +480,7 @@ describe("html parser — root template misdetection and reparse", () => {
 });
 
 describe("html parser — root template nested cases", () => {
-	test("nested template inside root template is treated as raw content", () => {
+	test("nested template inside root template binds as a template", () => {
 		const slot = "<p>x</p>";
 		const parsed = parse`<template id="host"
 			><template>${slot}</template></template
@@ -491,7 +491,7 @@ describe("html parser — root template nested cases", () => {
 			nameParts: ["id"],
 			valueParts: ["host"],
 		});
-		expect(parsed.bindings[1].type).toBe(BINDING.RAW_CONTENT);
+		expect(parsed.bindings[1].type).toBe(BINDING.TEMPLATE_CONTENT);
 		expect(
 			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
 		).not.toBeNull();
@@ -503,7 +503,7 @@ describe("html parser — root template nested cases", () => {
 
 		expect(parsed.hostBindingCount).toBe(0);
 		expect(parsed.bindings).toHaveLength(1);
-		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
+		expect(parsed.bindings[0].type).toBe(BINDING.TEMPLATE_CONTENT);
 	});
 
 	test("inner element with dynamic attribute does not count as host", () => {

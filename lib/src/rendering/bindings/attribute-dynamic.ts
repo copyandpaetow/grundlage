@@ -4,9 +4,10 @@ import {
 	applyAttributeValue,
 	applyLiveState,
 	applyLiveStateDefault,
+	ensureKeptByCopies,
 	isLiveStatePropertyOf,
 } from "./attribute-apply";
-import { DynamicAttributeLiveBinding } from "./types";
+import { DynamicAttributeLiveBinding, TreeState } from "./types";
 import { assertDuringDevelopment } from "../../utils/diagnostics";
 
 //TEMP sweep 9.5: "seen" is derived from the value instead of stamped per entry; keep it only if
@@ -53,6 +54,7 @@ const removeDroppedAttributes = (
 export const commitDynamic = (
 	liveBinding: DynamicAttributeLiveBinding,
 	values: Array<unknown>,
+	treeState: TreeState,
 ): void => {
 	const value = values[liveBinding.staticBinding.valueIndex];
 	const hash = hashValue(value);
@@ -66,6 +68,8 @@ export const commitDynamic = (
 		const desiredValueHash = hashValue(desiredValue);
 		const appliedEntry = appliedAttributes.get(name);
 		if (appliedEntry?.hash === desiredValueHash) continue;
+		if (treeState.isTemplateContent)
+			ensureKeptByCopies(element, name, desiredValue);
 		const isLiveState = isLiveStatePropertyOf(element, name);
 		if (isLiveState && appliedEntry !== undefined)
 			applyLiveState(element, name, desiredValue);

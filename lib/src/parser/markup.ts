@@ -1,6 +1,8 @@
 export const TAG_OPEN = "<";
 export const TAG_CLOSE = ">";
 export const END_TAG_OPEN = "</";
+export const STYLE_TAG = "style";
+export const SCRIPT_TAG = "script";
 export const COMMENT_OPEN = "<!--";
 export const COMMENT_CLOSE = "-->";
 export const EMPTY_COMMENT = "<!---->";
