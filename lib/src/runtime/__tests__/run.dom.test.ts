@@ -105,6 +105,7 @@ describe("the body waits at an update generator yield for the first run that fin
 						const gate = Promise.withResolvers<string>();
 						gates.push(gate);
 						yield html`<p>run ${gates.length}</p>`;
+						//oxlint-disable-next-line typescript/restrict-template-expressions -- the test needs a bare yield, which resumes as unknown
 						return `${yield gate.promise} from run ${gates.length}`;
 					},
 				);
@@ -243,6 +244,7 @@ describe("a yield that is not a template, an update generator, a promise or a lo
 		["a string", "Loading…"],
 		["an array of templates", [html`<i>a</i>`, html`<i>b</i>`]],
 		["undefined", undefined],
+		//oxlint-disable-next-line unicorn/no-thenable -- the case under test
 		["a thenable that is not a promise", { then: () => {} }],
 	] as const)("%s ends the component with a message naming the four", async (_label, yielded) => {
 		vi.spyOn(console, "error").mockImplementation(() => {});

@@ -368,8 +368,9 @@ export const loadPageModules = async (
 ): Promise<void> => {
 	const loader = loaderOf(realm, environment);
 	const moduleUrls = [...pageScripts.inlineScriptImports];
-	for (const scriptUrl of pageScripts.externalScriptUrls)
+	for (const scriptUrl of pageScripts.externalScriptUrls) {
 		moduleUrls.push(...(await importsOfScript(environment, scriptUrl)));
+	}
 	for (const moduleUrl of moduleUrls) await importOnce(loader, moduleUrl);
 };
 
@@ -429,8 +430,9 @@ const waitForPendingTasks = async (
 	timeoutMs: number,
 ): Promise<void> => {
 	const deadline = Date.now() + timeoutMs;
-	while (unsettledTasks.size > 0 && Date.now() < deadline)
+	while (unsettledTasks.size > 0 && Date.now() < deadline) {
 		await new Promise((resolve) => setTimeout(resolve, 16));
+	}
 };
 
 const hasUnsettledTask = (unsettledTasks: ReadonlySet<PendingTask>, host: EventTarget): boolean => {

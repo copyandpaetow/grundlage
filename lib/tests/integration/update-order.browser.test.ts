@@ -51,6 +51,7 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 			},
 			publish: (changes: Partial<State>) => {
 				Object.assign(state, changes);
+				//oxlint-disable-next-line unicorn/no-useless-spread -- a listener may unsubscribe while the loop runs
 				for (const listener of [...listeners]) listener();
 			},
 		};
@@ -334,6 +335,7 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 				{ props: { cartCount: prop.attribute(Number, 0) } },
 			);
 			customElements.define(writtenHeaderTag, WrittenHeader);
+			const writtenHeader = mount<InstanceType<typeof WrittenHeader>>(writtenHeaderTag);
 			//updates once per publish, so its mutation count is what a single paint writes
 			customElements.define(
 				readingHeaderTag,
@@ -361,7 +363,6 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 				}),
 			);
 
-			const writtenHeader = mount<InstanceType<typeof WrittenHeader>>(writtenHeaderTag);
 			const readingHeader = mount(readingHeaderTag);
 			mount(checkoutTag);
 			await sleep();
@@ -950,9 +951,9 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 					await sleep();
 				}
 				//the server's children are reused, so each one started when its own module loaded
-				serverRenderedChildren.forEach((child, index) =>
-					expect(page.shadowRoot!.children[index]).toBe(child),
-				);
+				for (const [index, child] of serverRenderedChildren.entries()) {
+					expect(page.shadowRoot!.children[index]).toBe(child);
+				}
 
 				runLog.length = 0;
 				for (const child of serverRenderedChildren as Array<BaseComponent>) child.update();
@@ -1124,8 +1125,9 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 
 			let deepest = mount(tag);
 			await sleep(100);
-			while (deepest.shadowRoot!.querySelector(tag))
+			while (deepest.shadowRoot!.querySelector(tag)) {
 				deepest = deepest.shadowRoot!.querySelector(tag)!;
+			}
 			updatedLevels.length = 0;
 
 			store.publish({ label: "after" });

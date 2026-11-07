@@ -45,8 +45,9 @@ describe("re-inserting a changed rule that can match the host", () => {
 		for (const offset of [2, 3]) {
 			values.offset = offset;
 			await host.update();
-			if (isRealBrowser)
+			if (isRealBrowser) {
 				expect(getComputedStyle(innerOf()).getPropertyValue("--offset")).toBe(`${offset}px`);
+			}
 		}
 		expect(sheetOf().cssRules[0]).not.toBe(hostRuleBefore);
 		expect(sheetOf().cssRules[1]).toBe(innerRuleBefore);

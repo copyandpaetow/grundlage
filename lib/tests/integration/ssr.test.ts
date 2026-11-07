@@ -332,6 +332,7 @@ describe("SSR: server stops at the first paint", () => {
 			} finally {
 				finallyRan = true;
 				//a dormant probe: capturing this on the server would land the side effect at teardown
+				//oxlint-disable-next-line no-unsafe-finally -- the case under test
 				return () => {
 					cleanupReturnInvoked = true;
 				};

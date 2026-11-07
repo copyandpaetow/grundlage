@@ -86,7 +86,10 @@ const writeDeclarations = (builder: Builder) => {
 			builder,
 			`${random() < 0.1 ? name.toUpperCase().replace(/^--.*/, name) : name}:${random() < 0.5 ? " " : ""}`,
 		);
-		for (const slot of slots) slot === null ? writeHole(builder) : write(builder, slot);
+		for (const slot of slots) {
+			if (slot === null) writeHole(builder);
+			else write(builder, slot);
+		}
 		if (random() < 0.1) write(builder, " !important");
 		write(builder, random() < 0.2 ? " /* note */; " : "; ");
 	}

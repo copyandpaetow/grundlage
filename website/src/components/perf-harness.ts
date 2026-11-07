@@ -13,11 +13,17 @@ const BASELINE_STORAGE_KEY = "grundlage:perf-harness:baseline";
 // fps reads better when higher; frame time and writes/frame read better when
 // lower. Both use the same 2% band — window mode is wall-clock noisy, so frame
 // count (and the writes/frame ratio over it) drifts run to run.
-const classWhenHigherIsBetter = (current: number, previous: number): string =>
-	current > previous * 1.02 ? "improve" : current < previous * 0.98 ? "regress" : "";
+const classWhenHigherIsBetter = (current: number, previous: number): string => {
+	if (current > previous * 1.02) return "improve";
+	if (current < previous * 0.98) return "regress";
+	return "";
+};
 
-const classWhenLowerIsBetter = (current: number, previous: number): string =>
-	current < previous * 0.98 ? "improve" : current > previous * 1.02 ? "regress" : "";
+const classWhenLowerIsBetter = (current: number, previous: number): string => {
+	if (current < previous * 0.98) return "improve";
+	if (current > previous * 1.02) return "regress";
+	return "";
+};
 
 /*
     Window-mode probe — the direct-binding baseline. Twenty bars are bound

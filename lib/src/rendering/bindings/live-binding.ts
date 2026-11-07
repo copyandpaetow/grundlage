@@ -1,3 +1,4 @@
+//oxlint-disable import/no-cycle -- mutual recursion: a template holds templates
 import { STYLE_SHEET_NOT_COMPILED } from "../../parser/constants";
 import * as BINDING from "../../parser/binding";
 import {
@@ -157,8 +158,9 @@ export const hydrateLiveBinding = (
 	if (
 		isRawContentBinding(liveBinding) &&
 		liveBinding.styleSheetLane.kind === STYLE_SHEET_LANE.CSSOM
-	)
+	) {
 		seedDeclarationValueHashes(liveBinding.styleSheetLane, values);
+	}
 	commitLiveBinding(instance, liveBinding, values);
 };
 
@@ -171,6 +173,7 @@ export const revertHostBinding = (liveBinding: AttributeLaneLiveBinding): void =
 		removeWrittenAttribute(liveBinding, liveBinding.lastComposedName);
 		return;
 	}
-	for (const [name, entry] of liveBinding.appliedAttributes)
+	for (const [name, entry] of liveBinding.appliedAttributes) {
 		applyAttributeValue(liveBinding.anchor, name, undefined, entry.value);
+	}
 };

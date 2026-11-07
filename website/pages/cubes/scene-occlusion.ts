@@ -132,7 +132,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 			const sampleX = left + SAMPLE_OFFSETS_PIXELS[sampleIndex % SAMPLES_PER_CELL_EDGE];
 			const sampleY = top + SAMPLE_OFFSETS_PIXELS[Math.floor(sampleIndex / SAMPLES_PER_CELL_EDGE)];
 			let isSampleInsideFace = true;
-			for (let edgeIndex = 0; edgeIndex < 4; edgeIndex++)
+			for (let edgeIndex = 0; edgeIndex < 4; edgeIndex++) {
 				if (
 					(crossingEdgeMask & (1 << edgeIndex)) !== 0 &&
 					edgeXFactors[edgeIndex] * sampleX +
@@ -143,6 +143,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 					isSampleInsideFace = false;
 					break;
 				}
+			}
 			if (isSampleInsideFace) sampleMask |= 1 << sampleIndex;
 		}
 		return sampleMask;
@@ -185,7 +186,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 			edgeConstants[edgeIndex] =
 				(alongY * faceXs[edgeIndex] - alongX * faceYs[edgeIndex]) * windingSign;
 		}
-		for (let row = firstRow; row <= lastRow; row++)
+		for (let row = firstRow; row <= lastRow; row++) {
 			for (let column = firstColumn; column <= lastColumn; column++) {
 				const left = column * OCCLUSION_CELL_PIXELS;
 				const top = row * OCCLUSION_CELL_PIXELS;
@@ -207,11 +208,13 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 					farthestDepth,
 				);
 				if (partialSampleMasks[cellIndex] !== ALL_SAMPLES_MASK) continue;
-				if (partialFarthestDepths[cellIndex] < coveredDepths[cellIndex])
+				if (partialFarthestDepths[cellIndex] < coveredDepths[cellIndex]) {
 					coveredDepths[cellIndex] = partialFarthestDepths[cellIndex];
+				}
 				partialSampleMasks[cellIndex] = 0;
 				partialFarthestDepths[cellIndex] = 0;
 			}
+		}
 	};
 
 	// Every cell under the cube's screen rectangle hides what lies beyond its nearest corner.
@@ -234,9 +237,11 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		const { firstColumn, lastColumn, firstRow, lastRow } = cellRange;
 		if (firstColumn > lastColumn || firstRow > lastRow) return false;
 		const nearestDepth = nearestDepths[cubeIndex];
-		for (let row = firstRow; row <= lastRow; row++)
-			for (let column = firstColumn; column <= lastColumn; column++)
+		for (let row = firstRow; row <= lastRow; row++) {
+			for (let column = firstColumn; column <= lastColumn; column++) {
 				if (!(coveredDepths[row * coverageColumns + column] < nearestDepth)) return false;
+			}
+		}
 		return true;
 	};
 
@@ -248,9 +253,11 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		partialFarthestDepths.fill(0);
 		isOccludedNow.fill(0);
 		frontToBackOrder.length = 0;
-		for (let cubeIndex = 0; cubeIndex < cubes.length; cubeIndex++)
-			if (!cubes[cubeIndex].isOutsideView && projectCorners(cubes[cubeIndex], cubeIndex))
+		for (let cubeIndex = 0; cubeIndex < cubes.length; cubeIndex++) {
+			if (!cubes[cubeIndex].isOutsideView && projectCorners(cubes[cubeIndex], cubeIndex)) {
 				frontToBackOrder.push(cubeIndex);
+			}
+		}
 		frontToBackOrder.sort(byNearestDepth);
 		for (const cubeIndex of frontToBackOrder) {
 			if (isCovered(cubeIndex)) {
@@ -259,9 +266,11 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 			}
 			const occludableCube = cubes[cubeIndex];
 			if (occludableCube.isSeeThrough) continue;
-			for (let faceIndex = 0; faceIndex < 6; faceIndex++)
-				if ((occludableCube.hiddenFaceMask & (1 << faceIndex)) === 0)
+			for (let faceIndex = 0; faceIndex < 6; faceIndex++) {
+				if ((occludableCube.hiddenFaceMask & (1 << faceIndex)) === 0) {
 					coverFace(cubeIndex, FACE_CORNER_INDICES[faceIndex]);
+				}
+			}
 		}
 		for (let cubeIndex = 0; cubeIndex < cubes.length; cubeIndex++) {
 			const occludableCube = cubes[cubeIndex];

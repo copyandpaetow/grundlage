@@ -81,17 +81,25 @@ interface TemplateReader {
 	isTemplateContent: boolean;
 }
 
+//the end of the source stands for "no hole left": every range ends at or before it
+const holeIndexFrom = (source: string, start: number) => {
+	const holeIndex = source.indexOf(HOLE, start);
+	return holeIndex === -1 ? source.length : holeIndex;
+};
+
 const createTemplateReader = (
 	strings: TemplateStringsArray,
 	mode: ParseModeKind,
 ): TemplateReader => {
-	for (const text of strings)
-		if (text.includes(HOLE))
+	for (const text of strings) {
+		if (text.includes(HOLE)) {
 			throw new Error(
 				libraryMessage(
 					"the template contains U+E000, which the parser reserves for holes. Write it as &#xE000;.",
 				),
 			);
+		}
+	}
 	const source = strings.join(HOLE);
 	return {
 		source,
@@ -112,12 +120,6 @@ const createTemplateReader = (
 	};
 };
 
-//the end of the source stands for "no hole left": every range ends at or before it
-const holeIndexFrom = (source: string, start: number) => {
-	const holeIndex = source.indexOf(HOLE, start);
-	return holeIndex === -1 ? source.length : holeIndex;
-};
-
 const unclosedError = (construct: string) =>
 	new Error(libraryMessage(`${construct} is never closed. Close it.`));
 
@@ -130,8 +132,9 @@ const partsOfRange = (reader: TemplateReader, start: number, end: number): Array
 	const parts: Array<Part> = [];
 	let sliceStart = start;
 	while (reader.nextHoleIndex < end) {
-		if (reader.nextHoleIndex > sliceStart)
+		if (reader.nextHoleIndex > sliceStart) {
 			parts.push(reader.source.slice(sliceStart, reader.nextHoleIndex));
+		}
 		parts.push(reader.readHoleCount++);
 		sliceStart = reader.nextHoleIndex + 1;
 		reader.nextHoleIndex = holeIndexFrom(reader.source, sliceStart);
@@ -165,14 +168,19 @@ const rootTemplateAfterNonRootTag = (rootTemplate: RootTemplateKind): RootTempla
 			return ROOT_TEMPLATE.RULED_OUT;
 		case ROOT_TEMPLATE.IS_THE_CURRENT_TAG:
 			return ROOT_TEMPLATE.CONTENT_OPEN;
-		default:
+		case ROOT_TEMPLATE.RULED_OUT:
+		case ROOT_TEMPLATE.CONTENT_OPEN:
+		case ROOT_TEMPLATE.CLOSED:
 			return rootTemplate;
+		default:
+			return rootTemplate satisfies never;
 	}
 };
 
 const hasNonWhitespace = (text: string) => {
-	for (let index = 0; index < text.length; index++)
+	for (let index = 0; index < text.length; index++) {
 		if (!isWhitespaceCode(text.charCodeAt(index))) return true;
+	}
 	return false;
 };
 
@@ -205,12 +213,13 @@ const readText = (reader: TemplateReader, end: number) => {
 
 //the close is searched from the opener's dashes, so `<!-->` closes itself
 const readComment = (reader: TemplateReader) => {
-	if (!reader.source.startsWith(MARKUP.COMMENT_OPEN, reader.index))
+	if (!reader.source.startsWith(MARKUP.COMMENT_OPEN, reader.index)) {
 		throw new Error(
 			libraryMessage(
 				"a `<!` opens neither a comment nor <![CDATA[. Write a comment as <!-- … -->, or a literal `<` as &lt;.",
 			),
 		);
+	}
 	const contentStart = reader.index + MARKUP.COMMENT_OPEN.length;
 	const commentClose = reader.source.indexOf(MARKUP.COMMENT_CLOSE, reader.index + "<!".length);
 	if (commentClose === -1) throw unclosedError("a comment");
@@ -238,12 +247,13 @@ const readCharacterData = (reader: TemplateReader) => {
 	const characterDataClose = reader.source.indexOf(CHARACTER_DATA_CLOSE, contentStart);
 	if (characterDataClose === -1) throw unclosedError("a <![CDATA[ section");
 	const parts = partsOfRange(reader, contentStart, characterDataClose);
-	if (hasHole(parts))
+	if (hasHole(parts)) {
 		throw new Error(
 			libraryMessage(
 				"a ${…} hole sits where the HTML parser reads markup as plain text, such as inside <![CDATA[…]]>. Move the hole outside of it.",
 			),
 		);
+	}
 	reader.index = characterDataClose + CHARACTER_DATA_CLOSE.length;
 	reader.resultMarkup += reader.source.slice(
 		contentStart - CHARACTER_DATA_OPEN.length,
@@ -260,12 +270,13 @@ const readEndTag = (reader: TemplateReader) => {
 
 	const isDynamicClose = hasHole(parts);
 	const openerIsDynamic = reader.openTagIsDynamic[reader.openTagIsDynamic.length - 1];
-	if (isDynamicClose && !openerIsDynamic)
+	if (isDynamicClose && !openerIsDynamic) {
 		throw new Error(
 			libraryMessage(
 				"asymmetric tag: a dynamic </${...}> close has no matching dynamic open tag. Pair `<${tag}>` with `</${tag}>`.",
 			),
 		);
+	}
 	reader.openTagIsDynamic.pop();
 
 	const rootTemplateIsOpen =
@@ -275,12 +286,13 @@ const readEndTag = (reader: TemplateReader) => {
 		reader.rootTemplate = ROOT_TEMPLATE.CLOSED;
 		return;
 	}
-	if (!isDynamicClose && openerIsDynamic)
+	if (!isDynamicClose && openerIsDynamic) {
 		throw new Error(
 			libraryMessage(
 				"asymmetric tag: a static end tag cannot pair with a dynamic <${...}> open tag. Make the close dynamic too.",
 			),
 		);
+	}
 	const tagName = isDynamicClose ? DYNAMIC_TAG_PLACEHOLDER : parts.join("");
 	reader.resultMarkup += MARKUP.END_TAG_OPEN + tagName + MARKUP.TAG_CLOSE;
 };
@@ -321,10 +333,11 @@ const warnOnSelectValueBinding = (tagName: string, binding: StaticBinding): void
 	const [name] = binding.nameParts;
 	const isValueName =
 		binding.nameParts.length === 1 && typeof name === "string" && name.toLowerCase() === "value";
-	if (isValueName)
+	if (isValueName) {
 		warnDuringDevelopment(
 			"`<select value=${…}>` selects nothing: <select> has no value attribute. Bind `selected` on the option instead: `<option selected=${…}>`.",
 		);
+	}
 };
 
 const attributeBindingOf = (
@@ -334,12 +347,13 @@ const attributeBindingOf = (
 ): StaticBinding => {
 	const isExpandableSpread =
 		valueParts.length === 0 && nameParts.length === 1 && typeof nameParts[0] === "number";
-	if (isExpandableSpread)
+	if (isExpandableSpread) {
 		return {
 			type: BINDING.DYNAMIC_ATTRIBUTE,
 			elementName,
 			valueIndex: nameParts[0] as number,
 		};
+	}
 	return {
 		type: BINDING.ATTRIBUTE,
 		elementName,
@@ -391,12 +405,13 @@ const readAttributes = (
 		reader.index = nameEnd;
 		const isNestedShadowRoot =
 			tagName === TEMPLATE_TAG && !isOnRootTemplate && isShadowRootModeName(nameParts);
-		if (isNestedShadowRoot)
+		if (isNestedShadowRoot) {
 			throw new Error(
 				libraryMessage(
 					"a nested <template> expects no shadowrootmode: a paint keeps it a plain <template>, while the browser turns it into a shadow root in server markup, so the two disagree. Let the element attach its own shadow root.",
 				),
 			);
+		}
 
 		let valueParts: Array<Part> = [];
 		if (source.charCodeAt(nameEnd) === CHARACTER_CODE.EQUALS) {
@@ -408,12 +423,13 @@ const readAttributes = (
 				if (closingQuote === -1) throw unclosedError("an attribute value");
 				valueParts = partsOfRange(reader, valueStart + 1, closingQuote);
 				reader.index = closingQuote + 1;
-				if (source.charCodeAt(reader.index) === HOLE_CODE)
+				if (source.charCodeAt(reader.index) === HOLE_CODE) {
 					throw new Error(
 						libraryMessage(
 							'a ${…} right after a quoted attribute value belongs to no attribute. Put a space before it: a="1" ${…}',
 						),
 					);
+				}
 			} else {
 				let valueEnd = valueStart;
 				while (valueEnd < source.length && !endsUnquotedValue(source, valueEnd)) valueEnd++;
@@ -441,12 +457,13 @@ const readAttributes = (
 			continue;
 		}
 		attributeMarkup += MARKUP.ATTRIBUTE_SEPARATOR + nameParts.join("");
-		if (valueParts.length > 0)
+		if (valueParts.length > 0) {
 			attributeMarkup +=
 				MARKUP.ATTRIBUTE_ASSIGN +
 				MARKUP.ATTRIBUTE_QUOTE +
 				valueParts.join("") +
 				MARKUP.ATTRIBUTE_QUOTE;
+		}
 	}
 	throw unclosedError("an open tag");
 };
@@ -460,8 +477,9 @@ const readRawContent = (
 	while (
 		closeTagStart !== -1 &&
 		!reader.source.startsWith(tagName, closeTagStart + MARKUP.END_TAG_OPEN.length)
-	)
+	) {
 		closeTagStart = reader.source.indexOf(MARKUP.END_TAG_OPEN, closeTagStart + 1);
+	}
 	if (closeTagStart === -1) throw unclosedError(`<${tagName}>`);
 	const parts = partsOfRange(reader, reader.index, closeTagStart);
 	reader.index = closeTagStart;
@@ -564,11 +582,13 @@ const readElement = (reader: TemplateReader) => {
 	}
 	if (attributes.isSelfClosing) {
 		reader.openTagIsDynamic.pop();
-		if (!isOnRootTemplate)
+		if (!isOnRootTemplate) {
 			reader.resultMarkup += openTagMarkup + MARKUP.END_TAG_OPEN + tagName + MARKUP.TAG_CLOSE;
+		}
 		return;
 	}
 	if (tagName === TEMPLATE_TAG && !isOnRootTemplate) {
+		//oxlint-disable-next-line no-use-before-define -- mutual recursion
 		const templateContent = readTemplateContent(reader);
 		reader.resultMarkup +=
 			templateContent.markerMarkup + openTagMarkup + templateContent.contentMarkup;
@@ -653,8 +673,9 @@ const readTemplateContent = (
 	reader.index = contentReader.index;
 	reader.readHoleCount = contentReader.readHoleCount;
 	reader.nextHoleIndex = contentReader.nextHoleIndex;
-	if (contentReader.bindings.length === 0)
+	if (contentReader.bindings.length === 0) {
 		return { contentMarkup: contentReader.resultMarkup, markerMarkup: "" };
+	}
 
 	const valueIndices: Array<number> = [];
 	for (let index = firstValueIndex; index < reader.readHoleCount; index++) valueIndices.push(index);
@@ -689,8 +710,9 @@ const parse = (
 		reader.rootTemplate !== ROOT_TEMPLATE.UNDECIDED &&
 		reader.rootTemplate !== ROOT_TEMPLATE.RULED_OUT;
 	const isFirstPass = mode === PARSE_MODE.OPTIMISTIC_ROOT;
-	if (isFirstPass && hasRootTemplate && reader.hasSeenTopLevelSibling)
+	if (isFirstPass && hasRootTemplate && reader.hasSeenTopLevelSibling) {
 		return parse(strings, PARSE_MODE.NO_ROOT_TEMPLATE);
+	}
 
 	return {
 		htmlWithMarkers: reader.resultMarkup,

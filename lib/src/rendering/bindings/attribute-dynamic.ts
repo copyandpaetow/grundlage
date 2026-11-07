@@ -24,8 +24,9 @@ const attributeNamesOf = (value: unknown): ReadonlyArray<unknown> => {
 //names are compared as spelled: an array or scalar value may hold numbers, booleans or bigints
 const valueStillHoldsAttribute = (value: unknown, name: string): boolean => {
 	if (Array.isArray(value)) {
-		for (let index = 0; index < value.length; index++)
+		for (let index = 0; index < value.length; index++) {
 			if (String(value[index]) === name) return true;
+		}
 		return false;
 	}
 	if (isPlainObject(value)) return Object.hasOwn(value, name);

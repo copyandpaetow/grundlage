@@ -79,7 +79,8 @@ export const stringHash = (text: string): number => {
 
 export const stringListHash = (strings: ReadonlyArray<string>): number => {
 	let hash = strings.length;
-	for (let index = 0; index < strings.length; index++)
+	for (let index = 0; index < strings.length; index++) {
 		hash = combineOrderedHash(hash, stringHash(strings[index]));
+	}
 	return hash;
 };

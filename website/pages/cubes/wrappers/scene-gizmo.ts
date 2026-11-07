@@ -56,6 +56,12 @@ const HANDLE_MARGIN = 44;
 type ScreenPoint = { x: number; y: number };
 type DragMode = "x" | "y" | "z" | "yaw";
 
+const axisIndexOf = (mode: DragMode): number => {
+	if (mode === "x") return 0;
+	if (mode === "y") return 1;
+	return 2;
+};
+
 const dot = (a: ScreenPoint, b: ScreenPoint): number => a.x * b.x + a.y * b.y;
 
 const centerOf = (rectangle: DOMRect): ScreenPoint => ({
@@ -247,11 +253,12 @@ customElements.define(
 			readCameraTurn();
 			void element.update();
 		});
-		if (world !== null)
+		if (world !== null) {
 			cameraTurnObserver.observe(world, {
 				attributes: true,
 				attributeFilter: ["camera-yaw", "camera-pitch"],
 			});
+		}
 
 		const child = (): HTMLElement | null => {
 			const slot = element.shadowRoot?.querySelector("slot");
@@ -287,8 +294,9 @@ customElements.define(
 			if (drag === null) return;
 			const target = drag.target;
 			const carrier = element.shadowRoot?.querySelector(".carrier");
-			if (carrier === null || carrier === undefined)
+			if (carrier === null || carrier === undefined) {
 				throw new Error("The gizmo dropped a drag before rendering its carrier.");
+			}
 			// The child's placement in the gizmo's frame: carrier · placement
 			const matrix = new DOMMatrix(getComputedStyle(carrier).transform).multiply(
 				new DOMMatrix(getComputedStyle(target).transform),
@@ -327,16 +335,11 @@ customElements.define(
 			event.preventDefault();
 			event.stopPropagation();
 
-			const axisIndex = mode === "x" ? 0 : mode === "y" ? 1 : 2;
+			const axisIndex = axisIndexOf(mode);
 			let screenOffsetPerWorldUnit: ScreenPoint = { x: 0, y: 0 };
 			if (mode !== "yaw") {
 				const origin = handlePoint("#origin");
-				const tip =
-					mode === "x"
-						? handlePoint("#knob-x")
-						: mode === "y"
-							? handlePoint("#knob-y")
-							: handlePoint("#knob-z");
+				const tip = handlePoint(`#knob-${mode}`);
 				// Measured on screen, so no camera matrix is needed
 				const worldUnitsOut = handleLengthsPx[axisIndex] / UNIT_SIZE;
 				const scale = worldUnitsOut === 0 ? 0 : 1 / worldUnitsOut;

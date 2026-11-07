@@ -24,8 +24,9 @@ const isElementMarkerData = (data: string) =>
 //an element's markers (tag, attributes, raw content) run unbroken up to the element itself
 const elementAfterMarkerRun = (marker: Comment): Element | null => {
 	let sibling = marker.nextSibling;
-	while (sibling instanceof Comment && isElementMarkerData(sibling.data))
+	while (sibling instanceof Comment && isElementMarkerData(sibling.data)) {
 		sibling = sibling.nextSibling;
+	}
 	return sibling instanceof Element ? sibling : null;
 };
 
@@ -75,12 +76,13 @@ export const ensureFragmentKeptEveryBinding = (
 		const parentName = node.parentElement?.localName ?? "the template root";
 		//markers are numbered in source order, so one that arrives early was moved there
 		const bindingIndex = bindingIndexOfMarker(node.data);
-		if (bindingIndex < lastBindingIndex)
+		if (bindingIndex < lastBindingIndex) {
 			throw new Error(
 				libraryMessage(
 					`the HTML parser moved a bound node ahead of one inside <${parentName}>, as it moves a <p> or <div> out of a <table>. Fix the nesting.`,
 				),
 			);
+		}
 		lastBindingIndex = bindingIndex;
 		const binding = parsed.bindings[bindingIndex];
 		if (binding.type === BINDING.TAG) {
@@ -112,19 +114,21 @@ export const ensureFragmentKeptEveryBinding = (
 	}
 	for (const tagName of boundFormattingTags) {
 		const builtCount = fragment.querySelectorAll(tagName).length;
-		if (builtCount > writtenStartTagCountOf(parsed.htmlWithMarkers, tagName))
+		if (builtCount > writtenStartTagCountOf(parsed.htmlWithMarkers, tagName)) {
 			throw new Error(
 				libraryMessage(
 					`a bound <${tagName}> is copied by the HTML parser past a block it does not close (a <div> inside <p><${tagName}>) or a misnested end tag, and the copies never get the bound value. Fix the nesting.`,
 				),
 			);
+		}
 	}
-	if (openMarkerCount !== expectedOpenMarkerCount)
+	if (openMarkerCount !== expectedOpenMarkerCount) {
 		throw new Error(
 			libraryMessage(
 				"a ${…} hole sits where the HTML parser reads markup as plain text, such as inside <![CDATA[…]]>. Move the hole outside of it.",
 			),
 		);
+	}
 };
 
 //a binding's open marker sits directly before the element it binds
@@ -173,8 +177,9 @@ export const removeMarkers = (fragment: DocumentFragment): void => {
 	const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT);
 	const markers: Array<Comment> = [];
 	let node: Comment | null;
-	while ((node = walker.nextNode() as Comment | null))
+	while ((node = walker.nextNode() as Comment | null)) {
 		if (isMarkerData(node.data)) markers.push(node);
+	}
 	for (let index = 0; index < markers.length; index++) markers[index].remove();
 };
 

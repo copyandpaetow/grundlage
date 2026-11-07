@@ -18,8 +18,11 @@ interface Measurement {
 	driven: OperationResult;
 }
 
-const classWhenLowerIsBetter = (current: number, previous: number): string =>
-	current < previous * 0.98 ? "improve" : current > previous * 1.02 ? "regress" : "";
+const classWhenLowerIsBetter = (current: number, previous: number): string => {
+	if (current < previous * 0.98) return "improve";
+	if (current > previous * 1.02) return "regress";
+	return "";
+};
 
 /*
     Window-mode probe. A self-driving animated list where every bar changes

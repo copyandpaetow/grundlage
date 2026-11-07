@@ -251,9 +251,11 @@ describe("hashValue - digits that could trade places", () => {
 	test("every three-character string over the common alphabet hashes uniquely", () => {
 		const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
 		const seen = new Set<number>();
-		for (const first of alphabet)
-			for (const second of alphabet)
+		for (const first of alphabet) {
+			for (const second of alphabet) {
 				for (const third of alphabet) seen.add(stringHash(first + second + third));
+			}
+		}
 		expect(seen.size).toBe(alphabet.length ** 3);
 	});
 });

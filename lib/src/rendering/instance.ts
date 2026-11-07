@@ -1,3 +1,4 @@
+//oxlint-disable import/no-cycle -- mutual recursion: a template holds templates
 import * as BINDING from "../parser/binding";
 import { getParsedTemplate } from "../parser/html";
 import { ParsedTemplate } from "../parser/types";
@@ -23,14 +24,16 @@ import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 //write to its own declared prop is output, not a reason to update. A nested template has none
 export const patchInstance = (instance: Instance, values: Array<unknown>): void => {
 	const { liveBindings, parsed } = instance;
-	for (let index = parsed.hostBindingCount; index < liveBindings.length; index++)
+	for (let index = parsed.hostBindingCount; index < liveBindings.length; index++) {
 		commitLiveBinding(instance, liveBindings[index], values);
+	}
 };
 
 export const commitHostBindings = (instance: Instance, values: Array<unknown>): void => {
 	const { liveBindings, parsed } = instance;
-	for (let index = 0; index < parsed.hostBindingCount; index++)
+	for (let index = 0; index < parsed.hostBindingCount; index++) {
 		commitLiveBinding(instance, liveBindings[index], values);
+	}
 };
 
 //a DOM move reparses every <style> in the moved subtree from its stale text; nested components
@@ -53,8 +56,9 @@ export const refreshStyleSheetsAfterMove = (instance: Instance): void => {
 		}
 		if (content.kind !== CONTENT_KIND.LIST) continue;
 		const { items } = content;
-		for (let itemIndex = 0; itemIndex < items.length; itemIndex++)
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			refreshStyleSheetsAfterMove(items[itemIndex].instance);
+		}
 	}
 };
 
@@ -65,12 +69,13 @@ export const isPatchableInPlace = (
 
 export const parseNestedTemplate = (value: TemplateValue): ParsedTemplate => {
 	const parsed = getParsedTemplate(value.__templateStrings);
-	if (parsed.hostBindingCount > 0)
+	if (parsed.hostBindingCount > 0) {
 		throw new Error(
 			libraryMessage(
 				"`<template>` with attributes is only valid at the top level of the template a component yields, not inside ${...} content, a list item, or any nested template position. Move the attributes to the outermost <template>.",
 			),
 		);
+	}
 	return parsed;
 };
 
@@ -131,8 +136,9 @@ export const cloneTemplateFragment = (
 	if (cloneSource === undefined) {
 		cloneSource = buildFragment(parsed.htmlWithMarkers, parseContext);
 		ensureFragmentKeptEveryBinding(cloneSource, parsed);
-		for (const element of cloneSource.children)
+		for (const element of cloneSource.children) {
 			warnWhenParsingWouldSplitParagraph(element.localName, insertionParent);
+		}
 		cloneSources[parseContext] = cloneSource;
 	}
 	//cloneNode is typed as Node; a fragment's clone is a fragment

@@ -20,12 +20,15 @@ const serializeBlock = (block: Element, depth: number, lines: string[]): void =>
 	const { position, rotation, size } = blockTransformFromAttributes(block);
 
 	const attributes: string[] = [];
-	if (position.some((value) => value !== 0))
+	if (position.some((value) => value !== 0)) {
 		attributes.push(`position="${position.map(formatNumber).join(" ")}"`);
-	if (rotation.some((value) => value !== 0))
+	}
+	if (rotation.some((value) => value !== 0)) {
 		attributes.push(`rotation="${rotation.map(formatNumber).join(" ")}"`);
-	if (!isGroup && size.some((value) => value !== 1))
+	}
+	if (!isGroup && size.some((value) => value !== 1)) {
 		attributes.push(`size="${size.map(formatNumber).join(" ")}"`);
+	}
 	const suffix = attributes.length > 0 ? ` ${attributes.join(" ")}` : "";
 
 	const childBlocks = childBlocksOf(block);

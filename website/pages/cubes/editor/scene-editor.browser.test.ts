@@ -10,6 +10,10 @@ import "../wrappers/scene-group";
 let editor: HTMLElement;
 let sceneCamera: HTMLElement;
 let world: HTMLElement;
+
+// The palette re-renders a microtask after the editor sets its inspector prop
+const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
+
 let dispose: () => void;
 
 beforeEach(() => {
@@ -57,9 +61,6 @@ const moveOverFloor = (x: number, z: number): void => {
 
 const paletteShadow = (): ShadowRoot | null =>
 	(editor.shadowRoot?.querySelector("scene-palette") as HTMLElement | null)?.shadowRoot ?? null;
-
-// The palette re-renders a microtask after the editor sets its inspector prop
-const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
 
 const clickPaletteButton = (selector: string): void => {
 	const button = paletteShadow()?.querySelector(selector);

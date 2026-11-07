@@ -10,11 +10,13 @@ import * as PROP_PRESENCE from "./prop-presence";
 const PROP_NAME_PATTERN = /^[a-z][a-zA-Z0-9_-]*$/;
 
 const resolveString: Resolve<string> = (incoming) =>
+	//oxlint-disable-next-line typescript/no-base-to-string -- the String parser spells whatever arrived
 	incoming === undefined ? undefined : String(incoming);
 
 const resolveNumber: Resolve<number> = (incoming) => {
 	if (incoming === undefined || incoming === "") return undefined;
 	const parsed = Number(incoming);
+	//oxlint-disable-next-line typescript/no-base-to-string -- only a spelled "NaN" is a parsed NaN
 	const isUnparsable = Number.isNaN(parsed) && String(incoming).trim() !== "NaN";
 	if (isUnparsable) return undefined;
 	return parsed;
@@ -67,12 +69,13 @@ const ensureFallbackIsUsable = (
 	resolveWithoutFallback: Resolve<unknown>,
 ): void => {
 	const fallback = definition.fallback;
-	if (fallback === undefined)
+	if (fallback === undefined) {
 		throw new TypeError(
 			libraryMessage(
 				`the fallback for prop "${propName}" is undefined, which is no fallback. Drop it to make the prop required, or wrap the prop in prop.optional().`,
 			),
 		);
+	}
 	let copy = fallback;
 	if (isCopiedPerElement(fallback)) {
 		try {
@@ -84,21 +87,23 @@ const ensureFallbackIsUsable = (
 				),
 			);
 		}
-		if (Object.getPrototypeOf(copy) !== Object.getPrototypeOf(fallback))
+		if (Object.getPrototypeOf(copy) !== Object.getPrototypeOf(fallback)) {
 			throw new TypeError(
 				libraryMessage(
 					`the fallback for prop "${propName}" cannot be copied for each element: structuredClone returns a plain object, so a class instance loses its prototype.`,
 				),
 			);
+		}
 	}
 
 	if (resolveWithoutFallback(copy) !== undefined) return;
-	if (definition.standardSchema !== null)
+	if (definition.standardSchema !== null) {
 		throw new TypeError(
 			libraryMessage(
 				`the fallback for prop "${propName}" is not a value its schema accepts: ${issueMessagesOf(definition.standardSchema, copy)}. Pass a fallback the schema accepts.`,
 			),
 		);
+	}
 	throw new TypeError(
 		libraryMessage(
 			`the fallback for prop "${propName}" is not a value its parser accepts: the parser returned undefined for it. Pass a fallback the parser accepts.`,
@@ -119,37 +124,42 @@ const ensureIsPropDefinition: (
 		typeof definition === "object" &&
 		definition !== null &&
 		(definition as Partial<PropDefinition<unknown, "required">>).parser !== undefined;
-	if (!isPropDefinition)
+	if (!isPropDefinition) {
 		throw new TypeError(
 			libraryMessage(
 				`prop "${propName}" must be declared with prop.attribute(parser) for a value the markup can set, or prop.property<Type>() for a value only JavaScript sets: prop.attribute(Number, 0) instead of [Number, 0].`,
 			),
 		);
+	}
 };
 
 const ensurePropNameIsUsable = (propName: string): void => {
-	if (!PROP_NAME_PATTERN.test(propName))
+	if (!PROP_NAME_PATTERN.test(propName)) {
 		throw new TypeError(
 			libraryMessage(
 				`prop name "${propName}" must start with a lowercase letter and contain only letters, digits, "_" or "-".`,
 			),
 		);
-	if (propName.startsWith(MARKUP.CUSTOM_EVENT_PREFIX))
+	}
+	if (propName.startsWith(MARKUP.CUSTOM_EVENT_PREFIX)) {
 		throw new TypeError(
 			libraryMessage(
 				`prop name "${propName}" is reserved: "${MARKUP.CUSTOM_EVENT_PREFIX}" marks a custom event binding in markup.`,
 			),
 		);
-	if (propName === "host")
+	}
+	if (propName === "host") {
 		throw new TypeError(
 			libraryMessage(`"host" is reserved: the props object carries the element under that name.`),
 		);
-	if (propName === DEFER_HYDRATION_ATTRIBUTE)
+	}
+	if (propName === DEFER_HYDRATION_ATTRIBUTE) {
 		throw new TypeError(
 			libraryMessage(
 				`"${DEFER_HYDRATION_ATTRIBUTE}" is reserved: it marks a child that must not hydrate before its parent has supplied its values.`,
 			),
 		);
+	}
 };
 
 //a schema is declared once and read again by every prop.read() call, so it is normalized once for as long
@@ -170,29 +180,32 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 		//every shipped token is in the map, so what falls through is the user's function
 		const resolveWithoutFallback = (SHIPPED_RESOLVERS.get(definition.parser) ??
 			definition.parser) as Resolve<unknown>;
-		if (typeof resolveWithoutFallback !== "function")
+		if (typeof resolveWithoutFallback !== "function") {
 			throw new TypeError(
 				libraryMessage(
 					`prop "${propName}": prop.attribute() takes String, Number, BigInt, Boolean, or a function.`,
 				),
 			);
+		}
 		const hasFallback = definition.presence === PROP_PRESENCE.FALLBACK;
-		if (hasFallback)
+		if (hasFallback) {
 			ensureFallbackIsUsable(
 				propName,
 				//its presence just said it carries a fallback
 				definition as PropDefinition<unknown, "fallback">,
 				resolveWithoutFallback,
 			);
+		}
 
 		const attributeName = propName.toLowerCase();
 		const claimant = props.get(attributeName);
-		if (claimant !== undefined)
+		if (claimant !== undefined) {
 			throw new TypeError(
 				libraryMessage(
 					`props "${claimant.propName}" and "${propName}" both map to the attribute "${attributeName}". Attribute names ignore case, so rename one of them.`,
 				),
 			);
+		}
 
 		const fallback = definition.fallback;
 		const mustCopyFallback = isCopiedPerElement(fallback);
@@ -224,11 +237,13 @@ export const ensurePropNamesAreAvailable = (
 	elementPrototype: object,
 	props: NormalizedSchema,
 ): void => {
-	for (const prop of props.values())
-		if (prop.propName in elementPrototype)
+	for (const prop of props.values()) {
+		if (prop.propName in elementPrototype) {
 			throw new TypeError(
 				libraryMessage(
 					`prop "${prop.propName}" is already a property on the element. Rename the prop.`,
 				),
 			);
+		}
+	}
 };

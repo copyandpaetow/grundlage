@@ -58,7 +58,10 @@ export const attributeSpellingOf = (prop: Prop, value: unknown): string | null =
 		case "boolean":
 			if (value) return "";
 			return prop.isTrueWhenAbsent ? "false" : null;
-		default:
+		case "symbol":
+		case "undefined":
+		case "object":
+		case "function":
 			return null;
 	}
 };

@@ -32,8 +32,9 @@ const uniqueTag = (role: string) => `test-load-${role}-${tagCount++}`;
 //between parts comes from the formatter
 const paintedTextOf = (element: Element): string => {
 	let text = "";
-	for (const child of element.shadowRoot?.childNodes ?? [])
+	for (const child of element.shadowRoot?.childNodes ?? []) {
 		if (!(child instanceof HTMLScriptElement)) text += child.textContent;
+	}
 	return text.replace(/\s+/g, " ").trim();
 };
 
@@ -158,6 +159,7 @@ describe("load() where nothing was prerendered", () => {
 		mountInBrowser(() =>
 			component(function* () {
 				const view = yield* load(() => html`<p>a view</p>`);
+				//oxlint-disable-next-line typescript/no-base-to-string -- the load throws before this paint
 				yield html`<p>${String(view)}</p>`;
 			}),
 		);
@@ -327,8 +329,9 @@ describe.skipIf("happyDOM" in globalThis)("load() across a prerendered round tri
 				component(function* () {
 					const takesBranch = isServerSide() ? serverTakesBranch : browserTakesBranch;
 					let firstValue = "not loaded";
-					if (takesBranch)
+					if (takesBranch) {
 						firstValue = yield* load("first", () => Promise.resolve(`first from ${side()}`));
+					}
 					const second = yield* load(() => Promise.resolve(`second from ${side()}`));
 					yield html`<p>${firstValue} | ${second}</p>`;
 				});
@@ -427,8 +430,9 @@ describe.skipIf("happyDOM" in globalThis)("load() across a prerendered round tri
 			component(function* () {
 				yield function* view() {
 					let draft = "no draft";
-					if (isServerSide() || browserTakesDraftBranch)
+					if (isServerSide() || browserTakesDraftBranch) {
 						draft = yield* load("draft", () => fetchCounted(fetches, `draft from ${side()}`));
+					}
 					yield html`<p>${draft}</p>`;
 				};
 			});

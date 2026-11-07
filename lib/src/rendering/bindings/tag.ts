@@ -29,12 +29,13 @@ export const commitTag = (
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
 	const switchesIntoForeignContent =
 		FOREIGN_CONTENT_ROOT_TAGS.has(newTag.toLowerCase()) && element.namespaceURI === HTML_NAMESPACE;
-	if (switchesIntoForeignContent)
+	if (switchesIntoForeignContent) {
 		throw new Error(
 			libraryMessage(
 				`a dynamic tag cannot become <${newTag}>: the markup inside it was already parsed as HTML. Write <${newTag}> statically and keep the dynamic tag inside it.`,
 			),
 		);
+	}
 
 	const focusRoot = element.getRootNode() as ShadowRoot | Document;
 	const focusedNode = focusRoot.activeElement as HTMLElement | null;
@@ -68,11 +69,13 @@ export const commitTag = (
 		//a composed value is a string, so the attribute copy above already carries it
 		const isSingleHoleAttribute =
 			isAttributeBinding(sibling) && isSingleHoleValue(sibling.staticBinding.valueParts);
-		if (isSingleHoleAttribute)
+		if (isSingleHoleAttribute) {
 			reapplyValueOnSwap(newElement, sibling.lastComposedName, sibling.lastValue);
-		else if (isDynamicAttributeBinding(sibling))
-			for (const [name, entry] of sibling.appliedAttributes)
+		} else if (isDynamicAttributeBinding(sibling)) {
+			for (const [name, entry] of sibling.appliedAttributes) {
 				reapplyValueOnSwap(newElement, name, entry.value);
+			}
+		}
 	}
 
 	element.replaceWith(newElement);

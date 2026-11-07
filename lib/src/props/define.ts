@@ -23,12 +23,13 @@ const resolverOfStandardSchema =
 	(standardSchema: StandardSchemaV1): Resolve<unknown> =>
 	(incoming) => {
 		const result = standardSchema["~standard"].validate(incoming);
-		if (result instanceof Promise)
+		if (result instanceof Promise) {
 			throw new TypeError(
 				libraryMessage(
 					"a prop's schema validated asynchronously; a prop is written synchronously, so use a schema without async refinements.",
 				),
 			);
+		}
 		return result.issues === undefined ? result.value : undefined;
 	};
 
@@ -87,12 +88,13 @@ export function attribute(
 export const optional = <Value, Kind extends PropKind>(
 	definition: PropDefinition<Value, "required", Kind>,
 ): PropDefinition<Value, "optional", Kind> => {
-	if (definition.presence !== PROP_PRESENCE.REQUIRED)
+	if (definition.presence !== PROP_PRESENCE.REQUIRED) {
 		throw new TypeError(
 			libraryMessage(
 				"prop.optional() takes a prop without a fallback, and only once: a fallback already makes the prop optional for the caller.",
 			),
 		);
+	}
 	//the phantom value type moves from required to optional, which the spread cannot express
 	return {
 		...definition,
@@ -103,18 +105,20 @@ export const optional = <Value, Kind extends PropKind>(
 export const unreflected = <Value, PresenceKind extends "required" | "fallback">(
 	definition: PropDefinition<Value, PresenceKind, "attribute">,
 ): PropDefinition<Value, PresenceKind, "attribute"> => {
-	if (definition.kind !== PROP_KIND.ATTRIBUTE)
+	if (definition.kind !== PROP_KIND.ATTRIBUTE) {
 		throw new TypeError(
 			libraryMessage(
 				"prop.unreflected() takes a prop.attribute(…): a prop.property() never reflects anyway.",
 			),
 		);
-	if (definition.presence === PROP_PRESENCE.OPTIONAL)
+	}
+	if (definition.presence === PROP_PRESENCE.OPTIONAL) {
 		throw new TypeError(
 			libraryMessage(
 				"prop.unreflected() goes inside prop.optional(): write prop.optional(prop.unreflected(prop.attribute(…))).",
 			),
 		);
+	}
 	return { ...definition, kind: PROP_KIND.UNREFLECTED_ATTRIBUTE };
 };
 

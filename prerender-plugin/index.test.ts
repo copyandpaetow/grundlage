@@ -48,7 +48,7 @@ const runTransform = async (
 		const handler = (typeof hook === "function" ? hook : hook.handler) as (
 			html: string,
 			context: { filename: string },
-		) => Promise<unknown> | unknown;
+		) => unknown;
 		const result = await handler.call(undefined, output, { filename: page });
 		if (typeof result === "string") output = result;
 	}

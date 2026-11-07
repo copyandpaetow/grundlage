@@ -42,8 +42,9 @@ describe("list placement moves the fewest rows", () => {
 		const rowsBefore = new Set<Node>(listItems(element));
 		const reinsertedRows = new Set<Node>();
 		const collect = (records: Array<MutationRecord>) => {
-			for (const record of records)
+			for (const record of records) {
 				for (const node of record.addedNodes) if (rowsBefore.has(node)) reinsertedRows.add(node);
+			}
 		};
 		const observer = new MutationObserver(collect);
 		observer.observe(element.shadowRoot!, { childList: true, subtree: true });

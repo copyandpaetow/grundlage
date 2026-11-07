@@ -341,7 +341,9 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 		const writes: Array<string> = [];
 		Object.defineProperty(serverTextNode, "data", {
 			get: () => "same-text",
-			set: (next: string) => writes.push(next),
+			set: (next: string) => {
+				writes.push(next);
+			},
 		});
 
 		hydrateShadowRoot(html`<p>${"same-text"}</p>`, shadowRoot, null, treeState());

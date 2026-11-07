@@ -136,7 +136,7 @@ const holeIndexesOf = (parsed: ParsedTemplate): Array<number> => {
 	const collect = (parts: ReadonlyArray<Part>) => {
 		for (const part of parts) if (typeof part === "number") indexes.push(part);
 	};
-	for (const binding of parsed.bindings)
+	for (const binding of parsed.bindings) {
 		switch (binding.type) {
 			case BINDING.TAG:
 			case BINDING.RAW_CONTENT:
@@ -157,6 +157,7 @@ const holeIndexesOf = (parsed: ParsedTemplate): Array<number> => {
 			default:
 				binding satisfies never;
 		}
+	}
 	return indexes;
 };
 
@@ -265,13 +266,13 @@ test.runIf(isRealBrowser).each([4, 5])(
 			host.remove();
 			const newErrors = errors.slice(errorCountBefore);
 			const unexpected = newErrors.filter((error) => !isLibraryError(error));
-			if (unexpected.length > 0)
+			if (unexpected.length > 0) {
 				wrong.push(
 					`${unexpected.map(describeError).join(" / ")} in ${source} with ${JSON.stringify(currentValues)}`,
 				);
-			else if (!settled && newErrors.length === 0)
+			} else if (!settled && newErrors.length === 0) {
 				wrong.push(`never settled without an error in ${source}`);
-			else if (newErrors.length > 0) tally.refused++;
+			} else if (newErrors.length > 0) tally.refused++;
 			else tally.painted++;
 		}
 		document.removeEventListener("grundlage-error", recordComponentError);

@@ -1,3 +1,4 @@
+//oxlint-disable import/no-cycle -- mutual recursion: a template holds templates
 import { isTemplate, TemplateValue } from "../../template";
 import { stringifyPrimitive } from "../../utils/guards";
 import { hashValue } from "../value-hashing";

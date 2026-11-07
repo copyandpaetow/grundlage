@@ -156,16 +156,139 @@ export const createComponentRunner = (setup: ComponentRunnerSetup): ComponentRun
 	return runner;
 };
 
+const isMissingRequiredProp = (runner: ComponentRunner): boolean => {
+	//the props object has no index signature; a required prop is read by its runtime name
+	const values = runner.componentProps as unknown as Record<string, unknown>;
+	for (let index = 0; index < runner.requiredPropNames.length; index++) {
+		if (values[runner.requiredPropNames[index]] === undefined) return true;
+	}
+	return false;
+};
+
+//derived, never stored: every field it reads is written by the driver itself, so a stored phase
+//would be a second source of truth to keep in step
+const phaseOf = (runner: ComponentRunner): ValueOf<typeof RUNNER_PHASE> => {
+	//ahead of the body run, because disconnectedCallback is a microtask behind the removal: between
+	//the two a runner still holds everything RUNNING reads, and its host is already nowhere
+	if (!runner.root.host.isConnected) return RUNNER_PHASE.NOT_CONNECTED;
+	//a fatal error can land before the first START, from a prop that throws on a detached element,
+	//and that START must not paint over it
+	if (runner.hasEndedWithFatalError) return RUNNER_PHASE.ENDED_BY_FATAL_ERROR;
+	if (runner.bodyRun !== null) return RUNNER_PHASE.RUNNING;
+	//the server writes the mark while the child sits in the parent's detached fragment, so it is
+	//already present when that fragment is connected and the child would otherwise paint its own run
+	//a required prop that has not arrived holds the start the same way a parent's mark does
+	if (isMissingRequiredProp(runner)) return RUNNER_PHASE.WAITING_FOR_PARENT_VALUES;
+	return !isServer() && runner.root.host.hasAttribute(DEFER_HYDRATION_ATTRIBUTE)
+		? RUNNER_PHASE.WAITING_FOR_PARENT_VALUES
+		: RUNNER_PHASE.READY_TO_START;
+};
+
+//the fields a phase is derived from constrain each other; checked wherever user code can be watching
+const assertRunnerIsConsistent = (runner: ComponentRunner): void => {
+	const isQueued = scheduler.queuedRunners.has(runner);
+	assertDuringDevelopment(
+		runner.blockedByRunner === null || isQueued,
+		"a runner waits for another only while it is queued",
+	);
+	assertDuringDevelopment(
+		runner.bodyRun !== null ||
+			(runner.currentUpdateGenerator === null && runner.updateGeneratorRun === null),
+		"an update generator belongs to a running body",
+	);
+	assertDuringDevelopment(
+		runner.updateGeneratorRun === null || runner.currentUpdateGenerator !== null,
+		"an update generator run belongs to the current update generator",
+	);
+	assertDuringDevelopment(
+		!runner.hasEndedWithFatalError || (runner.bodyRun === null && !isQueued),
+		"a runner that ended with a fatal error holds no run and no queue entry",
+	);
+};
+
+const resolvePendingUpdate = (runner: ComponentRunner): void => {
+	const pendingUpdate = runner.pendingUpdate;
+	runner.pendingUpdate = null;
+	pendingUpdate?.resolve();
+};
+
+//every field is cleared before either cleanup runs: a cleanup is user code that can call update() or
+//read the host, and it has to find a runner that is already fully stopped
+const stopRunner = (runner: ComponentRunner): void => {
+	scheduler.queuedRunners.delete(runner);
+	forgetAncestorRunner(runner);
+	runner.blockedByRunner = null;
+	const bodyRun = runner.bodyRun;
+	const updateGeneratorRun = runner.updateGeneratorRun;
+	runner.bodyRun = null;
+	runner.updateGeneratorRun = null;
+	runner.currentUpdateGenerator = null;
+	if (updateGeneratorRun !== null) tearDownRun(updateGeneratorRun);
+	if (bodyRun !== null) tearDownRun(bodyRun);
+	resolvePendingUpdate(runner);
+};
+
+export const endRunnerWithFatalError = (runner: ComponentRunner, error: unknown): void => {
+	if (runner.pendingFatalError === NO_PENDING_FATAL_ERROR) {
+		runner.pendingFatalError = error;
+		return;
+	}
+	//the component is already ending, so a second error has nothing left to end
+	if (runner.pendingFatalError !== NOT_DRIVEN) {
+		reportErrorFromUserCode(error);
+		return;
+	}
+	stopRunner(runner);
+	runner.hasEndedWithFatalError = true;
+	displayFatalErrorInRoot(runner.root, error);
+};
+
+const mountComponentGenerator = (runner: ComponentRunner): void => {
+	//a START queued by a paint can be beaten here by a move, and left in the queue it would re-run
+	//the update generator this mount starts
+	scheduler.queuedRunners.delete(runner);
+	runner.blockedByRunner = null;
+	runner.wasMountedOnServer = isServer();
+	let bodyRun: Run;
+	try {
+		bodyRun = createRun(
+			runner,
+			//not a method call, which would hand user code the runner as this
+			runner.componentGenerator.call(undefined, runner.componentProps),
+		);
+	} catch (error) {
+		if (error instanceof InvariantError) throw error;
+		endRunnerWithFatalError(runner, error);
+		return;
+	}
+	//the body's parameter defaults run user code, which can end the component before the body starts
+	if (phaseOf(runner) !== RUNNER_PHASE.READY_TO_START) return;
+	runner.bodyRun = bodyRun;
+	//oxlint-disable-next-line no-use-before-define -- mutual recursion
+	driveRun(bodyRun, TURN.SEND, undefined);
+};
+
+const rerunCurrentUpdateGenerator = (runner: ComponentRunner): void => {
+	assertDuringDevelopment(
+		runner.bodyRun !== null && runner.currentUpdateGenerator !== null,
+		"a running component is queued only while it has an update generator to re-run",
+	);
+	//oxlint-disable-next-line no-use-before-define -- mutual recursion
+	driveRun(runner.bodyRun, TURN.START_UPDATE_GENERATOR, undefined);
+};
+
 const runScheduledPass = (): void => {
 	scheduler.isPassScheduled = false;
+	//oxlint-disable-next-line no-use-before-define -- mutual recursion
 	runOnePass();
 };
 
 const enqueue = (runner: ComponentRunner): void => {
 	//an update from outside a paint says nothing about order, so it may not erase what a paint said
-	if (scheduler.runnerCurrentlyPainting !== null)
+	if (scheduler.runnerCurrentlyPainting !== null) {
 		runner.blockedByRunner =
 			scheduler.runnerCurrentlyPainting === runner ? null : scheduler.runnerCurrentlyPainting;
+	}
 	scheduler.queuedRunners.add(runner);
 	const needsPass = !scheduler.isPassScheduled && !scheduler.isPassRunning;
 	if (!needsPass) return;
@@ -249,53 +372,29 @@ const runOnePass = (): void => {
 	}
 };
 
-const isMissingRequiredProp = (runner: ComponentRunner): boolean => {
-	//the props object has no index signature; a required prop is read by its runtime name
-	const values = runner.componentProps as unknown as Record<string, unknown>;
-	for (let index = 0; index < runner.requiredPropNames.length; index++)
-		if (values[runner.requiredPropNames[index]] === undefined) return true;
-	return false;
+const settleRunner = (runner: ComponentRunner): void => {
+	const queuedUpdateWillCompleteRunner = scheduler.queuedRunners.has(runner);
+	if (runner.wasMountedOnServer) {
+		if (!queuedUpdateWillCompleteRunner) stopRunner(runner);
+		return;
+	}
+	if (queuedUpdateWillCompleteRunner) return;
+	resolvePendingUpdate(runner);
 };
 
-//derived, never stored: every field it reads is written by the driver itself, so a stored phase
-//would be a second source of truth to keep in step
-const phaseOf = (runner: ComponentRunner): ValueOf<typeof RUNNER_PHASE> => {
-	//ahead of the body run, because disconnectedCallback is a microtask behind the removal: between
-	//the two a runner still holds everything RUNNING reads, and its host is already nowhere
-	if (!runner.root.host.isConnected) return RUNNER_PHASE.NOT_CONNECTED;
-	//a fatal error can land before the first START, from a prop that throws on a detached element,
-	//and that START must not paint over it
-	if (runner.hasEndedWithFatalError) return RUNNER_PHASE.ENDED_BY_FATAL_ERROR;
-	if (runner.bodyRun !== null) return RUNNER_PHASE.RUNNING;
-	//the server writes the mark while the child sits in the parent's detached fragment, so it is
-	//already present when that fragment is connected and the child would otherwise paint its own run
-	//a required prop that has not arrived holds the start the same way a parent's mark does
-	if (isMissingRequiredProp(runner)) return RUNNER_PHASE.WAITING_FOR_PARENT_VALUES;
-	return !isServer() && runner.root.host.hasAttribute(DEFER_HYDRATION_ATTRIBUTE)
-		? RUNNER_PHASE.WAITING_FOR_PARENT_VALUES
-		: RUNNER_PHASE.READY_TO_START;
+const tearDownUpdateGeneratorRun = (runner: ComponentRunner): void => {
+	const updateGeneratorRun = runner.updateGeneratorRun;
+	if (updateGeneratorRun === null) return;
+	runner.updateGeneratorRun = null;
+	tearDownRun(updateGeneratorRun);
 };
 
-//the fields a phase is derived from constrain each other; checked wherever user code can be watching
-const assertRunnerIsConsistent = (runner: ComponentRunner): void => {
-	const isQueued = scheduler.queuedRunners.has(runner);
-	assertDuringDevelopment(
-		runner.blockedByRunner === null || isQueued,
-		"a runner waits for another only while it is queued",
-	);
-	assertDuringDevelopment(
-		runner.bodyRun !== null ||
-			(runner.currentUpdateGenerator === null && runner.updateGeneratorRun === null),
-		"an update generator belongs to a running body",
-	);
-	assertDuringDevelopment(
-		runner.updateGeneratorRun === null || runner.currentUpdateGenerator !== null,
-		"an update generator run belongs to the current update generator",
-	);
-	assertDuringDevelopment(
-		!runner.hasEndedWithFatalError || (runner.bodyRun === null && !isQueued),
-		"a runner that ended with a fatal error holds no run and no queue entry",
-	);
+const dropCurrentUpdateGenerator = (runner: ComponentRunner): void => {
+	runner.currentUpdateGenerator = null;
+	scheduler.queuedRunners.delete(runner);
+	runner.blockedByRunner = null;
+	tearDownUpdateGeneratorRun(runner);
+	resolvePendingUpdate(runner);
 };
 
 //the one entry into a runner's timing: a call site reports what happened to it, the phase decides
@@ -341,100 +440,6 @@ export const sendRunnerRequest = (
 	}
 };
 
-const resolvePendingUpdate = (runner: ComponentRunner): void => {
-	const pendingUpdate = runner.pendingUpdate;
-	runner.pendingUpdate = null;
-	pendingUpdate?.resolve();
-};
-
-//every field is cleared before either cleanup runs: a cleanup is user code that can call update() or
-//read the host, and it has to find a runner that is already fully stopped
-const stopRunner = (runner: ComponentRunner): void => {
-	scheduler.queuedRunners.delete(runner);
-	forgetAncestorRunner(runner);
-	runner.blockedByRunner = null;
-	const bodyRun = runner.bodyRun;
-	const updateGeneratorRun = runner.updateGeneratorRun;
-	runner.bodyRun = null;
-	runner.updateGeneratorRun = null;
-	runner.currentUpdateGenerator = null;
-	if (updateGeneratorRun !== null) tearDownRun(updateGeneratorRun);
-	if (bodyRun !== null) tearDownRun(bodyRun);
-	resolvePendingUpdate(runner);
-};
-
-export const endRunnerWithFatalError = (runner: ComponentRunner, error: unknown): void => {
-	if (runner.pendingFatalError === NO_PENDING_FATAL_ERROR) {
-		runner.pendingFatalError = error;
-		return;
-	}
-	//the component is already ending, so a second error has nothing left to end
-	if (runner.pendingFatalError !== NOT_DRIVEN) {
-		reportErrorFromUserCode(error);
-		return;
-	}
-	stopRunner(runner);
-	runner.hasEndedWithFatalError = true;
-	displayFatalErrorInRoot(runner.root, error);
-};
-
-const settleRunner = (runner: ComponentRunner): void => {
-	const queuedUpdateWillCompleteRunner = scheduler.queuedRunners.has(runner);
-	if (runner.wasMountedOnServer) {
-		if (!queuedUpdateWillCompleteRunner) stopRunner(runner);
-		return;
-	}
-	if (queuedUpdateWillCompleteRunner) return;
-	resolvePendingUpdate(runner);
-};
-
-const tearDownUpdateGeneratorRun = (runner: ComponentRunner): void => {
-	const updateGeneratorRun = runner.updateGeneratorRun;
-	if (updateGeneratorRun === null) return;
-	runner.updateGeneratorRun = null;
-	tearDownRun(updateGeneratorRun);
-};
-
-const dropCurrentUpdateGenerator = (runner: ComponentRunner): void => {
-	runner.currentUpdateGenerator = null;
-	scheduler.queuedRunners.delete(runner);
-	runner.blockedByRunner = null;
-	tearDownUpdateGeneratorRun(runner);
-	resolvePendingUpdate(runner);
-};
-
-const mountComponentGenerator = (runner: ComponentRunner): void => {
-	//a START queued by a paint can be beaten here by a move, and left in the queue it would re-run
-	//the update generator this mount starts
-	scheduler.queuedRunners.delete(runner);
-	runner.blockedByRunner = null;
-	runner.wasMountedOnServer = isServer();
-	let bodyRun: Run;
-	try {
-		bodyRun = createRun(
-			runner,
-			//not a method call, which would hand user code the runner as this
-			runner.componentGenerator.call(undefined, runner.componentProps),
-		);
-	} catch (error) {
-		if (error instanceof InvariantError) throw error;
-		endRunnerWithFatalError(runner, error);
-		return;
-	}
-	//the body's parameter defaults run user code, which can end the component before the body starts
-	if (phaseOf(runner) !== RUNNER_PHASE.READY_TO_START) return;
-	runner.bodyRun = bodyRun;
-	driveRun(bodyRun, TURN.SEND, undefined);
-};
-
-const rerunCurrentUpdateGenerator = (runner: ComponentRunner): void => {
-	assertDuringDevelopment(
-		runner.bodyRun !== null && runner.currentUpdateGenerator !== null,
-		"a running component is queued only while it has an update generator to re-run",
-	);
-	driveRun(runner.bodyRun, TURN.START_UPDATE_GENERATOR, undefined);
-};
-
 type TurnKind = ValueOf<typeof TURN>;
 
 const driveRun = (run: Run, turn: TurnKind, payload: unknown): void => {
@@ -445,11 +450,13 @@ const driveRun = (run: Run, turn: TurnKind, payload: unknown): void => {
 	scheduler.generatorCountOnStack++;
 	run.runner.pendingFatalError = NO_PENDING_FATAL_ERROR;
 	try {
+		//oxlint-disable-next-line no-use-before-define -- mutual recursion
 		driveRunUntilItStops(run, turn, payload);
 		const pendingFatalError = run.runner.pendingFatalError;
 		run.runner.pendingFatalError = NOT_DRIVEN;
-		if (pendingFatalError !== NO_PENDING_FATAL_ERROR)
+		if (pendingFatalError !== NO_PENDING_FATAL_ERROR) {
 			endRunnerWithFatalError(run.runner, pendingFatalError);
+		}
 		if (isDevelopmentBuild) assertRunnerIsConsistent(run.runner);
 	} finally {
 		scheduler.generatorCountOnStack--;
@@ -473,11 +480,25 @@ const paintRunnerRoot = (runner: ComponentRunner, template: TemplateValue): void
 	scheduler.runnerCurrentlyPainting = runner;
 	try {
 		paintComponentRoot(runner.root, template);
-		if (runner.wasMountedOnServer)
+		if (runner.wasMountedOnServer) {
 			flushHostPayload(runner.loadsRecordedOnServer, runner.root.shadowRoot);
+		}
 	} finally {
 		scheduler.runnerCurrentlyPainting = previousPainter;
 	}
+};
+
+//the async function sits outside the loop: a synchronous step never pays for the promise an async
+//function allocates on every call
+const driveRunOnceSettled = async (run: Run, settling: Promise<unknown>): Promise<void> => {
+	let value: unknown;
+	try {
+		value = await settling;
+	} catch (error) {
+		if (isStillParkedAt(run, settling)) driveRun(run, TURN.THROW, error);
+		return;
+	}
+	if (isStillParkedAt(run, settling)) driveRun(run, TURN.SEND, value);
 };
 
 //a turn does what the last step asked for, steps the run, then reads what it asks for next. Every
@@ -583,8 +604,9 @@ const driveRunUntilItStops = (run: Run, turn: TurnKind, payload: unknown): void 
 			if (result.done && isBodyRun) {
 				//nothing downstream reads any other return, so without this the drop is invisible to
 				//anyone not running the types
-				if (!hasReturnedCleanup && result.value !== undefined)
+				if (!hasReturnedCleanup && result.value !== undefined) {
 					warnDuringDevelopment(DROPPED_BODY_RETURN_MESSAGE);
+				}
 				settleRunner(run.runner);
 				return;
 			}
@@ -608,8 +630,9 @@ const driveRunUntilItStops = (run: Run, turn: TurnKind, payload: unknown): void 
 				void driveRunOnceSettled(run, yielded);
 				//after the continuation is registered: a listener awaiting the task resumes only once this
 				//run has gone on, so every child its next paint mounts has announced its own task by then
-				if (run.runner.wasMountedOnServer)
+				if (run.runner.wasMountedOnServer) {
 					run.runner.root.host.dispatchEvent(new PendingTaskEvent(yielded));
+				}
 				return;
 			}
 			if (isGeneratorFunction(yielded)) {
@@ -639,17 +662,4 @@ const driveRunUntilItStops = (run: Run, turn: TurnKind, payload: unknown): void 
 		}
 	}
 	endRunnerWithFatalError(run.runner, new Error(ENDLESS_SYNCHRONOUS_STEPS_MESSAGE));
-};
-
-//the async function sits outside the loop: a synchronous step never pays for the promise an async
-//function allocates on every call
-const driveRunOnceSettled = async (run: Run, settling: Promise<unknown>): Promise<void> => {
-	let value: unknown;
-	try {
-		value = await settling;
-	} catch (error) {
-		if (isStillParkedAt(run, settling)) driveRun(run, TURN.THROW, error);
-		return;
-	}
-	if (isStillParkedAt(run, settling)) driveRun(run, TURN.SEND, value);
 };

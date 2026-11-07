@@ -572,10 +572,11 @@ describe("a superseded update generator run", () => {
 		const MyElement = component(function* () {
 			yield function* () {
 				const mine = ++calls;
-				if (mine === 1)
+				if (mine === 1) {
 					yield sleep(40).then(() => {
 						throw new Error("superseded-rejection");
 					});
+				}
 				yield html`<p>call ${mine}</p>`;
 			};
 		});

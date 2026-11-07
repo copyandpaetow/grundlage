@@ -13,6 +13,7 @@ export const composeParts = (parts: ReadonlyArray<Part>, values: Array<unknown>)
 		const value = values[part];
 		//booleans read as absent, as in a content hole, so `cond && "active"` by static text drops out
 		const readsAsAbsent = value == null || typeof value === "boolean";
+		//oxlint-disable-next-line typescript/no-base-to-string -- an object composes as String(value)
 		if (!readsAsAbsent) result += String(value);
 	}
 	return result;

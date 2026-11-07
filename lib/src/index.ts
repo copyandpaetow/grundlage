@@ -78,16 +78,18 @@ export const component = <DeclaredSchema extends Schema = {}>(
 	componentGenerator: ComponentGenerator<DeclaredSchema>,
 	options: ComponentOptions<DeclaredSchema> = defaultOptions,
 ): ComponentConstructor<DeclaredSchema> => {
-	if (isAsyncGeneratorFunction(componentGenerator))
+	if (isAsyncGeneratorFunction(componentGenerator)) {
 		throw new TypeError(
 			libraryMessage(
 				"component(fn) expects a generator function, not an async one. Drop the async and yield each promise instead of awaiting it.",
 			),
 		);
-	if (!isGeneratorFunction(componentGenerator))
+	}
+	if (!isGeneratorFunction(componentGenerator)) {
 		throw new TypeError(
 			libraryMessage("component(fn) expects a generator function. Add the * after function."),
 		);
+	}
 	const mergedOptions = { ...defaultOptions, ...options };
 	const ParentClass: typeof HTMLElement = mergedOptions.formAssociated
 		? getFormAssociatedBaseClass()
@@ -129,7 +131,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 
 		static {
 			ensurePropNamesAreAvailable(this.prototype, props);
-			for (const [attributeName, prop] of props)
+			for (const [attributeName, prop] of props) {
 				Object.defineProperty(this.prototype, prop.propName, {
 					enumerable: true,
 					configurable: true,
@@ -142,6 +144,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 						this.#scheduleAfterPropChange();
 					},
 				});
+			}
 		}
 
 		//the resolver is user code, and neither the parent's paint nor attributeChangedCallback may
@@ -219,8 +222,9 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				);
 				return;
 			}
-			if (missingPropName !== undefined && isDevelopmentBuild)
+			if (missingPropName !== undefined && isDevelopmentBuild) {
 				requestAnimationFrame(() => this.#warnIfStillMissing(missingPropName));
+			}
 			sendRunnerRequest(this.#runner, RUNNER_REQUEST.START);
 		}
 

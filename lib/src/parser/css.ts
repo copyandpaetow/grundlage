@@ -106,6 +106,7 @@ const createRuleFrame = (
 		(MATCHES_HOST_PATTERN.test(prelude) ||
 			(parent !== null && parent.reinsertedRulePath !== NO_REINSERTION));
 	const inheritedReinsertedRulePath = parent === null ? NO_REINSERTION : parent.reinsertedRulePath;
+	const hostReinsertedRulePath = kind === RULE_KIND.STYLE ? rulePath : inheritedReinsertedRulePath;
 	return {
 		kind,
 		rulePath,
@@ -114,11 +115,7 @@ const createRuleFrame = (
 		openRunIndex: NO_OPEN_RUN,
 		isInsideStyleRule,
 		isInsideKeyframes,
-		reinsertedRulePath: !matchesHost
-			? NO_REINSERTION
-			: kind === RULE_KIND.STYLE
-				? rulePath
-				: inheritedReinsertedRulePath,
+		reinsertedRulePath: matchesHost ? hostReinsertedRulePath : NO_REINSERTION,
 		isOnDynamicPath: false,
 		declaredPropertyNames: new Set(),
 		holedPropertyNames: new Set(),
@@ -214,18 +211,20 @@ const readItem = (reader: StyleSheetReader): number => {
 			closingCode !== null && (isInsideBlock || code !== CHARACTER_CODE.OPEN_BRACE);
 		if (opensNestedBlock) openBlockClosingCodes.push(closingCode);
 		else if (isInsideBlock) {
-			if (code === openBlockClosingCodes[openBlockClosingCodes.length - 1])
+			if (code === openBlockClosingCodes[openBlockClosingCodes.length - 1]) {
 				openBlockClosingCodes.pop();
+			}
 		} else if (
 			code === CHARACTER_CODE.SEMICOLON ||
 			code === CHARACTER_CODE.OPEN_BRACE ||
 			code === CHARACTER_CODE.CLOSE_BRACE
-		)
+		) {
 			return index;
-		else if (code === CHARACTER_CODE.COLON) {
+		} else if (code === CHARACTER_CODE.COLON) {
 			if (reader.itemColonIndex === NO_COLON) reader.itemColonIndex = index;
-		} else if (code === CHARACTER_CODE.BANG && reader.itemColonIndex !== NO_COLON)
+		} else if (code === CHARACTER_CODE.BANG && reader.itemColonIndex !== NO_COLON) {
 			reader.itemTopLevelBangCount++;
+		}
 		index++;
 	}
 	if (openBlockClosingCodes.length > 0) throw NOT_ADDRESSABLE;
@@ -343,8 +342,9 @@ const trimValueEdgeWhitespace = (valueParts: Array<Part>): void => {
 //setProperty replaces a block's whole entry for a property, so a duplicate of a holed
 //property inside one rule would let an update defeat the cascade order the author wrote
 const claimStaticProperty = (frame: RuleFrame, propertyName: string) => {
-	if (frame.declaredPropertyNames.has(propertyName))
+	if (frame.declaredPropertyNames.has(propertyName)) {
 		return !frame.holedPropertyNames.has(propertyName);
+	}
 	frame.declaredPropertyNames.add(propertyName);
 	return true;
 };
@@ -394,8 +394,9 @@ const readDeclaration = (
 		return;
 	}
 	failUnlessHoleFree(source, declarationStart, colonIndex);
-	if (frame.doDeclarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN)
+	if (frame.doDeclarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN) {
 		frame.openRunIndex = frame.childRuleCount++;
+	}
 	const isDeclarationHolder = frame.kind === RULE_KIND.STYLE || frame.doDeclarationsCreateRuns;
 	const propertyName = isDeclarationHolder
 		? propertyNameOf(source, declarationStart, colonIndex)
@@ -422,8 +423,9 @@ const readDeclaration = (
 	holedRuleFor(reader, frame).declarations.push(declaration);
 	reader.declarationCount++;
 	const { openFrames } = reader;
-	for (let index = 0; index < openFrames.length - 1; index++)
+	for (let index = 0; index < openFrames.length - 1; index++) {
 		openFrames[index].isOnDynamicPath = true;
+	}
 	if (frame.openRunIndex !== NO_OPEN_RUN) frame.isOnDynamicPath = true;
 };
 
@@ -439,13 +441,15 @@ const readNestedRule = (
 	const frame = createRuleFrame(kind, parent.rulePath.concat(ruleIndex), parent, prelude);
 	reader.index = openBraceIndex + 1;
 	reader.openFrames.push(frame);
+	//oxlint-disable-next-line no-use-before-define -- mutual recursion
 	readRuleContents(reader);
 	reader.openFrames.pop();
-	if (frame.isOnDynamicPath)
+	if (frame.isOnDynamicPath) {
 		reader.ruleCountChecks.push({
 			rulePath: frame.rulePath,
 			expectedRuleCount: frame.childRuleCount,
 		});
+	}
 };
 
 const atRuleKindOf = (name: string): RuleKind => {

@@ -27,6 +27,9 @@ afterEach(async () => {
 	await sleep();
 });
 
+//a child tag known only at run time, so it is spliced into the template as a dynamic tag
+const childOf = (childTag: string) => html`<${childTag}></${childTag}>`;
+
 //the listener sits on an ancestor in the capture phase, where a server render listens
 const mountListening = (tag: string) => {
 	const container = document.createElement("div");
@@ -149,6 +152,7 @@ describe("pending-task on the server", () => {
 		);
 		container.append(document.createElement(parentTag));
 		document.body.append(container);
+		//oxlint-disable-next-line typescript/await-thenable -- the listener assigned it, which TypeScript does not track
 		await parentSettled;
 
 		expect(announcedWhenParentSettled).toBe(2);
@@ -188,6 +192,3 @@ describe("pending-task in the browser", () => {
 		expect(announced).toEqual([]);
 	});
 });
-
-//a child tag known only at run time, so it is spliced into the template as a dynamic tag
-const childOf = (childTag: string) => html`<${childTag}></${childTag}>`;

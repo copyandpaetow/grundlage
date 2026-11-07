@@ -7,12 +7,13 @@ export const isStringable = (value: unknown): value is string | number | bigint 
 	typeof value === "boolean";
 
 export const stringifyPrimitive = (value: unknown): string => {
-	if (!isStringable(value))
+	if (!isStringable(value)) {
 		throw new Error(
 			libraryMessage(
 				`expected a string, number, bigint or boolean, got ${typeof value}. Pass String(value) or one of its fields.`,
 			),
 		);
+	}
 	return String(value);
 };
 

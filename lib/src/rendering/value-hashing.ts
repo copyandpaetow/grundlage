@@ -45,7 +45,7 @@ const walk = createValueWalk();
 const walkLanes = new Int32Array(2);
 
 interface ReferenceRegistry {
-	idsByReference: WeakMap<Object, number>;
+	idsByReference: WeakMap<object, number>;
 	//held strongly, because a WeakMap refuses a Symbol.for symbol and, before Firefox 146, every
 	//symbol; each distinct symbol a walk meets stays registered
 	idsBySymbol: Map<symbol, number>;
@@ -61,7 +61,7 @@ const createReferenceRegistry = (): ReferenceRegistry => ({
 //one for the program: reference ids must stay stable across every paint
 const referenceRegistry = createReferenceRegistry();
 
-const referenceId = (value: Object): number => {
+const referenceId = (value: object): number => {
 	let id = referenceRegistry.idsByReference.get(value);
 	if (id === undefined) {
 		referenceRegistry.referenceRegistrationCount++;
@@ -92,8 +92,9 @@ const countWalkVisit = (): void => {
 };
 
 const ancestorDistanceOf = (container: {}, depth: number): number => {
-	for (let index = depth - 1; index >= 0; index--)
+	for (let index = depth - 1; index >= 0; index--) {
 		if (walk.containersOnPath[index] === container) return depth - index;
+	}
 	return NOT_AN_ANCESTOR;
 };
 
@@ -117,6 +118,42 @@ const mixNumberIntoWalk = (numberValue: number): void => {
 	mixWordIntoLanes(walkLanes, TAG.FLOAT << TAG_SHIFT);
 	mixWordIntoLanes(walkLanes, walk.floatWordsView[0]);
 	mixWordIntoLanes(walkLanes, walk.floatWordsView[1]);
+};
+
+const walkValue = (value: unknown, depth: number): void => {
+	switch (typeof value) {
+		case "string":
+			mixTextIntoLanes(walkLanes, (TAG.STRING << TAG_SHIFT) | value.length, value);
+			return;
+		case "number":
+			mixNumberIntoWalk(value);
+			return;
+		case "boolean":
+			mixWordIntoLanes(walkLanes, (TAG.BOOLEAN << TAG_SHIFT) | (value ? 1 : 0));
+			return;
+		case "undefined":
+			mixWordIntoLanes(walkLanes, TAG.NULLISH << TAG_SHIFT);
+			return;
+		case "bigint": {
+			const digits = String(value);
+			mixTextIntoLanes(walkLanes, (TAG.BIGINT << TAG_SHIFT) | digits.length, digits);
+			return;
+		}
+		case "function":
+			mixReferenceIntoWalk(referenceId(value));
+			return;
+		case "symbol":
+			mixReferenceIntoWalk(symbolId(value));
+			return;
+		case "object":
+			if (value === null) {
+				mixWordIntoLanes(walkLanes, TAG.NULLISH << TAG_SHIFT);
+				return;
+			}
+			//oxlint-disable-next-line no-use-before-define -- mutual recursion
+			walkObject(value, depth);
+			return;
+	}
 };
 
 //a template adds no level: nesting templates is written in source, and a cycle through one still
@@ -196,37 +233,6 @@ const walkObject = (value: object, depth: number): void => {
 	walk.containersOnPath[depth] = value;
 	walkContainerContents(value, depth + 1);
 	walk.containersOnPath[depth] = null;
-};
-
-const walkValue = (value: unknown, depth: number): void => {
-	switch (typeof value) {
-		case "string":
-			mixTextIntoLanes(walkLanes, (TAG.STRING << TAG_SHIFT) | value.length, value);
-			return;
-		case "number":
-			mixNumberIntoWalk(value);
-			return;
-		case "boolean":
-			mixWordIntoLanes(walkLanes, (TAG.BOOLEAN << TAG_SHIFT) | (value ? 1 : 0));
-			return;
-		case "undefined":
-			mixWordIntoLanes(walkLanes, TAG.NULLISH << TAG_SHIFT);
-			return;
-		case "bigint": {
-			const digits = String(value);
-			mixTextIntoLanes(walkLanes, (TAG.BIGINT << TAG_SHIFT) | digits.length, digits);
-			return;
-		}
-		case "function":
-			mixReferenceIntoWalk(referenceId(value));
-			return;
-		case "symbol":
-			mixReferenceIntoWalk(symbolId(value));
-			return;
-		case "object":
-			if (value === null) mixWordIntoLanes(walkLanes, TAG.NULLISH << TAG_SHIFT);
-			else walkObject(value, depth);
-	}
 };
 
 //every value's words go into the same two lanes, so nothing is allocated per value and no nested

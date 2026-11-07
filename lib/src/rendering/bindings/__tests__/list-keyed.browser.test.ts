@@ -155,8 +155,9 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 				<li><input value=${id} /></li>`;
 		const endMarkerOfRow = (item: Element): Node => {
 			let current = item.nextSibling;
-			while (current !== null && current.nodeType !== Node.COMMENT_NODE)
+			while (current !== null && current.nodeType !== Node.COMMENT_NODE) {
 				current = current.nextSibling;
+			}
 			return current!;
 		};
 

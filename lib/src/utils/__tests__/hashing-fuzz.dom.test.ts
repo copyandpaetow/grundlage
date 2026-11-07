@@ -103,6 +103,13 @@ const templates = [
 ];
 const DEPTH_LIMIT = 5;
 
+const createContainer = (kind: number) => {
+	if (kind <= 2) return [];
+	if (kind <= 4) return {};
+	if (kind === 5) return new Map();
+	return new Set();
+};
+
 const generate = (
 	random: (below: number) => number,
 	depth: number,
@@ -114,16 +121,17 @@ const generate = (
 	if (isBackReference) return containersOnPath[random(containersOnPath.length)];
 	const childOf = () => generate(random, depth + 1, containersOnPath);
 	if (kind === 7) return templates[random(templates.length)]([childOf(), childOf()]);
-	const container = kind <= 2 ? [] : kind <= 4 ? {} : kind === 5 ? new Map() : new Set();
+	const container = createContainer(kind);
 	containersOnPath.push(container);
 	const childCount = random(4);
 	for (let index = 0; index < childCount; index++) {
 		if (Array.isArray(container)) container.push(childOf());
 		else if (container instanceof Map) container.set(childOf(), childOf());
 		else if (container instanceof Set) container.add(childOf());
-		else
+		else {
 			(container as Record<string, unknown>)[propertyNames[random(propertyNames.length)]] =
 				childOf();
+		}
 	}
 	containersOnPath.pop();
 	return container;
@@ -151,11 +159,15 @@ const serialize = (value: unknown, containersOnPath: Array<object>): string => {
 		case "function":
 		case "symbol":
 			return `reference ${identityOf(value)}`;
+		case "object":
+		case "undefined":
+			break;
 	}
 	const object = value as object;
 	const serializeChild = (child: unknown) => serialize(child, containersOnPath);
-	if (isTemplate(object))
+	if (isTemplate(object)) {
 		return `template ${JSON.stringify([...object.__templateStrings])}(${object.values.map(serializeChild).join(",")})`;
+	}
 	const isWalked = [Array, Object, Map, Set].includes(object.constructor as never);
 	if (!isWalked) return `reference ${identityOf(value)}`;
 	const ancestorIndex = containersOnPath.lastIndexOf(object);
@@ -163,14 +175,15 @@ const serialize = (value: unknown, containersOnPath: Array<object>): string => {
 	containersOnPath.push(object);
 	let serialization: string;
 	if (Array.isArray(object)) serialization = `[${object.map(serializeChild).join(",")}]`;
-	else if (object instanceof Map)
+	else if (object instanceof Map) {
 		serialization = `map(${[...object].map(([key, entry]) => `${serializeChild(key)}=>${serializeChild(entry)}`).join(",")})`;
-	else if (object instanceof Set)
+	} else if (object instanceof Set) {
 		serialization = `set(${[...object].map(serializeChild).join(",")})`;
-	else
+	} else {
 		serialization = `{${Object.entries(object)
 			.map(([name, entry]) => `${JSON.stringify(name)}:${serializeChild(entry)}`)
 			.join(",")}}`;
+	}
 	containersOnPath.pop();
 	return serialization;
 };
@@ -184,8 +197,9 @@ test("a value and its twin one change away hash alike exactly when they serializ
 		const twin = generate(createTwinRandom(seed, seed % 7), 0, []);
 		const isSerializationEqual = serialize(value, []) === serialize(twin, []);
 		const isHashEqual = hashValue(value) === hashValue(twin);
-		if (isHashEqual && !isSerializationEqual)
+		if (isHashEqual && !isSerializationEqual) {
 			missedChanges.push(`${serialize(value, [])} vs ${serialize(twin, [])}`);
+		}
 		if (!isHashEqual && isSerializationEqual) falseChanges.push(serialize(value, []));
 	}
 	expect(missedChanges.slice(0, 3)).toEqual([]);
@@ -222,8 +236,9 @@ test("among many small values, equal hashes mean equal serializations", () => {
 		if (kind === 3) {
 			const object: Record<string, unknown> = {};
 			const propertyCount = random(3);
-			for (let index = 0; index < propertyCount; index++)
+			for (let index = 0; index < propertyCount; index++) {
 				object[["a", "b", "ab"][random(3)]] = childOf();
+			}
 			return object;
 		}
 		if (kind === 4) return new Map([[childOf(), childOf()]]);
@@ -241,8 +256,9 @@ test("among many small values, equal hashes mean equal serializations", () => {
 		const hash = hashValue(value);
 		const serializationWithThisHash = serializationByHash.get(hash);
 		if (serializationWithThisHash === undefined) serializationByHash.set(hash, serialization);
-		else if (serializationWithThisHash !== serialization)
+		else if (serializationWithThisHash !== serialization) {
 			missedChanges.push(`${serializationWithThisHash} vs ${serialization}`);
+		}
 		const hashOfThisSerialization = hashBySerialization.get(serialization);
 		if (hashOfThisSerialization === undefined) hashBySerialization.set(serialization, hash);
 		else if (hashOfThisSerialization !== hash) falseChanges.push(serialization);

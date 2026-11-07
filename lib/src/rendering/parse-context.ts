@@ -17,6 +17,7 @@ const MATHML_TEXT_INTEGRATION_POINTS = new Set(["mi", "mo", "mn", "ms", "mtext"]
 
 export const parseContextOfChildren = (parent: Node | null): ParseContextKind => {
 	if (!(parent instanceof Element)) return PARSE_CONTEXT.HTML;
+	//oxlint-disable-next-line typescript/switch-exhaustiveness-check -- namespaceURI is any string
 	switch (parent.namespaceURI) {
 		case SVG_NAMESPACE:
 			return SVG_HTML_INTEGRATION_POINTS.has(parent.localName)

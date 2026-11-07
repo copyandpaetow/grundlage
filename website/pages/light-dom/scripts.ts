@@ -184,7 +184,7 @@ const outcomeOf = (check: Check, tag: string): Outcome => {
 		check.needs.includes("a server render") &&
 		!wasRenderedOnTheServer(beforeUpgrade)
 	)
-		return "pending";
+		{return "pending";}
 	try {
 		return check.run({ tag, host, root: rootOf(host), beforeUpgrade })
 			? "holds"
@@ -217,7 +217,7 @@ const stateText = (): string => {
 		? ""
 		: " This page was not prerendered, so the hydration rows read ⏳ — the [prerender] warning in the terminal says why.";
 	if (!lightModeShips)
-		return `Light mode does not ship yet, so the light column reads ⏳. The shadow column is the problem it exists to solve: page CSS, label[for] and :target cannot cross the boundary, and no component can work around that.${hydrationNote}`;
+		{return `Light mode does not ship yet, so the light column reads ⏳. The shadow column is the problem it exists to solve: page CSS, label[for] and :target cannot cross the boundary, and no component can work around that.${hydrationNote}`;}
 	return `Light mode ships${slotsShip ? "" : ", slots do not"}. The light column is the specification, and every ✅ is a rule that holds.${hydrationNote}`;
 };
 

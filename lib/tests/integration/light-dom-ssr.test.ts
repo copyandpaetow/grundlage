@@ -254,7 +254,7 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 			//PROP_NAME_PATTERN forbids a key from starting with a digit, so the scope is the leading
 			//digit run and the key is everything past the hyphen after it
 			let element!: HTMLElement;
-			for (let index = 0; index <= 10; index++)
+			for (let index = 0; index <= 10; index++) {
 				element = await renderOnServer(
 					component(
 						function* (props) {
@@ -266,6 +266,7 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 					),
 					`<p slot="sub-title">deep</p>`,
 				);
+			}
 
 			const scope = element.getAttribute(SLOT_SCOPE_ATTRIBUTE)!;
 			expect(scope.length).toBeGreaterThan(1);

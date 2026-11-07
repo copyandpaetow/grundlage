@@ -9,6 +9,9 @@ const START = { x: 0, y: -160, z: 600 };
 const START_DISTANCE = Math.hypot(START.x, START.y, START.z);
 
 let camera: HTMLElement & { update: () => Promise<void> };
+
+const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
+
 let world: HTMLElement;
 
 beforeEach(() => {
@@ -26,9 +29,10 @@ afterEach(async () => {
 	await flush();
 });
 
-const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
-
 const readCamera = (name: string): number => parseFloat(world.getAttribute(`camera-${name}`) ?? "");
+
+const nextFrame = (): Promise<void> =>
+	new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
 // The step loop runs on rAF, so a movement key needs real frames to show up.
 const holdKeyForTwoFrames = async (key: string): Promise<void> => {
@@ -37,9 +41,6 @@ const holdKeyForTwoFrames = async (key: string): Promise<void> => {
 	await nextFrame();
 	window.dispatchEvent(new KeyboardEvent("keyup", { key }));
 };
-
-const nextFrame = (): Promise<void> =>
-	new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
 const setMode = async (mode: string): Promise<void> => {
 	camera.setAttribute("mode", mode);

@@ -70,6 +70,7 @@ export const createSelection = (state: EditorState, deps: SelectionDeps): Select
 
 	const clearSelection = (): void => {
 		if (state.gizmo === null) return;
+		//oxlint-disable-next-line unicorn/no-useless-spread -- foldOut removes the block from the selection
 		for (const block of [...state.selection]) foldOut(block);
 		teardownSelection();
 	};

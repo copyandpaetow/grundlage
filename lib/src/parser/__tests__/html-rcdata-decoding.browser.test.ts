@@ -18,8 +18,9 @@ const templateStringsOf = (tag: string, before: string, after: string): Template
 const composedByGrundlage = (tag: string, before: string, after: string): string => {
 	const parsed = getParsedTemplate(templateStringsOf(tag, before, after));
 	const binding = parsed.bindings.find((binding) => binding.type === BINDING.RAW_CONTENT);
-	if (binding === undefined || binding.type !== BINDING.RAW_CONTENT)
+	if (binding === undefined || binding.type !== BINDING.RAW_CONTENT) {
 		throw new Error("expected a raw content binding");
+	}
 	return composeParts(binding.parts, [HOLE_VALUE]);
 };
 
@@ -29,7 +30,7 @@ const parsedByBrowser = (tag: string, before: string, after: string): string => 
 	return host.firstElementChild!.textContent!;
 };
 
-for (const tag of ["textarea", "title"])
+for (const tag of ["textarea", "title"]) {
 	describe.skipIf(!isRealBrowser)(
 		`<${tag}> static parts beside a hole decode as the browser parser does`,
 		() => {
@@ -55,6 +56,7 @@ for (const tag of ["textarea", "title"])
 			}
 		},
 	);
+}
 
 describe("a named reference outside the subset is a definition error", () => {
 	const references = ["AT&T ", "&copy; ", "&copy2024 ", "&ltimes; ", "&ampx ", "&apos "];

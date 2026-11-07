@@ -56,8 +56,9 @@ export const findPageScripts = (html: string, pageUrlPath: string): PageScripts 
 
 		const source = attributes.get("src");
 		if (source !== undefined) {
-			if (!isExternalUrl(source))
+			if (!isExternalUrl(source)) {
 				pageScripts.externalScriptUrls.push(resolveAgainstPage(source, pageUrlPath));
+			}
 			continue;
 		}
 		for (const specifier of staticImportsOf(inlineCode)) {

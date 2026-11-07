@@ -98,8 +98,9 @@ const findVoidReasons = (
 ): Array<VoidReason> => {
 	const reasons: Array<VoidReason> = [];
 	if (!cacheStayedCold) reasons.push("cache hit");
-	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO)
+	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO) {
 		reasons.push("unstable timing");
+	}
 	return reasons;
 };
 

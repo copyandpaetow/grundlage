@@ -108,11 +108,12 @@ export const tearDownRun = (run: Run): void => {
 	run.suspension = null;
 	try {
 		const result = run.generator.return(undefined);
-		if (!result.done)
+		if (!result.done) {
 			void driveTeardownUntilDone(run, result, {
 				bodyRun: run.runner.bodyRun,
 				updateGeneratorRun: run.runner.updateGeneratorRun,
 			});
+		}
 	} catch (error) {
 		//the caller still has a sibling cleanup to run and a paint to make after this
 		reportErrorFromUserCode(error);

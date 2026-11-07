@@ -36,13 +36,15 @@ const comparableMarkupOf = (
 	const styles = container.querySelectorAll("style");
 	for (let index = 0; index < styles.length; index++) styles[index].textContent = styleTexts[index];
 	const textareas = container.querySelectorAll("textarea");
-	for (let index = 0; index < textareas.length; index++)
+	for (let index = 0; index < textareas.length; index++) {
 		textareas[index].textContent = textareaTexts[index];
+	}
 	const walker = document.createTreeWalker(container, NodeFilter.SHOW_COMMENT);
 	const markers: Array<Comment> = [];
 	let node: Comment | null;
-	while ((node = walker.nextNode() as Comment | null))
+	while ((node = walker.nextNode() as Comment | null)) {
 		if (node.data.startsWith("^.^ ")) markers.push(node);
+	}
 	for (const marker of markers) marker.remove();
 	container.normalize();
 	//the library appends bound attributes after the static ones, an order nothing but serialization sees
@@ -146,9 +148,9 @@ test.runIf(isRealBrowser).each([1, 2, 3])(
 			};
 			if (compare(firstValues, "mount")) {
 				currentPaint = { generated, values: nextValues };
-				if ((await settledWithin(host.update())) === UNSETTLED)
+				if ((await settledWithin(host.update())) === UNSETTLED) {
 					wrong.push(`patch never settled in ${source}`);
-				else if (compare(nextValues, "patch")) tally.patched++;
+				} else if (compare(nextValues, "patch")) tally.patched++;
 			}
 			host.remove();
 		}

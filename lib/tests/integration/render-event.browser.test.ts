@@ -23,6 +23,9 @@ afterEach(async () => {
 	await sleep();
 });
 
+//a child tag known only at run time, so it is spliced into the template as a dynamic tag
+const childOf = (childTag: string) => html`<${childTag}></${childTag}>`;
+
 //the listener sits on an ancestor, where a server render listens, and cancels the render of one tag
 const mountListening = (tag: string, cancelledTag: string | null = null) => {
 	const container = document.createElement("div");
@@ -127,6 +130,3 @@ describe("grundlage-render in the browser", () => {
 		expect(announced).toEqual([]);
 	});
 });
-
-//a child tag known only at run time, so it is spliced into the template as a dynamic tag
-const childOf = (childTag: string) => html`<${childTag}></${childTag}>`;

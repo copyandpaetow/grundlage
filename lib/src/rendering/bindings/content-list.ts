@@ -1,3 +1,4 @@
+//oxlint-disable import/no-cycle -- mutual recursion: a template holds templates
 import { ParsedTemplate } from "../../parser/types";
 import { coerceToTemplate, TemplateValue } from "../../template";
 import { combineOrderedHash, LIST_HASH_SEED } from "../../utils/hashing";
@@ -38,69 +39,6 @@ const shapeOrKeyHashOf = (value: TemplateValue, parsed: ParsedTemplate): number 
 		? parsed.templateHash
 		: combinedPartsHash(parsed.keyValueParts, value.values);
 
-export const commitList = (
-	liveBinding: ContentLiveBinding,
-	list: ListContentState,
-	itemValues: Array<unknown>,
-	treeState: TreeState,
-): void => {
-	const count = itemValues.length;
-	if (list.itemHashes.length < count) list.itemHashes = new Array(count);
-	const itemHashes = list.itemHashes;
-	let aggregateHash = LIST_HASH_SEED;
-	for (let index = 0; index < count; index++) {
-		const itemHash = hashValue(itemValues[index]);
-		itemHashes[index] = itemHash;
-		aggregateHash = combineOrderedHash(aggregateHash, itemHash);
-	}
-	if (aggregateHash === list.lastValueHash) return;
-	list.lastValueHash = aggregateHash;
-	const previousRows = list.items;
-	const resolvedRows = list.spareRows;
-	resolvedRows.length = count;
-
-	//a row still equal at its own index keeps it: claiming is leftmost-first, so a changed index would
-	//take the furthest match and drag its focus, scroll and input state across the list
-	let firstUnsettledIndex = 0;
-	let endOfUnsettledIndexes = count;
-	let endOfUnsettledPreviousRows = previousRows.length;
-	while (
-		firstUnsettledIndex < endOfUnsettledIndexes &&
-		firstUnsettledIndex < endOfUnsettledPreviousRows &&
-		previousRows[firstUnsettledIndex].itemHash === itemHashes[firstUnsettledIndex]
-	) {
-		resolvedRows[firstUnsettledIndex] = previousRows[firstUnsettledIndex];
-		firstUnsettledIndex++;
-	}
-	while (
-		endOfUnsettledIndexes > firstUnsettledIndex &&
-		endOfUnsettledPreviousRows > firstUnsettledIndex &&
-		previousRows[endOfUnsettledPreviousRows - 1].itemHash === itemHashes[endOfUnsettledIndexes - 1]
-	) {
-		endOfUnsettledIndexes--;
-		endOfUnsettledPreviousRows--;
-		resolvedRows[endOfUnsettledIndexes] = previousRows[endOfUnsettledPreviousRows];
-	}
-	if (endOfUnsettledPreviousRows > firstUnsettledIndex) {
-		matchUnsettledRows(
-			list,
-			itemValues,
-			firstUnsettledIndex,
-			endOfUnsettledIndexes,
-			endOfUnsettledPreviousRows,
-		);
-		removeUnclaimedRows(list, firstUnsettledIndex, endOfUnsettledPreviousRows);
-	}
-
-	placeRows(list, liveBinding.openMarker, resolvedRows, itemValues, treeState);
-	//placeRows mounted a row into every index the match left empty
-	list.items = resolvedRows as Array<ListItem>;
-	//emptied so the removed rows, and their detached DOM, are not kept alive until the next patch
-	const spareRows: Array<ListItem | undefined> = previousRows;
-	spareRows.fill(undefined);
-	list.spareRows = spareRows;
-};
-
 const emptyRowHashTable = (list: ListContentState): void => {
 	const capacity = 1 << (32 - list.tableIndexShift);
 	list.chainHeadAtTableIndex.fill(UNUSED_TABLE_ENTRY, 0, capacity);
@@ -115,8 +53,9 @@ const tableIndexOfHash = (list: ListContentState, hash: number): number => {
 	while (
 		chainHeadAtTableIndex[tableIndex] !== UNUSED_TABLE_ENTRY &&
 		hashAtTableIndex[tableIndex] !== hash
-	)
+	) {
 		tableIndex = (tableIndex + 1) & lastTableIndex;
+	}
 	return tableIndex;
 };
 
@@ -132,8 +71,9 @@ const chainRowByHash = (list: ListContentState, previousIndex: number, hash: num
 
 const chainRowsByContentHash = (list: ListContentState, start: number, end: number): void => {
 	emptyRowHashTable(list);
-	for (let previousIndex = end - 1; previousIndex >= start; previousIndex--)
+	for (let previousIndex = end - 1; previousIndex >= start; previousIndex--) {
 		chainRowByHash(list, previousIndex, list.items[previousIndex].itemHash);
+	}
 };
 
 const chainUnclaimedRowsByShapeOrKey = (
@@ -187,8 +127,9 @@ const matchUnsettledRows = (
 		list.chainHeadAtTableIndex = new Int32Array(tableCapacity);
 	}
 	list.tableIndexShift = 32 - indexBitCount;
-	if (list.nextRowWithSameHash.length < list.items.length)
+	if (list.nextRowWithSameHash.length < list.items.length) {
 		list.nextRowWithSameHash = new Int32Array(list.items.length);
+	}
 
 	chainRowsByContentHash(list, start, endOfPreviousRows);
 	let claimedRowCount = 0;
@@ -253,55 +194,6 @@ const findLongestIncreasingSubsequence = (
 	return longestLength === 0 ? END_OF_SUBSEQUENCE : subsequenceStarts[longestLength - 1];
 };
 
-const placeRows = (
-	list: ListContentState,
-	openMarker: Comment,
-	resolvedRows: Array<ListItem | undefined>,
-	itemValues: Array<unknown>,
-	treeState: TreeState,
-): void => {
-	//still the previous rows: commitList replaces them once this has placed the new ones
-	const previousRowCount = list.items.length;
-	if (list.nextInSubsequence.length < previousRowCount) {
-		list.subsequenceStarts = new Int32Array(previousRowCount);
-		list.nextInSubsequence = new Int32Array(previousRowCount);
-	}
-	let nextUnmovedPreviousIndex = findLongestIncreasingSubsequence(list, resolvedRows);
-	const { itemHashes, nextInSubsequence } = list;
-	let cursor: ChildNode = openMarker;
-	for (let index = 0; index < resolvedRows.length; index++) {
-		let row = resolvedRows[index];
-		if (row === undefined)
-			row = mountRowAfter(cursor, index, itemValues[index], itemHashes[index], treeState);
-		else {
-			//every other row the match found was already equal in content
-			if (row.itemHash !== itemHashes[index]) {
-				const value = coerceToTemplate(itemValues[index]);
-				const parsed = parseNestedTemplate(value);
-				row.itemHash = itemHashes[index];
-				if (isPatchableInPlace(row.instance, parsed)) patchInstance(row.instance, value.values);
-				else {
-					const fragment = cloneTemplateFragment(parsed, row.tailMarker.parentNode);
-					const instance = mountInstance(fragment, value.values, parsed, treeState);
-					clearRange(row.startNode, row.tailMarker);
-					row.startNode = fragment.firstChild ?? row.tailMarker;
-					row.tailMarker.before(fragment);
-					row.instance = instance;
-				}
-			}
-			if (row.placedAtIndex === nextUnmovedPreviousIndex)
-				nextUnmovedPreviousIndex = nextInSubsequence[nextUnmovedPreviousIndex];
-			else {
-				moveRowAfter(cursor, row);
-				refreshStyleSheetsAfterMove(row.instance);
-			}
-		}
-		row.placedAtIndex = index;
-		cursor = row.tailMarker;
-		resolvedRows[index] = row;
-	}
-};
-
 const mountRowAfter = (
 	after: ChildNode,
 	placedAtIndex: number,
@@ -338,10 +230,123 @@ const moveRowAfter = (after: ChildNode, row: ListItem): void => {
 	anchor.after(row.tailMarker);
 };
 
+const placeRows = (
+	list: ListContentState,
+	openMarker: Comment,
+	resolvedRows: Array<ListItem | undefined>,
+	itemValues: Array<unknown>,
+	treeState: TreeState,
+): void => {
+	//still the previous rows: commitList replaces them once this has placed the new ones
+	const previousRowCount = list.items.length;
+	if (list.nextInSubsequence.length < previousRowCount) {
+		list.subsequenceStarts = new Int32Array(previousRowCount);
+		list.nextInSubsequence = new Int32Array(previousRowCount);
+	}
+	let nextUnmovedPreviousIndex = findLongestIncreasingSubsequence(list, resolvedRows);
+	const { itemHashes, nextInSubsequence } = list;
+	let cursor: ChildNode = openMarker;
+	for (let index = 0; index < resolvedRows.length; index++) {
+		let row = resolvedRows[index];
+		if (row === undefined) {
+			row = mountRowAfter(cursor, index, itemValues[index], itemHashes[index], treeState);
+		} else {
+			//every other row the match found was already equal in content
+			if (row.itemHash !== itemHashes[index]) {
+				const value = coerceToTemplate(itemValues[index]);
+				const parsed = parseNestedTemplate(value);
+				row.itemHash = itemHashes[index];
+				if (isPatchableInPlace(row.instance, parsed)) patchInstance(row.instance, value.values);
+				else {
+					const fragment = cloneTemplateFragment(parsed, row.tailMarker.parentNode);
+					const instance = mountInstance(fragment, value.values, parsed, treeState);
+					clearRange(row.startNode, row.tailMarker);
+					row.startNode = fragment.firstChild ?? row.tailMarker;
+					row.tailMarker.before(fragment);
+					row.instance = instance;
+				}
+			}
+			if (row.placedAtIndex === nextUnmovedPreviousIndex) {
+				nextUnmovedPreviousIndex = nextInSubsequence[nextUnmovedPreviousIndex];
+			} else {
+				moveRowAfter(cursor, row);
+				refreshStyleSheetsAfterMove(row.instance);
+			}
+		}
+		row.placedAtIndex = index;
+		cursor = row.tailMarker;
+		resolvedRows[index] = row;
+	}
+};
+
+export const commitList = (
+	liveBinding: ContentLiveBinding,
+	list: ListContentState,
+	itemValues: Array<unknown>,
+	treeState: TreeState,
+): void => {
+	const count = itemValues.length;
+	if (list.itemHashes.length < count) list.itemHashes = new Array(count);
+	const itemHashes = list.itemHashes;
+	let aggregateHash = LIST_HASH_SEED;
+	for (let index = 0; index < count; index++) {
+		const itemHash = hashValue(itemValues[index]);
+		itemHashes[index] = itemHash;
+		aggregateHash = combineOrderedHash(aggregateHash, itemHash);
+	}
+	if (aggregateHash === list.lastValueHash) return;
+	list.lastValueHash = aggregateHash;
+	const previousRows = list.items;
+	const resolvedRows = list.spareRows;
+	resolvedRows.length = count;
+
+	//a row still equal at its own index keeps it: claiming is leftmost-first, so a changed index would
+	//take the furthest match and drag its focus, scroll and input state across the list
+	let firstUnsettledIndex = 0;
+	let endOfUnsettledIndexes = count;
+	let endOfUnsettledPreviousRows = previousRows.length;
+	while (
+		firstUnsettledIndex < endOfUnsettledIndexes &&
+		firstUnsettledIndex < endOfUnsettledPreviousRows &&
+		previousRows[firstUnsettledIndex].itemHash === itemHashes[firstUnsettledIndex]
+	) {
+		resolvedRows[firstUnsettledIndex] = previousRows[firstUnsettledIndex];
+		firstUnsettledIndex++;
+	}
+	while (
+		endOfUnsettledIndexes > firstUnsettledIndex &&
+		endOfUnsettledPreviousRows > firstUnsettledIndex &&
+		previousRows[endOfUnsettledPreviousRows - 1].itemHash === itemHashes[endOfUnsettledIndexes - 1]
+	) {
+		endOfUnsettledIndexes--;
+		endOfUnsettledPreviousRows--;
+		resolvedRows[endOfUnsettledIndexes] = previousRows[endOfUnsettledPreviousRows];
+	}
+	if (endOfUnsettledPreviousRows > firstUnsettledIndex) {
+		matchUnsettledRows(
+			list,
+			itemValues,
+			firstUnsettledIndex,
+			endOfUnsettledIndexes,
+			endOfUnsettledPreviousRows,
+		);
+		removeUnclaimedRows(list, firstUnsettledIndex, endOfUnsettledPreviousRows);
+	}
+
+	placeRows(list, liveBinding.openMarker, resolvedRows, itemValues, treeState);
+	//placeRows mounted a row into every index the match left empty
+	list.items = resolvedRows as Array<ListItem>;
+	//emptied so the removed rows, and their detached DOM, are not kept alive until the next patch
+	const spareRows: Array<ListItem | undefined> = previousRows;
+	spareRows.fill(undefined);
+	list.spareRows = spareRows;
+};
+
 export const aggregateHashOfItems = (items: Array<ListItem>): number => {
 	let aggregateHash = LIST_HASH_SEED;
-	for (let index = 0; index < items.length; index++)
+	for (let index = 0; index < items.length; index++) {
 		aggregateHash = combineOrderedHash(aggregateHash, items[index].itemHash);
+	}
 	return aggregateHash;
 };
 

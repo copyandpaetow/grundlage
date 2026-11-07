@@ -502,12 +502,11 @@ describe("shared template generator functions", () => {
 	test("helper with conditional variants swaps DOM structure between updates", async () => {
 		const tag = uniqueTag("shared-conditional");
 
-		const status = (state: "idle" | "loading" | "error", message: string) =>
-			state === "loading"
-				? html`<div role="status">loading: ${message}</div>`
-				: state === "error"
-					? html`<div role="alert">${message}</div>`
-					: html`<div role="presentation">${message}</div>`;
+		const status = (state: "idle" | "loading" | "error", message: string) => {
+			if (state === "loading") return html`<div role="status">loading: ${message}</div>`;
+			if (state === "error") return html`<div role="alert">${message}</div>`;
+			return html`<div role="presentation">${message}</div>`;
+		};
 
 		let state: "idle" | "loading" | "error" = "loading";
 		let message = "fetching";
@@ -1260,9 +1259,9 @@ describe("framework-parity patterns", () => {
 			await sleep();
 
 			expect(element.shadowRoot?.querySelector("h1")?.textContent).toBe("two");
-			const sameInput = (
-				element.shadowRoot?.querySelector(childTag) as HTMLElement
-			).shadowRoot?.querySelector("input");
+			const sameInput = element
+				.shadowRoot!.querySelector<HTMLElement>(childTag)!
+				.shadowRoot?.querySelector("input");
 			expect(sameInput).toBe(input);
 			expect(child.shadowRoot?.activeElement).toBe(input);
 

@@ -87,8 +87,9 @@ export const matchCompiledStyleSheet = (
 
 const isPathPrefix = (prefix: ReadonlyArray<number>, rulePath: ReadonlyArray<number>) => {
 	if (prefix.length > rulePath.length) return false;
-	for (let index = 0; index < prefix.length; index++)
+	for (let index = 0; index < prefix.length; index++) {
 		if (prefix[index] !== rulePath[index]) return false;
+	}
 	return true;
 };
 
@@ -162,11 +163,12 @@ export const seedDeclarationValueHashes = (
 	let declarationIndex = 0;
 	for (let ruleIndex = 0; ruleIndex < holedRules.length; ruleIndex++) {
 		const { declarations } = holedRules[ruleIndex];
-		for (let index = 0; index < declarations.length; index++)
+		for (let index = 0; index < declarations.length; index++) {
 			declarationValueHashes[declarationIndex++] = combinedPartsHash(
 				declarations[index].valueParts,
 				values,
 			);
+		}
 	}
 };
 

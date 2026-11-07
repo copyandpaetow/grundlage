@@ -19,8 +19,6 @@ import {
 	mountInstance,
 	patchInstance,
 } from "../../lib/src/rendering/instance";
-//the internal html, not the branded public one: this file is already below that surface
-import { html } from "../../lib/src/template";
 import { readHeapMb } from "./measure";
 import {
 	type CommitShape,
@@ -99,8 +97,9 @@ const mountShape = (generated: GeneratedShape, container: Element): MountedShape
 	const { templateStrings, valuesByParity } = generated;
 	const parsed = getParsedTemplate(templateStrings);
 	const fragment = cloneTemplateFragment(parsed, container);
-	const instance = mountInstance(fragment, html(templateStrings, ...valuesByParity[0]), parsed, {
+	const instance = mountInstance(fragment, valuesByParity[0], parsed, {
 		needsStyleSheetRefreshOnMove: false,
+		isTemplateContent: false,
 	});
 	container.replaceChildren(fragment);
 	return { generated, instance, container };
@@ -110,8 +109,9 @@ const runPass = (mounted: MountedShape, updates: number): number => {
 	const [first, second] = mounted.generated.valuesByParity;
 	const { instance } = mounted;
 	const start = performance.now();
-	for (let update = 0; update < updates; update++)
+	for (let update = 0; update < updates; update++) {
 		patchInstance(instance, (update & 1) === 0 ? first : second);
+	}
 	return performance.now() - start;
 };
 
@@ -120,8 +120,9 @@ const CALIBRATION_TRIES = 3;
 
 const bestPassOf = (mounted: MountedShape, updates: number): number => {
 	let best = Infinity;
-	for (let attempt = 0; attempt < CALIBRATION_TRIES; attempt++)
+	for (let attempt = 0; attempt < CALIBRATION_TRIES; attempt++) {
 		best = Math.min(best, runPass(mounted, updates));
+	}
 	return best;
 };
 
@@ -164,8 +165,14 @@ const readObservableState = (mounted: MountedShape): string => {
 			return readPropertyOfEveryChild(mounted, DECLARED_PROP_NAME);
 		case "liveStateProperty":
 			return readPropertyOfEveryChild(mounted, "value");
-		default:
+		case "staticNameAttribute":
+		case "composedNameAttribute":
+		case "customElementAttribute":
+		case "attributeSpread":
+		case "content":
 			return mounted.container.innerHTML;
+		default:
+			return mounted.generated.shape.lane satisfies never;
 	}
 };
 
@@ -189,8 +196,9 @@ const findVoidReasons = (
 	const reasons: Array<VoidReason> = [];
 	if (shape.churn === "changing" && !stateMoved) reasons.push("gate did not open");
 	if (shape.churn === "unchanged" && stateMoved) reasons.push("gate did not close");
-	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO)
+	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO) {
 		reasons.push("unstable timing");
+	}
 	//calibration can size a pass off a cold reading and land far under target;
 	//the pass itself is the honest check, not a cleverer calibrator
 	if (bestPassMs < TARGET_PASS_MS / 2) reasons.push("pass too short");
@@ -209,8 +217,9 @@ export const warmUpCommitShapes = (
 	shapes: ReadonlyArray<CommitShape>,
 	container: Element,
 ): void => {
-	for (let index = 0; index < shapes.length; index++)
+	for (let index = 0; index < shapes.length; index++) {
 		runPass(mountShape(generateShape(shapes[index]), container), WARM_UP_UPDATES);
+	}
 	container.replaceChildren();
 };
 
@@ -303,8 +312,9 @@ export const measureRegistryLookup = (
 	lookups: number,
 ): RegistryLookupReading => {
 	const start = performance.now();
-	for (let index = 0; index < lookups; index++)
+	for (let index = 0; index < lookups; index++) {
 		if (customElements.get(elementName) !== undefined) registryLookupChecksum++;
+	}
 	const elapsed = performance.now() - start;
 	return {
 		nanosecondsPerLookup: (elapsed * 1_000_000) / lookups,

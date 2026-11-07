@@ -59,5 +59,6 @@ const cardOptions = (mode: string): ComponentOptions =>
 
 customElements.define("shadow-card", component(userCard as never, cardOptions("open")));
 
-if (lightModeShips)
+if (lightModeShips) {
 	customElements.define("light-card", component(userCard as never, cardOptions("light")));
+}

@@ -88,8 +88,9 @@ const repeatOneElementPerBinding = (
 	bindings: number,
 ): Array<string> => {
 	const strings: Array<string> = [];
-	for (let index = 0; index < bindings; index++)
+	for (let index = 0; index < bindings; index++) {
 		strings.push(index === 0 ? openAt(index) : close + openAt(index));
+	}
 	strings.push(close);
 	return strings;
 };
@@ -144,8 +145,9 @@ const attributeSpreadMarkup = (bindings: number): LaneMarkup => ({
 	valuesFor: (parity) =>
 		Array.from({ length: bindings }, (_, index) => {
 			const bag: Record<string, string> = {};
-			for (let key = 0; key < SPREAD_KEYS.length; key++)
+			for (let key = 0; key < SPREAD_KEYS.length; key++) {
 				bag[SPREAD_KEYS[key]] = attributeValueFor(index * SPREAD_KEYS.length + key, parity);
+			}
 			return bag;
 		}),
 });

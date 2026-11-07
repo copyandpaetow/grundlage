@@ -17,6 +17,7 @@ export const markDeferredHydration = (
 //synchronous step, and a nested shadow root is not reachable from here anyway
 export const releaseDeferredChildren = (shadowRoot: ShadowRoot): void => {
 	const deferred = shadowRoot.querySelectorAll(`[${DEFER_HYDRATION_ATTRIBUTE}]`);
-	for (let index = 0; index < deferred.length; index++)
+	for (let index = 0; index < deferred.length; index++) {
 		deferred[index].removeAttribute(DEFER_HYDRATION_ATTRIBUTE);
+	}
 };

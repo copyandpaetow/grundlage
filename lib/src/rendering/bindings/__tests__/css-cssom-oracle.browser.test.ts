@@ -60,7 +60,7 @@ test.runIf(isRealBrowser).each([7, 8, 9])(
 			lane.boundSheet = bound;
 			seedDeclarationValueHashes(lane, holeValues);
 			const check = (values: Array<number>, label: string) => {
-				for (let ruleIndex = 0; ruleIndex < compiled.holedRules.length; ruleIndex++)
+				for (let ruleIndex = 0; ruleIndex < compiled.holedRules.length; ruleIndex++) {
 					for (const declaration of compiled.holedRules[ruleIndex].declarations) {
 						const block = bound.ruleDeclarations[ruleIndex];
 						const actual = `${block.getPropertyValue(declaration.propertyName)}|${block.getPropertyPriority(declaration.propertyName)}`;
@@ -70,11 +70,13 @@ test.runIf(isRealBrowser).each([7, 8, 9])(
 							declaration.priority,
 						);
 						tally.checkedDeclarations++;
-						if (actual !== expected)
+						if (actual !== expected) {
 							wrong.push(
-								`${label} ${declaration.propertyName} at ${compiled.holedRules[ruleIndex].rulePath}: ${actual} vs ${expected} in ${parts.join("${}")}`,
+								`${label} ${declaration.propertyName} at ${compiled.holedRules[ruleIndex].rulePath.join(",")}: ${actual} vs ${expected} in ${parts.join("${}")}`,
 							);
+						}
 					}
+				}
 			};
 			check(holeValues, "mount");
 			const nextValues = holeValues.map((value) => value + 3);
@@ -84,8 +86,9 @@ test.runIf(isRealBrowser).each([7, 8, 9])(
 			).length;
 			check(nextValues, "update");
 			const rematched = matchCompiledStyleSheet(compiled, style.sheet!);
-			if (rematched === RULE_STRUCTURE_MISMATCH)
+			if (rematched === RULE_STRUCTURE_MISMATCH) {
 				wrong.push(`structure changed by re-insertion in ${parts.join("${}")}`);
+			}
 			host.remove();
 		}
 		expect({ tally, wrong }).toEqual({ tally, wrong: [] });

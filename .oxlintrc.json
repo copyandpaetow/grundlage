@@ -6,7 +6,10 @@
 		"no-nested-ternary": "error",
 		"no-else-return": ["error", { "allowElseIf": false }],
 		"no-implicit-coercion": ["error", { "boolean": true, "number": true, "string": false }],
-		"no-unused-expressions": ["error", { "allowShortCircuit": false, "allowTernary": false }],
+		"no-unused-expressions": [
+			"error",
+			{ "allowShortCircuit": false, "allowTernary": false, "allowTaggedTemplates": true }
+		],
 		"unicorn/no-array-for-each": "error",
 		"import/no-default-export": "error",
 		"import/no-cycle": "error",
@@ -44,7 +47,16 @@
 				"max-depth": "off",
 				"max-lines-per-function": "off",
 				"require-yield": "off",
-				"typescript/no-non-null-asserted-optional-chain": "off"
+				"typescript/no-non-null-asserted-optional-chain": "off",
+				"typescript/unbound-method": "off"
+			}
+		},
+		{
+			"files": ["**/*.test-d.ts"],
+			"rules": {
+				"no-unused-vars": "off",
+				"no-unused-expressions": "off",
+				"typescript/no-meaningless-void-operator": "off"
 			}
 		},
 		{

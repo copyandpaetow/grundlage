@@ -67,14 +67,16 @@ const eventNameOf = (
 	value: unknown,
 ): string | typeof NO_EVENT_NAME => {
 	if (!key.startsWith(MARKUP.EVENT_PREFIX)) return NO_EVENT_NAME;
-	if (key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX))
+	if (key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX)) {
 		return key.slice(MARKUP.CUSTOM_EVENT_PREFIX.length).toLowerCase();
+	}
 	const lowercaseKey = key.toLowerCase();
 	if (lowercaseKey in element) return lowercaseKey.slice(MARKUP.EVENT_PREFIX.length);
-	if (typeof value === "function")
+	if (typeof value === "function") {
 		warnDuringDevelopment(
 			`"${key}" looks like an event handler but "${lowercaseKey}" is not a property of <${element.localName}> — the function was assigned as a dead property and will never fire. Check the spelling, or use "on-${key.slice(MARKUP.EVENT_PREFIX.length).toLowerCase()}" to bind it as a custom event.`,
 		);
+	}
 	return NO_EVENT_NAME;
 };
 
@@ -104,50 +106,6 @@ export const applyLiveState = (element: Element, key: string, value: unknown): v
 	//Element has no index signature; the live state is read and written by its IDL name
 	const record = element as unknown as Record<string, unknown>;
 	if (record[key] !== shown) record[key] = shown;
-};
-
-//a textarea's default is its text, not an attribute: the markup a server sends carries it there too
-export const applyLiveStateDefault = (element: Element, key: string, value: unknown): void => {
-	if (!(element instanceof HTMLTextAreaElement)) {
-		applyAttributeValue(element, key, value);
-		return;
-	}
-	const isAbsent = value === null || value === undefined || value === false;
-	if (isAbsent) return;
-	const text = String(value);
-	if (element.defaultValue !== text) element.defaultValue = text;
-};
-
-const copiedContentError = (
-	element: Element,
-	{ key, writeKind, fix }: { key: string; writeKind: string; fix: string },
-): Error =>
-	new Error(
-		libraryMessage(
-			`a <template>'s content expects attributes and text, which every copy of it keeps, not the ${writeKind} "${key}" on <${element.localName}>. ${fix}`,
-		),
-	);
-
-//checked in applyAttributeValue's order, so the message names the write it would make
-export const ensureKeptByCopies = (element: Element, key: string, value: unknown): void => {
-	if (isDeclaredPropName(element, key))
-		throw copiedContentError(element, {
-			key,
-			writeKind: "prop",
-			fix: "Set the prop on each copy.",
-		});
-	if (eventNameOf(key, element, value) !== NO_EVENT_NAME)
-		throw copiedContentError(element, {
-			key,
-			writeKind: "listener",
-			fix: "Listen on the element the copies go into.",
-		});
-	if (attributeModeOf(value) === ATTRIBUTE_MODE.PROPERTY)
-		throw copiedContentError(element, {
-			key,
-			writeKind: "property",
-			fix: "Bind text, or set the property on each copy.",
-		});
 };
 
 //Element has no index signature; props are read and written by their runtime name
@@ -181,8 +139,9 @@ export const applyAttributeValue = (
 
 	const listenerName = eventNameOf(key, element, value);
 	if (listenerName !== NO_EVENT_NAME) {
-		if (typeof oldValue === "function")
+		if (typeof oldValue === "function") {
 			element.removeEventListener(listenerName, oldValue as EventListener);
+		}
 		if (typeof value === "function") element.addEventListener(listenerName, value as EventListener);
 		return;
 	}
@@ -200,11 +159,13 @@ export const applyAttributeValue = (
 			clearPropertyValue(element, key);
 			//before definition nothing knows whether the prop observes an attribute, so the value also
 			//rides an own property, which upgrade claims either way; CSS still sees the attribute
-			if (isAwaitingDefinition(element))
+			if (isAwaitingDefinition(element)) {
 				(element as unknown as Record<string, unknown>)[key] = value;
+			}
 			const attributeValue = String(value);
-			if (element.getAttribute(key) !== attributeValue)
+			if (element.getAttribute(key) !== attributeValue) {
 				applyAttributeText(element, key, attributeValue);
+			}
 			break;
 		}
 		case ATTRIBUTE_MODE.PROPERTY:
@@ -215,6 +176,54 @@ export const applyAttributeValue = (
 			break;
 		default:
 			return attributeMode satisfies never;
+	}
+};
+
+//a textarea's default is its text, not an attribute: the markup a server sends carries it there too
+export const applyLiveStateDefault = (element: Element, key: string, value: unknown): void => {
+	if (!(element instanceof HTMLTextAreaElement)) {
+		applyAttributeValue(element, key, value);
+		return;
+	}
+	const isAbsent = value === null || value === undefined || value === false;
+	if (isAbsent) return;
+	//oxlint-disable-next-line typescript/no-base-to-string -- spelled like setAttribute would spell it
+	const text = String(value);
+	if (element.defaultValue !== text) element.defaultValue = text;
+};
+
+const copiedContentError = (
+	element: Element,
+	{ key, writeKind, fix }: { key: string; writeKind: string; fix: string },
+): Error =>
+	new Error(
+		libraryMessage(
+			`a <template>'s content expects attributes and text, which every copy of it keeps, not the ${writeKind} "${key}" on <${element.localName}>. ${fix}`,
+		),
+	);
+
+//checked in applyAttributeValue's order, so the message names the write it would make
+export const ensureKeptByCopies = (element: Element, key: string, value: unknown): void => {
+	if (isDeclaredPropName(element, key)) {
+		throw copiedContentError(element, {
+			key,
+			writeKind: "prop",
+			fix: "Set the prop on each copy.",
+		});
+	}
+	if (eventNameOf(key, element, value) !== NO_EVENT_NAME) {
+		throw copiedContentError(element, {
+			key,
+			writeKind: "listener",
+			fix: "Listen on the element the copies go into.",
+		});
+	}
+	if (attributeModeOf(value) === ATTRIBUTE_MODE.PROPERTY) {
+		throw copiedContentError(element, {
+			key,
+			writeKind: "property",
+			fix: "Bind text, or set the property on each copy.",
+		});
 	}
 };
 

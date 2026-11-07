@@ -83,6 +83,18 @@ const NOUNS = [
 const pickRandom = <T>(items: ReadonlyArray<T>): T =>
 	items[Math.floor(Math.random() * items.length)];
 
+const timeClassOf = (current: number, previous: number): string => {
+	if (current > previous * 1.02) return "regress";
+	if (current < previous * 0.98) return "improve";
+	return "";
+};
+
+const writesClassOf = (current: number, previous: number): string => {
+	if (current > previous) return "regress";
+	if (current < previous) return "improve";
+	return "";
+};
+
 const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline:v2";
 
 customElements.define(
@@ -462,20 +474,12 @@ customElements.define(
 										// the delta rides on min applied ms — the one timing here that resolves
 										// a change smaller than a frame. DOM writes are deterministic, so
 										// compare them exactly — any drift is a real false-write signal.
-										const msClass = !previous
-											? ""
-											: measurement.minAppliedMs > previous.minAppliedMs * 1.02
-												? "regress"
-												: measurement.minAppliedMs < previous.minAppliedMs * 0.98
-													? "improve"
-													: "";
-										const writesClass = !previous
-											? ""
-											: measurement.medianMutations > previous.medianMutations
-												? "regress"
-												: measurement.medianMutations < previous.medianMutations
-													? "improve"
-													: "";
+										const msClass = previous
+											? timeClassOf(measurement.minAppliedMs, previous.minAppliedMs)
+											: "";
+										const writesClass = previous
+											? writesClassOf(measurement.medianMutations, previous.medianMutations)
+											: "";
 										return html`
 											<div class="label">${measurement.label}</div>
 											<div>${itemCounts.get(measurement.label) ?? "—"}</div>

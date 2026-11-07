@@ -149,8 +149,9 @@ export const choosePrerenderRoots = (
 		const element = elements[index];
 		if (!element.isPrerendered || element.endIndex === NOT_CLOSED) continue;
 		let ancestorIndex = element.parentIndex;
-		while (ancestorIndex !== NO_PARENT && !chosenIndexes.has(ancestorIndex))
+		while (ancestorIndex !== NO_PARENT && !chosenIndexes.has(ancestorIndex)) {
 			ancestorIndex = elements[ancestorIndex].parentIndex;
+		}
 		if (ancestorIndex !== NO_PARENT) continue;
 		if (isPrerenderable(element.tagName)) chosenIndexes.add(index);
 	}

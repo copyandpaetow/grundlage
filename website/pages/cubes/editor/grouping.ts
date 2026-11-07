@@ -44,22 +44,25 @@ export const createGrouping = (state: EditorState, deps: GroupingDeps): Grouping
 
 		// Every member has to sit in one parent's frame, or one rebase cannot hold them all
 		const parent = members[0].parentElement;
-		if (parent === null || members.some((block) => block.parentElement !== parent))
+		if (parent === null || members.some((block) => block.parentElement !== parent)) {
 			throw new Error("Wrap blocks that share one parent; these sit in different ones.");
+		}
 
 		// Measured after clearSelection, so the bounds are in the parent's frame, not the cage's
 		const bounds = blocksBoundsPx(members);
-		if (bounds === null)
+		if (bounds === null) {
 			throw new Error("Wrap blocks that have rendered; these have no bounds yet.");
+		}
 		const center = fromScreenPoint(new DOMPoint(...bounds.center));
 
 		const wrapper = document.createElement(wrapperTagName);
 		wrapper.setAttribute("position", center.map(formatNumber).join(" "));
-		if (wrapperTagName === "scene-cube")
+		if (wrapperTagName === "scene-cube") {
 			wrapper.setAttribute(
 				"size",
 				bounds.half.map((halfPx) => formatNumber((halfPx * 2) / UNIT_SIZE)).join(" "),
 			);
+		}
 		parent.insertBefore(wrapper, members[0]);
 		for (const block of members) {
 			const rebased = subtractVectors(readPosition(block), center);

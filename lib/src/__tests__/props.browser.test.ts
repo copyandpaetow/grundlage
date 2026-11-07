@@ -12,8 +12,9 @@ const createElement = (
 ): HTMLElement => {
 	const element = document.createElement("div");
 	for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
-	for (const [key, value] of Object.entries(properties))
+	for (const [key, value] of Object.entries(properties)) {
 		(element as unknown as Record<string, unknown>)[key] = value;
+	}
 	return element;
 };
 

@@ -24,9 +24,9 @@ const attributeGateHash = (staticBinding: AttributeStaticBinding, values: Array<
 	);
 
 export const removeWrittenAttribute = (liveBinding: AttributeLiveBinding, name: string): void => {
-	if (isSingleHoleValue(liveBinding.staticBinding.valueParts))
+	if (isSingleHoleValue(liveBinding.staticBinding.valueParts)) {
 		applyAttributeValue(liveBinding.anchor, name, undefined, liveBinding.lastValue);
-	else liveBinding.anchor.removeAttribute(name);
+	} else liveBinding.anchor.removeAttribute(name);
 };
 
 export const commitAttribute = (
@@ -51,8 +51,9 @@ export const commitAttribute = (
 	//function, and write nothing
 	if (!isSingleHoleValue(valueParts)) {
 		const composedValue = composeParts(valueParts, values);
-		if (element.getAttribute(name) !== composedValue)
+		if (element.getAttribute(name) !== composedValue) {
 			applyAttributeText(element, name, composedValue);
+		}
 		return;
 	}
 	const value = values[valueParts[0]];

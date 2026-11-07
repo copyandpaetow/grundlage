@@ -88,11 +88,11 @@ const writeAttributes = (builder: Builder) => {
 		const spelledName = random() < 0.1 ? name.toUpperCase() : name;
 		const roll = random();
 		if (roll < 0.15) write(builder, spelledName);
-		else if (roll < 0.3)
+		else if (roll < 0.3) {
 			write(builder, `${spelledName}="${pick(random, STATIC_ATTRIBUTE_VALUES)}"`);
-		else if (roll < 0.4)
+		} else if (roll < 0.4) {
 			write(builder, `${spelledName}='${pick(random, STATIC_ATTRIBUTE_VALUES)}'`);
-		else if (roll < 0.45) write(builder, `${spelledName}=v`);
+		} else if (roll < 0.45) write(builder, `${spelledName}=v`);
 		else if (roll < 0.6) {
 			write(builder, `${spelledName}=`);
 			writeHole(builder, "unquoted");
@@ -116,6 +116,7 @@ const writeAttributes = (builder: Builder) => {
 const writeChildren = (builder: Builder) => {
 	const { random } = builder;
 	const count = Math.floor(random() * 4);
+	//oxlint-disable-next-line no-use-before-define -- mutual recursion
 	for (let index = 0; index < count; index++) writeNode(builder);
 };
 

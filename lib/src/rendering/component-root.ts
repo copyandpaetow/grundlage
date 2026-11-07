@@ -49,8 +49,9 @@ const revertAllHostBindings = (root: ComponentRoot): void => {
 	const instance = root.instance;
 	if (instance === null) return;
 	const liveBindings = instance.liveBindings;
-	for (let index = 0; index < instance.parsed.hostBindingCount; index++)
+	for (let index = 0; index < instance.parsed.hostBindingCount; index++) {
 		revertHostBinding(liveBindings[index] as AttributeLaneLiveBinding);
+	}
 };
 
 //the revert reads root.instance, which is still the outgoing one here and null on a first paint
@@ -130,5 +131,6 @@ export const displayFatalErrorInRoot = (root: ComponentRoot, error: unknown): vo
 	const isHandledByApp = !host.dispatchEvent(new ComponentErrorEvent(error, host.localName));
 	if (isHandledByApp) return;
 	console.error(libraryMessage(`<${host.localName}> stopped running.`), error);
+	//oxlint-disable-next-line typescript/restrict-template-expressions -- shown as the platform spells it
 	root.shadowRoot.textContent = `${error}`;
 };

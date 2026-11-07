@@ -68,8 +68,9 @@ const characterReferenceDecoderFor =
 		name: string | undefined,
 		semicolon: string,
 	): string => {
-		if (hexadecimalDigits !== undefined)
+		if (hexadecimalDigits !== undefined) {
 			return decodeNumericReference(parseInt(hexadecimalDigits, 16));
+		}
 		if (decimalDigits !== undefined) return decodeNumericReference(parseInt(decimalDigits, 10));
 		assertDuringDevelopment(
 			name !== undefined,
@@ -78,8 +79,9 @@ const characterReferenceDecoderFor =
 		const decoded = NAMED_REFERENCES.get(name);
 		//`&apos` has no legacy form, and the pattern already consumed every letter and digit after a name
 		const isLegacyFormWithoutSemicolon = semicolon === "" && name !== "apos";
-		if (decoded !== undefined && (semicolon === ";" || isLegacyFormWithoutSemicolon))
+		if (decoded !== undefined && (semicolon === ";" || isLegacyFormWithoutSemicolon)) {
 			return decoded;
+		}
 		throw new Error(
 			libraryMessage(
 				`"${reference}" in a <${tagName}> that has a \${…} is not decoded. Write the character itself, or "&amp;" for a literal "&".`,
@@ -108,6 +110,7 @@ export const decodeRCDATAParts = (parts: Array<Part>, tagName: string): void => 
 //the HTML parser drops a <textarea>'s first line feed, also one written as a reference
 export const dropLeadingLineFeed = (parts: Array<Part>): void => {
 	const firstPart = parts[0];
-	if (typeof firstPart === "string" && firstPart.charCodeAt(0) === CHARACTER_CODE.LINE_FEED)
+	if (typeof firstPart === "string" && firstPart.charCodeAt(0) === CHARACTER_CODE.LINE_FEED) {
 		parts[0] = firstPart.slice(1);
+	}
 };

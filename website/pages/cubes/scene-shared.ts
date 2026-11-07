@@ -120,8 +120,9 @@ export const bodySizeVariables = ([sizeX, sizeY, sizeZ]: Vector3): string =>
 const asTriple =
 	(fallback: number): Resolve<Vector3> =>
 	(incoming) => {
-		if (Array.isArray(incoming))
+		if (Array.isArray(incoming)) {
 			return [incoming[0] ?? fallback, incoming[1] ?? fallback, incoming[2] ?? fallback];
+		}
 		const values = String(incoming)
 			.trim()
 			.split(/\s+/)

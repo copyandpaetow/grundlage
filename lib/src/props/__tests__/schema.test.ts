@@ -89,18 +89,14 @@ describe("normalization", () => {
 	});
 
 	test("a collision names both offending keys", () => {
-		let message = "";
-		try {
+		const normalizeCollision = () =>
 			normalizeSchema({
 				userId: prop.optional(prop.attribute(String)),
 				userid: prop.optional(prop.attribute(String)),
 			});
-		} catch (error) {
-			message = `${error}`;
-		}
-		expect(message).toContain('"userId"');
-		expect(message).toContain('"userid"');
-		expect(message).toContain('the attribute "userid"');
+		expect(normalizeCollision).toThrow('"userId"');
+		expect(normalizeCollision).toThrow('"userid"');
+		expect(normalizeCollision).toThrow('the attribute "userid"');
 	});
 
 	test("a parser that is not a function is refused at definition time", () => {

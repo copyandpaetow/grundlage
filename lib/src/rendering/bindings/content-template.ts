@@ -1,3 +1,4 @@
+//oxlint-disable import/no-cycle -- mutual recursion: a template holds templates
 import { combinedPartsHash } from "../compose";
 import { cloneTemplateFragment, mountInstance } from "../instance";
 import { elementAfterMarker, removeMarkers } from "../markers";

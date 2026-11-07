@@ -5,7 +5,7 @@ import { productionOptions } from "../tsdown.config";
 
 //the shipped minifier and property names, with the development flag on so the warnings the tests
 //expect are there. Each bundle project builds its own, since projects set up side by side
-export default async (project: TestProject): Promise<void> => {
+export const setup = async (project: TestProject): Promise<void> => {
 	await build({
 		...productionOptions,
 		config: false,

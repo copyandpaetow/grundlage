@@ -129,6 +129,17 @@ customElements.define(
 		const isBeyondResolution = (current: number, previous: number): boolean =>
 			previous !== 0 && Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
 
+		const resolutionClassOf = (current: number, previous: number | undefined): string => {
+			if (previous === undefined) return "";
+			return isBeyondResolution(current, previous) ? "beyond-resolution" : "within-resolution";
+		};
+
+		const statusOf = () => {
+			if (isRunning) return html`running: ${activeShape ?? "…"}`;
+			if (baseline) return html`baseline captured ${baseline.capturedAt}`;
+			return html`no baseline saved`;
+		};
+
 		yield function* view() {
 			yield html`
 				<style>
@@ -236,13 +247,7 @@ customElements.define(
 				</div>
 
 				<div class="status">
-					${
-						isRunning
-							? html`running: ${activeShape ?? "…"}`
-							: baseline
-								? html`baseline captured ${baseline.capturedAt}`
-								: html`no baseline saved`
-					}
+					${statusOf()}
 				</div>
 
 				${
@@ -333,16 +338,7 @@ customElements.define(
 																	}
 																</td>
 																<td
-																	class="${
-																		previous
-																			? isBeyondResolution(
-																					result.nanosecondsPerCharacter,
-																					previous.nanosecondsPerCharacter,
-																				)
-																				? "beyond-resolution"
-																				: "within-resolution"
-																			: ""
-																	}"
+																	class="${resolutionClassOf(result.nanosecondsPerCharacter, previous?.nanosecondsPerCharacter)}"
 																>
 																	${
 																		previous
