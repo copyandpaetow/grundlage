@@ -2,8 +2,7 @@ import { describe, expect, test } from "vitest";
 import { component, html } from "../../index";
 import { hashValue } from "../value-hashing";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("template value hashing", () => {
 	test("a cycle that passes through a template ends at its back-reference", () => {
@@ -44,11 +43,7 @@ describe("template value hashing", () => {
 		const template1 = html`<div style="width:${50.1}%"></div>`;
 		const template2 = html`<div style="width:${50.10001}%"></div>`;
 		const template3 = html`<div style="width:${50.2}%"></div>`;
-		const hashes = new Set([
-			hashValue(template1),
-			hashValue(template2),
-			hashValue(template3),
-		]);
+		const hashes = new Set([hashValue(template1), hashValue(template2), hashValue(template3)]);
 		expect(hashes.size).toBe(3);
 	});
 });
@@ -98,23 +93,17 @@ describe("update() change propagation", () => {
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"50.1",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("50.1");
 
 		value = 50.1000001;
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"50.1000001",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("50.1000001");
 
 		value = 50.2;
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"50.2",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("50.2");
 
 		cleanup(element);
 	});
@@ -204,22 +193,14 @@ describe("update() change propagation", () => {
 		await sleep();
 
 		const original = Array.from(element.shadowRoot!.querySelectorAll("li"));
-		expect(original.map((node) => node.textContent?.trim())).toEqual([
-			"one",
-			"two",
-			"three",
-		]);
+		expect(original.map((node) => node.textContent?.trim())).toEqual(["one", "two", "three"]);
 
 		items = ["three", "one", "two"];
 		await element.update();
 		await sleep();
 
 		const reordered = Array.from(element.shadowRoot!.querySelectorAll("li"));
-		expect(reordered.map((node) => node.textContent?.trim())).toEqual([
-			"three",
-			"one",
-			"two",
-		]);
+		expect(reordered.map((node) => node.textContent?.trim())).toEqual(["three", "one", "two"]);
 
 		//each reordered <li> should be one of the originals, not a fresh node
 		for (const li of reordered) {

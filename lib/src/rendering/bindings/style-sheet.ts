@@ -24,9 +24,7 @@ export const createCSSOMStyleSheetLane = (
 	kind: STYLE_SHEET_LANE.CSSOM,
 	compiledStyleSheet,
 	styleElement,
-	declarationValueHashes: new Array<number>(
-		compiledStyleSheet.declarationCount,
-	).fill(UNSET_HASH),
+	declarationValueHashes: new Array<number>(compiledStyleSheet.declarationCount).fill(UNSET_HASH),
 	boundSheet: null,
 });
 
@@ -57,12 +55,9 @@ const declarationBlockAtPath = (
 	rulePath: ReadonlyArray<number>,
 ): CSSStyleDeclaration | undefined =>
 	//a style, keyframe and nested-declarations rule all carry .style; nothing else does
-	(findRuleAtPath(sheet, rulePath, rulePath.length) as CSSStyleRule | null)
-		?.style;
+	(findRuleAtPath(sheet, rulePath, rulePath.length) as CSSStyleRule | null)?.style;
 
-export const RULE_STRUCTURE_MISMATCH: unique symbol = Symbol(
-	"rule structure mismatch",
-);
+export const RULE_STRUCTURE_MISMATCH: unique symbol = Symbol("rule structure mismatch");
 
 //the browser drops rules it cannot parse, shifting every later sibling index — the counts
 //recorded at compile time must match at every level a dynamic path runs through
@@ -81,24 +76,16 @@ export const matchCompiledStyleSheet = (
 			childRules !== undefined && childRules.length === expectedRuleCount;
 		if (!hasExpectedRuleCount) return RULE_STRUCTURE_MISMATCH;
 	}
-	const ruleDeclarations: Array<CSSStyleDeclaration> = new Array(
-		holedRules.length,
-	);
+	const ruleDeclarations: Array<CSSStyleDeclaration> = new Array(holedRules.length);
 	for (let index = 0; index < holedRules.length; index++) {
-		const declarationBlock = declarationBlockAtPath(
-			sheet,
-			holedRules[index].rulePath,
-		);
+		const declarationBlock = declarationBlockAtPath(sheet, holedRules[index].rulePath);
 		if (declarationBlock === undefined) return RULE_STRUCTURE_MISMATCH;
 		ruleDeclarations[index] = declarationBlock;
 	}
 	return { sheet, ruleDeclarations };
 };
 
-const isPathPrefix = (
-	prefix: ReadonlyArray<number>,
-	rulePath: ReadonlyArray<number>,
-) => {
+const isPathPrefix = (prefix: ReadonlyArray<number>, rulePath: ReadonlyArray<number>) => {
 	if (prefix.length > rulePath.length) return false;
 	for (let index = 0; index < prefix.length; index++)
 		if (prefix[index] !== rulePath[index]) return false;
@@ -116,9 +103,7 @@ const reinsertRule = (
 	const parentDepth = rulePath.length - 1;
 	//a rule that holds a rule is a grouping or style rule, and both carry insertRule
 	const parent =
-		parentDepth === 0
-			? sheet
-			: (findRuleAtPath(sheet, rulePath, parentDepth) as CSSGroupingRule);
+		parentDepth === 0 ? sheet : (findRuleAtPath(sheet, rulePath, parentDepth) as CSSGroupingRule);
 	const ruleIndex = rulePath[parentDepth];
 	//inserted before the old copy is deleted, so a text the browser refuses loses nothing
 	parent.insertRule(parent.cssRules[ruleIndex].cssText, ruleIndex);
@@ -163,10 +148,8 @@ export const commitChangedDeclarations = (
 				declaration.priority,
 			);
 		}
-		const needsReinsertion =
-			hasChangedDeclaration && reinsertedRulePath !== NO_REINSERTION;
-		if (needsReinsertion)
-			reinsertRule(compiledStyleSheet, boundSheet, reinsertedRulePath);
+		const needsReinsertion = hasChangedDeclaration && reinsertedRulePath !== NO_REINSERTION;
+		if (needsReinsertion) reinsertRule(compiledStyleSheet, boundSheet, reinsertedRulePath);
 	}
 };
 

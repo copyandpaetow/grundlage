@@ -52,18 +52,12 @@ describe("html parser — expression to binding mapping", () => {
 
 	test("expressions in different attributes map to different bindings", () => {
 		const parsed = parse` <div class="${"a"}" id="${"b"}"></div>`;
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.ATTRIBUTE,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.ATTRIBUTE]);
 	});
 
 	test("mixed content and attribute expressions", () => {
 		const parsed = parse` <div class="${"a"}">${"text"}</div>`;
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.CONTENT,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.CONTENT]);
 	});
 });
 
@@ -130,9 +124,7 @@ describe("html parser — whitespace handling", () => {
 	test("whitespace before self-closing slash", () => {
 		const parsed = parse`<br />`;
 		expect(parsed.bindings).toHaveLength(0);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("br"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("br")).not.toBeNull();
 	});
 });
 
@@ -151,10 +143,7 @@ describe("html parser — void and self-closing elements", () => {
 		const type2 = "email";
 		const parsed = parse`<input type="${type1}" /><input type="${type2}" />`;
 
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.ATTRIBUTE,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.ATTRIBUTE]);
 	});
 
 	test("img with dynamic src", () => {
@@ -232,9 +221,7 @@ describe("html parser — a `<` that opens no markup", () => {
 	});
 
 	test("a `<!` that opens no comment names the fix", () => {
-		expect(() => parse`<!DOCTYPE html><p>${1}</p>`).toThrow(
-			/Write a comment as <!-- … -->/,
-		);
+		expect(() => parse`<!DOCTYPE html><p>${1}</p>`).toThrow(/Write a comment as <!-- … -->/);
 	});
 });
 
@@ -403,10 +390,7 @@ describe("html parser — mixed scenarios", () => {
 				            }
 			</style>`;
 
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.RAW_CONTENT,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.RAW_CONTENT]);
 	});
 
 	test("deeply nested template with all binding types", () => {
@@ -462,9 +446,7 @@ describe("html parser — mixed scenarios", () => {
 		const parsed = parse`<br />${value}`;
 		expect(parsed.bindings).toHaveLength(1);
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("br"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("br")).not.toBeNull();
 	});
 
 	test("void element without trailing slash nested in a parent", () => {

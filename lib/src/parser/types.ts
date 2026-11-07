@@ -56,8 +56,7 @@ export interface RawContentStaticBinding {
 	readonly type: typeof BINDING.RAW_CONTENT;
 	readonly elementName: string;
 	readonly parts: ReadonlyArray<Part>;
-	readonly compiledStyleSheet:
-		CompiledStyleSheet | typeof STYLE_SHEET_NOT_COMPILED;
+	readonly compiledStyleSheet: CompiledStyleSheet | typeof STYLE_SHEET_NOT_COMPILED;
 }
 
 export interface CommentStaticBinding {

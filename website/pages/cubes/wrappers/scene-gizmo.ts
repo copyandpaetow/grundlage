@@ -6,11 +6,7 @@ import {
 	UNIT_SIZE,
 	type Vector3,
 } from "../scene-shared";
-import {
-	blocksBoundsPx,
-	eulerFromMatrix,
-	fromScreenPoint,
-} from "../scene-geometry";
+import { blocksBoundsPx, eulerFromMatrix, fromScreenPoint } from "../scene-geometry";
 
 // The drag in flight moves the child inside the gizmo's own carrier, so its attributes
 // change once, on drop, and the gizmo works on any child.
@@ -224,11 +220,7 @@ customElements.define(
 	"scene-gizmo",
 	component(function* ({ host: element }) {
 		let handleCenterPx: Vector3 = [0, 0, 0];
-		let handleLengthsPx: Vector3 = [
-			HANDLE_LENGTH,
-			HANDLE_LENGTH,
-			HANDLE_LENGTH,
-		];
+		let handleLengthsPx: Vector3 = [HANDLE_LENGTH, HANDLE_LENGTH, HANDLE_LENGTH];
 
 		let drag: {
 			mode: DragMode;
@@ -268,9 +260,7 @@ customElements.define(
 		};
 
 		const handlePoint = (selector: string): ScreenPoint => {
-			const node = element.shadowRoot?.querySelector(
-				selector,
-			) as HTMLElement | null;
+			const node = element.shadowRoot?.querySelector(selector) as HTMLElement | null;
 			return node ? centerOf(node.getBoundingClientRect()) : { x: 0, y: 0 };
 		};
 
@@ -286,14 +276,9 @@ customElements.define(
 				active.yawDegrees = delta.x * YAW_PER_PIXEL;
 			} else {
 				// Scalar projection: (delta · a) / (a · a), with a = one world unit on screen
-				const lengthSquared = dot(
-					active.screenOffsetPerWorldUnit,
-					active.screenOffsetPerWorldUnit,
-				);
+				const lengthSquared = dot(active.screenOffsetPerWorldUnit, active.screenOffsetPerWorldUnit);
 				active.unitsAlongAxis =
-					lengthSquared === 0
-						? 0
-						: dot(delta, active.screenOffsetPerWorldUnit) / lengthSquared;
+					lengthSquared === 0 ? 0 : dot(delta, active.screenOffsetPerWorldUnit) / lengthSquared;
 			}
 			void element.update();
 		};
@@ -303,18 +288,14 @@ customElements.define(
 			const target = drag.target;
 			const carrier = element.shadowRoot?.querySelector(".carrier");
 			if (carrier === null || carrier === undefined)
-				throw new Error(
-					"The gizmo dropped a drag before rendering its carrier.",
-				);
+				throw new Error("The gizmo dropped a drag before rendering its carrier.");
 			// The child's placement in the gizmo's frame: carrier · placement
-			const matrix = new DOMMatrix(
-				getComputedStyle(carrier).transform,
-			).multiply(new DOMMatrix(getComputedStyle(target).transform));
+			const matrix = new DOMMatrix(getComputedStyle(carrier).transform).multiply(
+				new DOMMatrix(getComputedStyle(target).transform),
+			);
 			// Unsnapped: the editor snaps the leaf blocks on flatten, and snapping this
 			// carrier too would add a grid-sized jump, worst after an off-centre yaw.
-			const position = fromScreenPoint(
-				new DOMPoint(matrix.m41, matrix.m42, matrix.m43),
-			);
+			const position = fromScreenPoint(new DOMPoint(matrix.m41, matrix.m42, matrix.m43));
 			const rotation = eulerFromMatrix(matrix);
 			target.setAttribute("position", position.map(formatNumber).join(" "));
 			target.setAttribute("rotation", rotation.map(formatNumber).join(" "));
@@ -331,9 +312,7 @@ customElements.define(
 			drag = null;
 			void settledChild.then(() => {
 				void element.update();
-				element.dispatchEvent(
-					new CustomEvent("scene-commit", { bubbles: true }),
-				);
+				element.dispatchEvent(new CustomEvent("scene-commit", { bubbles: true }));
 			});
 		};
 

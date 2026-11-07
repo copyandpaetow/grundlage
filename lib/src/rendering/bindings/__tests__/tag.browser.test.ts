@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html, component, prop } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("tag updates", () => {
 	let tagId = 0;
@@ -239,9 +238,7 @@ describe("tag updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("data-label"),
-		).toBe("first");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("data-label")).toBe("first");
 
 		tagName = "section";
 		label = "second";
@@ -275,9 +272,7 @@ describe("tag updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("box small");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("box small");
 
 		tagName = "section";
 		modifier = "large";
@@ -327,9 +322,7 @@ describe("tag updates", () => {
 		const section = element.shadowRoot?.querySelector("section")!;
 		expect(section.getAttribute("title")).toBe("kept");
 		expect(section.hasAttribute("payload")).toBe(false);
-		expect((section as unknown as Record<string, unknown>).payload).toBe(
-			payload,
-		);
+		expect((section as unknown as Record<string, unknown>).payload).toBe(payload);
 
 		cleanup(element);
 	});
@@ -352,9 +345,7 @@ describe("tag updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain(
-			"before",
-		);
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain("before");
 
 		tagName = "article";
 		text = "after";
@@ -500,9 +491,7 @@ describe("tag updates", () => {
 		await sleep();
 		expect(element.shadowRoot?.querySelector("h3")).not.toBeNull();
 		expect(element.shadowRoot?.querySelector("h2")).toBeNull();
-		expect(element.shadowRoot?.querySelector("h3")?.textContent).toBe(
-			"heading",
-		);
+		expect(element.shadowRoot?.querySelector("h3")?.textContent).toBe("heading");
 
 		cleanup(element);
 	});
@@ -519,10 +508,7 @@ describe("tag updates", () => {
 				},
 				{
 					props: {
-						items: prop.attribute(
-							(incoming: unknown) => incoming as Array<unknown>,
-							[],
-						),
+						items: prop.attribute((incoming: unknown) => incoming as Array<unknown>, []),
 					},
 				},
 			),

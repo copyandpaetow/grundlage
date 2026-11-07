@@ -35,14 +35,7 @@ const CONTENT_VALUES = [
 ];
 const TAG_VALUES = ["section", "article", "my-box"];
 const INLINE_TAG_VALUES = ["span", "em", "my-box"];
-const ATTRIBUTE_NAMES = [
-	"class",
-	"title",
-	"id",
-	"data-a",
-	"aria-label",
-	"lang",
-];
+const ATTRIBUTE_NAMES = ["class", "title", "id", "data-a", "aria-label", "lang"];
 const CONTAINER_TAGS = ["div", "span", "p", "b", "section", "my-box", "DIV"];
 const PHRASING_CONTAINER_TAGS = ["span", "b", "my-box"];
 const VOID_TAGS = ["br", "img", "hr", "wbr"];
@@ -89,24 +82,16 @@ const separator = (random: Random) => pick(random, [" ", " ", "\n\t", "  "]);
 
 const writeAttributes = (builder: Builder) => {
 	const { random } = builder;
-	const names = [...ATTRIBUTE_NAMES]
-		.sort(() => random() - 0.5)
-		.slice(0, Math.floor(random() * 3));
+	const names = [...ATTRIBUTE_NAMES].sort(() => random() - 0.5).slice(0, Math.floor(random() * 3));
 	for (const name of names) {
 		write(builder, separator(random));
 		const spelledName = random() < 0.1 ? name.toUpperCase() : name;
 		const roll = random();
 		if (roll < 0.15) write(builder, spelledName);
 		else if (roll < 0.3)
-			write(
-				builder,
-				`${spelledName}="${pick(random, STATIC_ATTRIBUTE_VALUES)}"`,
-			);
+			write(builder, `${spelledName}="${pick(random, STATIC_ATTRIBUTE_VALUES)}"`);
 		else if (roll < 0.4)
-			write(
-				builder,
-				`${spelledName}='${pick(random, STATIC_ATTRIBUTE_VALUES)}'`,
-			);
+			write(builder, `${spelledName}='${pick(random, STATIC_ATTRIBUTE_VALUES)}'`);
 		else if (roll < 0.45) write(builder, `${spelledName}=v`);
 		else if (roll < 0.6) {
 			write(builder, `${spelledName}=`);
@@ -150,17 +135,11 @@ const writeNode = (builder: Builder) => {
 		return;
 	}
 	if (roll < 0.4) {
-		write(
-			builder,
-			pick(random, ["<!-- note -->", "<!---->", "<!-- a > b -->"]),
-		);
+		write(builder, pick(random, ["<!-- note -->", "<!---->", "<!-- a > b -->"]));
 		return;
 	}
 	if (roll < 0.47) {
-		write(
-			builder,
-			`<${pick(random, isInsideParagraph ? PHRASING_VOID_TAGS : VOID_TAGS)}`,
-		);
+		write(builder, `<${pick(random, isInsideParagraph ? PHRASING_VOID_TAGS : VOID_TAGS)}`);
 		writeAttributes(builder);
 		write(builder, random() < 0.5 ? " />" : ">");
 		return;
@@ -194,16 +173,12 @@ const writeNode = (builder: Builder) => {
 		writeAttributes(builder);
 		write(builder, "><td>");
 		writeHole(builder, "content");
-		write(
-			builder,
-			hasBody ? "</td></tr></tbody></table>" : "</td></tr></table>",
-		);
+		write(builder, hasBody ? "</td></tr></tbody></table>" : "</td></tr></table>");
 		return;
 	}
 	if (roll < 0.7 && canNest) {
 		//a <section> built by the DOM stays inside a <p>, where parsed markup would close the <p>
-		const tagContext =
-			builder.paragraphDepth > 0 ? "inline-tag-name" : "tag-name";
+		const tagContext = builder.paragraphDepth > 0 ? "inline-tag-name" : "tag-name";
 		write(builder, "<");
 		writeHole(builder, tagContext);
 		writeAttributes(builder);
@@ -226,10 +201,7 @@ const writeNode = (builder: Builder) => {
 		writeHole(builder, "content");
 		return;
 	}
-	const tag = pick(
-		random,
-		isInsideParagraph ? PHRASING_CONTAINER_TAGS : CONTAINER_TAGS,
-	);
+	const tag = pick(random, isInsideParagraph ? PHRASING_CONTAINER_TAGS : CONTAINER_TAGS);
 	write(builder, `<${tag}`);
 	writeAttributes(builder);
 	if (random() < 0.05) {

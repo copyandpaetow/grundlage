@@ -1,0 +1,55 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["typescript", "unicorn", "import"],
+	"rules": {
+		"curly": ["error", "multi-line"],
+		"no-nested-ternary": "error",
+		"no-else-return": ["error", { "allowElseIf": false }],
+		"no-implicit-coercion": ["error", { "boolean": true, "number": true, "string": false }],
+		"no-unused-expressions": ["error", { "allowShortCircuit": false, "allowTernary": false }],
+		"unicorn/no-array-for-each": "error",
+		"import/no-default-export": "error",
+		"import/no-cycle": "error",
+		"no-use-before-define": [
+			"error",
+			{
+				"functions": true,
+				"classes": true,
+				"variables": true,
+				"typedefs": false,
+				"ignoreTypeReferences": true
+			}
+		],
+		"typescript/switch-exhaustiveness-check": [
+			"error",
+			{ "considerDefaultExhaustiveForUnions": false, "requireDefaultForNonUnion": false }
+		],
+		"complexity": ["warn", 16],
+		"max-depth": ["warn", 4],
+		"max-lines-per-function": ["warn", { "max": 70, "skipBlankLines": true, "skipComments": true }],
+		"typescript/no-floating-promises": "off",
+		"unicorn/no-new-array": "off"
+	},
+	"overrides": [
+		{
+			"files": [
+				"**/*.test.ts",
+				"**/*.test-d.ts",
+				"**/__tests__/**",
+				"**/__fixtures__/**",
+				"lib/tests/**"
+			],
+			"rules": {
+				"complexity": "off",
+				"max-depth": "off",
+				"max-lines-per-function": "off",
+				"require-yield": "off",
+				"typescript/no-non-null-asserted-optional-chain": "off"
+			}
+		},
+		{
+			"files": ["**/*.config.ts"],
+			"rules": { "import/no-default-export": "off" }
+		}
+	]
+}

@@ -110,18 +110,13 @@ customElements.define(
 						const axis = MOVE_AXES[key];
 						if (axis === undefined) continue;
 						const [alongRight, alongUp, alongForward] = axis;
-						camera.x +=
-							MOVE_PIXELS_PER_FRAME *
-							(alongRight * rightX + alongForward * forwardX);
-						camera.z +=
-							MOVE_PIXELS_PER_FRAME *
-							(alongRight * rightZ + alongForward * forwardZ);
+						camera.x += MOVE_PIXELS_PER_FRAME * (alongRight * rightX + alongForward * forwardX);
+						camera.z += MOVE_PIXELS_PER_FRAME * (alongRight * rightZ + alongForward * forwardZ);
 						camera.y += MOVE_PIXELS_PER_FRAME * alongUp;
 					}
 
 					writeCameraVariables();
-					animationFrame =
-						pressedKeys.size > 0 ? requestAnimationFrame(stepWhileKeysHeld) : 0;
+					animationFrame = pressedKeys.size > 0 ? requestAnimationFrame(stepWhileKeysHeld) : 0;
 				};
 
 				const onKeyDown = (event: KeyboardEvent): void => {
@@ -131,8 +126,7 @@ customElements.define(
 					const key = event.key.toLowerCase();
 					if (!MOVEMENT_KEYS.has(key)) return;
 					pressedKeys.add(key);
-					if (animationFrame === 0)
-						animationFrame = requestAnimationFrame(stepWhileKeysHeld);
+					if (animationFrame === 0) animationFrame = requestAnimationFrame(stepWhileKeysHeld);
 				};
 
 				const onKeyUp = (event: KeyboardEvent): void => {
@@ -153,18 +147,13 @@ customElements.define(
 
 			// Entering keeps the current distance as the radius, so the view does not zoom
 			function* orbitCamera() {
-				camera.orbitRadius =
-					Math.hypot(camera.x, camera.y, camera.z) || DEFAULT_ORBIT_RADIUS;
+				camera.orbitRadius = Math.hypot(camera.x, camera.y, camera.z) || DEFAULT_ORBIT_RADIUS;
 				camera.x = 0;
 				camera.y = 0;
 				camera.z = 0;
 
 				const onWheel = (event: WheelEvent): void => {
-					camera.orbitRadius = clamp(
-						camera.orbitRadius + event.deltaY,
-						120,
-						4000,
-					);
+					camera.orbitRadius = clamp(camera.orbitRadius + event.deltaY, 120, 4000);
 					writeCameraVariables();
 					event.preventDefault();
 				};
@@ -179,11 +168,9 @@ customElements.define(
 				return () => {
 					const yawRadians = toRadians(camera.yaw);
 					const pitchRadians = toRadians(camera.pitch);
-					camera.x =
-						camera.orbitRadius * Math.sin(yawRadians) * Math.cos(pitchRadians);
+					camera.x = camera.orbitRadius * Math.sin(yawRadians) * Math.cos(pitchRadians);
 					camera.y = -camera.orbitRadius * Math.sin(pitchRadians);
-					camera.z =
-						camera.orbitRadius * Math.cos(yawRadians) * Math.cos(pitchRadians);
+					camera.z = camera.orbitRadius * Math.cos(yawRadians) * Math.cos(pitchRadians);
 					camera.orbitRadius = 0;
 					writeCameraVariables();
 					element.removeEventListener("wheel", onWheel);

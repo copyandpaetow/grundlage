@@ -10,15 +10,12 @@ import {
 
 //the browser is the oracle: a painted template, markers removed, must equal the markup the app
 //would have written by hand with the same values, at mount and after a patch
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 const CASE_COUNT = 400;
 
 const serializedSheetOf = (sheet: CSSStyleSheet | null) =>
-	sheet === null
-		? "no sheet"
-		: Array.from(sheet.cssRules, (rule) => rule.cssText).join("\n");
+	sheet === null ? "no sheet" : Array.from(sheet.cssRules, (rule) => rule.cssText).join("\n");
 
 const scratchSheetOf = (cssText: string) => {
 	const sheet = new CSSStyleSheet();
@@ -32,19 +29,12 @@ const comparableMarkupOf = (
 	liveStyleTextOf: (style: HTMLStyleElement) => string,
 	liveTextareaTextOf: (textarea: HTMLTextAreaElement) => string,
 ) => {
-	const styleTexts = Array.from(
-		root.querySelectorAll("style"),
-		liveStyleTextOf,
-	);
-	const textareaTexts = Array.from(
-		root.querySelectorAll("textarea"),
-		liveTextareaTextOf,
-	);
+	const styleTexts = Array.from(root.querySelectorAll("style"), liveStyleTextOf);
+	const textareaTexts = Array.from(root.querySelectorAll("textarea"), liveTextareaTextOf);
 	const container = document.createElement("div");
 	for (const child of root.childNodes) container.append(child.cloneNode(true));
 	const styles = container.querySelectorAll("style");
-	for (let index = 0; index < styles.length; index++)
-		styles[index].textContent = styleTexts[index];
+	for (let index = 0; index < styles.length; index++) styles[index].textContent = styleTexts[index];
 	const textareas = container.querySelectorAll("textarea");
 	for (let index = 0; index < textareas.length; index++)
 		textareas[index].textContent = textareaTexts[index];
@@ -57,10 +47,7 @@ const comparableMarkupOf = (
 	container.normalize();
 	//the library appends bound attributes after the static ones, an order nothing but serialization sees
 	for (const element of container.querySelectorAll("*")) {
-		const attributes = Array.from(element.attributes, ({ name, value }) => [
-			name,
-			value,
-		]);
+		const attributes = Array.from(element.attributes, ({ name, value }) => [name, value]);
 		for (const [name] of attributes) element.removeAttribute(name);
 		attributes.sort(([first], [second]) => (first < second ? -1 : 1));
 		for (const [name, value] of attributes) element.setAttribute(name, value);
@@ -94,9 +81,7 @@ const UNSETTLED = "unsettled";
 const settledWithin = (update: Promise<void>) =>
 	Promise.race([
 		update,
-		new Promise<typeof UNSETTLED>((resolve) =>
-			setTimeout(() => resolve(UNSETTLED), 1000),
-		),
+		new Promise<typeof UNSETTLED>((resolve) => setTimeout(() => resolve(UNSETTLED), 1000)),
 	]);
 
 let currentPaint: CurrentPaint | null = null;
@@ -123,11 +108,7 @@ test.runIf(isRealBrowser).each([1, 2, 3])(
 		document.addEventListener("grundlage-error", recordError);
 		const wrong: Array<string> = [];
 		const tally = { cases: 0, holes: 0, patched: 0, refusedNesting: 0 };
-		for (
-			let caseIndex = 0;
-			caseIndex < CASE_COUNT && wrong.length < 6;
-			caseIndex++
-		) {
+		for (let caseIndex = 0; caseIndex < CASE_COUNT && wrong.length < 6; caseIndex++) {
 			const generated = generateTemplate(random);
 			const firstValues = generated.valuesOf(random);
 			const nextValues = generated.valuesOf(random);
@@ -156,9 +137,7 @@ test.runIf(isRealBrowser).each([1, 2, 3])(
 					return false;
 				}
 				const painted = paintedMarkupOf(host);
-				const handWritten = handWrittenComparableMarkupOf(
-					handWrittenMarkupOf(generated, values),
-				);
+				const handWritten = handWrittenComparableMarkupOf(handWrittenMarkupOf(generated, values));
 				if (painted === handWritten) return true;
 				wrong.push(
 					`${label} in ${source} with ${JSON.stringify(values)}\n  painted:      ${painted}\n  hand-written: ${handWritten}`,

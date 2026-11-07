@@ -3,14 +3,12 @@ import { type FormAssociatedBase } from "../forms";
 import * as FORM_EVENTS from "../form-events";
 import { html, component } from "../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 //the real form-association round-trip needs attachInternals + live form behavior.
 //the browser-as-dom project runs this file under happy-dom, which has neither, so
 //skip there and let the chromium project carry the coverage
-const hasInternals =
-	typeof HTMLElement.prototype.attachInternals === "function";
+const hasInternals = typeof HTMLElement.prototype.attachInternals === "function";
 
 let tagId = 0;
 const uniqueTag = () => `browser-field-${tagId++}-${Date.now()}`;
@@ -26,30 +24,27 @@ const mountInForm = (tag: string) => {
 };
 
 describe("form-associated component in a live form", () => {
-	test.skipIf(!hasInternals)(
-		"attachInternals populates host.internals",
-		async () => {
-			const tag = uniqueTag();
-			let captured: ElementInternals | null | undefined;
-			customElements.define(
-				tag,
-				component(function* ({ host }) {
-					captured = host.internals;
-					yield function* () {
-						yield html`<template><input /></template>`;
-					};
-				}, formOptions),
-			);
+	test.skipIf(!hasInternals)("attachInternals populates host.internals", async () => {
+		const tag = uniqueTag();
+		let captured: ElementInternals | null | undefined;
+		customElements.define(
+			tag,
+			component(function* ({ host }) {
+				captured = host.internals;
+				yield function* () {
+					yield html`<template><input /></template>`;
+				};
+			}, formOptions),
+		);
 
-			const field = document.createElement(tag);
-			document.body.appendChild(field);
-			await sleep();
+		const field = document.createElement(tag);
+		document.body.appendChild(field);
+		await sleep();
 
-			expect(captured).toBeInstanceOf(ElementInternals);
+		expect(captured).toBeInstanceOf(ElementInternals);
 
-			field.remove();
-		},
-	);
+		field.remove();
+	});
 
 	test.skipIf(!hasInternals)(
 		"setFormValue surfaces under the element's name in FormData",
@@ -75,64 +70,57 @@ describe("form-associated component in a live form", () => {
 		},
 	);
 
-	test.skipIf(!hasInternals)(
-		"form.reset() broadcasts form-reset on the host",
-		async () => {
-			const tag = uniqueTag();
-			customElements.define(
-				tag,
-				component(function* () {
-					yield function* () {
-						yield html`<template><input /></template>`;
-					};
-				}, formOptions),
-			);
+	test.skipIf(!hasInternals)("form.reset() broadcasts form-reset on the host", async () => {
+		const tag = uniqueTag();
+		customElements.define(
+			tag,
+			component(function* () {
+				yield function* () {
+					yield html`<template><input /></template>`;
+				};
+			}, formOptions),
+		);
 
-			const { form, field } = mountInForm(tag);
-			await sleep();
+		const { form, field } = mountInForm(tag);
+		await sleep();
 
-			let resets = 0;
-			field.addEventListener(FORM_EVENTS.RESET, () => resets++);
-			form.reset();
+		let resets = 0;
+		field.addEventListener(FORM_EVENTS.RESET, () => resets++);
+		form.reset();
 
-			expect(resets).toBe(1);
+		expect(resets).toBe(1);
 
-			form.remove();
-		},
-	);
+		form.remove();
+	});
 
-	test.skipIf(!hasInternals)(
-		"disabling a wrapping fieldset broadcasts form-disabled",
-		async () => {
-			const tag = uniqueTag();
-			customElements.define(
-				tag,
-				component(function* () {
-					yield function* () {
-						yield html`<template><input /></template>`;
-					};
-				}, formOptions),
-			);
+	test.skipIf(!hasInternals)("disabling a wrapping fieldset broadcasts form-disabled", async () => {
+		const tag = uniqueTag();
+		customElements.define(
+			tag,
+			component(function* () {
+				yield function* () {
+					yield html`<template><input /></template>`;
+				};
+			}, formOptions),
+		);
 
-			const form = document.createElement("form");
-			const fieldset = document.createElement("fieldset");
-			const field = document.createElement(tag) as FormAssociatedBase;
-			fieldset.appendChild(field);
-			form.appendChild(fieldset);
-			document.body.appendChild(form);
-			await sleep();
+		const form = document.createElement("form");
+		const fieldset = document.createElement("fieldset");
+		const field = document.createElement(tag) as FormAssociatedBase;
+		fieldset.appendChild(field);
+		form.appendChild(fieldset);
+		document.body.appendChild(form);
+		await sleep();
 
-			let disabled: boolean | null = null;
-			field.addEventListener(FORM_EVENTS.DISABLED, (event) => {
-				disabled = (event as CustomEvent<{ disabled: boolean }>).detail
-					.disabled;
-			});
-			fieldset.disabled = true;
-			await sleep();
+		let disabled: boolean | null = null;
+		field.addEventListener(FORM_EVENTS.DISABLED, (event) => {
+			disabled = (event as CustomEvent<{ disabled: boolean }>).detail.disabled;
+		});
+		fieldset.disabled = true;
+		await sleep();
 
-			expect(disabled).toBe(true);
+		expect(disabled).toBe(true);
 
-			form.remove();
-		},
-	);
+		form.remove();
+	});
 });

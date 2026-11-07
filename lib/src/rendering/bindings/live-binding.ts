@@ -21,10 +21,7 @@ import {
 } from "./style-sheet";
 import { commitRawContent } from "./content-raw";
 import { commitTag } from "./tag";
-import {
-	commitTemplateContent,
-	hydrateTemplateContent,
-} from "./content-template";
+import { commitTemplateContent, hydrateTemplateContent } from "./content-template";
 import {
 	AttributeLaneLiveBinding,
 	AttributeLiveBinding,
@@ -92,10 +89,7 @@ export const createMarkedLiveBinding = (
 			return { staticBinding, openMarker, lastValueHash: UNSET_HASH };
 		case BINDING.ATTRIBUTE:
 		case BINDING.DYNAMIC_ATTRIBUTE:
-			return createAttributeLaneLiveBinding(
-				staticBinding,
-				elementAfterMarker(openMarker),
-			);
+			return createAttributeLaneLiveBinding(staticBinding, elementAfterMarker(openMarker));
 		case BINDING.RAW_CONTENT: {
 			const { compiledStyleSheet } = staticBinding;
 			return {
@@ -127,25 +121,13 @@ export const commitLiveBinding = (
 			commitTag(liveBinding as TagLiveBinding, values, instance.liveBindings);
 			break;
 		case BINDING.ATTRIBUTE:
-			commitAttribute(
-				liveBinding as AttributeLiveBinding,
-				values,
-				instance.treeState,
-			);
+			commitAttribute(liveBinding as AttributeLiveBinding, values, instance.treeState);
 			break;
 		case BINDING.DYNAMIC_ATTRIBUTE:
-			commitDynamic(
-				liveBinding as DynamicAttributeLiveBinding,
-				values,
-				instance.treeState,
-			);
+			commitDynamic(liveBinding as DynamicAttributeLiveBinding, values, instance.treeState);
 			break;
 		case BINDING.CONTENT:
-			commitContent(
-				liveBinding as ContentLiveBinding,
-				values,
-				instance.treeState,
-			);
+			commitContent(liveBinding as ContentLiveBinding, values, instance.treeState);
 			break;
 		case BINDING.RAW_CONTENT:
 			commitRawContent(liveBinding as RawContentLiveBinding, values);
@@ -180,9 +162,7 @@ export const hydrateLiveBinding = (
 	commitLiveBinding(instance, liveBinding, values);
 };
 
-export const revertHostBinding = (
-	liveBinding: AttributeLaneLiveBinding,
-): void => {
+export const revertHostBinding = (liveBinding: AttributeLaneLiveBinding): void => {
 	if (isAttributeBinding(liveBinding)) {
 		assertDuringDevelopment(
 			liveBinding.lastComposedName !== NO_ATTRIBUTE_WRITTEN,

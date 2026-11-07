@@ -4,8 +4,7 @@ import { component, html, prop } from "../index";
 const sleep = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 //happy-dom has no form-associated elements, so this needs a real browser
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 test.skipIf(!isRealBrowser)(
 	"an unreflected value restores from the markup on form reset",
@@ -19,8 +18,7 @@ test.skipIf(!isRealBrowser)(
 			tag,
 			component(
 				function* ({ host }) {
-					const resetToMarkup = () =>
-						(host.value = prop.read(host, ratingInputProps).value);
+					const resetToMarkup = () => (host.value = prop.read(host, ratingInputProps).value);
 					yield function* view({ value }) {
 						host.internals?.setFormValue(String(value));
 						yield html`<template on-form-reset=${resetToMarkup}

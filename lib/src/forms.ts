@@ -5,15 +5,11 @@ const createFormAssociatedBaseClass = () =>
 		static formAssociated = true;
 
 		formAssociatedCallback(form: HTMLFormElement | null) {
-			this.dispatchEvent(
-				new CustomEvent(FORM_EVENTS.ASSOCIATED, { detail: { form } }),
-			);
+			this.dispatchEvent(new CustomEvent(FORM_EVENTS.ASSOCIATED, { detail: { form } }));
 		}
 
 		formDisabledCallback(disabled: boolean) {
-			this.dispatchEvent(
-				new CustomEvent(FORM_EVENTS.DISABLED, { detail: { disabled } }),
-			);
+			this.dispatchEvent(new CustomEvent(FORM_EVENTS.DISABLED, { detail: { disabled } }));
 		}
 
 		formResetCallback() {
@@ -21,21 +17,15 @@ const createFormAssociatedBaseClass = () =>
 		}
 
 		formStateRestoreCallback(state: unknown, mode: "restore" | "autocomplete") {
-			this.dispatchEvent(
-				new CustomEvent(FORM_EVENTS.RESTORE, { detail: { state, mode } }),
-			);
+			this.dispatchEvent(new CustomEvent(FORM_EVENTS.RESTORE, { detail: { state, mode } }));
 		}
 	};
 
-export type FormAssociatedBase = InstanceType<
-	ReturnType<typeof createFormAssociatedBaseClass>
->;
+export type FormAssociatedBase = InstanceType<ReturnType<typeof createFormAssociatedBaseClass>>;
 
 //built on first use so importing the library never touches `HTMLElement`, and shared from
 //then on so every form-associated component stays a single `instanceof` lineage
-let sharedFormAssociatedBaseClass: ReturnType<
-	typeof createFormAssociatedBaseClass
-> | null = null;
+let sharedFormAssociatedBaseClass: ReturnType<typeof createFormAssociatedBaseClass> | null = null;
 
 export const getFormAssociatedBaseClass = () =>
 	(sharedFormAssociatedBaseClass ??= createFormAssociatedBaseClass());

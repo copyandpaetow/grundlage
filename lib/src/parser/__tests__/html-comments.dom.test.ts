@@ -121,15 +121,9 @@ describe("html parser — comment bindings", () => {
 			<!-- <fake-tag class="x"> -->
 			<p>after</p>`;
 		expect(parsed.bindings).toHaveLength(0);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("div"),
-		).not.toBeNull();
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("p"),
-		).not.toBeNull();
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("fake-tag"),
-		).toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("div")).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("p")).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("fake-tag")).toBeNull();
 	});
 
 	test("a single-hole comment after the key stays a comment — whitespace does not flip its semantics", () => {

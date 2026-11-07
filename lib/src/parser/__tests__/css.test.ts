@@ -6,8 +6,7 @@ import { CompiledStyleSheet, Part } from "../types";
 
 const compiledOrThrow = (parts: Array<Part>): CompiledStyleSheet => {
 	const compiled = compileStyleSheet(parts);
-	if (compiled === STYLE_SHEET_NOT_COMPILED)
-		throw new Error("expected the sheet to compile");
+	if (compiled === STYLE_SHEET_NOT_COMPILED) throw new Error("expected the sheet to compile");
 	return compiled;
 };
 
@@ -36,19 +35,11 @@ describe("holed declarations", () => {
 				valueParts: [0],
 			},
 		]);
-		expect(plan.ruleCountChecks).toEqual([
-			{ rulePath: [], expectedRuleCount: 1 },
-		]);
+		expect(plan.ruleCountChecks).toEqual([{ rulePath: [], expectedRuleCount: 1 }]);
 	});
 
 	test("multiple holes in one declaration collapse to one entry", () => {
-		const plan = compileOrThrow([
-			".box { transform: rotate(",
-			0,
-			"deg) translateX(",
-			1,
-			"px); }",
-		]);
+		const plan = compileOrThrow([".box { transform: rotate(", 0, "deg) translateX(", 1, "px); }"]);
 		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0],
@@ -92,15 +83,11 @@ describe("holed declarations", () => {
 			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [0] },
 			{ rulePath: [1], propertyName: "color", priority: "", valueParts: [1] },
 		]);
-		expect(plan.ruleCountChecks).toEqual([
-			{ rulePath: [], expectedRuleCount: 2 },
-		]);
+		expect(plan.ruleCountChecks).toEqual([{ rulePath: [], expectedRuleCount: 2 }]);
 	});
 
 	test("a sheet without any hole compiles to nothing", () => {
-		expect(compileStyleSheet(["div{color:red}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:red}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 });
 
@@ -126,29 +113,21 @@ describe("property names", () => {
 	});
 
 	test("a malformed holed property name bails", () => {
-		expect(compileStyleSheet(["div{wi dth:", 0, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{wi dth:", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 });
 
 describe("duplicate properties", () => {
 	test("a static duplicate after a holed property bails", () => {
-		expect(compileStyleSheet(["div{color:", 0, ";color:red}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:", 0, ";color:red}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a holed duplicate after a static property bails", () => {
-		expect(compileStyleSheet(["div{color:red;color:", 0, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:red;color:", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("two holed declarations of one property bail", () => {
-		expect(compileStyleSheet(["div{color:", 0, ";color:", 1, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:", 0, ";color:", 1, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("the same property in two different rules is fine", () => {
@@ -157,9 +136,7 @@ describe("duplicate properties", () => {
 	});
 
 	test("an escaped static name that spells a holed property bails", () => {
-		expect(compileStyleSheet(["div{color:", 0, ";c\\olor:red}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:", 0, ";c\\olor:red}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("static duplicates without any hole are the browser's business", () => {
@@ -190,9 +167,7 @@ describe("nesting", () => {
 		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
-		expect(plan.ruleCountChecks).toEqual([
-			{ rulePath: [], expectedRuleCount: 1 },
-		]);
+		expect(plan.ruleCountChecks).toEqual([{ rulePath: [], expectedRuleCount: 1 }]);
 	});
 
 	test("declarations after a nested rule land in an implicit nested-declarations rule", () => {
@@ -222,19 +197,13 @@ describe("nesting", () => {
 	});
 
 	test("a custom property whose value opens a block bails", () => {
-		expect(compileStyleSheet(["div{--x:{a:b};width:", 0, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{--x:{a:b};width:", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 });
 
 describe("at-rules", () => {
 	test("a hole in a rule nested in @media is addressed through the media rule", () => {
-		const plan = compileOrThrow([
-			"@media (min-width: 600px){.a{color:",
-			0,
-			"}}",
-		]);
+		const plan = compileOrThrow(["@media (min-width: 600px){.a{color:", 0, "}}"]);
 		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0, 0],
@@ -267,11 +236,7 @@ describe("at-rules", () => {
 	});
 
 	test("a hole in a keyframe declaration addresses the keyframe block", () => {
-		const plan = compileOrThrow([
-			"@keyframes spin{to{transform:rotate(",
-			0,
-			"deg)}}",
-		]);
+		const plan = compileOrThrow(["@keyframes spin{to{transform:rotate(", 0, "deg)}}"]);
 		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0, 0],
@@ -303,9 +268,7 @@ describe("at-rules", () => {
 		expect(plan.declarations).toEqual([
 			{ rulePath: [1], propertyName: "color", priority: "", valueParts: [0] },
 		]);
-		expect(plan.ruleCountChecks).toEqual([
-			{ rulePath: [], expectedRuleCount: 2 },
-		]);
+		expect(plan.ruleCountChecks).toEqual([{ rulePath: [], expectedRuleCount: 2 }]);
 	});
 
 	test("a @layer statement occupies a rule slot", () => {
@@ -314,15 +277,11 @@ describe("at-rules", () => {
 	});
 
 	test("a bare holed declaration directly inside top-level @media bails", () => {
-		expect(compileStyleSheet(["@media screen{color:", 0, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["@media screen{color:", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a hole inside @font-face bails — descriptors are not addressable", () => {
-		expect(compileStyleSheet(["@font-face{src:", 0, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["@font-face{src:", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a hole inside @property bails", () => {
@@ -332,41 +291,27 @@ describe("at-rules", () => {
 	});
 
 	test("descriptor at-rule names are case-insensitive", () => {
-		expect(compileStyleSheet(["@FONT-FACE{src:", 0, "}"])).toBe(
+		expect(compileStyleSheet(["@FONT-FACE{src:", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
+	});
+
+	test("a holed !important inside a keyframe bails: the browser drops it", () => {
+		expect(compileStyleSheet(["@keyframes spin{to{opacity:", 0, " !important}}"])).toBe(
 			STYLE_SHEET_NOT_COMPILED,
 		);
 	});
 
-	test("a holed !important inside a keyframe bails: the browser drops it", () => {
-		expect(
-			compileStyleSheet(["@keyframes spin{to{opacity:", 0, " !important}}"]),
-		).toBe(STYLE_SHEET_NOT_COMPILED);
-	});
-
 	test("a hole after a closed descriptor block is fast again", () => {
-		const plan = compileOrThrow([
-			"@font-face{src:url(x.woff2)}.a{color:",
-			0,
-			"}",
-		]);
+		const plan = compileOrThrow(["@font-face{src:url(x.woff2)}.a{color:", 0, "}"]);
 		expect(plan.declarations).toEqual([
 			{ rulePath: [1], propertyName: "color", priority: "", valueParts: [0] },
 		]);
-		expect(plan.ruleCountChecks).toEqual([
-			{ rulePath: [], expectedRuleCount: 2 },
-		]);
+		expect(plan.ruleCountChecks).toEqual([{ rulePath: [], expectedRuleCount: 2 }]);
 	});
 });
 
 describe("value edge whitespace", () => {
 	test("whitespace around the value is trimmed, inside it is kept", () => {
-		const plan = compileOrThrow([
-			"div{--offset:\n\t ",
-			0,
-			"px  ",
-			1,
-			"px \t\n}",
-		]);
+		const plan = compileOrThrow(["div{--offset:\n\t ", 0, "px  ", 1, "px \t\n}"]);
 		expect(plan.declarations).toEqual([
 			{
 				rulePath: [0],
@@ -397,21 +342,17 @@ describe("!important", () => {
 	});
 
 	test("a top-level bang that is not !important bails", () => {
-		expect(compileStyleSheet(["div{color:", 0, " !imp}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:", 0, " !imp}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("two top-level bangs bail", () => {
-		expect(
-			compileStyleSheet(["div{color:", 0, " !important !important}"]),
-		).toBe(STYLE_SHEET_NOT_COMPILED);
+		expect(compileStyleSheet(["div{color:", 0, " !important !important}"])).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
 	});
 
 	test("a bang before a hole bails", () => {
-		expect(compileStyleSheet(["div{color: x !", 0, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color: x !", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a bang in a hole-free declaration is fine", () => {
@@ -422,29 +363,25 @@ describe("!important", () => {
 	});
 
 	test("a trailing comment after !important in a holed declaration bails", () => {
-		expect(
-			compileStyleSheet(["div{color:", 0, " !important /* note */}"]),
-		).toBe(STYLE_SHEET_NOT_COMPILED);
+		expect(compileStyleSheet(["div{color:", 0, " !important /* note */}"])).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
 	});
 });
 
 describe("structural bails", () => {
 	test("a hole in a selector bails", () => {
-		expect(compileStyleSheet(["div.", 0, "{color:red}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div.", 0, "{color:red}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a hole in a property name bails", () => {
-		expect(compileStyleSheet(["div{", 0, ":red}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{", 0, ":red}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a hole in an at-rule prelude bails", () => {
-		expect(
-			compileStyleSheet(["@media (min-width:", 0, "px){div{color:red}}"]),
-		).toBe(STYLE_SHEET_NOT_COMPILED);
+		expect(compileStyleSheet(["@media (min-width:", 0, "px){div{color:red}}"])).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
 	});
 
 	test("a whole-stylesheet hole bails", () => {
@@ -452,29 +389,21 @@ describe("structural bails", () => {
 	});
 
 	test("an unclosed rule bails", () => {
-		expect(compileStyleSheet(["div{color:", 0, ";"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:", 0, ";"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a sheet ending inside a value bails", () => {
-		expect(compileStyleSheet(["div{color:", 0, ""])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:", 0, ""])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a stray closing brace bails", () => {
-		expect(compileStyleSheet(["div{color:red}}.a{width:", 0, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{color:red}}.a{width:", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 });
 
 describe("strings and comments", () => {
 	test("a hole inside a string bails", () => {
-		expect(compileStyleSheet(['div{content:"', 0, '"}'])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(['div{content:"', 0, '"}'])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a semicolon inside a string is not a terminator", () => {
@@ -485,9 +414,7 @@ describe("strings and comments", () => {
 	});
 
 	test("a hole inside a comment bails", () => {
-		expect(compileStyleSheet(["div{/* ", 0, " */}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(["div{/* ", 0, " */}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("braces inside a comment are inert", () => {
@@ -505,9 +432,7 @@ describe("strings and comments", () => {
 	});
 
 	test("an unterminated string bails", () => {
-		expect(compileStyleSheet(['div{content:"a}', 0, ""])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet(['div{content:"a}', 0, ""])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("an escaped backslash does not swallow the closing quote", () => {
@@ -532,46 +457,30 @@ describe("strings and comments", () => {
 
 describe("parentheses", () => {
 	test("a semicolon inside url() is not a terminator", () => {
-		const plan = compileOrThrow([
-			".a{background:url(img;x.png);width:",
-			0,
-			"}",
-		]);
+		const plan = compileOrThrow([".a{background:url(img;x.png);width:", 0, "}"]);
 		expect(plan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "width", priority: "", valueParts: [0] },
 		]);
 	});
 
 	test("an unclosed parenthesis bails", () => {
-		expect(compileStyleSheet([".a{width:calc(", 0, "}"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet([".a{width:calc(", 0, "}"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	//the browser reads `({)` as a block still open, so the `;` and what follows join the value
 	test("a brace opened inside parentheses swallows the next declaration", () => {
-		expect(
-			compileStyleSheet([
-				".a{transform:translateX(",
-				0,
-				"px {);opacity:",
-				1,
-				"}",
-			]),
-		).toBe(STYLE_SHEET_NOT_COMPILED);
+		expect(compileStyleSheet([".a{transform:translateX(", 0, "px {);opacity:", 1, "}"])).toBe(
+			STYLE_SHEET_NOT_COMPILED,
+		);
 	});
 
 	test("a bracket closes only its own block", () => {
 		const plan = compileOrThrow([".a{grid-area:[a);b];width:", 0, "}"]);
-		expect(plan.declarations.map(({ propertyName }) => propertyName)).toEqual([
-			"width",
-		]);
+		expect(plan.declarations.map(({ propertyName }) => propertyName)).toEqual(["width"]);
 	});
 
 	test("a backslash that ends the sheet bails instead of reading past the end", () => {
-		expect(compileStyleSheet([".a{width:", 0, "}\\"])).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(compileStyleSheet([".a{width:", 0, "}\\"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("an escaped semicolon stays inside the value", () => {
@@ -588,38 +497,21 @@ describe("parser reuse", () => {
 		expect(secondPlan.declarations).toEqual([
 			{ rulePath: [0], propertyName: "color", priority: "", valueParts: [0] },
 		]);
-		expect(secondPlan.ruleCountChecks).toEqual([
-			{ rulePath: [], expectedRuleCount: 1 },
-		]);
+		expect(secondPlan.ruleCountChecks).toEqual([{ rulePath: [], expectedRuleCount: 1 }]);
 	});
 });
 
 describe("holed rules", () => {
 	test("declarations of one block share one holed rule", () => {
-		const compiled = compiledOrThrow([
-			".a{width:",
-			0,
-			";color:red;height:",
-			1,
-			"}",
-		]);
+		const compiled = compiledOrThrow([".a{width:", 0, ";color:red;height:", 1, "}"]);
 		expect(compiled.holedRules).toHaveLength(1);
 		expect(compiled.holedRules[0].declarations).toHaveLength(2);
 		expect(compiled.declarationCount).toBe(2);
 	});
 
 	test("a rule's own block and its nested-declarations run are two holed rules", () => {
-		const compiled = compiledOrThrow([
-			"div{width:",
-			0,
-			";.b{color:red}height:",
-			1,
-			"}",
-		]);
-		expect(compiled.holedRules.map((holedRule) => holedRule.rulePath)).toEqual([
-			[0],
-			[0, 1],
-		]);
+		const compiled = compiledOrThrow(["div{width:", 0, ";.b{color:red}height:", 1, "}"]);
+		expect(compiled.holedRules.map((holedRule) => holedRule.rulePath)).toEqual([[0], [0, 1]]);
 	});
 
 	test("a rule that cannot match the host is never re-inserted", () => {
@@ -646,9 +538,7 @@ describe("holed rules", () => {
 	test("holes keep the value indexes they were given", () => {
 		const compiled = compiledOrThrow([".a{width:", 3, ";height:", 7, "}"]);
 		expect(
-			compiled.holedRules[0].declarations.map(
-				(declaration) => declaration.valueParts,
-			),
+			compiled.holedRules[0].declarations.map((declaration) => declaration.valueParts),
 		).toEqual([[3], [7]]);
 	});
 });

@@ -54,23 +54,16 @@ export const DECLARED_PROP_NAME = "payload";
 
 export const defineProbeElements = (): void => {
 	if (customElements.get(PLAIN_CUSTOM_ELEMENT_NAME)) return;
-	customElements.define(
-		PLAIN_CUSTOM_ELEMENT_NAME,
-		class extends HTMLElement {},
-	);
+	customElements.define(PLAIN_CUSTOM_ELEMENT_NAME, class extends HTMLElement {});
 	customElements.define(
 		DECLARED_PROP_ELEMENT_NAME,
 		class extends HTMLElement {
-			static [DECLARED_PROP_NAMES]: ReadonlySet<string> = new Set([
-				DECLARED_PROP_NAME,
-			]);
+			static [DECLARED_PROP_NAMES]: ReadonlySet<string> = new Set([DECLARED_PROP_NAME]);
 		},
 	);
 };
 
-const asTemplateStringsArray = (
-	parts: ReadonlyArray<string>,
-): TemplateStringsArray =>
+const asTemplateStringsArray = (parts: ReadonlyArray<string>): TemplateStringsArray =>
 	Object.assign(parts.slice(), {
 		raw: parts.slice(),
 	}) as unknown as TemplateStringsArray;
@@ -80,8 +73,7 @@ const asTemplateStringsArray = (
     a long value would move cost out of the lane being measured and into the
     hash, and every lane would drift toward the same number.
 */
-const attributeValueFor = (index: number, parity: number): string =>
-	`v${index}${parity}`;
+const attributeValueFor = (index: number, parity: number): string => `v${index}${parity}`;
 
 interface LaneMarkup {
 	/** literal chunks, one longer than the value count */
@@ -105,9 +97,7 @@ const repeatOneElementPerBinding = (
 const oneValuePerBinding =
 	(bindings: number) =>
 	(parity: number): Array<unknown> =>
-		Array.from({ length: bindings }, (_, index) =>
-			attributeValueFor(index, parity),
-		);
+		Array.from({ length: bindings }, (_, index) => attributeValueFor(index, parity));
 
 const singleValueAttributeMarkup = (
 	tagName: string,
@@ -155,10 +145,7 @@ const attributeSpreadMarkup = (bindings: number): LaneMarkup => ({
 		Array.from({ length: bindings }, (_, index) => {
 			const bag: Record<string, string> = {};
 			for (let key = 0; key < SPREAD_KEYS.length; key++)
-				bag[SPREAD_KEYS[key]] = attributeValueFor(
-					index * SPREAD_KEYS.length + key,
-					parity,
-				);
+				bag[SPREAD_KEYS[key]] = attributeValueFor(index * SPREAD_KEYS.length + key, parity);
 			return bag;
 		}),
 });
@@ -171,11 +158,7 @@ const contentMarkup = (bindings: number): LaneMarkup => ({
 const markupForLane = (lane: CommitLane, bindings: number): LaneMarkup => {
 	switch (lane) {
 		case "staticNameAttribute":
-			return singleValueAttributeMarkup(
-				"div",
-				(index) => `data-slot${index}`,
-				bindings,
-			);
+			return singleValueAttributeMarkup("div", (index) => `data-slot${index}`, bindings);
 		case "customElementAttribute":
 			return singleValueAttributeMarkup(
 				PLAIN_CUSTOM_ELEMENT_NAME,
@@ -205,10 +188,7 @@ export const generateShape = (shape: CommitShape): GeneratedShape => {
 	return {
 		shape,
 		templateStrings: asTemplateStringsArray(markup.strings),
-		valuesByParity:
-			shape.churn === "unchanged"
-				? [first, first]
-				: [first, markup.valuesFor(1)],
+		valuesByParity: shape.churn === "unchanged" ? [first, first] : [first, markup.valuesFor(1)],
 	};
 };
 
@@ -217,16 +197,14 @@ export const generateShape = (shape: CommitShape): GeneratedShape => {
 const BINDINGS_PER_TEMPLATE = 400;
 
 const LANE_HYPOTHESES: Record<CommitLane, string> = {
-	staticNameAttribute:
-		"the common attribute: one hole, a name with none. P13's subject",
+	staticNameAttribute: "the common attribute: one hole, a name with none. P13's subject",
 	composedNameAttribute:
 		"the same commit with a hole in the name. The gap to staticName is what a hole-free walk is worth",
 	customElementAttribute:
 		"staticName on a defined custom element. The gap is the customElements.get B4 wants to cache",
 	declaredPropAttribute:
 		"isDeclaredPropName answers yes and the write leaves the attribute path entirely",
-	attributeSpread:
-		"one binding, four keys: normalize to a Map and diff it every commit",
+	attributeSpread: "one binding, four keys: normalize to a Map and diff it every commit",
 	liveStateProperty:
 		"value on <input>: the first commit writes the attribute, every later one the IDL property",
 	content: "a text hole. No name, no compose, no attribute write: the floor",
@@ -250,6 +228,7 @@ const LANES_IN_ORDER: Array<CommitLane> = [
 	"liveStateProperty",
 ];
 
-export const COMMIT_SHAPES: Array<CommitShape> = LANES_IN_ORDER.flatMap(
-	(lane) => [shapeFor(lane, "unchanged"), shapeFor(lane, "changing")],
-);
+export const COMMIT_SHAPES: Array<CommitShape> = LANES_IN_ORDER.flatMap((lane) => [
+	shapeFor(lane, "unchanged"),
+	shapeFor(lane, "changing"),
+]);

@@ -49,11 +49,9 @@ export function load(
 	keyOrFetcher: string | (() => unknown),
 	keyedFetcher?: () => unknown,
 ): Generator<LoadRequest | Promise<unknown>, unknown, unknown> {
-	const isPositionalCall =
-		typeof keyOrFetcher === "function" && keyedFetcher === undefined;
+	const isPositionalCall = typeof keyOrFetcher === "function" && keyedFetcher === undefined;
 	if (isPositionalCall) return loadSteps(undefined, keyOrFetcher);
-	const isKeyedCall =
-		typeof keyOrFetcher === "string" && typeof keyedFetcher === "function";
+	const isKeyedCall = typeof keyOrFetcher === "string" && typeof keyedFetcher === "function";
 	if (isKeyedCall) return loadSteps(keyOrFetcher, keyedFetcher);
 	throw new TypeError(LOAD_ARGUMENTS_MESSAGE);
 }
@@ -99,10 +97,7 @@ function* loadSteps(
 	return value;
 }
 
-const isKeyRecorded = (
-	recordedLoads: ReadonlyArray<RecordedLoad>,
-	key: string,
-): boolean => {
+const isKeyRecorded = (recordedLoads: ReadonlyArray<RecordedLoad>, key: string): boolean => {
 	for (let index = 0; index < recordedLoads.length; index++)
 		if (recordedLoads[index].key === key) return true;
 	return false;
@@ -118,15 +113,10 @@ export const flushHostPayload = (
 		const script = ownerDocument.createElement("script");
 		script.setAttribute("type", "application/json");
 		script.setAttribute(SSR_ATTRIBUTE, "");
-		if (recordedLoad.key !== undefined)
-			script.setAttribute(KEY_ATTRIBUTE, recordedLoad.key);
+		if (recordedLoad.key !== undefined) script.setAttribute(KEY_ATTRIBUTE, recordedLoad.key);
 		if (recordedLoad.serialized === LOAD_FAILED_ON_SERVER)
 			script.setAttribute(FAILED_ATTRIBUTE, "");
-		else
-			script.textContent = recordedLoad.serialized.replace(
-				ANGLE_BRACKET,
-				"\\u003c",
-			);
+		else script.textContent = recordedLoad.serialized.replace(ANGLE_BRACKET, "\\u003c");
 		shadowRoot.appendChild(script);
 	}
 	recordedLoads.length = 0;
@@ -134,10 +124,7 @@ export const flushHostPayload = (
 
 //depth one, walked rather than selected because a ShadowRoot is never a :scope match: every payload
 //is a direct child, and a <script data-ssr> the component painted itself must not be claimed
-const findPayloadScript = (
-	shadowRoot: ShadowRoot,
-	key: string | undefined,
-): Element | null => {
+const findPayloadScript = (shadowRoot: ShadowRoot, key: string | undefined): Element | null => {
 	const selector =
 		key === undefined
 			? POSITIONAL_SELECTOR
@@ -148,15 +135,11 @@ const findPayloadScript = (
 	return null;
 };
 
-const claimServerValue = (
-	shadowRoot: ShadowRoot,
-	key: string | undefined,
-): unknown => {
+const claimServerValue = (shadowRoot: ShadowRoot, key: string | undefined): unknown => {
 	const script = findPayloadScript(shadowRoot, key);
 	if (script === null) {
 		//a missing key is a branch the server did not take; a missing position is a shift
-		if (key === undefined)
-			warnDuringDevelopment(BROWSER_REACHED_MORE_LOADS_MESSAGE);
+		if (key === undefined) warnDuringDevelopment(BROWSER_REACHED_MORE_LOADS_MESSAGE);
 		return NO_SERVER_VALUE;
 	}
 	script.remove();
@@ -192,9 +175,7 @@ const describeUnreplayableValue = (
 		case "boolean":
 			return null;
 		case "number":
-			return Number.isFinite(value)
-				? null
-				: `${path} is ${value}: return null or a string instead`;
+			return Number.isFinite(value) ? null : `${path} is ${value}: return null or a string instead`;
 		case "bigint":
 			return `${path} is a bigint: return a string and convert it after the load`;
 		case "symbol":
@@ -219,28 +200,19 @@ const describeUnreplayableValue = (
 		return `${path} is nested deeper than ${PLAIN_DATA_DEPTH_LIMIT} levels: return flatter data`;
 	if (Object.prototype.toString.call(value) === "[object Module]")
 		return `${path} is a module: yield the import() promise itself, so the browser loads the module too`;
-	if (value instanceof Response)
-		return `${path} is a Response: return response.json() instead`;
-	if (value instanceof Promise)
-		return `${path} is a promise: await it inside the fetcher`;
+	if (value instanceof Response) return `${path} is a Response: return response.json() instead`;
+	if (value instanceof Promise) return `${path} is a promise: await it inside the fetcher`;
 	if (value instanceof Date)
 		return `${path} is a Date: return the string and turn it into a Date after the load`;
 	const prototype = Object.getPrototypeOf(value);
-	const isPlainData =
-		Array.isArray(value) ||
-		prototype === Object.prototype ||
-		prototype === null;
+	const isPlainData = Array.isArray(value) || prototype === Object.prototype || prototype === null;
 	if (!isPlainData)
 		return `${path} is an instance of ${value.constructor?.name ?? "a class"}: return a plain object or array`;
 	ancestors.push(value);
 	try {
 		if (Array.isArray(value)) {
 			for (let index = 0; index < value.length; index++) {
-				const problem = describeUnreplayableValue(
-					value[index],
-					`${path}[${index}]`,
-					ancestors,
-				);
+				const problem = describeUnreplayableValue(value[index], `${path}[${index}]`, ancestors);
 				if (problem !== null) return problem;
 			}
 			return null;
@@ -248,11 +220,7 @@ const describeUnreplayableValue = (
 		const entries = Object.entries(value);
 		for (let index = 0; index < entries.length; index++) {
 			const [name, entry] = entries[index];
-			const problem = describeUnreplayableValue(
-				entry,
-				`${path}.${name}`,
-				ancestors,
-			);
+			const problem = describeUnreplayableValue(entry, `${path}.${name}`, ancestors);
 			if (problem !== null) return problem;
 		}
 		return null;

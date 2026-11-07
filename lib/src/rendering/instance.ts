@@ -12,44 +12,22 @@ import {
 } from "./bindings/live-binding";
 import { commitContent, hydrateContent } from "./bindings/content";
 import { rebindStyleSheet } from "./bindings/style-sheet";
-import {
-	TreeState,
-	Instance,
-	isContentBinding,
-	isRawContentBinding,
-} from "./bindings/types";
+import { TreeState, Instance, isContentBinding, isRawContentBinding } from "./bindings/types";
 import * as CONTENT_KIND from "./content-kind";
 import { buildFragment } from "./dom";
-import {
-	ensureFragmentKeptEveryBinding,
-	nextOpenMarker,
-	scanToClose,
-} from "./markers";
-import {
-	parseContextOfChildren,
-	warnWhenParsingWouldSplitParagraph,
-} from "./parse-context";
+import { ensureFragmentKeptEveryBinding, nextOpenMarker, scanToClose } from "./markers";
+import { parseContextOfChildren, warnWhenParsingWouldSplitParagraph } from "./parse-context";
 import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 
 //liveBindings[0..hostBindingCount) are host bindings, owned by their element: only it knows a
 //write to its own declared prop is output, not a reason to update. A nested template has none
-export const patchInstance = (
-	instance: Instance,
-	values: Array<unknown>,
-): void => {
+export const patchInstance = (instance: Instance, values: Array<unknown>): void => {
 	const { liveBindings, parsed } = instance;
-	for (
-		let index = parsed.hostBindingCount;
-		index < liveBindings.length;
-		index++
-	)
+	for (let index = parsed.hostBindingCount; index < liveBindings.length; index++)
 		commitLiveBinding(instance, liveBindings[index], values);
 };
 
-export const commitHostBindings = (
-	instance: Instance,
-	values: Array<unknown>,
-): void => {
+export const commitHostBindings = (instance: Instance, values: Array<unknown>): void => {
 	const { liveBindings, parsed } = instance;
 	for (let index = 0; index < parsed.hostBindingCount; index++)
 		commitLiveBinding(instance, liveBindings[index], values);
@@ -83,8 +61,7 @@ export const refreshStyleSheetsAfterMove = (instance: Instance): void => {
 export const isPatchableInPlace = (
 	current: Instance | null,
 	parsed: ParsedTemplate,
-): current is Instance =>
-	current !== null && current.parsed.templateHash === parsed.templateHash;
+): current is Instance => current !== null && current.parsed.templateHash === parsed.templateHash;
 
 export const parseNestedTemplate = (value: TemplateValue): ParsedTemplate => {
 	const parsed = getParsedTemplate(value.__templateStrings);
@@ -97,20 +74,13 @@ export const parseNestedTemplate = (value: TemplateValue): ParsedTemplate => {
 	return parsed;
 };
 
-const createInstance = (
-	parsed: ParsedTemplate,
-	treeState: TreeState,
-): Instance => ({
+const createInstance = (parsed: ParsedTemplate, treeState: TreeState): Instance => ({
 	parsed,
 	liveBindings: new Array(parsed.bindings.length),
 	treeState,
 });
 
-const bindFreshClone = (
-	walker: TreeWalker,
-	instance: Instance,
-	values: Array<unknown>,
-): void => {
+const bindFreshClone = (walker: TreeWalker, instance: Instance, values: Array<unknown>): void => {
 	const { bindings, hostBindingCount } = instance.parsed;
 	const { liveBindings } = instance;
 
@@ -129,21 +99,12 @@ const bindFreshClone = (
 			continue;
 		}
 
-		const closeMarker = scanToClose(
-			walker,
-			openMarker,
-			staticBinding.closeMarkerData,
-			null,
-		);
+		const closeMarker = scanToClose(walker, openMarker, staticBinding.closeMarkerData, null);
 		assertDuringDevelopment(
 			closeMarker !== null,
 			"a fresh clone closes every content range it opens",
 		);
-		const liveBinding = createContentLiveBinding(
-			staticBinding,
-			openMarker,
-			closeMarker,
-		);
+		const liveBinding = createContentLiveBinding(staticBinding, openMarker, closeMarker);
 		commitContent(liveBinding, values, instance.treeState);
 		liveBindings[bindingIndex++] = liveBinding;
 	}
@@ -190,11 +151,7 @@ export const mountInstance = (
 	treeState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
 	const instance = createInstance(parsed, treeState);
 
-	bindFreshClone(
-		document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT),
-		instance,
-		values,
-	);
+	bindFreshClone(document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT), instance, values);
 	return instance;
 };
 
@@ -225,18 +182,9 @@ export const hydrateInstance = (
 			continue;
 		}
 
-		const closeMarker = scanToClose(
-			walker,
-			openMarker,
-			staticBinding.closeMarkerData,
-			rangeEnd,
-		);
+		const closeMarker = scanToClose(walker, openMarker, staticBinding.closeMarkerData, rangeEnd);
 		if (closeMarker === null) return HYDRATION_MISMATCH;
-		const liveBinding = createContentLiveBinding(
-			staticBinding,
-			openMarker,
-			closeMarker,
-		);
+		const liveBinding = createContentLiveBinding(staticBinding, openMarker, closeMarker);
 		//the scan left the walker on the close marker, so a nested hydration would start past its
 		//own range; this puts it back inside, and the line after the call undoes the descent
 		walker.currentNode = openMarker;

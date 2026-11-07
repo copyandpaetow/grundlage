@@ -2,8 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { html, component } from "../index";
 
 const canRun =
-	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe ===
-	"function";
+	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe === "function";
 
 let tagId = 0;
 const uniqueTag = () => `fatal-then-hydrate-${tagId++}-${Date.now()}`;
@@ -49,9 +48,7 @@ describe("a fatal error before the first paint ends the pending hydration", () =
 			host.remove();
 			parent.appendChild(host);
 
-			expect(host.shadowRoot!.querySelector("p")?.textContent).toBe(
-				"recovered",
-			);
+			expect(host.shadowRoot!.querySelector("p")?.textContent).toBe("recovered");
 			const hydrationWarnings = warn.mock.calls.filter(([message]) =>
 				String(message).includes("hydration mismatch"),
 			);

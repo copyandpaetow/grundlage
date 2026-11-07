@@ -13,10 +13,8 @@ import {
 const MARKER_PREFIX = MARKUP.COMMENT_IDENTIFIER + " ";
 const CLOSE_SLASH_INDEX = MARKER_PREFIX.length;
 const TAG_OPEN_MARKER_PREFIX = MARKER_PREFIX + OPEN_CONSTRUCT.TAG + "-";
-const ATTRIBUTE_OPEN_MARKER_PREFIX =
-	MARKER_PREFIX + OPEN_CONSTRUCT.ATTRIBUTE + "-";
-const RAW_CONTENT_OPEN_MARKER_PREFIX =
-	MARKER_PREFIX + OPEN_CONSTRUCT.RAW_CONTENT + "-";
+const ATTRIBUTE_OPEN_MARKER_PREFIX = MARKER_PREFIX + OPEN_CONSTRUCT.ATTRIBUTE + "-";
+const RAW_CONTENT_OPEN_MARKER_PREFIX = MARKER_PREFIX + OPEN_CONSTRUCT.RAW_CONTENT + "-";
 
 const isElementMarkerData = (data: string) =>
 	data.startsWith(TAG_OPEN_MARKER_PREFIX) ||
@@ -32,8 +30,7 @@ const elementAfterMarkerRun = (marker: Comment): Element | null => {
 };
 
 const isOpenMarkerData = (data: string) =>
-	data.startsWith(MARKER_PREFIX) &&
-	data.charCodeAt(CLOSE_SLASH_INDEX) !== CHARACTER_CODE.SLASH;
+	data.startsWith(MARKER_PREFIX) && data.charCodeAt(CLOSE_SLASH_INDEX) !== CHARACTER_CODE.SLASH;
 
 //the HTML parser copies an open formatting element past a block it does not close (a <div> inside
 //<p><b>) and past a misnested end tag, attributes included, but a binding only reaches the original
@@ -58,8 +55,7 @@ const FORMATTING_TAGS = new Set([
 const writtenStartTagCountOf = (markup: string, tagName: string) =>
 	markup.match(new RegExp(`<${tagName}[\\s/>]`, "gi"))?.length ?? 0;
 
-const bindingIndexOfMarker = (data: string) =>
-	Number(data.slice(data.indexOf("-") + 1));
+const bindingIndexOfMarker = (data: string) => Number(data.slice(data.indexOf("-") + 1));
 
 //the HTML parser relocates an element its content model forbids (a <tr> inside <table> moves in
 //front of it, a <div> closes the <p> around it) and reads markers inside <![CDATA[…]]> as text
@@ -67,8 +63,7 @@ export const ensureFragmentKeptEveryBinding = (
 	fragment: DocumentFragment,
 	parsed: ParsedTemplate,
 ): void => {
-	const expectedOpenMarkerCount =
-		parsed.bindings.length - parsed.hostBindingCount;
+	const expectedOpenMarkerCount = parsed.bindings.length - parsed.hostBindingCount;
 	const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT);
 	let openMarkerCount = 0;
 	let lastBindingIndex = -1;
@@ -89,8 +84,7 @@ export const ensureFragmentKeptEveryBinding = (
 		lastBindingIndex = bindingIndex;
 		const binding = parsed.bindings[bindingIndex];
 		if (binding.type === BINDING.TAG) {
-			if (elementAfterMarkerRun(node)?.localName === DYNAMIC_TAG_PLACEHOLDER)
-				continue;
+			if (elementAfterMarkerRun(node)?.localName === DYNAMIC_TAG_PLACEHOLDER) continue;
 			throw new Error(
 				libraryMessage(
 					`a dynamic tag <\${…}> inside <${parentName}> was moved by the HTML parser, which only allows specific elements there (a <tr> in a <table>, an <option> in a <select>). Write that tag statically.`,
@@ -105,11 +99,9 @@ export const ensureFragmentKeptEveryBinding = (
 		if (!bindsElement) continue;
 		const element = elementAfterMarkerRun(node);
 		const isBoundElement =
-			element !== null &&
-			element.localName.toLowerCase() === binding.elementName.toLowerCase();
+			element !== null && element.localName.toLowerCase() === binding.elementName.toLowerCase();
 		if (isBoundElement) {
-			if (FORMATTING_TAGS.has(element.localName))
-				boundFormattingTags.add(element.localName);
+			if (FORMATTING_TAGS.has(element.localName)) boundFormattingTags.add(element.localName);
 			continue;
 		}
 		throw new Error(
@@ -164,10 +156,7 @@ export const scanToClose = (
 	return null;
 };
 
-export const nextOpenMarker = (
-	walker: TreeWalker,
-	rangeEnd: Comment | null,
-): Comment | null => {
+export const nextOpenMarker = (walker: TreeWalker, rangeEnd: Comment | null): Comment | null => {
 	let node: Comment | null;
 	while ((node = walker.nextNode() as Comment | null)) {
 		if (node === rangeEnd) return null;
@@ -208,10 +197,7 @@ export const warnOnRejectedServerRange = (): void =>
 		"hydration mismatch: the server's markup does not match this template. Yield the same first template on the server and the client.",
 	);
 
-export const clearRange = (
-	first: ChildNode | null,
-	end: ChildNode | null,
-): void => {
+export const clearRange = (first: ChildNode | null, end: ChildNode | null): void => {
 	let current = first;
 	while (current && current !== end) {
 		const next = current.nextSibling;

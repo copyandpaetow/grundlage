@@ -1,10 +1,7 @@
 import { expect, test } from "vitest";
 import { STYLE_SHEET_NOT_COMPILED } from "../../../parser/constants";
 import { compileStyleSheet } from "../../../parser/css";
-import {
-	createRandom,
-	generateSheet,
-} from "../../../parser/__tests__/css-sheet-generator";
+import { createRandom, generateSheet } from "../../../parser/__tests__/css-sheet-generator";
 import { Part } from "../../../parser/types";
 import { composeParts } from "../../compose";
 import {
@@ -17,8 +14,7 @@ import {
 
 //well-formed sheets with random edits in their static text: wherever the compiler still addresses
 //declarations, CSSOM updates must leave the sheet the browser builds from the updated text
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 const EDIT_TOKENS = [
 	"{",
@@ -56,12 +52,10 @@ const mutatedParts = (random: () => number, parts: ReadonlyArray<Part>) => {
 		const position = Math.floor(random() * (text.length + 1));
 		if (random() < 0.6) {
 			const token = EDIT_TOKENS[Math.floor(random() * EDIT_TOKENS.length)];
-			mutated[textIndex] =
-				text.slice(0, position) + token + text.slice(position);
+			mutated[textIndex] = text.slice(0, position) + token + text.slice(position);
 		} else {
 			const length = 1 + Math.floor(random() * 4);
-			mutated[textIndex] =
-				text.slice(0, position) + text.slice(position + length);
+			mutated[textIndex] = text.slice(0, position) + text.slice(position + length);
 		}
 	}
 	return mutated;
@@ -100,9 +94,7 @@ test.runIf(isRealBrowser).each([11, 12, 13])(
 				continue;
 			}
 			tally.compiled++;
-			const { host, style } = mountedStyle(
-				composeParts(parts, generated.holeValues),
-			);
+			const { host, style } = mountedStyle(composeParts(parts, generated.holeValues));
 			const bound = matchCompiledStyleSheet(compiled, style.sheet!);
 			if (bound === RULE_STRUCTURE_MISMATCH) {
 				tally.structureMismatch++;

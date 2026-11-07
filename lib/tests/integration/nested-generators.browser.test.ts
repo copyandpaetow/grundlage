@@ -1,18 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
 import { awaited, html, component, prop } from "../../src/index";
-import {
-	BaseComponent,
-	ComponentGenerator,
-	PropDefinition,
-	ComponentProps,
-} from "../../src/types";
+import { BaseComponent, ComponentGenerator, PropDefinition, ComponentProps } from "../../src/types";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
-const uniqueTag = (prefix: string) =>
-	`test-nested-gen-${prefix}-${tagId++}-${Date.now()}`;
+const uniqueTag = (prefix: string) => `test-nested-gen-${prefix}-${tagId++}-${Date.now()}`;
 
 const mount = (tag: string): HTMLElement => {
 	const element = document.createElement(tag);
@@ -53,9 +46,7 @@ describe("outer yields a generator function (nested generator)", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"inner-static",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("inner-static");
 		element.remove();
 	});
 
@@ -74,9 +65,7 @@ describe("outer yields a generator function (nested generator)", () => {
 		const element = mount(tag);
 		await sleep(40);
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"async-ready",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("async-ready");
 		element.remove();
 	});
 
@@ -100,9 +89,7 @@ describe("outer yields a generator function (nested generator)", () => {
 	});
 
 	test("inner generator yielding a generator function throws and surfaces the error", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("inner-yields-gen");
 
 		customElements.define(
@@ -212,9 +199,7 @@ describe("disconnect cleanup with nested generators", () => {
 
 describe("inner generator error contracts", () => {
 	test("outer try/catch around the inner can recover by yielding new content", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("recover");
 
 		customElements.define(
@@ -237,9 +222,7 @@ describe("inner generator error contracts", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"recovered",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("recovered");
 		//recovery path is silent — no console.warn
 		expect(consoleError).not.toHaveBeenCalled();
 		consoleError.mockRestore();
@@ -247,9 +230,7 @@ describe("inner generator error contracts", () => {
 	});
 
 	test("outer catches and returns a cleanup: prior template persists, cleanup deferred to disconnect", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("catch-return");
 		const events: string[] = [];
 
@@ -292,9 +273,7 @@ describe("inner generator error contracts", () => {
 	});
 
 	test("uncaught inner error becomes a terminal: console error + error text in shadow", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("terminal");
 
 		customElements.define(
@@ -322,9 +301,7 @@ describe("inner generator error contracts", () => {
 	});
 
 	test("after a terminal error, update() is a no-op", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag("terminal-noop");
 		let shouldThrow = true;
 
@@ -754,22 +731,16 @@ describe("inner generator post-yield work and cancellation", () => {
 
 		const element = mount(tag) as InstanceType<typeof ComponentClass>;
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-1",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-1");
 
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-2",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-2");
 
 		resolveSlow!();
 		await sleep(20);
 
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-2",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-2");
 		expect(events).not.toContain("completed-1");
 
 		element.remove();
@@ -817,9 +788,7 @@ describe("inner generator post-yield work and cancellation", () => {
 
 		const element = mount(tag);
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"inner-from-async-outer",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("inner-from-async-outer");
 		element.remove();
 	});
 });
@@ -862,32 +831,24 @@ describe("rapid restart with in-flight inner async work", () => {
 
 		const element = mount(tag) as InstanceType<typeof ComponentClass>;
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-1",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-1");
 
 		//supersede gen1 (now stopped, parked at its await) with gen2. update() resolves on the
 		//fresh run's completion, so hold the promise — gen2 is still mid-flight at its own await
 		const flush = element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-2-first",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-2-first");
 
 		//gen1's late await fires while gen2 is parked between its yields. it must not paint
 		//"attempt-1-late", and must not stop gen2 from landing its second yield
 		releaseOld();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-2-first",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-2-first");
 
 		//gen2 runs on to its end; the flush resolves there (completion contract)
 		releaseLive();
 		await flush;
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"attempt-2-second",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-2-second");
 
 		element.remove();
 	});
@@ -925,9 +886,7 @@ describe("rapid restart with in-flight inner async work", () => {
 
 		const element = mount(tag) as InstanceType<typeof ComponentClass>;
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"mount",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("mount");
 
 		//open a batch that supersedes the parked mount run, then a mid-flight update that
 		//coalesces into exactly one reflush carrying the latest state
@@ -941,9 +900,7 @@ describe("rapid restart with in-flight inner async work", () => {
 		releaseOld();
 
 		await flush; // resolves after the reflushed run ("third") lands
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"third",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("third");
 		expect(element.shadowRoot?.textContent).not.toContain("mount-late");
 
 		element.remove();
@@ -974,9 +931,7 @@ describe("cleanup contract for inner async generators on cancel", () => {
 
 		const element = mount(tag);
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"parked",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("parked");
 
 		element.remove();
 		await sleep();
@@ -1043,9 +998,7 @@ describe("the outer painting over a live inner generator abandons it", () => {
 
 		releaseGate!("late");
 		await sleep(20);
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"outer took over",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("outer took over");
 		element.remove();
 	});
 
@@ -1066,9 +1019,7 @@ describe("the outer painting over a live inner generator abandons it", () => {
 
 		const element = mount(tag);
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"outer took over",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("outer took over");
 		//a ResizeObserver in the abandoned body would otherwise stay connected until disconnect
 		expect(cleanupSpy).toHaveBeenCalledTimes(1);
 
@@ -1100,9 +1051,7 @@ describe("the outer painting over a live inner generator abandons it", () => {
 		//abandoned generator would clobber the outer's content on every update()
 		await element.update();
 		expect(setups).toBe(1);
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"outer took over",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("outer took over");
 		element.remove();
 	});
 });

@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html, component, prop } from "../../src/index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("component lifecycle", () => {
 	let tagId = 0;
@@ -161,9 +160,7 @@ describe("component lifecycle", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"static template",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("static template");
 
 		cleanup(element);
 	});
@@ -184,16 +181,12 @@ describe("component lifecycle", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
-			"none",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain("none");
 
 		element.setAttribute("data-label", "updated");
 		await sleep(50);
 
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
-			"updated",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain("updated");
 
 		cleanup(element);
 	});
@@ -342,18 +335,14 @@ describe("component lifecycle", () => {
 		const element = mount(tag) as InstanceType<typeof ComponentClass>;
 		await sleep();
 		expect(timesGeneratorRan).toBe(1);
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"static-content",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("static-content");
 
 		await element.update();
 		await element.update();
 		await sleep();
 
 		expect(timesGeneratorRan).toBe(1);
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"static-content",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("static-content");
 		cleanup(element);
 	});
 
@@ -380,108 +369,100 @@ describe("component lifecycle", () => {
 	});
 });
 
-describe.skipIf("happyDOM" in globalThis)(
-	"deferred custom-element upgrade",
-	() => {
-		//the lazy-define shape: createElement and insertion happen before the define, and the upgrade
-		//fires retroactively. happy-dom does not implement that, so only the real-browser project runs
-		//these
-		let tagId = 0;
-		const uniqueTag = () => `test-upgrade-${tagId++}-${Date.now()}`;
+describe.skipIf("happyDOM" in globalThis)("deferred custom-element upgrade", () => {
+	//the lazy-define shape: createElement and insertion happen before the define, and the upgrade
+	//fires retroactively. happy-dom does not implement that, so only the real-browser project runs
+	//these
+	let tagId = 0;
+	const uniqueTag = () => `test-upgrade-${tagId++}-${Date.now()}`;
 
-		const sleep = (duration = 0) =>
-			new Promise((resolve) => setTimeout(resolve, duration));
+	const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
-		test("element created and inserted before define is upgraded and paints", async () => {
-			const tag = uniqueTag();
+	test("element created and inserted before define is upgraded and paints", async () => {
+		const tag = uniqueTag();
 
-			const element = document.createElement(tag);
-			document.body.appendChild(element);
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
 
-			//before upgrade: no shadowRoot, no painted content
-			expect(element.shadowRoot).toBeNull();
+		//before upgrade: no shadowRoot, no painted content
+		expect(element.shadowRoot).toBeNull();
 
-			const MyElement = component(function* () {
-				yield function* () {
-					yield html`<p>upgraded</p>`;
-				};
-			});
-			customElements.define(tag, MyElement);
-
-			await sleep();
-
-			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-				"upgraded",
-			);
-
-			element.remove();
-		});
-
-		test("attributes set before upgrade are visible to the generator on its first run", async () => {
-			//attributeChangedCallback replays every pre-existing attribute during upgrade, before
-			//connectedCallback — update()'s early return absorbs those, so the first run is the
-			//one that reads them and there is exactly one of it
-			const tag = uniqueTag();
-			let runCount = 0;
-
-			const element = document.createElement(tag);
-			element.setAttribute("data-label", "pre-define");
-			document.body.appendChild(element);
-
-			const MyElement = component(
-				//the count sits in the update generator, not the body: an absorbed replay would re-run
-				//this one, where the body runs once per mount whether the early return holds or not
-				function* (componentProps) {
-					yield function* () {
-						runCount++;
-						yield html`<span>${componentProps["data-label"] ?? "none"}</span>`;
-					};
-				},
-				{ props: { "data-label": prop.optional(prop.attribute(String)) } },
-			);
-			customElements.define(tag, MyElement);
-
-			await sleep();
-
-			expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-				"pre-define",
-			);
-			expect(runCount).toBe(1);
-
-			element.remove();
-		});
-
-		test("update() called before define is a no-op and does not throw post-upgrade", async () => {
-			//a method called before the class is defined does not exist yet and the call is ignored
-			//quietly; the upgrade that follows still paints fresh
-			const tag = uniqueTag();
-
-			const element = document.createElement(tag) as HTMLElement & {
-				update?: () => Promise<void>;
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<p>upgraded</p>`;
 			};
-			document.body.appendChild(element);
-
-			//no .update() yet — the prototype has not been swapped in
-			expect(element.update).toBeUndefined();
-
-			const MyElement = component(function* () {
-				yield function* () {
-					yield html`<p>after</p>`;
-				};
-			});
-			customElements.define(tag, MyElement);
-
-			await sleep();
-
-			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
-			await (element as InstanceType<typeof MyElement>).update();
-			await sleep();
-			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
-
-			element.remove();
 		});
-	},
-);
+		customElements.define(tag, MyElement);
+
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("upgraded");
+
+		element.remove();
+	});
+
+	test("attributes set before upgrade are visible to the generator on its first run", async () => {
+		//attributeChangedCallback replays every pre-existing attribute during upgrade, before
+		//connectedCallback — update()'s early return absorbs those, so the first run is the
+		//one that reads them and there is exactly one of it
+		const tag = uniqueTag();
+		let runCount = 0;
+
+		const element = document.createElement(tag);
+		element.setAttribute("data-label", "pre-define");
+		document.body.appendChild(element);
+
+		const MyElement = component(
+			//the count sits in the update generator, not the body: an absorbed replay would re-run
+			//this one, where the body runs once per mount whether the early return holds or not
+			function* (componentProps) {
+				yield function* () {
+					runCount++;
+					yield html`<span>${componentProps["data-label"] ?? "none"}</span>`;
+				};
+			},
+			{ props: { "data-label": prop.optional(prop.attribute(String)) } },
+		);
+		customElements.define(tag, MyElement);
+
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("pre-define");
+		expect(runCount).toBe(1);
+
+		element.remove();
+	});
+
+	test("update() called before define is a no-op and does not throw post-upgrade", async () => {
+		//a method called before the class is defined does not exist yet and the call is ignored
+		//quietly; the upgrade that follows still paints fresh
+		const tag = uniqueTag();
+
+		const element = document.createElement(tag) as HTMLElement & {
+			update?: () => Promise<void>;
+		};
+		document.body.appendChild(element);
+
+		//no .update() yet — the prototype has not been swapped in
+		expect(element.update).toBeUndefined();
+
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<p>after</p>`;
+			};
+		});
+		customElements.define(tag, MyElement);
+
+		await sleep();
+
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
+		await (element as InstanceType<typeof MyElement>).update();
+		await sleep();
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("after");
+
+		element.remove();
+	});
+});
 
 describe("MutationObserver and update() interleaving", () => {
 	//the first update() opens a flush and any update() arriving while it is open only flags dirty and
@@ -491,8 +472,7 @@ describe("MutationObserver and update() interleaving", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-observer-race-${tagId++}-${Date.now()}`;
 
-	const sleep = (duration = 0) =>
-		new Promise((resolve) => setTimeout(resolve, duration));
+	const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 	const mount = (tag: string): HTMLElement => {
 		const element = document.createElement(tag);
@@ -530,9 +510,7 @@ describe("MutationObserver and update() interleaving", () => {
 		//one extra run is accepted: the attribute write and update() queue the same runner once, so one
 		//pass paints the already-mutated DOM, in either order
 		expect(runCount).toBe(2);
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
-			"racy",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain("racy");
 
 		element.remove();
 	});
@@ -562,9 +540,7 @@ describe("MutationObserver and update() interleaving", () => {
 		await sleep(50);
 
 		expect(runCount).toBe(2);
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
-			"settled",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain("settled");
 
 		element.remove();
 	});

@@ -1,10 +1,7 @@
 import { test, expect } from "vitest";
 import { STYLE_SHEET_NOT_COMPILED } from "../../../parser/constants";
 import { compileStyleSheet } from "../../../parser/css";
-import {
-	createRandom,
-	generateSheet,
-} from "../../../parser/__tests__/css-sheet-generator";
+import { createRandom, generateSheet } from "../../../parser/__tests__/css-sheet-generator";
 import { composeParts } from "../../compose";
 import {
 	commitChangedDeclarations,
@@ -22,19 +19,14 @@ const scratchStyle = (() => {
 	return (sheet.cssRules[0] as CSSStyleRule).style;
 })();
 
-const expectedSerialization = (
-	propertyName: string,
-	value: string,
-	priority: string,
-) => {
+const expectedSerialization = (propertyName: string, value: string, priority: string) => {
 	scratchStyle.cssText = "";
 	scratchStyle.setProperty(propertyName, value, priority);
 	return `${scratchStyle.getPropertyValue(propertyName)}|${scratchStyle.getPropertyPriority(propertyName)}`;
 };
 
 //happy-dom has no CSSOM structure to ask
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 test.runIf(isRealBrowser).each([7, 8, 9])(
 	"every compiled address lands on the block the browser built, before and after updates (seed %i)",
@@ -68,13 +60,8 @@ test.runIf(isRealBrowser).each([7, 8, 9])(
 			lane.boundSheet = bound;
 			seedDeclarationValueHashes(lane, holeValues);
 			const check = (values: Array<number>, label: string) => {
-				for (
-					let ruleIndex = 0;
-					ruleIndex < compiled.holedRules.length;
-					ruleIndex++
-				)
-					for (const declaration of compiled.holedRules[ruleIndex]
-						.declarations) {
+				for (let ruleIndex = 0; ruleIndex < compiled.holedRules.length; ruleIndex++)
+					for (const declaration of compiled.holedRules[ruleIndex].declarations) {
 						const block = bound.ruleDeclarations[ruleIndex];
 						const actual = `${block.getPropertyValue(declaration.propertyName)}|${block.getPropertyPriority(declaration.propertyName)}`;
 						const expected = expectedSerialization(

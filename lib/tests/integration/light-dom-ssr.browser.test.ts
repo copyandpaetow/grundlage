@@ -1,11 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, component } from "../../src/index";
 import * as grundlage from "../../src/index";
-import {
-	ComponentConstructor,
-	ComponentOptions,
-	PropDefinition,
-} from "../../src/types";
+import { ComponentConstructor, ComponentOptions, PropDefinition } from "../../src/types";
 
 //The claim that reads the server's slot markers back (light-dom/PLAN.md §3.5, §4.5, §4.6, R20—R27).
 //Everything here is a real round trip: render with the server flag on, serialize, re-parse into an
@@ -27,20 +23,16 @@ const light = (props?: Record<string, unknown>): ComponentOptions<any> =>
 //`attachShadow({ mode: "light" })`, and a constructor's throw is reported to the page whether or
 //not the caller catches it — which would fail this file before a test ran
 const lightModeShips =
-	Object.getOwnPropertyDescriptor(
-		component(function* () {}, light()).prototype,
-		"renderRoot",
-	) !== undefined;
-const slotsShip =
-	(Slot as unknown) !== undefined && (DefaultSlot as unknown) !== undefined;
+	Object.getOwnPropertyDescriptor(component(function* () {}, light()).prototype, "renderRoot") !==
+	undefined;
+const slotsShip = (Slot as unknown) !== undefined && (DefaultSlot as unknown) !== undefined;
 const ships = lightModeShips && slotsShip;
 
 const SLOT_SCOPE_ATTRIBUTE = "slot-scope";
 const ERROR_ATTRIBUTE = "component-error";
 
 describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
-	const sleep = (duration = 0) =>
-		new Promise((resolve) => setTimeout(resolve, duration));
+	const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 	let tagId = 0;
 	const uniqueTag = () => `light-hydrate-${tagId++}-${Date.now()}`;
@@ -100,11 +92,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 	const renamed = (
 		markup: string,
 		replacements: ReadonlyArray<readonly [string, string]>,
-	): string =>
-		replacements.reduce(
-			(current, [from, to]) => current.replaceAll(from, to),
-			markup,
-		);
+	): string => replacements.reduce((current, [from, to]) => current.replaceAll(from, to), markup);
 
 	const scopeIn = (markup: string): string =>
 		markup.match(new RegExp(`${SLOT_SCOPE_ATTRIBUTE}="(\\d+)"`))![1];
@@ -112,9 +100,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 	const readProp = (host: HTMLElement, propName: string): unknown =>
 		(host as unknown as Record<string, unknown>)[propName];
 
-	const silenced = async <Result>(
-		run: () => Promise<Result>,
-	): Promise<[Result, Array<string>]> => {
+	const silenced = async <Result>(run: () => Promise<Result>): Promise<[Result, Array<string>]> => {
 		const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const result = await run();
 		const messages = consoleWarn.mock.calls.map((call) => String(call[0]));
@@ -153,17 +139,13 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 					card(),
 					`<h2 slot="heading">Ada Lovelace</h2>`,
 				);
-				const element = parseUnupgraded(
-					renamed(serialized, [[serverTag, clientTag]]),
-				);
+				const element = parseUnupgraded(renamed(serialized, [[serverTag, clientTag]]));
 				const serverHeading = element.querySelector("h2")!;
 
 				//childList/characterData only: §1.1 stamps `light-dom` in `#mount` unconditionally, so
 				//an attribute record is expected and says nothing about the tree
 				const records: Array<MutationRecord> = [];
-				const observer = new MutationObserver((entries) =>
-					records.push(...entries),
-				);
+				const observer = new MutationObserver((entries) => records.push(...entries));
 				observer.observe(element, {
 					childList: true,
 					subtree: true,
@@ -180,37 +162,28 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 			},
 		);
 
-		test.skipIf(!ships)(
-			"the default slot round-trips under its own prop key",
-			async () => {
-				const makeComponent = () =>
-					component(
-						function* (props) {
-							yield function* () {
-								yield html`<article>${props.body}</article>`;
-							};
-						},
-						light({ body: DefaultSlot }),
-					);
-				const serverTag = uniqueTag();
-				const clientTag = uniqueTag();
-				const serialized = await serverRender(
-					serverTag,
-					makeComponent(),
-					`<p>unnamed</p>`,
+		test.skipIf(!ships)("the default slot round-trips under its own prop key", async () => {
+			const makeComponent = () =>
+				component(
+					function* (props) {
+						yield function* () {
+							yield html`<article>${props.body}</article>`;
+						};
+					},
+					light({ body: DefaultSlot }),
 				);
-				const element = parseUnupgraded(
-					renamed(serialized, [[serverTag, clientTag]]),
-				);
-				const serverParagraph = element.querySelector("p")!;
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+			const serialized = await serverRender(serverTag, makeComponent(), `<p>unnamed</p>`);
+			const element = parseUnupgraded(renamed(serialized, [[serverTag, clientTag]]));
+			const serverParagraph = element.querySelector("p")!;
 
-				customElements.define(clientTag, makeComponent());
-				await sleep();
+			customElements.define(clientTag, makeComponent());
+			await sleep();
 
-				expect(readProp(element, "body")).toEqual([serverParagraph]);
-				cleanup();
-			},
-		);
+			expect(readProp(element, "body")).toEqual([serverParagraph]);
+			cleanup();
+		});
 
 		test.skipIf(!ships)(
 			"no slot-scope attribute means no walk, even with markers still in the markup",
@@ -247,9 +220,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				const serialized = await serverRender(serverTag, cardWithFallback());
-				const element = parseUnupgraded(
-					renamed(serialized, [[serverTag, clientTag]]),
-				);
+				const element = parseUnupgraded(renamed(serialized, [[serverTag, clientTag]]));
 
 				const [, messages] = await silenced(async () => {
 					customElements.define(clientTag, cardWithFallback());
@@ -298,11 +269,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 			async () => {
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
-				const serialized = await serverRender(
-					serverTag,
-					card(),
-					`<h2 slot="heading">Ada</h2>`,
-				);
+				const serialized = await serverRender(serverTag, card(), `<h2 slot="heading">Ada</h2>`);
 				const foreignScope = `${Number(scopeIn(serialized)) + 1000}`;
 				const element = parseUnupgraded(
 					renamed(serialized, [
@@ -331,11 +298,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 			async () => {
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
-				const serialized = await serverRender(
-					serverTag,
-					card(),
-					`<h2 slot="heading">Ada</h2>`,
-				);
+				const serialized = await serverRender(serverTag, card(), `<h2 slot="heading">Ada</h2>`);
 				const scope = scopeIn(serialized);
 				const element = parseUnupgraded(
 					renamed(serialized, [
@@ -350,67 +313,56 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 					await sleep();
 				});
 
-				expect(messages.some((message) => message.includes(clientTag))).toBe(
-					true,
-				);
+				expect(messages.some((message) => message.includes(clientTag))).toBe(true);
 				expect(element.querySelector("[data-from-the-server]")).toBeNull();
 				cleanup();
 			},
 		);
 
-		test.skipIf(!ships)(
-			"a hyphenated key reads back against a multi-digit scope",
-			async () => {
-				const makeComponent = () =>
-					component(
-						function* (props) {
-							yield function* () {
-								yield html`<article>${props["sub-title"]}</article>`;
-							};
-						},
-						light({ "sub-title": Slot }),
-					);
-				const serverTag = uniqueTag();
-				const clientTag = uniqueTag();
-				const serialized = await serverRender(
-					serverTag,
-					makeComponent(),
-					`<p slot="sub-title">deep</p>`,
+		test.skipIf(!ships)("a hyphenated key reads back against a multi-digit scope", async () => {
+			const makeComponent = () =>
+				component(
+					function* (props) {
+						yield function* () {
+							yield html`<article>${props["sub-title"]}</article>`;
+						};
+					},
+					light({ "sub-title": Slot }),
 				);
-				const scope = scopeIn(serialized);
-				const element = parseUnupgraded(
-					renamed(serialized, [
-						[serverTag, clientTag],
-						[`slot-scope="${scope}"`, `slot-scope="1234"`],
-						[`slot-${scope}-sub-title`, `slot-1234-sub-title`],
-					]),
-				);
-				const serverParagraph = element.querySelector("p")!;
+			const serverTag = uniqueTag();
+			const clientTag = uniqueTag();
+			const serialized = await serverRender(
+				serverTag,
+				makeComponent(),
+				`<p slot="sub-title">deep</p>`,
+			);
+			const scope = scopeIn(serialized);
+			const element = parseUnupgraded(
+				renamed(serialized, [
+					[serverTag, clientTag],
+					[`slot-scope="${scope}"`, `slot-scope="1234"`],
+					[`slot-${scope}-sub-title`, `slot-1234-sub-title`],
+				]),
+			);
+			const serverParagraph = element.querySelector("p")!;
 
-				const [, messages] = await silenced(async () => {
-					customElements.define(clientTag, makeComponent());
-					await sleep();
-				});
+			const [, messages] = await silenced(async () => {
+				customElements.define(clientTag, makeComponent());
+				await sleep();
+			});
 
-				expect(messages).toHaveLength(0);
-				expect(readProp(element, "sub-title")).toEqual([serverParagraph]);
-				cleanup();
-			},
-		);
+			expect(messages).toHaveLength(0);
+			expect(readProp(element, "sub-title")).toEqual([serverParagraph]);
+			cleanup();
+		});
 
 		test.skipIf(!ships)(
 			"a pre-upgrade assignment beats the claim and commits over the server's nodes",
 			async () => {
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
-				const serialized = await serverRender(
-					serverTag,
-					card(),
-					`<h2 slot="heading">Ada</h2>`,
-				);
-				const element = parseUnupgraded(
-					renamed(serialized, [[serverTag, clientTag]]),
-				);
+				const serialized = await serverRender(serverTag, card(), `<h2 slot="heading">Ada</h2>`);
+				const element = parseUnupgraded(renamed(serialized, [[serverTag, clientTag]]));
 				const replacement = document.createElement("h2");
 				replacement.textContent = "Grace";
 				(element as unknown as Record<string, unknown>).heading = [replacement];
@@ -446,9 +398,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				);
 				expect(serialized).toContain("<template shadowrootmode=");
 
-				const element = parseUnupgraded(
-					renamed(serialized, [[serverTag, clientTag]]),
-				);
+				const element = parseUnupgraded(renamed(serialized, [[serverTag, clientTag]]));
 				const serverHeading = element.shadowRoot!.querySelector("h2")!;
 				customElements.define(clientTag, makeComponent());
 				await sleep();
@@ -512,48 +462,43 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 			},
 		);
 
-		test.skipIf(!ships)(
-			"R23 — the child updating leaves the parent's nodes alone",
-			async () => {
-				customElements.define(
-					"light-ownership-inner",
-					component(
-						function* (props) {
-							yield function* () {
-								yield html`<section><b>badge</b>${props.heading}</section>`;
-							};
-						},
-						light({ heading: [Slot, html`<h2>Untitled</h2>`] }),
-					),
-				);
-				const serialized = await serverRender(
-					"light-ownership-outer",
-					component(function* () {
+		test.skipIf(!ships)("R23 — the child updating leaves the parent's nodes alone", async () => {
+			customElements.define(
+				"light-ownership-inner",
+				component(
+					function* (props) {
 						yield function* () {
-							yield html`<article>
+							yield html`<section><b>badge</b>${props.heading}</section>`;
+						};
+					},
+					light({ heading: [Slot, html`<h2>Untitled</h2>`] }),
+				),
+			);
+			const serialized = await serverRender(
+				"light-ownership-outer",
+				component(function* () {
+					yield function* () {
+						yield html`<article>
 								<light-ownership-inner>
 									<h2 slot="heading">Ada</h2>
 								</light-ownership-inner>
 							</article>`;
-						};
-					}, light()),
-				);
+					};
+				}, light()),
+			);
 
-				const outer = parseUnupgraded(serialized);
-				await sleep();
+			const outer = parseUnupgraded(serialized);
+			await sleep();
 
-				const inner = outer.querySelector(
-					"light-ownership-inner",
-				) as HTMLElement;
-				const heading = inner.querySelector("h2")!;
-				await (inner as HTMLElement & { update(): Promise<void> }).update();
-				await sleep();
+			const inner = outer.querySelector("light-ownership-inner") as HTMLElement;
+			const heading = inner.querySelector("h2")!;
+			await (inner as HTMLElement & { update(): Promise<void> }).update();
+			await sleep();
 
-				expect(inner.querySelector("h2")).toBe(heading);
-				expect(inner.querySelector("b")?.textContent).toBe("badge");
-				cleanup();
-			},
-		);
+			expect(inner.querySelector("h2")).toBe(heading);
+			expect(inner.querySelector("b")?.textContent).toBe("badge");
+			cleanup();
+		});
 
 		test.skipIf(!ships)(
 			"R20 — a forwarded slot value keeps its owner, so a later parent update re-passes it",
@@ -630,9 +575,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				);
 				//the child names what it destroyed, on the server, where nobody sees the repaint
 				expect(
-					serverMessages.some((message) =>
-						message.includes("declares no slot matching"),
-					),
+					serverMessages.some((message) => message.includes("declares no slot matching")),
 				).toBe(true);
 
 				const [outer, clientMessages] = await silenced(async () => {
@@ -644,9 +587,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				//the parent points at itself: the cause is in the other console
 				expect(
 					clientMessages.some(
-						(message) =>
-							message.includes("light-discard-outer") &&
-							message.includes("repainting"),
+						(message) => message.includes("light-discard-outer") && message.includes("repainting"),
 					),
 				).toBe(true);
 				expect(outer.querySelector("[data-from-the-server]")).toBeNull();

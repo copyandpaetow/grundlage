@@ -12,8 +12,7 @@ import { prop } from "../../index";
 const setUp = (schema: Schema) => {
 	const props = normalizeSchema(schema);
 	const values: PropValues = {};
-	for (const prop of props.values())
-		values[prop.propName] = prop.resolve(undefined);
+	for (const prop of props.values()) values[prop.propName] = prop.resolve(undefined);
 	return {
 		values,
 		propOf: (attributeName: string) => props.get(attributeName)!,
@@ -21,16 +20,13 @@ const setUp = (schema: Schema) => {
 };
 
 const parseTags = (incoming: unknown) =>
-	typeof incoming === "string"
-		? incoming.split(" ").filter(Boolean)
-		: (incoming as Array<string>);
+	typeof incoming === "string" ? incoming.split(" ").filter(Boolean) : (incoming as Array<string>);
 
 class Quote {
 	constructor(readonly text: string) {}
 }
 
-const asQuote = (incoming: unknown) =>
-	incoming instanceof Quote ? incoming : undefined;
+const asQuote = (incoming: unknown) => (incoming instanceof Quote ? incoming : undefined);
 
 describe("the write flow", () => {
 	test("a string is parsed and anything else is taken as it is", () => {
@@ -49,9 +45,7 @@ describe("the write flow", () => {
 		const quote = new Quote("hi");
 		claimPropValueChange(values, propOf("quote"), quote);
 
-		expect(claimPropValueChange(values, propOf("quote"), "garbage")).toBe(
-			false,
-		);
+		expect(claimPropValueChange(values, propOf("quote"), "garbage")).toBe(false);
 		expect(values.quote).toBe(quote);
 		expect(warn).toHaveBeenCalledTimes(1);
 		warn.mockRestore();
@@ -139,38 +133,24 @@ describe("the attribute spelling", () => {
 	};
 
 	test("a string, number and bigint spell themselves", () => {
-		expect(
-			spellingOf({ label: prop.optional(prop.attribute(String)) }, "ada"),
-		).toBe("ada");
-		expect(
-			spellingOf({ count: prop.optional(prop.attribute(Number)) }, 7),
-		).toBe("7");
-		expect(
-			spellingOf({ total: prop.optional(prop.attribute(BigInt)) }, 10n),
-		).toBe("10");
+		expect(spellingOf({ label: prop.optional(prop.attribute(String)) }, "ada")).toBe("ada");
+		expect(spellingOf({ count: prop.optional(prop.attribute(Number)) }, 7)).toBe("7");
+		expect(spellingOf({ total: prop.optional(prop.attribute(BigInt)) }, 10n)).toBe("10");
 	});
 
 	test("true is presence and false takes the attribute off", () => {
 		expect(spellingOf({ open: prop.attribute(Boolean) }, true)).toBe("");
 		expect(spellingOf({ open: prop.attribute(Boolean) }, false)).toBe(null);
-		expect(spellingOf({ open: prop.attribute(Boolean, false) }, false)).toBe(
-			null,
-		);
+		expect(spellingOf({ open: prop.attribute(Boolean, false) }, false)).toBe(null);
 	});
 
 	test("false spells itself out where absence would read true", () => {
-		expect(spellingOf({ open: prop.attribute(Boolean, true) }, false)).toBe(
-			"false",
-		);
+		expect(spellingOf({ open: prop.attribute(Boolean, true) }, false)).toBe("false");
 	});
 
 	test("a value with no string spelling has no attribute half", () => {
-		expect(
-			spellingOf({ tags: prop.optional(prop.attribute(parseTags)) }, ["a"]),
-		).toBe(null);
-		expect(
-			spellingOf({ tags: prop.optional(prop.attribute(parseTags)) }, undefined),
-		).toBe(null);
+		expect(spellingOf({ tags: prop.optional(prop.attribute(parseTags)) }, ["a"])).toBe(null);
+		expect(spellingOf({ tags: prop.optional(prop.attribute(parseTags)) }, undefined)).toBe(null);
 	});
 });
 

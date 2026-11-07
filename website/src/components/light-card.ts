@@ -14,10 +14,7 @@ const { Slot, DefaultSlot } = grundlage as typeof grundlage & {
 export const slotsShip = Slot !== undefined && DefaultSlot !== undefined;
 
 export const lightModeShips =
-	Object.getOwnPropertyDescriptor(
-		component(function* () {}).prototype,
-		"renderRoot",
-	) !== undefined;
+	Object.getOwnPropertyDescriptor(component(function* () {}).prototype, "renderRoot") !== undefined;
 
 const userCard = function* (props: Record<string, unknown>) {
 	yield function* view() {
@@ -60,13 +57,7 @@ const cardOptions = (mode: string): ComponentOptions =>
 			: {},
 	}) as unknown as ComponentOptions<Schema>;
 
-customElements.define(
-	"shadow-card",
-	component(userCard as never, cardOptions("open")),
-);
+customElements.define("shadow-card", component(userCard as never, cardOptions("open")));
 
 if (lightModeShips)
-	customElements.define(
-		"light-card",
-		component(userCard as never, cardOptions("light")),
-	);
+	customElements.define("light-card", component(userCard as never, cardOptions("light")));

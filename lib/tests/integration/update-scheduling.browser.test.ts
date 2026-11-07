@@ -9,8 +9,7 @@ import { html, component } from "../../src/index";
 //update() re-runs the update generator the body yielded last, never the body, which runs once
 //per connection.
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `test-update-${tagId++}-${Date.now()}`;
@@ -332,9 +331,7 @@ describe("update() scheduling contract", () => {
 
 		fallbackText.resolve("fallback");
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"fallback",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("fallback");
 
 		element.remove();
 	});

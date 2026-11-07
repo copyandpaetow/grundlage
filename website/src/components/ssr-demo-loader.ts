@@ -2,20 +2,14 @@ import { html, load, component } from "../../../lib/src";
 
 const fetchUser = (delayMilliseconds: number) =>
 	new Promise<{ name: string; team: string }>((resolve) => {
-		setTimeout(
-			() => resolve({ name: "Lucas P.", team: "Library team" }),
-			delayMilliseconds,
-		);
+		setTimeout(() => resolve({ name: "Lucas P.", team: "Library team" }), delayMilliseconds);
 	});
 
 customElements.define(
 	"demo-loader",
 	component(function* ({ host }) {
 		const label = host.getAttribute("data-label") ?? "?";
-		const delayMilliseconds = parseInt(
-			host.getAttribute("data-delay-ms") ?? "0",
-			10,
-		);
+		const delayMilliseconds = parseInt(host.getAttribute("data-delay-ms") ?? "0", 10);
 		const startedAt = performance.now();
 		//the server writes the result into this host's shadow root as a <script data-ssr>, and the hydrating browser reuses it instead of fetching
 		const user = yield* load(() => fetchUser(delayMilliseconds));

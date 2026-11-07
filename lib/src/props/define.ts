@@ -34,43 +34,22 @@ const resolverOfStandardSchema =
 
 export function property<DeclaredStandardSchema extends StandardSchemaV1>(
 	standardSchema: DeclaredStandardSchema,
-): PropDefinition<
-	StandardSchemaOutput<DeclaredStandardSchema>,
-	"required",
-	"property"
->;
+): PropDefinition<StandardSchemaOutput<DeclaredStandardSchema>, "required", "property">;
 export function property<DeclaredStandardSchema extends StandardSchemaV1>(
 	standardSchema: DeclaredStandardSchema,
 	fallback: StandardSchemaOutput<DeclaredStandardSchema>,
-): PropDefinition<
-	StandardSchemaOutput<DeclaredStandardSchema>,
-	"fallback",
-	"property"
->;
-export function property<Value>(): PropDefinition<
-	Value,
-	"required",
-	"property"
->;
-export function property<Value>(
-	fallback: Value,
-): PropDefinition<Value, "fallback", "property">;
+): PropDefinition<StandardSchemaOutput<DeclaredStandardSchema>, "fallback", "property">;
+export function property<Value>(): PropDefinition<Value, "required", "property">;
+export function property<Value>(fallback: Value): PropDefinition<Value, "fallback", "property">;
 export function property(
 	...schemaAndFallback: Array<unknown>
 ): PropDefinition<unknown, "required" | "fallback", "property"> {
-	const standardSchema = isStandardSchema(schemaAndFallback[0])
-		? schemaAndFallback[0]
-		: null;
-	const fallbackPart =
-		standardSchema === null ? schemaAndFallback : schemaAndFallback.slice(1);
+	const standardSchema = isStandardSchema(schemaAndFallback[0]) ? schemaAndFallback[0] : null;
+	const fallbackPart = standardSchema === null ? schemaAndFallback : schemaAndFallback.slice(1);
 	return {
 		kind: PROP_KIND.PROPERTY,
-		presence:
-			fallbackPart.length > 0 ? PROP_PRESENCE.FALLBACK : PROP_PRESENCE.REQUIRED,
-		parser:
-			standardSchema === null
-				? takeAsIs
-				: resolverOfStandardSchema(standardSchema),
+		presence: fallbackPart.length > 0 ? PROP_PRESENCE.FALLBACK : PROP_PRESENCE.REQUIRED,
+		parser: standardSchema === null ? takeAsIs : resolverOfStandardSchema(standardSchema),
 		standardSchema,
 		fallback: fallbackPart[0],
 	};
@@ -121,10 +100,7 @@ export const optional = <Value, Kind extends PropKind>(
 	} as PropDefinition<Value, "optional", Kind>;
 };
 
-export const unreflected = <
-	Value,
-	PresenceKind extends "required" | "fallback",
->(
+export const unreflected = <Value, PresenceKind extends "required" | "fallback">(
 	definition: PropDefinition<Value, PresenceKind, "attribute">,
 ): PropDefinition<Value, PresenceKind, "attribute"> => {
 	if (definition.kind !== PROP_KIND.ATTRIBUTE)
@@ -143,9 +119,7 @@ export const unreflected = <
 };
 
 export const oneOf =
-	<const Values extends ReadonlyArray<string>>(
-		...values: Values
-	): Resolve<Values[number]> =>
+	<const Values extends ReadonlyArray<string>>(...values: Values): Resolve<Values[number]> =>
 	(incoming) =>
 		values.includes(incoming as string)
 			? //includes() just narrowed it to one of the values

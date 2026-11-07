@@ -22,8 +22,7 @@ const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
 
 const attributesAfterCommitting = (...spreadValues: Array<unknown>) => {
 	const liveBinding = createSpreadBinding();
-	for (const spreadValue of spreadValues)
-		commitDynamic(liveBinding, [spreadValue], treeState);
+	for (const spreadValue of spreadValues) commitDynamic(liveBinding, [spreadValue], treeState);
 	return liveBinding.anchor
 		.getAttributeNames()
 		.map((name) => [name, liveBinding.anchor.getAttribute(name)]);
@@ -64,15 +63,11 @@ describe("spread binding - value shapes", () => {
 
 describe("spread binding - across commits", () => {
 	test("a name the next value drops comes off the element, the names it keeps stay", () => {
-		expect(
-			attributesAfterCommitting({ id: "x", title: "t" }, { id: "y" }),
-		).toEqual([["id", "y"]]);
+		expect(attributesAfterCommitting({ id: "x", title: "t" }, { id: "y" })).toEqual([["id", "y"]]);
 	});
 
 	test("a name dropped, then brought back, is written again", () => {
-		expect(attributesAfterCommitting({ id: "x" }, {}, { id: "x" })).toEqual([
-			["id", "x"],
-		]);
+		expect(attributesAfterCommitting({ id: "x" }, {}, { id: "x" })).toEqual([["id", "x"]]);
 	});
 
 	test("a name whose value is unchanged is not written again when another name changes", () => {
@@ -97,8 +92,6 @@ describe("spread binding - across commits", () => {
 	});
 
 	test("a value switching shape removes the names of the old shape", () => {
-		expect(attributesAfterCommitting(["disabled", "hidden"], "hidden")).toEqual(
-			[["hidden", ""]],
-		);
+		expect(attributesAfterCommitting(["disabled", "hidden"], "hidden")).toEqual([["hidden", ""]]);
 	});
 });

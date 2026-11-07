@@ -26,9 +26,7 @@ test("a list row whose values trade 4181 for 423877 is repainted", async () => {
 	await element.update();
 	rows = [[1, 423877]];
 	await element.update();
-	expect(element.shadowRoot!.querySelector("li")!.textContent).toBe(
-		"1: 423877",
-	);
+	expect(element.shadowRoot!.querySelector("li")!.textContent).toBe("1: 423877");
 	element.remove();
 });
 
@@ -42,9 +40,7 @@ test("an attribute of two holes whose values trade 4181 for 423877 is rewritten"
 	await element.update();
 	position = [1, 423877];
 	await element.update();
-	expect(
-		element.shadowRoot!.querySelector("p")!.getAttribute("data-position"),
-	).toBe("1,423877");
+	expect(element.shadowRoot!.querySelector("p")!.getAttribute("data-position")).toBe("1,423877");
 	element.remove();
 });
 
@@ -54,8 +50,7 @@ test("a hole holding posts that point back at their user paints, and repaints a 
 		name: "ada",
 		posts: [] as Array<{ title: string; author: unknown }>,
 	};
-	for (const title of ["first", "second", "third"])
-		user.posts.push({ title, author: user });
+	for (const title of ["first", "second", "third"]) user.posts.push({ title, author: user });
 	const element = mountComponent(function* () {
 		yield function* view() {
 			yield html`<ul data-user=${user}>
@@ -64,9 +59,7 @@ test("a hole holding posts that point back at their user paints, and repaints a 
 		};
 	});
 	const titles = () =>
-		[...element.shadowRoot!.querySelectorAll("li")].map(
-			(item) => item.textContent,
-		);
+		[...element.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent);
 	await element.update();
 	expect(titles()).toEqual(["first", "second", "third"]);
 	user.posts[1].title = "changed";

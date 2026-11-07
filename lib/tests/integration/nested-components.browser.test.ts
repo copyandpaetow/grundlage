@@ -1,15 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, prop, component, type Template } from "../../src/index";
 import { hashValue } from "../../src/rendering/value-hashing";
-import {
-	BaseComponent,
-	ComponentGenerator,
-	ComponentProps,
-	YieldableValue,
-} from "../../src/types";
+import { BaseComponent, ComponentGenerator, ComponentProps, YieldableValue } from "../../src/types";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = (prefix: string) => `test-${prefix}-${tagId++}-${Date.now()}`;
@@ -47,9 +41,7 @@ describe("nested components", () => {
 
 		const child = element.shadowRoot?.querySelector(childTag) as HTMLElement;
 		expect(child).not.toBeNull();
-		expect(child.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"child-content",
-		);
+		expect(child.shadowRoot?.querySelector("span")?.textContent).toBe("child-content");
 
 		element.remove();
 	});
@@ -219,9 +211,7 @@ describe("nested components", () => {
 
 		const childAfter = element.shadowRoot?.querySelector(childTag);
 		expect(childAfter).toBe(childBefore);
-		expect(childAfter?.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"b",
-		);
+		expect(childAfter?.shadowRoot?.querySelector("span")?.textContent).toBe("b");
 
 		element.remove();
 	});
@@ -243,9 +233,7 @@ describe("nested components", () => {
 		const ParentClass = component(function* () {
 			yield function* () {
 				yield html`<ul>
-					${items.map(
-						(item) => html`<li><${childTag} value=${item}></${childTag}></li>`,
-					)}
+					${items.map((item) => html`<li><${childTag} value=${item}></${childTag}></li>`)}
 				</ul>`;
 			};
 		});
@@ -254,23 +242,17 @@ describe("nested components", () => {
 		const element = mount(parentTag) as InstanceType<typeof ParentClass>;
 		await sleep();
 
-		const children = element.shadowRoot?.querySelectorAll(
-			childTag,
-		) as NodeListOf<HTMLElement>;
+		const children = element.shadowRoot?.querySelectorAll(childTag) as NodeListOf<HTMLElement>;
 		expect(children.length).toBe(3);
 		expect(
-			Array.from(children).map(
-				(child) => child.shadowRoot?.querySelector("span")?.textContent,
-			),
+			Array.from(children).map((child) => child.shadowRoot?.querySelector("span")?.textContent),
 		).toEqual(["x", "y", "z"]);
 
 		items = ["x", "y", "z", "w"];
 		await element.update();
 		await sleep(50);
 
-		const grown = element.shadowRoot?.querySelectorAll(
-			childTag,
-		) as NodeListOf<HTMLElement>;
+		const grown = element.shadowRoot?.querySelectorAll(childTag) as NodeListOf<HTMLElement>;
 		expect(grown.length).toBe(4);
 		expect(grown[3].shadowRoot?.querySelector("span")?.textContent).toBe("w");
 
@@ -410,10 +392,7 @@ describe("shared template generator functions", () => {
 			<p>${body}</p>
 		</article>`;
 
-	const list = <Item>(
-		items: ReadonlyArray<Item>,
-		row: (item: Item) => Template,
-	): Template =>
+	const list = <Item>(items: ReadonlyArray<Item>, row: (item: Item) => Template): Template =>
 		html`<ul>
 			${items.map((item) => html`<li>${row(item)}</li>`)}
 		</ul>`;
@@ -451,13 +430,9 @@ describe("shared template generator functions", () => {
 		const elementB = mount(tagB);
 		await sleep();
 
-		expect(elementA.shadowRoot?.querySelector("h2")?.textContent).toBe(
-			"from-a",
-		);
+		expect(elementA.shadowRoot?.querySelector("h2")?.textContent).toBe("from-a");
 		expect(elementA.shadowRoot?.querySelector("p")?.textContent).toBe("body-a");
-		expect(elementB.shadowRoot?.querySelector("h2")?.textContent).toBe(
-			"from-b",
-		);
+		expect(elementB.shadowRoot?.querySelector("h2")?.textContent).toBe("from-b");
 		expect(elementB.shadowRoot?.querySelector("p")?.textContent).toBe("body-b");
 
 		elementA.remove();
@@ -483,9 +458,7 @@ describe("shared template generator functions", () => {
 
 		const stableHeading = element.shadowRoot?.querySelectorAll("h2")[0];
 		expect(stableHeading?.textContent).toBe("alpha");
-		expect(element.shadowRoot?.querySelectorAll("h2")[1]?.textContent).toBe(
-			"beta",
-		);
+		expect(element.shadowRoot?.querySelectorAll("h2")[1]?.textContent).toBe("beta");
 
 		rows = [
 			{ title: "alpha", body: "one" },
@@ -498,9 +471,7 @@ describe("shared template generator functions", () => {
 		//since its inputs did not change
 		const headingAfter = element.shadowRoot?.querySelectorAll("h2")[0];
 		expect(headingAfter).toBe(stableHeading);
-		expect(element.shadowRoot?.querySelectorAll("p")[1]?.textContent).toBe(
-			"two-updated",
-		);
+		expect(element.shadowRoot?.querySelectorAll("p")[1]?.textContent).toBe("two-updated");
 
 		element.remove();
 	});
@@ -521,9 +492,7 @@ describe("shared template generator functions", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("strong")?.textContent).toBe(
-			"heading",
-		);
+		expect(element.shadowRoot?.querySelector("strong")?.textContent).toBe("heading");
 		expect(element.shadowRoot?.querySelector("h2")?.textContent).toBe("title");
 		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("body");
 
@@ -552,9 +521,7 @@ describe("shared template generator functions", () => {
 		const element = mount(tag) as InstanceType<typeof ComponentClass>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("[role=status]")?.textContent,
-		).toContain("fetching");
+		expect(element.shadowRoot?.querySelector("[role=status]")?.textContent).toContain("fetching");
 
 		state = "error";
 		message = "boom";
@@ -562,9 +529,7 @@ describe("shared template generator functions", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("[role=status]")).toBeNull();
-		expect(
-			element.shadowRoot?.querySelector("[role=alert]")?.textContent,
-		).toContain("boom");
+		expect(element.shadowRoot?.querySelector("[role=alert]")?.textContent).toContain("boom");
 
 		state = "idle";
 		message = "ready";
@@ -572,9 +537,9 @@ describe("shared template generator functions", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("[role=alert]")).toBeNull();
-		expect(
-			element.shadowRoot?.querySelector("[role=presentation]")?.textContent,
-		).toContain("ready");
+		expect(element.shadowRoot?.querySelector("[role=presentation]")?.textContent).toContain(
+			"ready",
+		);
 
 		element.remove();
 	});
@@ -585,10 +550,7 @@ describe("shared template generator functions", () => {
 		const ComponentClass = component(function* () {
 			yield function* () {
 				yield html`<main>
-					${card("first", "one")}${card("second", "two")}${card(
-						"third",
-						"three",
-					)}
+					${card("first", "one")}${card("second", "two")}${card("third", "three")}
 				</main>`;
 			};
 		});
@@ -599,9 +561,11 @@ describe("shared template generator functions", () => {
 
 		const headings = element.shadowRoot?.querySelectorAll("h2");
 		const bodies = element.shadowRoot?.querySelectorAll("p");
-		expect(
-			Array.from(headings ?? []).map((heading) => heading.textContent),
-		).toEqual(["first", "second", "third"]);
+		expect(Array.from(headings ?? []).map((heading) => heading.textContent)).toEqual([
+			"first",
+			"second",
+			"third",
+		]);
 		expect(Array.from(bodies ?? []).map((body) => body.textContent)).toEqual([
 			"one",
 			"two",
@@ -644,9 +608,7 @@ describe("shared template generator functions", () => {
 		expect(parentHeading?.textContent).toBe("parent-card");
 
 		const child = element.shadowRoot?.querySelector(childTag) as HTMLElement;
-		expect(child.shadowRoot?.querySelector("h2")?.textContent).toBe(
-			"child-card",
-		);
+		expect(child.shadowRoot?.querySelector("h2")?.textContent).toBe("child-card");
 		expect(child.shadowRoot?.querySelector("p")?.textContent).toBe("inner");
 
 		element.remove();
@@ -801,17 +763,13 @@ describe("shared generator functions", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"step-1,step-2,step-3",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("step-1,step-2,step-3");
 
 		element.remove();
 	});
 
 	test("a sub-generator delegated with yield* sequences async work", async () => {
-		const loadInTwoStages: (
-			element: BaseComponent,
-		) => Generator<YieldableValue> = function* () {
+		const loadInTwoStages: (element: BaseComponent) => Generator<YieldableValue> = function* () {
 			yield html`<p>stage-1</p>`;
 			yield new Promise((resolve) => setTimeout(resolve, 10));
 			yield function* () {
@@ -883,19 +841,13 @@ describe("framework-parity patterns", () => {
 		document.body.appendChild(element);
 		await sleep();
 
-		const titleSlot = element.shadowRoot?.querySelector(
-			"slot[name=title]",
-		) as HTMLSlotElement;
-		const defaultSlot = element.shadowRoot?.querySelector(
-			"slot:not([name])",
-		) as HTMLSlotElement;
+		const titleSlot = element.shadowRoot?.querySelector("slot[name=title]") as HTMLSlotElement;
+		const defaultSlot = element.shadowRoot?.querySelector("slot:not([name])") as HTMLSlotElement;
 
-		expect(
-			(titleSlot.assignedElements() as Element[]).map((node) => node.tagName),
-		).toEqual(["H1"]);
-		expect(
-			(defaultSlot.assignedElements() as Element[]).map((node) => node.tagName),
-		).toEqual(["P"]);
+		expect((titleSlot.assignedElements() as Element[]).map((node) => node.tagName)).toEqual(["H1"]);
+		expect((defaultSlot.assignedElements() as Element[]).map((node) => node.tagName)).toEqual([
+			"P",
+		]);
 
 		element.remove();
 	});
@@ -920,16 +872,12 @@ describe("framework-parity patterns", () => {
 		const element = mount(tag);
 		await sleep();
 
-		const input = element.shadowRoot?.querySelector(
-			"input",
-		) as HTMLInputElement;
+		const input = element.shadowRoot?.querySelector("input") as HTMLInputElement;
 		input.value = "typed";
 		input.dispatchEvent(new Event("input", { bubbles: true }));
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("output")?.textContent).toBe(
-			"typed",
-		);
+		expect(element.shadowRoot?.querySelector("output")?.textContent).toBe("typed");
 
 		element.remove();
 	});
@@ -982,9 +930,7 @@ describe("framework-parity patterns", () => {
 		document.body.appendChild(provider);
 		await sleep();
 
-		expect(consumer.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"theme:dark",
-		);
+		expect(consumer.shadowRoot?.querySelector("span")?.textContent).toBe("theme:dark");
 
 		provider.remove();
 	});
@@ -1030,9 +976,7 @@ describe("framework-parity patterns", () => {
 			disabled: true,
 			missing: "fallback",
 		});
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"hello-42-fallback",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("hello-42-fallback");
 
 		element.remove();
 	});
@@ -1101,9 +1045,7 @@ describe("framework-parity patterns", () => {
 		await element.update();
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("aside")?.textContent).toBe(
-			"visible",
-		);
+		expect(element.shadowRoot?.querySelector("aside")?.textContent).toBe("visible");
 		expect(element.shadowRoot?.querySelector("header")).toBe(stableHeader);
 
 		element.remove();
@@ -1119,8 +1061,7 @@ describe("framework-parity patterns", () => {
 			listTag,
 			component(function* ({ host: element }) {
 				yield function* () {
-					const rows =
-						(element as HTMLElement & { items?: string[] }).items ?? [];
+					const rows = (element as HTMLElement & { items?: string[] }).items ?? [];
 					const rowTemplate =
 						(element as HTMLElement & { row?: RowTemplate }).row ??
 						((item) => html`<li>${item}</li>`);
@@ -1136,8 +1077,7 @@ describe("framework-parity patterns", () => {
 			hostTag,
 			component(function* () {
 				const items = ["one", "two", "three"];
-				const row: RowTemplate = (item) =>
-					html`<li class="custom">item:${item}</li>`;
+				const row: RowTemplate = (item) => html`<li class="custom">item:${item}</li>`;
 				yield function* () {
 					yield html`<${listTag} items=${items} row=${row}></${listTag}>`;
 				};
@@ -1229,9 +1169,7 @@ describe("framework-parity patterns", () => {
 		document.body.appendChild(element);
 		await sleep();
 
-		const titleSlot = element.shadowRoot?.querySelector(
-			'slot[name="title"]',
-		) as HTMLSlotElement;
+		const titleSlot = element.shadowRoot?.querySelector('slot[name="title"]') as HTMLSlotElement;
 		//default-slot has the <p>, but title-slot has nothing assigned and falls back
 		expect(titleSlot.assignedNodes().length).toBe(0);
 		expect(titleSlot.querySelector("h1")?.textContent).toBe("default-title");
@@ -1313,9 +1251,7 @@ describe("framework-parity patterns", () => {
 			await sleep();
 
 			const child = element.shadowRoot?.querySelector(childTag) as HTMLElement;
-			const input = child.shadowRoot?.querySelector(
-				"input",
-			) as HTMLInputElement;
+			const input = child.shadowRoot?.querySelector("input") as HTMLInputElement;
 			input.focus();
 			expect(child.shadowRoot?.activeElement).toBe(input);
 
@@ -1335,9 +1271,7 @@ describe("framework-parity patterns", () => {
 	);
 
 	test("error thrown in nested child does not break the parent", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const childTag = uniqueTag("err-child");
 		let shouldChildThrow = true;

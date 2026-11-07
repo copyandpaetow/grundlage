@@ -8,8 +8,7 @@ import { ComponentRunner } from "../driver";
 
 let counter = 0;
 const uniqueTag = () => `test-run-${counter++}-${Date.now()}`;
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 const mount = (constructor: CustomElementConstructor): HTMLElement => {
 	const tag = uniqueTag();
@@ -195,9 +194,7 @@ describe("the body waits at an update generator yield for the first run that fin
 			}),
 		);
 		await sleep();
-		expect(element.shadowRoot?.textContent).toContain(
-			"One level of nesting only",
-		);
+		expect(element.shadowRoot?.textContent).toContain("One level of nesting only");
 	});
 });
 
@@ -247,21 +244,18 @@ describe("a yield that is not a template, an update generator, a promise or a lo
 		["an array of templates", [html`<i>a</i>`, html`<i>b</i>`]],
 		["undefined", undefined],
 		["a thenable that is not a promise", { then: () => {} }],
-	] as const)(
-		"%s ends the component with a message naming the four",
-		async (_label, yielded) => {
-			vi.spyOn(console, "error").mockImplementation(() => {});
-			const element = mount(
-				component(function* () {
-					yield yielded as never;
-				}),
-			);
-			await sleep();
-			expect(element.shadowRoot?.textContent).toContain(
-				"a component yields a template, an update generator, a promise or a load()",
-			);
-		},
-	);
+	] as const)("%s ends the component with a message naming the four", async (_label, yielded) => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const element = mount(
+			component(function* () {
+				yield yielded as never;
+			}),
+		);
+		await sleep();
+		expect(element.shadowRoot?.textContent).toContain(
+			"a component yields a template, an update generator, a promise or a load()",
+		);
+	});
 });
 
 describe("completion", () => {
@@ -327,11 +321,7 @@ describe("tearing down a generator", () => {
 	//only the permit stops the promise the generator was parked on from stepping it a second time
 	test.each([
 		["resolves", (settle: PromiseWithResolvers<unknown>) => settle.resolve(1)],
-		[
-			"rejects",
-			(settle: PromiseWithResolvers<unknown>) =>
-				settle.reject(new Error("late")),
-		],
+		["rejects", (settle: PromiseWithResolvers<unknown>) => settle.reject(new Error("late"))],
 	] as const)(
 		"the parked promise that %s after removal does not step the teardown",
 		async (_label, finish) => {
@@ -413,9 +403,7 @@ describe("tearing down a run", () => {
 	//the teardown has a sibling run to tear down and a paint to make after this, so a user cleanup
 	//that throws is reported rather than propagated
 	test("a cleanup that throws does not escape the teardown", () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		//the runner is read only when a finally block yields
 		const run = createRun({} as ComponentRunner, (function* () {})());
 		run.cleanup = () => {

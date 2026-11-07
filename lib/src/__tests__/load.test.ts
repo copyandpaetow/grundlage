@@ -6,11 +6,7 @@ import { html } from "../template";
 //node env: the protocol between load() and the driver, and the plain-data check. The round trip
 //through a component lives in tests/integration/load.browser.test.ts
 
-type LoadGenerator = Generator<
-	LoadRequest | Promise<unknown>,
-	unknown,
-	unknown
->;
+type LoadGenerator = Generator<LoadRequest | Promise<unknown>, unknown, unknown>;
 
 //stand-ins for the runner the driver hands back: a load reads nothing else of it
 const createServerRunner = (): ComponentRunner =>
@@ -28,10 +24,7 @@ const createBrowserRunner = (): ComponentRunner =>
 	}) as unknown as ComponentRunner;
 
 //what the driver does for a fetcher that returns at once: answer the request, take the result
-const finishSynchronousLoad = (
-	generator: LoadGenerator,
-	runner: ComponentRunner,
-): unknown => {
+const finishSynchronousLoad = (generator: LoadGenerator, runner: ComponentRunner): unknown => {
 	expect(generator.next()).toEqual({ done: false, value: LOAD_REQUEST });
 	const step = generator.next(runner);
 	expect(step.done).toBe(true);
@@ -86,9 +79,7 @@ describe("load() asks the driver for its runner, then loads by itself", () => {
 		["a host where the key goes", [{}, () => 1]],
 		["nothing", []],
 	])("%s throws, naming both spellings", (_, parameters) => {
-		const callWithAnyArguments = load as (
-			...parameters: Array<unknown>
-		) => unknown;
+		const callWithAnyArguments = load as (...parameters: Array<unknown>) => unknown;
 		expect(() => callWithAnyArguments(...parameters)).toThrow(TypeError);
 		expect(() => callWithAnyArguments(...parameters)).toThrow(
 			'load(() => fetchData()) or load("name", () => fetchData())',
@@ -110,14 +101,8 @@ describe("a server result must survive JSON, and the message names the fix", () 
 		["a boolean", false],
 		["null", null],
 		["undefined", undefined],
-		[
-			"a nested plain object and array",
-			{ posts: [{ title: "a", tags: ["b"] }] },
-		],
-		[
-			"an object without a prototype",
-			Object.assign(Object.create(null), { a: 1 }),
-		],
+		["a nested plain object and array", { posts: [{ title: "a", tags: ["b"] }] }],
+		["an object without a prototype", Object.assign(Object.create(null), { a: 1 })],
 	])("%s passes", (_, value) => {
 		expect(loadOnServer(value)).toBe(value);
 	});
@@ -139,24 +124,18 @@ describe("a server result must survive JSON, and the message names the fix", () 
 		["a function", () => 1, "is a function: return data, not code"],
 		["a template", html`<p>view</p>`, "yield function* view()"],
 	])("%s is refused", (_, value, fix) => {
-		expect(() => loadOnServer(value)).toThrow(
-			"load() takes a fetcher that returns plain data",
-		);
+		expect(() => loadOnServer(value)).toThrow("load() takes a fetcher that returns plain data");
 		expect(() => loadOnServer(value)).toThrow(fix);
 	});
 
 	test("a module namespace is refused with the import() fix", async () => {
 		const module = await import("node:path");
-		expect(() => loadOnServer(module)).toThrow(
-			"yield the import() promise itself",
-		);
+		expect(() => loadOnServer(module)).toThrow("yield the import() promise itself");
 	});
 
 	test("the message points at the nested value that fails", () => {
 		const value = { posts: [{ title: "a" }, { publishedAt: new Date(0) }] };
-		expect(() => loadOnServer(value)).toThrow(
-			"its result.posts[1].publishedAt is a Date",
-		);
+		expect(() => loadOnServer(value)).toThrow("its result.posts[1].publishedAt is a Date");
 	});
 
 	test("a cycle is refused instead of overflowing", () => {

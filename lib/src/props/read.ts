@@ -12,22 +12,17 @@ export const read = <DeclaredSchema extends Schema>(
 	const record = element as unknown as Record<string, unknown>;
 	const values: PropValues = {};
 
-	for (const prop of normalized.values())
-		values[prop.propName] = prop.resolve(undefined);
+	for (const prop of normalized.values()) values[prop.propName] = prop.resolve(undefined);
 
 	for (const [attributeName, prop] of normalized) {
 		const isOwnProperty = Object.hasOwn(record, prop.propName);
 		const isAbsent =
-			!isOwnProperty &&
-			(prop.kind === PROP_KIND.PROPERTY ||
-				!element.hasAttribute(attributeName));
+			!isOwnProperty && (prop.kind === PROP_KIND.PROPERTY || !element.hasAttribute(attributeName));
 		if (isAbsent) continue;
 		claimPropValueChange(
 			values,
 			prop,
-			isOwnProperty
-				? record[prop.propName]
-				: element.getAttribute(attributeName),
+			isOwnProperty ? record[prop.propName] : element.getAttribute(attributeName),
 		);
 	}
 

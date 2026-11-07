@@ -38,11 +38,7 @@ export const forgetAncestorRunner = (runner: OrderedRunner): void => {
 };
 
 const findNearestAncestorRunner = (host: Element): OrderedRunner | null => {
-	for (
-		let root = host.getRootNode();
-		root instanceof ShadowRoot;
-		root = root.host.getRootNode()
-	) {
+	for (let root = host.getRootNode(); root instanceof ShadowRoot; root = root.host.getRootNode()) {
 		const ancestorRunner = registry.runnersByHost.get(root.host);
 		if (ancestorRunner !== undefined) return ancestorRunner;
 	}
@@ -67,8 +63,7 @@ export const hasQueuedAncestorRunner = (
 		//memo key rather than a heuristic, and a settled app walks the tree zero times
 		const mustSearchAgain =
 			current.ancestorRunner === null &&
-			current.lastAncestorSearchAtHostRegistrationCount !==
-				hostRegistrationCount;
+			current.lastAncestorSearchAtHostRegistrationCount !== hostRegistrationCount;
 		if (mustSearchAgain) {
 			current.lastAncestorSearchAtHostRegistrationCount = hostRegistrationCount;
 			current.ancestorRunner = findNearestAncestorRunner(current.root.host);

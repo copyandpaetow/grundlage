@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("content updates", () => {
 	let tagId = 0;
@@ -208,9 +207,7 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"shown",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("shown");
 
 		isVisible = false;
 		await element.update();
@@ -302,18 +299,14 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain(
-			"plain text",
-		);
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain("plain text");
 		expect(element.shadowRoot?.querySelector("span")).toBeNull();
 
 		useTemplate = true;
 		await element.update();
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"nested",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("nested");
 
 		cleanup(element);
 	});
@@ -334,18 +327,14 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"nested",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("nested");
 
 		useTemplate = false;
 		await element.update();
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("span")).toBeNull();
-		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain(
-			"plain text",
-		);
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain("plain text");
 
 		cleanup(element);
 	});
@@ -357,9 +346,7 @@ describe("content updates", () => {
 		const MyElement = component(function* () {
 			yield function* () {
 				yield html`<div>
-					${
-						useArray ? ["a", "b"].map((i) => html`<span>${i}</span>`) : "single"
-					}
+					${useArray ? ["a", "b"].map((i) => html`<span>${i}</span>`) : "single"}
 				</div>`;
 			};
 		});
@@ -368,9 +355,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain(
-			"single",
-		);
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain("single");
 
 		useArray = true;
 		await element.update();
@@ -388,9 +373,7 @@ describe("content updates", () => {
 		const MyElement = component(function* () {
 			yield function* () {
 				yield html`<div>
-					${
-						useArray ? ["a", "b"].map((i) => html`<span>${i}</span>`) : "single"
-					}
+					${useArray ? ["a", "b"].map((i) => html`<span>${i}</span>`) : "single"}
 				</div>`;
 			};
 		});
@@ -406,9 +389,7 @@ describe("content updates", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelectorAll("span").length).toBe(0);
-		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain(
-			"single",
-		);
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain("single");
 
 		cleanup(element);
 	});
@@ -460,17 +441,13 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"deep",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("deep");
 
 		inner = "deeper";
 		await element.update();
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"deeper",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("deeper");
 
 		cleanup(element);
 	});
@@ -541,9 +518,7 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 		expect(element.shadowRoot?.querySelectorAll("span").length).toBe(1);
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
-			"z",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain("z");
 
 		cleanup(element);
 	});
@@ -564,17 +539,13 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [alphaNode, betaNode, gammaNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [alphaNode, betaNode, gammaNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["gamma", "beta", "alpha"];
 		await element.update();
 		await sleep();
 
-		const reorderedNodes = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const reorderedNodes = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(reorderedNodes).toEqual([gammaNode, betaNode, alphaNode]);
 
 		cleanup(element);
@@ -596,9 +567,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [oneNode, twoNode, threeNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [oneNode, twoNode, threeNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["two", "one", "three"];
 		await element.update();
@@ -626,17 +595,13 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [aNode, cNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [aNode, cNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["a", "b", "c"];
 		await element.update();
 		await sleep();
 
-		const nodesAfterInsert = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const nodesAfterInsert = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(nodesAfterInsert.length).toBe(3);
 		expect(nodesAfterInsert[0]).toBe(aNode);
 		expect(nodesAfterInsert[2]).toBe(cNode);
@@ -661,9 +626,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const originalNodes = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const originalNodes = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		const aNode = originalNodes[0];
 		const cNode = originalNodes[2];
 
@@ -671,9 +634,7 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		const nodesAfterRemove = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const nodesAfterRemove = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(nodesAfterRemove.length).toBe(2);
 		expect(nodesAfterRemove[0]).toBe(aNode);
 		expect(nodesAfterRemove[1]).toBe(cNode);
@@ -703,9 +664,7 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		const nodesAfterPrepend = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const nodesAfterPrepend = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(nodesAfterPrepend.length).toBe(3);
 		expect(nodesAfterPrepend[0].textContent).toContain("first");
 		expect(nodesAfterPrepend[1].textContent).toContain("middle");
@@ -834,10 +793,7 @@ describe("content updates", () => {
 		const MyElement = component(function* () {
 			yield function* () {
 				yield html`<ul>
-					${items.map(
-						(value) =>
-							html`<li><span>${value}</span><em>${value * 2}</em></li>`,
-					)}
+					${items.map((value) => html`<li><span>${value}</span><em>${value * 2}</em></li>`)}
 				</ul>`;
 			};
 		});
@@ -846,12 +802,8 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const originalItems = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
-		const originalSpans = Array.from(
-			element.shadowRoot!.querySelectorAll("span"),
-		);
+		const originalItems = Array.from(element.shadowRoot!.querySelectorAll("li"));
+		const originalSpans = Array.from(element.shadowRoot!.querySelectorAll("span"));
 		expect(originalItems.length).toBe(4);
 
 		//every value changes, so no hash match anywhere, but structure is identical
@@ -860,9 +812,7 @@ describe("content updates", () => {
 		await sleep();
 
 		const updatedItems = Array.from(element.shadowRoot!.querySelectorAll("li"));
-		const updatedSpans = Array.from(
-			element.shadowRoot!.querySelectorAll("span"),
-		);
+		const updatedSpans = Array.from(element.shadowRoot!.querySelectorAll("span"));
 		expect(updatedItems.length).toBe(4);
 		//no hash matches anywhere, but the structure is identical, so tier-2
 		//patches each row in place: node identity survives and the DOM carries
@@ -893,9 +843,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [alphaNode, betaNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [alphaNode, betaNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		//alpha stays (hash match keeps its node); beta's slot changes to "gamma",
 		//which has no content match but the same shape, so tier-2 patches betaNode
@@ -929,9 +877,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [aNode, cNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [aNode, cNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		//inserting in the middle: hash for "c" must still find the existing cNode
 		//rather than cNode being consumed by an in-place update for "b"
@@ -958,10 +904,7 @@ describe("content updates", () => {
 		const MyElement = component(function* () {
 			yield function* () {
 				yield html`<ul>
-					${items.map(
-						(item) =>
-							html`<li style="width:${item.width}px">${item.label}</li>`,
-					)}
+					${items.map((item) => html`<li style="width:${item.width}px">${item.label}</li>`)}
 				</ul>`;
 			};
 		});
@@ -1039,17 +982,11 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		const outerLisAfterSwap = Array.from(
-			outerUl.children,
-		) as Array<HTMLElement>;
+		const outerLisAfterSwap = Array.from(outerUl.children) as Array<HTMLElement>;
 		expect(outerLisAfterSwap[0]).toBe(bGroupNode);
 		expect(outerLisAfterSwap[1]).toBe(aGroupNode);
-		expect(Array.from(bGroupNode.querySelector("ul")!.children)).toEqual(
-			bInnerItemsBefore,
-		);
-		expect(Array.from(aGroupNode.querySelector("ul")!.children)).toEqual(
-			aInnerItemsBefore,
-		);
+		expect(Array.from(bGroupNode.querySelector("ul")!.children)).toEqual(bInnerItemsBefore);
+		expect(Array.from(aGroupNode.querySelector("ul")!.children)).toEqual(aInnerItemsBefore);
 
 		//phase 2: inner reorder within one group, outer unchanged. The inner
 		//change folds into group b's hash, so b no longer content-matches, but its
@@ -1064,19 +1001,14 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		const outerLisAfterInnerSwap = Array.from(
-			outerUl.children,
-		) as Array<HTMLElement>;
+		const outerLisAfterInnerSwap = Array.from(outerUl.children) as Array<HTMLElement>;
 		expect(outerLisAfterInnerSwap[0]).toBe(bGroupNode);
 		expect(outerLisAfterInnerSwap[1]).toBe(aGroupNode);
 
 		const bInnerItemsAfter = Array.from(
 			outerLisAfterInnerSwap[0].querySelector("ul")!.children,
 		) as Array<HTMLElement>;
-		expect(bInnerItemsAfter.map((node) => node.textContent!.trim())).toEqual([
-			"b2",
-			"b1",
-		]);
+		expect(bInnerItemsAfter.map((node) => node.textContent!.trim())).toEqual(["b2", "b1"]);
 
 		const aInnerItemsAfter = Array.from(
 			aGroupNode.querySelector("ul")!.children,
@@ -1104,11 +1036,7 @@ describe("content updates", () => {
 
 		const before = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(before.length).toBe(3);
-		expect(before.map((node) => node.textContent?.trim())).toEqual([
-			"a",
-			"a",
-			"b",
-		]);
+		expect(before.map((node) => node.textContent?.trim())).toEqual(["a", "a", "b"]);
 
 		items = ["b", "a", "a"];
 		await element.update();
@@ -1116,11 +1044,7 @@ describe("content updates", () => {
 
 		const afterReorder = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(afterReorder.length).toBe(3);
-		expect(afterReorder.map((node) => node.textContent?.trim())).toEqual([
-			"b",
-			"a",
-			"a",
-		]);
+		expect(afterReorder.map((node) => node.textContent?.trim())).toEqual(["b", "a", "a"]);
 
 		items = ["b", "a", "c"];
 		await element.update();
@@ -1128,11 +1052,7 @@ describe("content updates", () => {
 
 		const afterEdit = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(afterEdit.length).toBe(3);
-		expect(afterEdit.map((node) => node.textContent?.trim())).toEqual([
-			"b",
-			"a",
-			"c",
-		]);
+		expect(afterEdit.map((node) => node.textContent?.trim())).toEqual(["b", "a", "c"]);
 
 		cleanup(element);
 	});
@@ -1165,15 +1085,9 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		const afterRepopulate = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const afterRepopulate = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(afterRepopulate.length).toBe(3);
-		expect(afterRepopulate.map((node) => node.textContent?.trim())).toEqual([
-			"x",
-			"y",
-			"z",
-		]);
+		expect(afterRepopulate.map((node) => node.textContent?.trim())).toEqual(["x", "y", "z"]);
 
 		cleanup(element);
 	});
@@ -1194,9 +1108,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [aNode, bNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [aNode, bNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["a", "b", "c"];
 		await element.update();
@@ -1285,9 +1197,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [aNode, bNode, cNode, dNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [aNode, bNode, cNode, dNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["a", "b", "c"];
 		await element.update();
@@ -1319,9 +1229,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [aNode, bNode, cNode, dNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [aNode, bNode, cNode, dNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["b", "c", "d"];
 		await element.update();
@@ -1364,9 +1272,7 @@ describe("content updates", () => {
 		await element.update();
 		await sleep();
 
-		const afterMiddleSwap = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const afterMiddleSwap = Array.from(element.shadowRoot!.querySelectorAll("li"));
 		expect(afterMiddleSwap.length).toBe(5);
 		expect(afterMiddleSwap[0]).toBe(aNode);
 		expect(afterMiddleSwap[4]).toBe(dNode);
@@ -1433,9 +1339,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [aNode, bNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [aNode, bNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["a", "b", "c", "d", "e"];
 		await element.update();
@@ -1468,9 +1372,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [dNode, eNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [dNode, eNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["a", "b", "c", "d", "e"];
 		await element.update();
@@ -1505,9 +1407,7 @@ describe("content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const [aNode, bNode, cNode, , eNode] = Array.from(
-			element.shadowRoot!.querySelectorAll("li"),
-		);
+		const [aNode, bNode, cNode, , eNode] = Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 		items = ["a", "b", "c", "e"];
 		await element.update();
@@ -1577,8 +1477,7 @@ describe("content updates", () => {
 		await sleep();
 
 		//bare primitive items paint as adjacent text nodes with no separator
-		const text = () =>
-			element.shadowRoot!.textContent!.replace(/\s+/g, "").trim();
+		const text = () => element.shadowRoot!.textContent!.replace(/\s+/g, "").trim();
 		expect(text()).toBe("abc");
 		//the engine must not have replaced the caller's primitives with wrappers
 		expect(items).toEqual(["a", "b", "c"]);

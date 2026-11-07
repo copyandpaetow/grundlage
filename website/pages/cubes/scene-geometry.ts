@@ -4,15 +4,9 @@ import type { Vector3 } from "./scene-shared";
 // Measuring and composing block transforms in JS, where CSS cannot: bounds need the union
 // of children's boxes, and combining two rotations needs matrices.
 
-export const BLOCK_TAGS = new Set([
-	"scene-cube",
-	"scene-wall",
-	"scene-ramp",
-	"scene-group",
-]);
+export const BLOCK_TAGS = new Set(["scene-cube", "scene-wall", "scene-ramp", "scene-group"]);
 
-export const isBlock = (node: Element): boolean =>
-	BLOCK_TAGS.has(node.tagName.toLowerCase());
+export const isBlock = (node: Element): boolean => BLOCK_TAGS.has(node.tagName.toLowerCase());
 
 // The eight corners of a block and of every block inside it, in screen-px world space:
 //   world = accumulated · local, corner = world · (±extentX, ±extentY, ±extentZ)
@@ -26,9 +20,7 @@ export const blockCornersPx = (
 	const style = getComputedStyle(block as HTMLElement);
 	const transform = style.transform;
 	const local =
-		transform === "" || transform === "none"
-			? new DOMMatrix()
-			: new DOMMatrix(transform);
+		transform === "" || transform === "none" ? new DOMMatrix() : new DOMMatrix(transform);
 	const worldMatrix = accumulated.multiply(local);
 
 	const readExtent = (name: string): number => {
@@ -57,8 +49,7 @@ export const blockCornersPx = (
 
 	for (const child of Array.from(block.children)) {
 		if (!isBlock(child)) continue;
-		for (const corner of blockCornersPx(child, worldMatrix))
-			corners.push(corner);
+		for (const corner of blockCornersPx(child, worldMatrix)) corners.push(corner);
 	}
 	return corners;
 };
@@ -84,11 +75,7 @@ export const blocksBoundsPx = (blocks: Iterable<Element>): Bounds | null => {
 	}
 	if (min === null || max === null) return null;
 	return {
-		center: [
-			(min[0] + max[0]) / 2,
-			(min[1] + max[1]) / 2,
-			(min[2] + max[2]) / 2,
-		],
+		center: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
 		half: [(max[0] - min[0]) / 2, (max[1] - min[1]) / 2, (max[2] - min[2]) / 2],
 	};
 };
@@ -105,14 +92,8 @@ export const fromScreenPoint = (point: DOMPoint): Vector3 => [
 	point.z / UNIT_SIZE,
 ];
 
-export const rotationMatrix = ([
-	rotateX,
-	rotateY,
-	rotateZ,
-]: Vector3): DOMMatrix =>
-	new DOMMatrix(
-		`rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`,
-	);
+export const rotationMatrix = ([rotateX, rotateY, rotateZ]: Vector3): DOMMatrix =>
+	new DOMMatrix(`rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`);
 
 // What a block contributes to its children, in the same order every :host writes it
 // (size scales only the .body). A child lifts into the parent's frame through this.
@@ -120,9 +101,7 @@ export const frameMatrix = (position: Vector3, rotation: Vector3): DOMMatrix =>
 	new DOMMatrix(
 		`translate3d(${position[0] * UNIT_SIZE}px, ${-position[1] * UNIT_SIZE}px, ${
 			position[2] * UNIT_SIZE
-		}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${
-			rotation[2]
-		}deg)`,
+		}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg)`,
 	);
 
 // Decomposes R = Rx(a)·Ry(b)·Rz(c), frameMatrix's order, so a round trip is stable. With
@@ -154,9 +133,5 @@ export const eulerFromMatrix = (matrix: DOMMatrix): Vector3 => {
 		];
 	}
 	// Gimbal lock at ±90° pitch: X and Z couple, so fold the rotation into X.
-	return [
-		toDegrees(Math.atan2(sinPitch * xAxis.y, yAxis.y)),
-		toDegrees(pitch),
-		0,
-	];
+	return [toDegrees(Math.atan2(sinPitch * xAxis.y, yAxis.y)), toDegrees(pitch), 0];
 };

@@ -17,4 +17,6 @@ spikes
 
 .*
 .*/**
+!.oxfmtrc.json
+!.oxlintrc.json
 

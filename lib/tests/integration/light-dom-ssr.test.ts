@@ -4,12 +4,7 @@ import "./ssr-setup";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { html, component } from "../../src/index";
 import * as grundlage from "../../src/index";
-import {
-	ComponentConstructor,
-	ComponentOptions,
-	Schema,
-	PropDefinition,
-} from "../../src/types";
+import { ComponentConstructor, ComponentOptions, Schema, PropDefinition } from "../../src/types";
 
 //What the server *emits* for a light-DOM render (light-dom/PLAN.md §1.1, §3.5, §4.6, §5.1).
 //The claim that reads this output back is the browser half, in light-dom-ssr.browser.test.ts.
@@ -30,20 +25,15 @@ const light = <DeclaredSchema extends Schema>(
 //read off the class, never an instance: constructing one today throws inside
 //`attachShadow({ mode: "light" })`
 const lightModeShips =
-	Object.getOwnPropertyDescriptor(
-		component(function* () {}, light()).prototype,
-		"renderRoot",
-	) !== undefined;
-const slotsShip =
-	(Slot as unknown) !== undefined && (DefaultSlot as unknown) !== undefined;
+	Object.getOwnPropertyDescriptor(component(function* () {}, light()).prototype, "renderRoot") !==
+	undefined;
+const slotsShip = (Slot as unknown) !== undefined && (DefaultSlot as unknown) !== undefined;
 const ships = lightModeShips && slotsShip;
 
 const LIGHT_DOM_ATTRIBUTE = "light-dom";
 const SLOT_SCOPE_ATTRIBUTE = "slot-scope";
-const slotOpenMarker = (scope: string, key: string) =>
-	`<!--^.^ slot-${scope}-${key}-->`;
-const slotCloseMarker = (scope: string, key: string) =>
-	`<!--^.^ /slot-${scope}-${key}-->`;
+const slotOpenMarker = (scope: string, key: string) => `<!--^.^ slot-${scope}-${key}-->`;
+const slotCloseMarker = (scope: string, key: string) => `<!--^.^ /slot-${scope}-${key}-->`;
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -181,33 +171,28 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 			);
 
 			const scope = element.getAttribute(SLOT_SCOPE_ATTRIBUTE)!;
-			expect(serializedRenderOf(element)).toContain(
-				slotOpenMarker(scope, "body"),
-			);
+			expect(serializedRenderOf(element)).toContain(slotOpenMarker(scope, "body"));
 		},
 	);
 
-	test.skipIf(!ships)(
-		"a declared slot the consumer left empty gets no pair at all",
-		async () => {
-			const element = await renderOnServer(
-				component(
-					function* (props) {
-						yield function* () {
-							yield html`<article>${props.heading}${props.footer}</article>`;
-						};
-					},
-					light({ heading: Slot, footer: Slot }),
-				),
-				`<h2 slot="heading">Ada</h2>`,
-			);
+	test.skipIf(!ships)("a declared slot the consumer left empty gets no pair at all", async () => {
+		const element = await renderOnServer(
+			component(
+				function* (props) {
+					yield function* () {
+						yield html`<article>${props.heading}${props.footer}</article>`;
+					};
+				},
+				light({ heading: Slot, footer: Slot }),
+			),
+			`<h2 slot="heading">Ada</h2>`,
+		);
 
-			const scope = element.getAttribute(SLOT_SCOPE_ATTRIBUTE)!;
-			const serialized = serializedRenderOf(element);
-			expect(serialized).toContain(slotOpenMarker(scope, "heading"));
-			expect(serialized).not.toContain(slotOpenMarker(scope, "footer"));
-		},
-	);
+		const scope = element.getAttribute(SLOT_SCOPE_ATTRIBUTE)!;
+		const serialized = serializedRenderOf(element);
+		expect(serialized).toContain(slotOpenMarker(scope, "heading"));
+		expect(serialized).not.toContain(slotOpenMarker(scope, "footer"));
+	});
 
 	test.skipIf(!ships)(
 		"a host that adopted nothing is left without the attribute, which is the claim's early return",
@@ -242,34 +227,26 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 
 		const scope = element.getAttribute(SLOT_SCOPE_ATTRIBUTE);
 		expect(scope).not.toBeNull();
-		expect(element.shadowRoot!.innerHTML).toContain(
-			slotOpenMarker(scope!, "heading"),
-		);
+		expect(element.shadowRoot!.innerHTML).toContain(slotOpenMarker(scope!, "heading"));
 	});
 
-	test.skipIf(!ships)(
-		"two hosts in one subtree never share a scope",
-		async () => {
-			const define = () =>
-				component(
-					function* (props) {
-						yield function* () {
-							yield html`<article>${props.heading}</article>`;
-						};
-					},
-					light({ heading: Slot }),
-				);
-			const first = await renderOnServer(define(), `<h2 slot="heading">a</h2>`);
-			const second = await renderOnServer(
-				define(),
-				`<h2 slot="heading">b</h2>`,
+	test.skipIf(!ships)("two hosts in one subtree never share a scope", async () => {
+		const define = () =>
+			component(
+				function* (props) {
+					yield function* () {
+						yield html`<article>${props.heading}</article>`;
+					};
+				},
+				light({ heading: Slot }),
 			);
+		const first = await renderOnServer(define(), `<h2 slot="heading">a</h2>`);
+		const second = await renderOnServer(define(), `<h2 slot="heading">b</h2>`);
 
-			expect(first.getAttribute(SLOT_SCOPE_ATTRIBUTE)).not.toBe(
-				second.getAttribute(SLOT_SCOPE_ATTRIBUTE),
-			);
-		},
-	);
+		expect(first.getAttribute(SLOT_SCOPE_ATTRIBUTE)).not.toBe(
+			second.getAttribute(SLOT_SCOPE_ATTRIBUTE),
+		);
+	});
 
 	test.skipIf(!ships)(
 		"a hyphenated key stays unambiguous against a multi-digit scope",
@@ -292,9 +269,7 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 
 			const scope = element.getAttribute(SLOT_SCOPE_ATTRIBUTE)!;
 			expect(scope.length).toBeGreaterThan(1);
-			expect(serializedRenderOf(element)).toContain(
-				slotOpenMarker(scope, "sub-title"),
-			);
+			expect(serializedRenderOf(element)).toContain(slotOpenMarker(scope, "sub-title"));
 		},
 	);
 });
@@ -310,70 +285,51 @@ describe("§4.6 / R24 — the discard warning, on the side that knows", () => {
 			light({ heading: Slot }),
 		);
 
-	test.skipIf(!ships)(
-		"a light host names the count of children no entry claims",
-		async () => {
-			const calls = await warningsFrom(() =>
-				renderOnServer(
-					cardWithNoNoteSlot(),
-					`<h2 slot="heading">Ada</h2><p slot="note">one</p><p slot="note">two</p>`,
-				),
-			);
-
-			expect(calls.length).toBe(1);
-			expect(String(calls[0][0])).toContain("2 of its children");
-			expect(calls[0][1]).toHaveLength(2);
-		},
-	);
-
-	test.skipIf(!ships)(
-		"it fires while the discarded nodes are still in the document",
-		async () => {
-			let connectedAtWarnTime: boolean | null = null;
-			const consoleWarn = vi
-				.spyOn(console, "warn")
-				.mockImplementation((_message, discarded) => {
-					connectedAtWarnTime = (discarded as Array<ChildNode>).every(
-						(node) => node.isConnected,
-					);
-				});
-			await renderOnServer(
+	test.skipIf(!ships)("a light host names the count of children no entry claims", async () => {
+		const calls = await warningsFrom(() =>
+			renderOnServer(
 				cardWithNoNoteSlot(),
-				`<h2 slot="heading">Ada</h2><p slot="note">lost</p>`,
-			);
-			consoleWarn.mockRestore();
+				`<h2 slot="heading">Ada</h2><p slot="note">one</p><p slot="note">two</p>`,
+			),
+		);
 
-			expect(connectedAtWarnTime).toBe(true);
-		},
-	);
+		expect(calls.length).toBe(1);
+		expect(String(calls[0][0])).toContain("2 of its children");
+		expect(calls[0][1]).toHaveLength(2);
+	});
 
-	test.skipIf(!ships)(
-		"whitespace between elements is not a discarded child",
-		async () => {
-			const calls = await warningsFrom(() =>
-				renderOnServer(
-					cardWithNoNoteSlot(),
-					`\n\t<h2 slot="heading">Ada</h2>\n`,
-				),
-			);
+	test.skipIf(!ships)("it fires while the discarded nodes are still in the document", async () => {
+		let connectedAtWarnTime: boolean | null = null;
+		const consoleWarn = vi.spyOn(console, "warn").mockImplementation((_message, discarded) => {
+			connectedAtWarnTime = (discarded as Array<ChildNode>).every((node) => node.isConnected);
+		});
+		await renderOnServer(
+			cardWithNoNoteSlot(),
+			`<h2 slot="heading">Ada</h2><p slot="note">lost</p>`,
+		);
+		consoleWarn.mockRestore();
 
-			expect(calls).toHaveLength(0);
-		},
-	);
+		expect(connectedAtWarnTime).toBe(true);
+	});
 
-	test.skipIf(!ships)(
-		"an SSR payload script is not a discarded child",
-		async () => {
-			const calls = await warningsFrom(() =>
-				renderOnServer(
-					cardWithNoNoteSlot(),
-					`<script type="application/json" data-ssr>{"name":"Ada"}</script><h2 slot="heading">Ada</h2>`,
-				),
-			);
+	test.skipIf(!ships)("whitespace between elements is not a discarded child", async () => {
+		const calls = await warningsFrom(() =>
+			renderOnServer(cardWithNoNoteSlot(), `\n\t<h2 slot="heading">Ada</h2>\n`),
+		);
 
-			expect(calls).toHaveLength(0);
-		},
-	);
+		expect(calls).toHaveLength(0);
+	});
+
+	test.skipIf(!ships)("an SSR payload script is not a discarded child", async () => {
+		const calls = await warningsFrom(() =>
+			renderOnServer(
+				cardWithNoNoteSlot(),
+				`<script type="application/json" data-ssr>{"name":"Ada"}</script><h2 slot="heading">Ada</h2>`,
+			),
+		);
+
+		expect(calls).toHaveLength(0);
+	});
 
 	test.skipIf(!ships)(
 		"shadow mode never warns: an unmatched child stays in the child list and nothing was destroyed",
@@ -401,9 +357,7 @@ describe("§5.1 / R27 — what a server fatal leaves behind", () => {
 	test.skipIf(!lightModeShips)(
 		"a fatal before the first paint flags the element and writes nothing into it",
 		async () => {
-			const consoleError = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
+			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 			const element = await renderOnServer(
 				component(function* () {
 					throw new Error("no data");
@@ -424,9 +378,7 @@ describe("§5.1 / R27 — what a server fatal leaves behind", () => {
 	test.skipIf(!lightModeShips)(
 		"a fatal after a good paint leaves that paint on screen, flagged",
 		async () => {
-			const consoleError = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
+			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 			const element = await renderOnServer(
 				component(function* () {
 					yield function* () {
@@ -446,9 +398,7 @@ describe("§5.1 / R27 — what a server fatal leaves behind", () => {
 	test.skipIf(!lightModeShips)(
 		"the flag never carries the message: it is serialized into shipped HTML",
 		async () => {
-			const consoleError = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
+			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 			const element = await renderOnServer(
 				component(function* () {
 					throw new Error("secret internal detail");

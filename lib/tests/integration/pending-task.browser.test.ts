@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { awaited, component, html, load } from "../../src/index";
 
-const sleep = (milliseconds = 0) =>
-	new Promise((resolve) => setTimeout(resolve, milliseconds));
+const sleep = (milliseconds = 0) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 //the same browser plays the server: the flag is what isServer() reads
 const serverFlagHolder = globalThis as { __grundlage_ssr__?: boolean };

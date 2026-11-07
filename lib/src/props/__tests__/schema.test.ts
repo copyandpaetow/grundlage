@@ -8,16 +8,14 @@ class Quote {
 	constructor(readonly text: string) {}
 }
 
-const asQuote = (incoming: unknown) =>
-	incoming instanceof Quote ? incoming : undefined;
+const asQuote = (incoming: unknown) => (incoming instanceof Quote ? incoming : undefined);
 
 const takeAsIs = (incoming: unknown) => incoming;
 
 const seed = (schema: Schema): Record<string, unknown> => {
 	const props = normalizeSchema(schema);
 	const values: Record<string, unknown> = {};
-	for (const prop of props.values())
-		values[prop.propName] = prop.resolve(undefined);
+	for (const prop of props.values()) values[prop.propName] = prop.resolve(undefined);
 	return values;
 };
 
@@ -46,12 +44,7 @@ describe("normalization", () => {
 			parseHTML: prop.optional(prop.attribute(String)),
 			ariaLabel: prop.optional(prop.attribute(String)),
 		});
-		expect([...props.keys()]).toEqual([
-			"userid",
-			"activeuserid",
-			"parsehtml",
-			"arialabel",
-		]);
+		expect([...props.keys()]).toEqual(["userid", "activeuserid", "parsehtml", "arialabel"]);
 	});
 
 	test("names the platform can carry are kept verbatim", () => {
@@ -62,28 +55,22 @@ describe("normalization", () => {
 			count2: prop.optional(prop.attribute(Number)),
 			x: prop.optional(prop.attribute(Number)),
 		});
-		expect([...props.keys()]).toEqual([
-			"userid",
-			"user-id",
-			"user_id",
-			"count2",
-			"x",
-		]);
+		expect([...props.keys()]).toEqual(["userid", "user-id", "user_id", "count2", "x"]);
 	});
 
 	test.each(["UserId", "2fast", "-lead", "user id", "user.id", ""])(
 		"rejects the prop name %j",
 		(propName) => {
-			expect(() =>
-				normalizeSchema({ [propName]: prop.optional(prop.attribute(String)) }),
-			).toThrow(/must start with a lowercase letter/);
+			expect(() => normalizeSchema({ [propName]: prop.optional(prop.attribute(String)) })).toThrow(
+				/must start with a lowercase letter/,
+			);
 		},
 	);
 
 	test('"on-" is a custom event binding, so no prop can claim it', () => {
-		expect(() =>
-			normalizeSchema({ "on-select": prop.optional(prop.attribute(takeAsIs)) }),
-		).toThrow(/is reserved/);
+		expect(() => normalizeSchema({ "on-select": prop.optional(prop.attribute(takeAsIs)) })).toThrow(
+			/is reserved/,
+		);
 	});
 
 	test('a name merely starting with "on" is fine — the binding checks props first', () => {
@@ -96,9 +83,9 @@ describe("normalization", () => {
 	});
 
 	test("host is reserved for the props object itself", () => {
-		expect(() =>
-			normalizeSchema({ host: prop.optional(prop.attribute(String)) }),
-		).toThrow(/"host" is reserved/);
+		expect(() => normalizeSchema({ host: prop.optional(prop.attribute(String)) })).toThrow(
+			/"host" is reserved/,
+		);
 	});
 
 	test("a collision names both offending keys", () => {
@@ -149,19 +136,16 @@ describe("reserved names", () => {
 		update(): void {}
 	}
 
-	test.each(["title", "update"])(
-		"%s is already on the prototype chain",
-		(propName) => {
-			expect(() =>
-				ensurePropNamesAreAvailable(
-					FakeBase.prototype,
-					normalizeSchema({
-						[propName]: prop.optional(prop.attribute(String)),
-					}),
-				),
-			).toThrow(/already a property on the element/);
-		},
-	);
+	test.each(["title", "update"])("%s is already on the prototype chain", (propName) => {
+		expect(() =>
+			ensurePropNamesAreAvailable(
+				FakeBase.prototype,
+				normalizeSchema({
+					[propName]: prop.optional(prop.attribute(String)),
+				}),
+			),
+		).toThrow(/already a property on the element/);
+	});
 
 	test("a free name passes", () => {
 		expect(() =>
@@ -232,15 +216,13 @@ describe("fallbacks", () => {
 
 	test("a template fallback is shared rather than copied, handlers and all", () => {
 		const template = html`<footer onClick=${() => {}}>made with &lt;3</footer>`;
-		expect(seed({ footer: prop.attribute(takeAsIs, template) }).footer).toBe(
-			template,
-		);
+		expect(seed({ footer: prop.attribute(takeAsIs, template) }).footer).toBe(template);
 	});
 
 	test("a class instance is refused at definition time: the copy loses its prototype", () => {
-		expect(() =>
-			normalizeSchema({ quote: prop.attribute(asQuote, new Quote("hi")) }),
-		).toThrow(/cannot be copied for each element.*loses its prototype/);
+		expect(() => normalizeSchema({ quote: prop.attribute(asQuote, new Quote("hi")) })).toThrow(
+			/cannot be copied for each element.*loses its prototype/,
+		);
 	});
 
 	test("a fallback holding a function is refused at definition time: the copy throws", () => {
@@ -252,8 +234,7 @@ describe("fallbacks", () => {
 	});
 
 	test("a Date survives the copy, so it is a fallback like any other", () => {
-		const when = seed({ when: prop.attribute(takeAsIs, new Date(0)) })
-			.when as Date;
+		const when = seed({ when: prop.attribute(takeAsIs, new Date(0)) }).when as Date;
 		expect(when).toBeInstanceOf(Date);
 		expect(when.getTime()).toBe(0);
 	});

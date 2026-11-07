@@ -33,8 +33,5 @@ export const hydrateTemplateContent = (
 	liveBinding: TemplateContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	liveBinding.lastValueHash = combinedPartsHash(
-		liveBinding.staticBinding.valueIndices,
-		values,
-	);
+	liveBinding.lastValueHash = combinedPartsHash(liveBinding.staticBinding.valueIndices, values);
 };

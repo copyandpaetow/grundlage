@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 //content values are chosen distinct so the exact-content-hash pass never claims a row;
 //this isolates the key match path (reorder/insert/remove tracked by key, not content)
@@ -40,11 +39,9 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 	const update = (element: HTMLElement) =>
 		(element as HTMLElement & { update: () => Promise<void> }).update();
 
-	const rows = (element: HTMLElement) =>
-		Array.from(element.shadowRoot!.querySelectorAll("li"));
+	const rows = (element: HTMLElement) => Array.from(element.shadowRoot!.querySelectorAll("li"));
 
-	const texts = (list: Array<Element>) =>
-		list.map((li) => li.textContent?.trim());
+	const texts = (list: Array<Element>) => list.map((li) => li.textContent?.trim());
 
 	test("a key preserves a row's node across a reorder that also changes its content", async () => {
 		let items: Array<Row> = [
@@ -127,9 +124,7 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 
 		const [aNode, bNode, cNode] = rows(element);
 
-		items = items.map((row) =>
-			row.id === "b" ? { ...row, isEditing: true } : row,
-		);
+		items = items.map((row) => (row.id === "b" ? { ...row, isEditing: true } : row));
 		await update(element);
 		await sleep();
 
@@ -174,9 +169,7 @@ describe("keyed lists (dynamic-comment escape hatch)", () => {
 				component(function* () {
 					yield function* () {
 						yield html`<ul>
-							${[1, id, 2].map((rowId) =>
-								rowId === editedId ? editRow(rowId) : viewRow(rowId),
-							)}
+							${[1, id, 2].map((rowId) => (rowId === editedId ? editRow(rowId) : viewRow(rowId)))}
 						</ul>`;
 					};
 				}),

@@ -16,10 +16,7 @@ export type PlacementApi = {
 	dropPlacement: () => void;
 };
 
-export const createPlacement = (
-	state: EditorState,
-	deps: PlacementDeps,
-): PlacementApi => {
+export const createPlacement = (state: EditorState, deps: PlacementDeps): PlacementApi => {
 	const cancelPlacement = (): void => {
 		if (state.placement === null) return;
 		state.placement.ghost.remove();

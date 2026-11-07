@@ -9,8 +9,7 @@ const created: HTMLElement[] = [];
 
 const mountCube = (attributes: Record<string, string>): HTMLElement => {
 	const cube = document.createElement("scene-cube");
-	for (const [name, value] of Object.entries(attributes))
-		cube.setAttribute(name, value);
+	for (const [name, value] of Object.entries(attributes)) cube.setAttribute(name, value);
 	document.body.appendChild(cube);
 	created.push(cube);
 	return cube;
@@ -28,10 +27,7 @@ describe("scene-cube size", () => {
 	test("a size of 2 paints faces twice as wide as a size of 1", () => {
 		const unitCube = mountCube({});
 		const doubleCube = mountCube({ size: "2" });
-		expect(frontFace(doubleCube).width).toBeCloseTo(
-			frontFace(unitCube).width * 2,
-			1,
-		);
+		expect(frontFace(doubleCube).width).toBeCloseTo(frontFace(unitCube).width * 2, 1);
 	});
 
 	test("a nested cube keeps the world grid inside a sized parent", () => {

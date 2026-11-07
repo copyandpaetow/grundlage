@@ -35,8 +35,7 @@ export interface StandardSchemaV1<Input = unknown, Output = Input> {
 		readonly validate: (
 			value: unknown,
 		) => StandardSchemaResult<Output> | Promise<StandardSchemaResult<Output>>;
-		readonly types?:
-			{ readonly input: Input; readonly output: Output } | undefined;
+		readonly types?: { readonly input: Input; readonly output: Output } | undefined;
 	};
 }
 
@@ -44,22 +43,21 @@ export type StandardSchemaResult<Output> =
 	| { readonly value: Output; readonly issues?: undefined }
 	| { readonly issues: ReadonlyArray<{ readonly message: string }> };
 
-export type StandardSchemaOutput<
-	DeclaredStandardSchema extends StandardSchemaV1,
-> = NonNullable<DeclaredStandardSchema["~standard"]["types"]>["output"];
+export type StandardSchemaOutput<DeclaredStandardSchema extends StandardSchemaV1> = NonNullable<
+	DeclaredStandardSchema["~standard"]["types"]
+>["output"];
 
-export type ParsedValueOf<DeclaredParser> =
-	DeclaredParser extends StringConstructor
-		? string
-		: DeclaredParser extends NumberConstructor
-			? number
-			: DeclaredParser extends BigIntConstructor
-				? bigint
-				: DeclaredParser extends BooleanConstructor
-					? boolean
-					: DeclaredParser extends (incoming: never) => infer Value
-						? Exclude<Value, undefined>
-						: never;
+export type ParsedValueOf<DeclaredParser> = DeclaredParser extends StringConstructor
+	? string
+	: DeclaredParser extends NumberConstructor
+		? number
+		: DeclaredParser extends BigIntConstructor
+			? bigint
+			: DeclaredParser extends BooleanConstructor
+				? boolean
+				: DeclaredParser extends (incoming: never) => infer Value
+					? Exclude<Value, undefined>
+					: never;
 
 //type-level only: who must supply the value (Presence) and whether the markup can (Kind) decide which
 //wrappers a definition accepts and which keys a caller may leave out
@@ -89,10 +87,7 @@ type ValueOfDefinition<Definition> =
 	Definition extends PropDefinition<infer Value, Presence> ? Value : never;
 
 type KeysWithPresence<DeclaredSchema, PresenceKind extends Presence> = {
-	[Name in keyof DeclaredSchema]: DeclaredSchema[Name] extends PropDefinition<
-		any,
-		PresenceKind
-	>
+	[Name in keyof DeclaredSchema]: DeclaredSchema[Name] extends PropDefinition<any, PresenceKind>
 		? Name
 		: never;
 }[keyof DeclaredSchema];
@@ -103,10 +98,7 @@ type Flatten<Shape> = { [Name in keyof Shape]: Shape[Name] } & {};
 export type PropsOf<DeclaredSchema> = Flatten<
 	{
 		[
-			Name in Exclude<
-				keyof DeclaredSchema,
-				KeysWithPresence<DeclaredSchema, "optional">
-			>
+			Name in Exclude<keyof DeclaredSchema, KeysWithPresence<DeclaredSchema, "optional">>
 		]: ValueOfDefinition<DeclaredSchema[Name]>;
 	} & {
 		[Name in KeysWithPresence<DeclaredSchema, "optional">]?: ValueOfDefinition<
@@ -117,12 +109,10 @@ export type PropsOf<DeclaredSchema> = Flatten<
 
 //a snapshot read from an element: a required prop nothing has set yet is undefined
 export type ReadPropsOf<DeclaredSchema> = Flatten<
-	Omit<
-		PropsOf<DeclaredSchema>,
-		KeysWithPresence<DeclaredSchema, "required">
-	> & {
+	Omit<PropsOf<DeclaredSchema>, KeysWithPresence<DeclaredSchema, "required">> & {
 		[Name in KeysWithPresence<DeclaredSchema, "required">]:
-			ValueOfDefinition<DeclaredSchema[Name]> | undefined;
+			| ValueOfDefinition<DeclaredSchema[Name]>
+			| undefined;
 	}
 >;
 
@@ -141,15 +131,10 @@ type HostPropsOf<DeclaredSchema> = {
 //the caller's view: only a required prop must be passed
 export type PassedPropsOf<DeclaredSchema> = Flatten<
 	{
-		[Name in KeysWithPresence<DeclaredSchema, "required">]: ValueOfDefinition<
-			DeclaredSchema[Name]
-		>;
+		[Name in KeysWithPresence<DeclaredSchema, "required">]: ValueOfDefinition<DeclaredSchema[Name]>;
 	} & {
 		[
-			Name in Exclude<
-				keyof DeclaredSchema,
-				KeysWithPresence<DeclaredSchema, "required">
-			>
+			Name in Exclude<keyof DeclaredSchema, KeysWithPresence<DeclaredSchema, "required">>
 		]?: ValueOfDefinition<DeclaredSchema[Name]>;
 	}
 >;
@@ -161,17 +146,19 @@ export type ComponentProps<DeclaredSchema extends Schema = Schema> = Readonly<
 };
 
 //partial: every ShadowRootInit field has a default, and any option passed overrides its default
-export type ComponentOptions<DeclaredSchema extends Schema = Schema> =
-	Partial<ShadowRootInit> & {
-		formAssociated?: boolean;
-		clonable?: boolean;
-		props?: DeclaredSchema;
-	};
+export type ComponentOptions<DeclaredSchema extends Schema = Schema> = Partial<ShadowRootInit> & {
+	formAssociated?: boolean;
+	clonable?: boolean;
+	props?: DeclaredSchema;
+};
 
 //a promise resumes the generator with its value, a template paints once, an update generator re-runs
 //on every update, and a load request is the one `yield* load(…)` makes
 export type YieldableValue<DeclaredSchema extends Schema = Schema> =
-	Template | Promise<unknown> | UpdateGenerator<DeclaredSchema> | LoadRequest;
+	| Template
+	| Promise<unknown>
+	| UpdateGenerator<DeclaredSchema>
+	| LoadRequest;
 
 export type Cleanup = () => void;
 
@@ -185,5 +172,5 @@ export type ComponentGenerator<DeclaredSchema extends Schema = Schema> = (
 	componentProps: ComponentProps<DeclaredSchema>,
 ) => Generator<YieldableValue<DeclaredSchema>, Cleanup | void, unknown>;
 
-export type ComponentConstructor<DeclaredSchema extends Schema = Schema> =
-	new () => BaseComponent & HostPropsOf<DeclaredSchema>;
+export type ComponentConstructor<DeclaredSchema extends Schema = Schema> = new () => BaseComponent &
+	HostPropsOf<DeclaredSchema>;

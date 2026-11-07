@@ -9,8 +9,7 @@ const CAGE_MARGIN = 6;
 
 let cage: HTMLElement & { update: () => Promise<void> };
 
-const flush = (): Promise<void> =>
-	new Promise((resolve) => queueMicrotask(resolve));
+const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
 
 // Left un-upgraded, so nothing depends on the shapes' own rendering
 const makeLeaf = (offsetX: number): HTMLElement => {
@@ -25,9 +24,7 @@ const makeLeaf = (offsetX: number): HTMLElement => {
 // The cage paints the shared placement sheets first, so the box lives in whichever
 // :host rule declares the variable.
 const boxVariable = (name: string): string => {
-	for (const style of Array.from(
-		cage.shadowRoot?.querySelectorAll("style") ?? [],
-	)) {
+	for (const style of Array.from(cage.shadowRoot?.querySelectorAll("style") ?? [])) {
 		for (const rule of Array.from(style.sheet?.cssRules ?? [])) {
 			const styleRule = rule as CSSStyleRule;
 			if (styleRule.selectorText !== ":host") continue;

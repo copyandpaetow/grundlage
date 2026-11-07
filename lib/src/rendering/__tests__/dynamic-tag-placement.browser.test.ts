@@ -1,13 +1,7 @@
 import { describe, expect, test } from "vitest";
-import {
-	html,
-	component,
-	ComponentErrorEvent,
-	type Template,
-} from "../../index";
+import { html, component, ComponentErrorEvent, type Template } from "../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("dynamic tag placement", () => {
 	let tagId = 0;
@@ -54,9 +48,7 @@ describe("dynamic tag placement", () => {
 		);
 
 		expect(errors).toHaveLength(1);
-		expect(String(errors[0])).toMatch(
-			/inside <tbody> was moved by the HTML parser/,
-		);
+		expect(String(errors[0])).toMatch(/inside <tbody> was moved by the HTML parser/);
 		expect(shadowMarkup).not.toContain("<table>");
 	});
 
@@ -67,8 +59,6 @@ describe("dynamic tag placement", () => {
 		);
 
 		expect(errors).toEqual([]);
-		expect(shadowMarkup.replace(/<!--[\s\S]*?-->/g, "")).toBe(
-			"<ul><li>a</li></ul>",
-		);
+		expect(shadowMarkup.replace(/<!--[\s\S]*?-->/g, "")).toBe("<ul><li>a</li></ul>");
 	});
 });

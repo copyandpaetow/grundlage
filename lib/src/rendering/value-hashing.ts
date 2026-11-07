@@ -104,13 +104,9 @@ const mixReferenceIntoWalk = (id: number): void => {
 
 const mixNumberIntoWalk = (numberValue: number): void => {
 	if (numberValue === (numberValue | 0)) {
-		const fitsBesideTag =
-			numberValue >= -SMALL_INTEGER_LIMIT && numberValue < SMALL_INTEGER_LIMIT;
+		const fitsBesideTag = numberValue >= -SMALL_INTEGER_LIMIT && numberValue < SMALL_INTEGER_LIMIT;
 		if (fitsBesideTag) {
-			mixWordIntoLanes(
-				walkLanes,
-				(TAG.SMALL_INTEGER << TAG_SHIFT) | (numberValue & PAYLOAD_MASK),
-			);
+			mixWordIntoLanes(walkLanes, (TAG.SMALL_INTEGER << TAG_SHIFT) | (numberValue & PAYLOAD_MASK));
 			return;
 		}
 		mixWordIntoLanes(walkLanes, TAG.INTEGER << TAG_SHIFT);
@@ -128,40 +124,28 @@ const mixNumberIntoWalk = (numberValue: number): void => {
 const walkTemplate = (value: TemplateValue, depth: number): void => {
 	countWalkVisit();
 	const { templateHash } = getParsedTemplate(value.__templateStrings);
-	mixWordIntoLanes(
-		walkLanes,
-		(TAG.TEMPLATE << TAG_SHIFT) | value.values.length,
-	);
+	mixWordIntoLanes(walkLanes, (TAG.TEMPLATE << TAG_SHIFT) | value.values.length);
 	mixWordIntoLanes(walkLanes, lowWordOf(templateHash));
 	mixWordIntoLanes(walkLanes, highWordOf(templateHash));
-	for (let index = 0; index < value.values.length; index++)
-		walkValue(value.values[index], depth);
+	for (let index = 0; index < value.values.length; index++) walkValue(value.values[index], depth);
 };
 
 //exact constructors: subclasses and null-prototype objects are hashed by reference
-const isPlainObject = (value: {}): value is Record<string, unknown> =>
-	value.constructor === Object;
-const isExactlyMap = (value: {}): value is Map<unknown, unknown> =>
-	value.constructor === Map;
-const isExactlySet = (value: {}): value is Set<unknown> =>
-	value.constructor === Set;
+const isPlainObject = (value: {}): value is Record<string, unknown> => value.constructor === Object;
+const isExactlyMap = (value: {}): value is Map<unknown, unknown> => value.constructor === Map;
+const isExactlySet = (value: {}): value is Set<unknown> => value.constructor === Set;
 
 const walkContainerContents = (container: {}, childDepth: number): void => {
 	if (Array.isArray(container)) {
 		mixWordIntoLanes(walkLanes, (TAG.ARRAY << TAG_SHIFT) | container.length);
-		for (let index = 0; index < container.length; index++)
-			walkValue(container[index], childDepth);
+		for (let index = 0; index < container.length; index++) walkValue(container[index], childDepth);
 		return;
 	}
 
 	if (isPlainObject(container)) {
 		mixWordIntoLanes(walkLanes, TAG.OBJECT << TAG_SHIFT);
 		for (const name in container) {
-			mixTextIntoLanes(
-				walkLanes,
-				(TAG.STRING << TAG_SHIFT) | name.length,
-				name,
-			);
+			mixTextIntoLanes(walkLanes, (TAG.STRING << TAG_SHIFT) | name.length, name);
 			walkValue(container[name], childDepth);
 		}
 		mixWordIntoLanes(walkLanes, TAG.OBJECT_END << TAG_SHIFT);
@@ -195,10 +179,7 @@ const walkObject = (value: object, depth: number): void => {
 		return;
 	}
 	const isWalkedContainer =
-		Array.isArray(value) ||
-		isPlainObject(value) ||
-		isExactlyMap(value) ||
-		isExactlySet(value);
+		Array.isArray(value) || isPlainObject(value) || isExactlyMap(value) || isExactlySet(value);
 	//walking class instances, Date, typed arrays and null-prototype objects costs every paint for
 	//values that are rarely mutated in place; an in-place change to one of them is not noticed
 	if (!isWalkedContainer) {
@@ -220,11 +201,7 @@ const walkObject = (value: object, depth: number): void => {
 const walkValue = (value: unknown, depth: number): void => {
 	switch (typeof value) {
 		case "string":
-			mixTextIntoLanes(
-				walkLanes,
-				(TAG.STRING << TAG_SHIFT) | value.length,
-				value,
-			);
+			mixTextIntoLanes(walkLanes, (TAG.STRING << TAG_SHIFT) | value.length, value);
 			return;
 		case "number":
 			mixNumberIntoWalk(value);
@@ -237,11 +214,7 @@ const walkValue = (value: unknown, depth: number): void => {
 			return;
 		case "bigint": {
 			const digits = String(value);
-			mixTextIntoLanes(
-				walkLanes,
-				(TAG.BIGINT << TAG_SHIFT) | digits.length,
-				digits,
-			);
+			mixTextIntoLanes(walkLanes, (TAG.BIGINT << TAG_SHIFT) | digits.length, digits);
 			return;
 		}
 		case "function":

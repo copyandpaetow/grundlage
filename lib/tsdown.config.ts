@@ -56,11 +56,7 @@ const readPlatformNames = (): Array<string> => {
 	);
 	return readdirSync(typingsDirectory)
 		.filter((file) => file.startsWith("lib.") && file.endsWith(".d.ts"))
-		.flatMap(
-			(file) =>
-				readFileSync(join(typingsDirectory, file), "utf8").match(/[\w$]+/g) ??
-				[],
-		);
+		.flatMap((file) => readFileSync(join(typingsDirectory, file), "utf8").match(/[\w$]+/g) ?? []);
 };
 
 const sharedOptions: UserConfig = {

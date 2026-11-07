@@ -32,8 +32,7 @@ export const writeViewPoint = (
 	const yawedZ = offsetX * view.yawSine + offsetZ * view.yawCosine;
 	viewPoint.x = offsetX * view.yawCosine - offsetZ * view.yawSine;
 	viewPoint.y = offsetY * view.pitchCosine + yawedZ * view.pitchSine;
-	viewPoint.depth =
-		view.orbitRadius - (-offsetY * view.pitchSine + yawedZ * view.pitchCosine);
+	viewPoint.depth = view.orbitRadius - (-offsetY * view.pitchSine + yawedZ * view.pitchCosine);
 };
 
 export const createView = (): View => ({

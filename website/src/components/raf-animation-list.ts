@@ -19,11 +19,7 @@ interface Measurement {
 }
 
 const classWhenLowerIsBetter = (current: number, previous: number): string =>
-	current < previous * 0.98
-		? "improve"
-		: current > previous * 1.02
-			? "regress"
-			: "";
+	current < previous * 0.98 ? "improve" : current > previous * 1.02 ? "regress" : "";
 
 /*
     Window-mode probe. A self-driving animated list where every bar changes
@@ -66,9 +62,7 @@ customElements.define(
 
 		// Observe only the animating list, not the controls/result chrome.
 		const barsRoot = (): Node =>
-			element.shadowRoot?.querySelector(".bars") ??
-			element.shadowRoot ??
-			element;
+			element.shadowRoot?.querySelector(".bars") ?? element.shadowRoot ?? element;
 
 		const measure = async () => {
 			if (isMeasuring) return;
@@ -121,24 +115,16 @@ customElements.define(
 			};
 		};
 
-		const formatLabel = (index: number) =>
-			`b${index.toString().padStart(2, "0")}`;
+		const formatLabel = (index: number) => `b${index.toString().padStart(2, "0")}`;
 
 		const formatNumber = (value: number, digits = 2) => value.toFixed(digits);
 
 		// One result row: the current value, plus a colored delta against the
 		// baseline when one is saved.
-		const metricRow = (
-			label: string,
-			formatted: string,
-			delta: string,
-			deltaClass: string,
-		) => html`
+		const metricRow = (label: string, formatted: string, delta: string, deltaClass: string) => html`
 			<span>${label}</span>
 			<span
-				>${formatted}${
-					delta ? html` <span class="delta ${deltaClass}">${delta}</span>` : ""
-				}</span
+				>${formatted}${delta ? html` <span class="delta ${deltaClass}">${delta}</span>` : ""}</span
 			>
 		`;
 
@@ -272,17 +258,9 @@ customElements.define(
 										${metricRow(
 											"min update",
 											`${formatNumber(driven.minAppliedMs, 3)} ms`,
+											base ? formatDelta(driven.minAppliedMs, base.driven.minAppliedMs) : "",
 											base
-												? formatDelta(
-														driven.minAppliedMs,
-														base.driven.minAppliedMs,
-													)
-												: "",
-											base
-												? classWhenLowerIsBetter(
-														driven.minAppliedMs,
-														base.driven.minAppliedMs,
-													)
+												? classWhenLowerIsBetter(driven.minAppliedMs, base.driven.minAppliedMs)
 												: "",
 										)}
 										${metricRow(
@@ -291,21 +269,11 @@ customElements.define(
 											"",
 											"",
 										)}
-										${metricRow(
-											"frames to paint",
-											String(driven.medianPaintedFrames),
-											"",
-											"",
-										)}
+										${metricRow("frames to paint", String(driven.medianPaintedFrames), "", "")}
 										${metricRow(
 											"writes / update",
 											String(driven.medianMutations),
-											base
-												? formatDelta(
-														driven.medianMutations,
-														base.driven.medianMutations,
-													)
-												: "",
+											base ? formatDelta(driven.medianMutations, base.driven.medianMutations) : "",
 											base
 												? classWhenLowerIsBetter(
 														driven.medianMutations,

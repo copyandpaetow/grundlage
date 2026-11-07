@@ -26,18 +26,10 @@ const treeState = (): TreeState => ({
 	isTemplateContent: false,
 });
 
-const mountTemplateValue = (
-	value: TemplateValue,
-	treeStateValue: TreeState,
-) => {
+const mountTemplateValue = (value: TemplateValue, treeStateValue: TreeState) => {
 	const parsed = getParsedTemplate(value.__templateStrings);
 	const fragment = cloneTemplateFragment(parsed, null);
-	const instance = mountInstance(
-		fragment,
-		value.values,
-		parsed,
-		treeStateValue,
-	);
+	const instance = mountInstance(fragment, value.values, parsed, treeStateValue);
 	return { instance, fragment };
 };
 
@@ -65,18 +57,13 @@ const hydrateShadowRoot = (
 		treeState,
 	);
 
-const instanceOrThrow = (
-	instance: Instance | typeof HYDRATION_MISMATCH,
-): Instance => {
-	if (instance === HYDRATION_MISMATCH)
-		throw new Error("expected the server range to hydrate");
+const instanceOrThrow = (instance: Instance | typeof HYDRATION_MISMATCH): Instance => {
+	if (instance === HYDRATION_MISMATCH) throw new Error("expected the server range to hydrate");
 	return instance;
 };
 
 const textNodeOf = (element: Element): Text =>
-	Array.from(element.childNodes).find(
-		(node) => node.nodeType === Node.TEXT_NODE,
-	) as Text;
+	Array.from(element.childNodes).find((node) => node.nodeType === Node.TEXT_NODE) as Text;
 
 describe("template value hashing", () => {
 	test("hash changes when an expression changes at the same call site", () => {
@@ -98,9 +85,7 @@ describe("template value hashing", () => {
 describe("parseNestedTemplate: host binding requirement", () => {
 	test("throws when a root template with host bindings is nested", () => {
 		const value = html`<template id="${"missing-host"}"><p>hi</p></template>`;
-		expect(
-			getParsedTemplate(value.__templateStrings).hostBindingCount,
-		).toBeGreaterThan(0);
+		expect(getParsedTemplate(value.__templateStrings).hostBindingCount).toBeGreaterThan(0);
 		expect(() => parseNestedTemplate(value)).toThrow(
 			/top level of the template a component yields/,
 		);
@@ -113,9 +98,9 @@ describe("parseNestedTemplate: host binding requirement", () => {
 
 	test("mounting a parent whose content is a nested root template throws", () => {
 		const inner = html`<template class="leak"><p>x</p></template>`;
-		expect(() =>
-			mountTemplateValue(html`<div>${inner}</div>`, treeState()),
-		).toThrow(/top level of the template a component yields/);
+		expect(() => mountTemplateValue(html`<div>${inner}</div>`, treeState())).toThrow(
+			/top level of the template a component yields/,
+		);
 	});
 
 	test("mounting a list whose item is a root template throws", () => {
@@ -133,10 +118,7 @@ describe("parseNestedTemplate: host binding requirement", () => {
 
 describe("mountInstance: fragment + live-binding wiring", () => {
 	test("produces a DocumentFragment with the parsed shape", () => {
-		const { fragment } = mountTemplateValue(
-			html`<section><p>${"hi"}</p></section>`,
-			treeState(),
-		);
+		const { fragment } = mountTemplateValue(html`<section><p>${"hi"}</p></section>`, treeState());
 		expect(fragment.querySelector("section")).not.toBeNull();
 		expect(fragment.querySelector("p")?.textContent).toContain("hi");
 	});
@@ -155,34 +137,25 @@ describe("isPatchableInPlace: patch vs rebuild", () => {
 		const paragraph = (value: string) => html`<p class="${value}">x</p>`;
 		const { instance } = mountTemplateValue(paragraph("a"), treeState());
 		const next = paragraph("b");
-		expect(
-			isPatchableInPlace(instance, getParsedTemplate(next.__templateStrings)),
-		).toBe(true);
+		expect(isPatchableInPlace(instance, getParsedTemplate(next.__templateStrings))).toBe(true);
 	});
 
 	test("rebuilds when the structure differs", () => {
 		const { instance } = mountTemplateValue(html`<p>${"a"}</p>`, treeState());
 		const next = html`<span>${"a"}</span>`;
-		expect(
-			isPatchableInPlace(instance, getParsedTemplate(next.__templateStrings)),
-		).toBe(false);
+		expect(isPatchableInPlace(instance, getParsedTemplate(next.__templateStrings))).toBe(false);
 	});
 
 	test("a first paint has no instance to patch", () => {
 		const value = html`<p>${"a"}</p>`;
-		expect(
-			isPatchableInPlace(null, getParsedTemplate(value.__templateStrings)),
-		).toBe(false);
+		expect(isPatchableInPlace(null, getParsedTemplate(value.__templateStrings))).toBe(false);
 	});
 });
 
 describe("patchInstance: change detection", () => {
 	test("a changed attribute value is written to the DOM", () => {
 		const paragraph = (value: string) => html`<p class="${value}">${"hi"}</p>`;
-		const { instance, fragment } = mountTemplateValue(
-			paragraph("before"),
-			treeState(),
-		);
+		const { instance, fragment } = mountTemplateValue(paragraph("before"), treeState());
 		const element = fragment.querySelector("p")!;
 		expect(element.getAttribute("class")).toBe("before");
 
@@ -192,10 +165,7 @@ describe("patchInstance: change detection", () => {
 
 	test("a changed text expression updates the text node in place", () => {
 		const paragraph = (value: string) => html`<p>${value}</p>`;
-		const { instance, fragment } = mountTemplateValue(
-			paragraph("first"),
-			treeState(),
-		);
+		const { instance, fragment } = mountTemplateValue(paragraph("first"), treeState());
 		const element = fragment.querySelector("p")!;
 		const original = textNodeOf(element);
 		expect(original.data).toBe("first");
@@ -213,8 +183,7 @@ describe("raw content with a css plan", () => {
 				color: ${color};
 			}
 		</style>`;
-	const normalizeWhitespace = (string: string) =>
-		string.replace(/\s+/g, " ").trim();
+	const normalizeWhitespace = (string: string) => string.replace(/\s+/g, " ").trim();
 	const declarationOf = (style: HTMLStyleElement): CSSStyleDeclaration =>
 		(style.sheet!.cssRules[0] as CSSStyleRule).style;
 
@@ -223,9 +192,7 @@ describe("raw content with a css plan", () => {
 		const styles = fragment.querySelectorAll("style");
 
 		expect(styles).toHaveLength(1);
-		expect(normalizeWhitespace(styles[0].textContent!)).toBe(
-			"p { color: red; }",
-		);
+		expect(normalizeWhitespace(styles[0].textContent!)).toBe("p { color: red; }");
 	});
 
 	test("a connected patch updates the declaration through the sheet, never the text", () => {
@@ -256,10 +223,7 @@ describe("raw content with a css plan", () => {
 	});
 
 	test("a patch while detached rewrites the composed text", () => {
-		const { instance, fragment } = mountTemplateValue(
-			sheet("red"),
-			treeState(),
-		);
+		const { instance, fragment } = mountTemplateValue(sheet("red"), treeState());
 		const style = fragment.querySelector("style")!;
 
 		patchInstance(instance, sheet("blue").values);
@@ -272,12 +236,7 @@ describe("raw content with a css plan", () => {
 		const style = shadowRoot.querySelector("style")!;
 		const sheetTextNode = style.firstChild as Text;
 
-		const instance = hydrateShadowRoot(
-			sheet("red"),
-			shadowRoot,
-			null,
-			treeState(),
-		);
+		const instance = hydrateShadowRoot(sheet("red"), shadowRoot, null, treeState());
 		expect(style.firstChild).toBe(sheetTextNode);
 
 		patchInstance(instanceOrThrow(instance), sheet("blue").values);
@@ -298,9 +257,7 @@ describe("raw content with a css plan", () => {
 
 		patchInstance(second.instance, sheet("green").values);
 
-		expect(normalizeWhitespace(styles[0].textContent!)).toBe(
-			"p { color: red; }",
-		);
+		expect(normalizeWhitespace(styles[0].textContent!)).toBe("p { color: red; }");
 		expect(declarationOf(styles[0]).getPropertyValue("color")).toBe("red");
 		expect(declarationOf(styles[1]).getPropertyValue("color")).toBe("green");
 	});
@@ -313,9 +270,7 @@ describe("raw content with a css plan", () => {
 		//a plain re-append reparses the sheet from the stale mount-time text
 		const wrapper = document.createElement("div");
 		shadowRoot.appendChild(wrapper);
-		wrapper.append(
-			...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper),
-		);
+		wrapper.append(...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper));
 		expect(declarationOf(style).getPropertyValue("color")).toBe("red");
 
 		refreshStyleSheetsAfterMove(instance);
@@ -335,9 +290,7 @@ describe("raw content with a css plan", () => {
 		style.textContent = "p { color: red; } a { color: blue; }";
 		const wrapper = document.createElement("div");
 		shadowRoot.appendChild(wrapper);
-		wrapper.append(
-			...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper),
-		);
+		wrapper.append(...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper));
 
 		expect(host.update).not.toHaveBeenCalled();
 		refreshStyleSheetsAfterMove(instance);
@@ -350,10 +303,7 @@ describe("raw content with a css plan", () => {
 
 	test("switching a branch away removes the style element with the branch", () => {
 		const wrap = (inner: unknown) => html`<div>${inner}</div>`;
-		const { instance, fragment } = mountTemplateValue(
-			wrap(sheet("red")),
-			treeState(),
-		);
+		const { instance, fragment } = mountTemplateValue(wrap(sheet("red")), treeState());
 		expect(fragment.querySelector("style")).not.toBeNull();
 
 		patchInstance(instance, wrap(null).values);
@@ -363,10 +313,7 @@ describe("raw content with a css plan", () => {
 
 	test("removing a list row removes its style element", () => {
 		const wrap = (items: Array<unknown>) => html`<div>${items}</div>`;
-		const { instance, fragment } = mountTemplateValue(
-			wrap([sheet("red")]),
-			treeState(),
-		);
+		const { instance, fragment } = mountTemplateValue(wrap([sheet("red")]), treeState());
 		expect(fragment.querySelector("style")).not.toBeNull();
 
 		patchInstance(instance, wrap([]).values);
@@ -382,12 +329,7 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 		const serverTextNode = textNodeOf(paragraph);
 		expect(serverTextNode.data).toBe("server-text");
 
-		hydrateShadowRoot(
-			html`<p>${"client-text"}</p>`,
-			shadowRoot,
-			null,
-			treeState(),
-		);
+		hydrateShadowRoot(html`<p>${"client-text"}</p>`, shadowRoot, null, treeState());
 
 		expect(textNodeOf(paragraph)).toBe(serverTextNode);
 		expect(serverTextNode.data).toBe("client-text");
@@ -402,46 +344,27 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 			set: (next: string) => writes.push(next),
 		});
 
-		hydrateShadowRoot(
-			html`<p>${"same-text"}</p>`,
-			shadowRoot,
-			null,
-			treeState(),
-		);
+		hydrateShadowRoot(html`<p>${"same-text"}</p>`, shadowRoot, null, treeState());
 
 		expect(writes).toEqual([]);
 	});
 
 	test("repairs a diverged attribute in place", () => {
-		const { shadowRoot } = mountIntoShadow(
-			html`<span class="${"server-class"}"></span>`,
-		);
+		const { shadowRoot } = mountIntoShadow(html`<span class="${"server-class"}"></span>`);
 		const span = shadowRoot.querySelector("span")!;
 		expect(span.getAttribute("class")).toBe("server-class");
 
-		hydrateShadowRoot(
-			html`<span class="${"client-class"}"></span>`,
-			shadowRoot,
-			null,
-			treeState(),
-		);
+		hydrateShadowRoot(html`<span class="${"client-class"}"></span>`, shadowRoot, null, treeState());
 
 		expect(span.getAttribute("class")).toBe("client-class");
 	});
 
 	test("leaves a matching attribute alone: no write", () => {
-		const { shadowRoot } = mountIntoShadow(
-			html`<span class="${"same-class"}"></span>`,
-		);
+		const { shadowRoot } = mountIntoShadow(html`<span class="${"same-class"}"></span>`);
 		const span = shadowRoot.querySelector("span")!;
 		const setAttribute = vi.spyOn(span, "setAttribute");
 
-		hydrateShadowRoot(
-			html`<span class="${"same-class"}"></span>`,
-			shadowRoot,
-			null,
-			treeState(),
-		);
+		hydrateShadowRoot(html`<span class="${"same-class"}"></span>`, shadowRoot, null, treeState());
 
 		expect(setAttribute).not.toHaveBeenCalled();
 	});
@@ -461,9 +384,7 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 	});
 
 	test("a patch after hydrate writes a changed attribute value", () => {
-		const { shadowRoot } = mountIntoShadow(
-			html`<span class="${"server-class"}"></span>`,
-		);
+		const { shadowRoot } = mountIntoShadow(html`<span class="${"server-class"}"></span>`);
 		const span = shadowRoot.querySelector("span")!;
 		const instance = hydrateShadowRoot(
 			html`<span class="${"client-class"}"></span>`,
@@ -485,9 +406,7 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 			</ul>`;
 		const { shadowRoot } = mountIntoShadow(rows(["a", "b"]));
 
-		expect(() =>
-			hydrateShadowRoot(rows(["a", "b"]), shadowRoot, null, treeState()),
-		).not.toThrow();
+		expect(() => hydrateShadowRoot(rows(["a", "b"]), shadowRoot, null, treeState())).not.toThrow();
 
 		const items = shadowRoot.querySelectorAll("li");
 		expect(items.length).toBe(2);
@@ -500,10 +419,7 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 		//the nested content range, not stop at the first one it sees
 		const rows = (groups: Array<Array<string>>) =>
 			html`<ul>
-				${groups.map(
-					(group) =>
-						html`<li>${group.map((cell) => html`<span>${cell}</span>`)}</li>`,
-				)}
+				${groups.map((group) => html`<li>${group.map((cell) => html`<span>${cell}</span>`)}</li>`)}
 			</ul>`;
 		const tree = [
 			["a", "b"],
@@ -511,9 +427,7 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 		];
 		const { shadowRoot } = mountIntoShadow(rows(tree));
 
-		expect(() =>
-			hydrateShadowRoot(rows(tree), shadowRoot, null, treeState()),
-		).not.toThrow();
+		expect(() => hydrateShadowRoot(rows(tree), shadowRoot, null, treeState())).not.toThrow();
 
 		expect(shadowRoot.querySelectorAll("li").length).toBe(2);
 		expect(shadowRoot.querySelectorAll("span").length).toBe(4);
@@ -602,9 +516,7 @@ describe("hydrateInstance: rejects a server range that contradicts the value", (
 		const twoHoles = (branch: TemplateValue, tail: string) =>
 			html`<div>${branch}</div>
 				<span>${tail}</span>`;
-		const { shadowRoot } = mountIntoShadow(
-			twoHoles(html`<p>${"server"}</p>`, "tail"),
-		);
+		const { shadowRoot } = mountIntoShadow(twoHoles(html`<p>${"server"}</p>`, "tail"));
 
 		hydrateShadowRoot(
 			twoHoles(
@@ -681,14 +593,9 @@ describe("an iterator in a content hole paints as a list", () => {
 
 	test("a patch with a new iterator updates the rows", () => {
 		const labels = ["a", "b"];
-		const { shadowRoot, instance } = mountIntoShadow(
-			contentHole(labels.values().map(row)),
-		);
+		const { shadowRoot, instance } = mountIntoShadow(contentHole(labels.values().map(row)));
 
-		patchInstance(
-			instance,
-			contentHole(["c", "b", "a"].values().map(row)).values,
-		);
+		patchInstance(instance, contentHole(["c", "b", "a"].values().map(row)).values);
 
 		expect(rowLabels(shadowRoot)).toEqual(["c", "b", "a"]);
 	});
@@ -698,21 +605,14 @@ describe("an iterator in a content hole paints as a list", () => {
 		const { shadowRoot } = mountIntoShadow(contentHole(rowsByKey.values()));
 
 		expect(rowLabels(shadowRoot)).toEqual(["a"]);
-		expect(() => mountIntoShadow(contentHole(rowsByKey))).toThrow(
-			/expected a string/,
-		);
+		expect(() => mountIntoShadow(contentHole(rowsByKey))).toThrow(/expected a string/);
 	});
 
 	test("hydration adopts the server's rows", () => {
 		const { shadowRoot } = mountIntoShadow(contentHole([row("a"), row("b")]));
 		const serverRows = Array.from(shadowRoot.querySelectorAll("li"));
 
-		hydrateShadowRoot(
-			contentHole(["a", "b"].values().map(row)),
-			shadowRoot,
-			null,
-			treeState(),
-		);
+		hydrateShadowRoot(contentHole(["a", "b"].values().map(row)), shadowRoot, null, treeState());
 
 		expect(Array.from(shadowRoot.querySelectorAll("li"))).toEqual(serverRows);
 	});
@@ -722,12 +622,7 @@ describe("an iterator in a content hole paints as a list", () => {
 		vi.spyOn(console, "warn").mockImplementation(() => {});
 		const { shadowRoot } = mountIntoShadow(contentHole([row("a")]));
 
-		hydrateShadowRoot(
-			contentHole(["a", "b"].values().map(row)),
-			shadowRoot,
-			null,
-			treeState(),
-		);
+		hydrateShadowRoot(contentHole(["a", "b"].values().map(row)), shadowRoot, null, treeState());
 
 		expect(rowLabels(shadowRoot)).toEqual(["a", "b"]);
 	});

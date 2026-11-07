@@ -1,9 +1,5 @@
 import { stringListHash } from "../utils/hashing";
-import {
-	DYNAMIC_TAG_PLACEHOLDER,
-	NO_KEY,
-	STYLE_SHEET_NOT_COMPILED,
-} from "./constants";
+import { DYNAMIC_TAG_PLACEHOLDER, NO_KEY, STYLE_SHEET_NOT_COMPILED } from "./constants";
 import * as BINDING from "./binding";
 import * as OPEN_CONSTRUCT from "./open-construct";
 import { ParsedTemplate, Part, StaticBinding } from "./types";
@@ -109,9 +105,7 @@ const createTemplateReader = (
 		keyValueParts: NO_KEY,
 		hasStyleSheetBinding: false,
 		rootTemplate:
-			mode === PARSE_MODE.NO_ROOT_TEMPLATE
-				? ROOT_TEMPLATE.RULED_OUT
-				: ROOT_TEMPLATE.UNDECIDED,
+			mode === PARSE_MODE.NO_ROOT_TEMPLATE ? ROOT_TEMPLATE.RULED_OUT : ROOT_TEMPLATE.UNDECIDED,
 		hasSeenTopLevelSibling: false,
 		openTagIsDynamic: [],
 		isTemplateContent: false,
@@ -128,11 +122,7 @@ const unclosedError = (construct: string) =>
 	new Error(libraryMessage(`${construct} is never closed. Close it.`));
 
 //every hole passes through here exactly once and in order, which is what numbers it
-const partsOfRange = (
-	reader: TemplateReader,
-	start: number,
-	end: number,
-): Array<Part> => {
+const partsOfRange = (reader: TemplateReader, start: number, end: number): Array<Part> => {
 	assertDuringDevelopment(
 		reader.nextHoleIndex >= start,
 		"ranges are read in source order, so no hole before this range is left unread",
@@ -150,22 +140,15 @@ const partsOfRange = (
 	return parts;
 };
 
-const hasHole = (parts: ReadonlyArray<Part>) =>
-	parts.some((part) => typeof part === "number");
+const hasHole = (parts: ReadonlyArray<Part>) => parts.some((part) => typeof part === "number");
 
 const asComment = (markerData: string) =>
 	`${MARKUP.COMMENT_OPEN}${markerData}${MARKUP.COMMENT_CLOSE}`;
 
-const openMarkerComment = (
-	openConstructKind: OpenConstructKind,
-	bindingIndex: number,
-) =>
-	asComment(
-		`${MARKUP.COMMENT_IDENTIFIER} ${openConstructKind}-${bindingIndex}`,
-	);
+const openMarkerComment = (openConstructKind: OpenConstructKind, bindingIndex: number) =>
+	asComment(`${MARKUP.COMMENT_IDENTIFIER} ${openConstructKind}-${bindingIndex}`);
 
-const isTopLevel = (reader: TemplateReader) =>
-	reader.openTagIsDynamic.length === 0;
+const isTopLevel = (reader: TemplateReader) => reader.openTagIsDynamic.length === 0;
 
 const parsesContentAsRaw = (tagName: string) => {
 	return (
@@ -176,9 +159,7 @@ const parsesContentAsRaw = (tagName: string) => {
 	);
 };
 
-const rootTemplateAfterNonRootTag = (
-	rootTemplate: RootTemplateKind,
-): RootTemplateKind => {
+const rootTemplateAfterNonRootTag = (rootTemplate: RootTemplateKind): RootTemplateKind => {
 	switch (rootTemplate) {
 		case ROOT_TEMPLATE.UNDECIDED:
 			return ROOT_TEMPLATE.RULED_OUT;
@@ -207,8 +188,7 @@ const readText = (reader: TemplateReader, end: number) => {
 		const bindingIndex = reader.startedBindingCount++;
 		const closeMarkerData = `${MARKUP.COMMENT_IDENTIFIER} /${OPEN_CONSTRUCT.CONTENT}-${bindingIndex}`;
 		reader.resultMarkup +=
-			openMarkerComment(OPEN_CONSTRUCT.CONTENT, bindingIndex) +
-			asComment(closeMarkerData);
+			openMarkerComment(OPEN_CONSTRUCT.CONTENT, bindingIndex) + asComment(closeMarkerData);
 		reader.bindings.push({
 			type: BINDING.CONTENT,
 			valueIndex: part,
@@ -232,16 +212,9 @@ const readComment = (reader: TemplateReader) => {
 			),
 		);
 	const contentStart = reader.index + MARKUP.COMMENT_OPEN.length;
-	const commentClose = reader.source.indexOf(
-		MARKUP.COMMENT_CLOSE,
-		reader.index + "<!".length,
-	);
+	const commentClose = reader.source.indexOf(MARKUP.COMMENT_CLOSE, reader.index + "<!".length);
 	if (commentClose === -1) throw unclosedError("a comment");
-	const parts = partsOfRange(
-		reader,
-		contentStart,
-		Math.max(contentStart, commentClose),
-	);
+	const parts = partsOfRange(reader, contentStart, Math.max(contentStart, commentClose));
 	reader.index = commentClose + MARKUP.COMMENT_CLOSE.length;
 
 	if (!hasHole(parts)) {
@@ -249,25 +222,20 @@ const readComment = (reader: TemplateReader) => {
 		return;
 	}
 	//the first dynamic comment is the list key: it never reaches the DOM and owns no binding index
-	const isListKey =
-		reader.keyValueParts === NO_KEY && !reader.isTemplateContent;
+	const isListKey = reader.keyValueParts === NO_KEY && !reader.isTemplateContent;
 	if (isListKey) {
 		reader.keyValueParts = parts;
 		return;
 	}
 	reader.resultMarkup +=
-		openMarkerComment(OPEN_CONSTRUCT.COMMENT, reader.startedBindingCount++) +
-		MARKUP.EMPTY_COMMENT;
+		openMarkerComment(OPEN_CONSTRUCT.COMMENT, reader.startedBindingCount++) + MARKUP.EMPTY_COMMENT;
 	reader.bindings.push({ type: BINDING.COMMENT, parts });
 };
 
 //foreign content only; the HTML parser reads what is inside as text, so a marker there never binds
 const readCharacterData = (reader: TemplateReader) => {
 	const contentStart = reader.index + CHARACTER_DATA_OPEN.length;
-	const characterDataClose = reader.source.indexOf(
-		CHARACTER_DATA_CLOSE,
-		contentStart,
-	);
+	const characterDataClose = reader.source.indexOf(CHARACTER_DATA_CLOSE, contentStart);
 	if (characterDataClose === -1) throw unclosedError("a <![CDATA[ section");
 	const parts = partsOfRange(reader, contentStart, characterDataClose);
 	if (hasHole(parts))
@@ -291,8 +259,7 @@ const readEndTag = (reader: TemplateReader) => {
 	reader.index = tagClose + MARKUP.TAG_CLOSE.length;
 
 	const isDynamicClose = hasHole(parts);
-	const openerIsDynamic =
-		reader.openTagIsDynamic[reader.openTagIsDynamic.length - 1];
+	const openerIsDynamic = reader.openTagIsDynamic[reader.openTagIsDynamic.length - 1];
 	if (isDynamicClose && !openerIsDynamic)
 		throw new Error(
 			libraryMessage(
@@ -348,17 +315,12 @@ const endsUnquotedValue = (source: string, index: number) => {
 };
 
 //<select> has no value attribute, and its options are not there yet when its own bindings commit
-const warnOnSelectValueBinding = (
-	tagName: string,
-	binding: StaticBinding,
-): void => {
+const warnOnSelectValueBinding = (tagName: string, binding: StaticBinding): void => {
 	if (tagName !== SELECT_TAG) return;
 	if (binding.type !== BINDING.ATTRIBUTE) return;
 	const [name] = binding.nameParts;
 	const isValueName =
-		binding.nameParts.length === 1 &&
-		typeof name === "string" &&
-		name.toLowerCase() === "value";
+		binding.nameParts.length === 1 && typeof name === "string" && name.toLowerCase() === "value";
 	if (isValueName)
 		warnDuringDevelopment(
 			"`<select value=${…}>` selects nothing: <select> has no value attribute. Bind `selected` on the option instead: `<option selected=${…}>`.",
@@ -371,9 +333,7 @@ const attributeBindingOf = (
 	valueParts: Array<Part>,
 ): StaticBinding => {
 	const isExpandableSpread =
-		valueParts.length === 0 &&
-		nameParts.length === 1 &&
-		typeof nameParts[0] === "number";
+		valueParts.length === 0 && nameParts.length === 1 && typeof nameParts[0] === "number";
 	if (isExpandableSpread)
 		return {
 			type: BINDING.DYNAMIC_ATTRIBUTE,
@@ -426,14 +386,11 @@ const readAttributes = (
 
 		const nameStart = reader.index;
 		let nameEnd = nameStart + 1;
-		while (nameEnd < source.length && !endsAttributeName(source, nameEnd))
-			nameEnd++;
+		while (nameEnd < source.length && !endsAttributeName(source, nameEnd)) nameEnd++;
 		const nameParts = partsOfRange(reader, nameStart, nameEnd);
 		reader.index = nameEnd;
 		const isNestedShadowRoot =
-			tagName === TEMPLATE_TAG &&
-			!isOnRootTemplate &&
-			isShadowRootModeName(nameParts);
+			tagName === TEMPLATE_TAG && !isOnRootTemplate && isShadowRootModeName(nameParts);
 		if (isNestedShadowRoot)
 			throw new Error(
 				libraryMessage(
@@ -447,10 +404,7 @@ const readAttributes = (
 			const quoteCode = source.charCodeAt(valueStart);
 			if (isQuoteCode(quoteCode)) {
 				//nothing between the quotes can end the value, holes included, so the scan is a search
-				const closingQuote = source.indexOf(
-					String.fromCharCode(quoteCode),
-					valueStart + 1,
-				);
+				const closingQuote = source.indexOf(String.fromCharCode(quoteCode), valueStart + 1);
 				if (closingQuote === -1) throw unclosedError("an attribute value");
 				valueParts = partsOfRange(reader, valueStart + 1, closingQuote);
 				reader.index = closingQuote + 1;
@@ -462,8 +416,7 @@ const readAttributes = (
 					);
 			} else {
 				let valueEnd = valueStart;
-				while (valueEnd < source.length && !endsUnquotedValue(source, valueEnd))
-					valueEnd++;
+				while (valueEnd < source.length && !endsUnquotedValue(source, valueEnd)) valueEnd++;
 				valueParts = partsOfRange(reader, valueStart, valueEnd);
 				reader.index = valueEnd;
 			}
@@ -476,11 +429,7 @@ const readAttributes = (
 			warnOnSelectValueBinding(tagName, binding);
 			reader.bindings.push(binding);
 			if (isOnRootTemplate) reader.hostBindingCount++;
-			else
-				markerMarkup += openMarkerComment(
-					OPEN_CONSTRUCT.ATTRIBUTE,
-					bindingIndex,
-				);
+			else markerMarkup += openMarkerComment(OPEN_CONSTRUCT.ATTRIBUTE, bindingIndex);
 			continue;
 		}
 		//a static host attribute emits no markup but still owns a binding index, and every marker
@@ -510,32 +459,21 @@ const readRawContent = (
 	let closeTagStart = reader.source.indexOf(MARKUP.END_TAG_OPEN, reader.index);
 	while (
 		closeTagStart !== -1 &&
-		!reader.source.startsWith(
-			tagName,
-			closeTagStart + MARKUP.END_TAG_OPEN.length,
-		)
+		!reader.source.startsWith(tagName, closeTagStart + MARKUP.END_TAG_OPEN.length)
 	)
-		closeTagStart = reader.source.indexOf(
-			MARKUP.END_TAG_OPEN,
-			closeTagStart + 1,
-		);
+		closeTagStart = reader.source.indexOf(MARKUP.END_TAG_OPEN, closeTagStart + 1);
 	if (closeTagStart === -1) throw unclosedError(`<${tagName}>`);
 	const parts = partsOfRange(reader, reader.index, closeTagStart);
 	reader.index = closeTagStart;
 
-	if (!hasHole(parts))
-		return { contentMarkup: parts.join(""), markerMarkup: "" };
-	if (tagName === TEXTAREA_TAG || tagName === TITLE_TAG)
-		decodeRCDATAParts(parts, tagName);
+	if (!hasHole(parts)) return { contentMarkup: parts.join(""), markerMarkup: "" };
+	if (tagName === TEXTAREA_TAG || tagName === TITLE_TAG) decodeRCDATAParts(parts, tagName);
 	if (tagName === TEXTAREA_TAG) dropLeadingLineFeed(parts);
 	//the sheet text is composed with literal values at first commit, while the clone is
 	//still detached — the cached markup deliberately carries an empty <style>
 	const compiledStyleSheet =
-		tagName === MARKUP.STYLE_TAG
-			? compileStyleSheet(parts)
-			: STYLE_SHEET_NOT_COMPILED;
-	if (compiledStyleSheet !== STYLE_SHEET_NOT_COMPILED)
-		reader.hasStyleSheetBinding = true;
+		tagName === MARKUP.STYLE_TAG ? compileStyleSheet(parts) : STYLE_SHEET_NOT_COMPILED;
+	if (compiledStyleSheet !== STYLE_SHEET_NOT_COMPILED) reader.hasStyleSheetBinding = true;
 	const bindingIndex = reader.startedBindingCount++;
 	reader.bindings.push({
 		type: BINDING.RAW_CONTENT,
@@ -576,11 +514,7 @@ const readElement = (reader: TemplateReader) => {
 	const endsWithSlash =
 		source.charCodeAt(nameEnd) === CHARACTER_CODE.GREATER_THAN &&
 		source.charCodeAt(nameEnd - 1) === CHARACTER_CODE.SLASH;
-	const nameParts = partsOfRange(
-		reader,
-		nameStart,
-		endsWithSlash ? nameEnd - 1 : nameEnd,
-	);
+	const nameParts = partsOfRange(reader, nameStart, endsWithSlash ? nameEnd - 1 : nameEnd);
 	reader.index = nameEnd;
 
 	//in the second pass the root template is already ruled out, and nothing there reads a sibling
@@ -593,10 +527,7 @@ const readElement = (reader: TemplateReader) => {
 	let isOnRootTemplate = false;
 	if (isDynamicTag) {
 		tagName = DYNAMIC_TAG_PLACEHOLDER;
-		tagMarkerMarkup = openMarkerComment(
-			OPEN_CONSTRUCT.TAG,
-			reader.startedBindingCount++,
-		);
+		tagMarkerMarkup = openMarkerComment(OPEN_CONSTRUCT.TAG, reader.startedBindingCount++);
 		reader.bindings.push({ type: BINDING.TAG, parts: nameParts });
 		reader.rootTemplate = rootTemplateAfterNonRootTag(reader.rootTemplate);
 	} else {
@@ -606,8 +537,7 @@ const readElement = (reader: TemplateReader) => {
 			"a tag name without a hole is captured as one text part",
 		);
 		tagName = staticTagName;
-		isOnRootTemplate =
-			isFirstTag && !reader.hasSeenTopLevelSibling && tagName === TEMPLATE_TAG;
+		isOnRootTemplate = isFirstTag && !reader.hasSeenTopLevelSibling && tagName === TEMPLATE_TAG;
 		reader.rootTemplate = isOnRootTemplate
 			? ROOT_TEMPLATE.IS_THE_CURRENT_TAG
 			: rootTemplateAfterNonRootTag(reader.rootTemplate);
@@ -619,8 +549,7 @@ const readElement = (reader: TemplateReader) => {
 		markerMarkup: "",
 		isSelfClosing: endsWithSlash,
 	};
-	if (source.charCodeAt(nameEnd) === CHARACTER_CODE.GREATER_THAN)
-		reader.index++;
+	if (source.charCodeAt(nameEnd) === CHARACTER_CODE.GREATER_THAN) reader.index++;
 	else attributes = readAttributes(reader, tagName, isOnRootTemplate);
 
 	const openTagMarkup = isOnRootTemplate
@@ -636,28 +565,23 @@ const readElement = (reader: TemplateReader) => {
 	if (attributes.isSelfClosing) {
 		reader.openTagIsDynamic.pop();
 		if (!isOnRootTemplate)
-			reader.resultMarkup +=
-				openTagMarkup + MARKUP.END_TAG_OPEN + tagName + MARKUP.TAG_CLOSE;
+			reader.resultMarkup += openTagMarkup + MARKUP.END_TAG_OPEN + tagName + MARKUP.TAG_CLOSE;
 		return;
 	}
 	if (tagName === TEMPLATE_TAG && !isOnRootTemplate) {
 		const templateContent = readTemplateContent(reader);
 		reader.resultMarkup +=
-			templateContent.markerMarkup +
-			openTagMarkup +
-			templateContent.contentMarkup;
+			templateContent.markerMarkup + openTagMarkup + templateContent.contentMarkup;
 		readEndTag(reader);
 		return;
 	}
-	if (UNESCAPED_TEXT_TAGS.has(tagName.toLowerCase()))
-		ensureStaticContent(reader, tagName);
+	if (UNESCAPED_TEXT_TAGS.has(tagName.toLowerCase())) ensureStaticContent(reader, tagName);
 	if (!parsesContentAsRaw(tagName)) {
 		reader.resultMarkup += openTagMarkup;
 		return;
 	}
 	const rawContent = readRawContent(reader, tagName);
-	reader.resultMarkup +=
-		rawContent.markerMarkup + openTagMarkup + rawContent.contentMarkup;
+	reader.resultMarkup += rawContent.markerMarkup + openTagMarkup + rawContent.contentMarkup;
 	readEndTag(reader);
 };
 
@@ -675,8 +599,7 @@ const markupStartFrom = (source: string, index: number) => {
 		const opensMarkup =
 			nextCode === CHARACTER_CODE.BANG ||
 			startsTagName(source, tagStart + 1) ||
-			(nextCode === CHARACTER_CODE.SLASH &&
-				startsTagName(source, tagStart + 2));
+			(nextCode === CHARACTER_CODE.SLASH && startsTagName(source, tagStart + 2));
 		if (opensMarkup) return tagStart;
 		tagStart = source.indexOf(MARKUP.TAG_OPEN, tagStart + 1);
 	}
@@ -696,14 +619,11 @@ const readMarkup = (reader: TemplateReader): void => {
 		readText(reader, tagStart === -1 ? source.length : tagStart);
 		if (tagStart === -1) break;
 		const endsTemplateContent =
-			reader.isTemplateContent &&
-			isTopLevel(reader) &&
-			startsTemplateEndTag(source, tagStart);
+			reader.isTemplateContent && isTopLevel(reader) && startsTemplateEndTag(source, tagStart);
 		if (endsTemplateContent) return;
 
 		const nextCode = source.charCodeAt(tagStart + 1);
-		if (source.startsWith(CHARACTER_DATA_OPEN, tagStart))
-			readCharacterData(reader);
+		if (source.startsWith(CHARACTER_DATA_OPEN, tagStart)) readCharacterData(reader);
 		else if (nextCode === CHARACTER_CODE.BANG) readComment(reader);
 		else if (nextCode === CHARACTER_CODE.SLASH) readEndTag(reader);
 		else readElement(reader);
@@ -737,8 +657,7 @@ const readTemplateContent = (
 		return { contentMarkup: contentReader.resultMarkup, markerMarkup: "" };
 
 	const valueIndices: Array<number> = [];
-	for (let index = firstValueIndex; index < reader.readHoleCount; index++)
-		valueIndices.push(index);
+	for (let index = firstValueIndex; index < reader.readHoleCount; index++) valueIndices.push(index);
 	const bindingIndex = reader.startedBindingCount++;
 	reader.bindings.push({
 		type: BINDING.TEMPLATE_CONTENT,
@@ -787,9 +706,7 @@ const parse = (
 //paint of that template for as long as the page holds it
 const parseCache = new WeakMap<TemplateStringsArray, ParsedTemplate>();
 
-export const getParsedTemplate = (
-	templateStrings: TemplateStringsArray,
-): ParsedTemplate => {
+export const getParsedTemplate = (templateStrings: TemplateStringsArray): ParsedTemplate => {
 	const cached = parseCache.get(templateStrings);
 	if (cached !== undefined) return cached;
 	const parsed = parse(templateStrings);

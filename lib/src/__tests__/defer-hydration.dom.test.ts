@@ -157,9 +157,7 @@ describe("defer-hydration: a marked child waits for its parent", () => {
 		await flushMicrotasks();
 
 		expect(
-			parent
-				.shadowRoot!.querySelector(childTag)!
-				.hasAttribute(DEFER_HYDRATION_ATTRIBUTE),
+			parent.shadowRoot!.querySelector(childTag)!.hasAttribute(DEFER_HYDRATION_ATTRIBUTE),
 		).toBe(false);
 	});
 

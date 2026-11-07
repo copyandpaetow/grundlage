@@ -1,5 +1,3 @@
-// The executable form of the "Measuring" contract in lib/STYLE_GUIDE.md.
-//
 // One shared way to measure, so a "win" is never an artifact. Every probe
 // reports the same four numbers per operation/frame:
 //   1. DOM mutation count   — a MutationObserver tally (the direct read of enemy #1)
@@ -26,15 +24,11 @@
 
 /** Resolves after the browser has committed a frame (layout + paint). */
 export const waitForPaint = (): Promise<void> =>
-	new Promise((resolve) =>
-		requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-	);
+	new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
 /** Best-effort used-heap reading in MB, or null when unavailable. */
 export const readHeapMb = (): number | null => {
-	const memory = (
-		performance as unknown as { memory?: { usedJSHeapSize: number } }
-	).memory;
+	const memory = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
 	return memory ? memory.usedJSHeapSize / 1_000_000 : null;
 };
 
@@ -80,9 +74,7 @@ export const observeMutations = (root: Node): MutationCounter => {
 const median = (samples: ReadonlyArray<number>): number => {
 	const sorted = samples.slice().sort((left, right) => left - right);
 	const middle = sorted.length >> 1;
-	return sorted.length % 2 === 0
-		? (sorted[middle - 1] + sorted[middle]) / 2
-		: sorted[middle];
+	return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 };
 
 // --- operation mode (discrete ops: create, swap, select, …) --------------
@@ -157,8 +149,7 @@ export const measureOperation = async (
 		medianAppliedMs: median(appliedMsSamples),
 		medianPaintedFrames: Math.round(median(paintedMsSamples) / FRAME_BUDGET_MS),
 		medianMutations: median(mutationSamples),
-		heapDeltaMb:
-			heapStart !== null && heapEnd !== null ? heapEnd - heapStart : null,
+		heapDeltaMb: heapStart !== null && heapEnd !== null ? heapEnd - heapStart : null,
 	};
 };
 
@@ -190,10 +181,7 @@ export interface WindowResult {
  * Watches a self-driving animation for a wall-clock window — counts frames and
  * mutations without owning the rAF loop, so it measures the component as-is.
  */
-export const measureWindow = async (
-	root: Node,
-	durationMs: number,
-): Promise<WindowResult> => {
+export const measureWindow = async (root: Node, durationMs: number): Promise<WindowResult> => {
 	const counter = observeMutations(root);
 	const frameTimes: number[] = [];
 	const heapStart = readHeapMb();
@@ -227,8 +215,7 @@ export const measureWindow = async (
 		medianFrameMs: median(frameTimes),
 		mutations,
 		mutationsPerFrame: mutations / frames,
-		heapDeltaMb:
-			heapStart !== null && heapEnd !== null ? heapEnd - heapStart : null,
+		heapDeltaMb: heapStart !== null && heapEnd !== null ? heapEnd - heapStart : null,
 	};
 };
 

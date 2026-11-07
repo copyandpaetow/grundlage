@@ -52,9 +52,7 @@ customElements.define(
 			const { host } = componentProps;
 
 			const sendCommand = (command: PaletteCommand): void => {
-				host.dispatchEvent(
-					new CustomEvent("palette-command", { detail: command }),
-				);
+				host.dispatchEvent(new CustomEvent("palette-command", { detail: command }));
 			};
 
 			const onClick = (event: Event): void => {

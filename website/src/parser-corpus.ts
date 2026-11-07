@@ -110,16 +110,12 @@ const FILLER_DECLARATIONS = [
 ];
 
 /** Whole declarations up to the budget, then spaces — a truncated declaration would not parse. */
-const buildDeclarationFiller = (
-	characterCount: number,
-	seed: number,
-): string => {
+const buildDeclarationFiller = (characterCount: number, seed: number): string => {
 	if (characterCount <= 0) return "";
 	let text = "";
 	let declarationIndex = seed;
 	while (true) {
-		const next =
-			FILLER_DECLARATIONS[declarationIndex % FILLER_DECLARATIONS.length];
+		const next = FILLER_DECLARATIONS[declarationIndex % FILLER_DECLARATIONS.length];
 		if (text.length + next.length > characterCount) break;
 		text += next;
 		declarationIndex++;
@@ -142,11 +138,7 @@ interface HolePattern {
 	documentOpen: string;
 	documentClose: string;
 	/** Static text preceding each hole of one unit. Length is holesPerUnit. */
-	staticsBeforeHoles(
-		unitIndex: number,
-		attributeText: string,
-		filler: string,
-	): Array<string>;
+	staticsBeforeHoles(unitIndex: number, attributeText: string, filler: string): Array<string>;
 	/** Static text following the unit's last hole. */
 	staticAfterUnit(unitIndex: number, filler: string): string;
 	fillerIsDeclarations: boolean;
@@ -173,9 +165,7 @@ const HOLE_PATTERNS: Record<HoleKind, HolePattern> = {
 		holesPerUnit: 1,
 		documentOpen: `<div class="root">`,
 		documentClose: `</div>`,
-		staticsBeforeHoles: (_unitIndex, attributeText) => [
-			`<span${attributeText} id="`,
-		],
+		staticsBeforeHoles: (_unitIndex, attributeText) => [`<span${attributeText} id="`],
 		staticAfterUnit: (_unitIndex, filler) => `">${filler}</span>`,
 		fillerIsDeclarations: false,
 	},
@@ -183,9 +173,7 @@ const HOLE_PATTERNS: Record<HoleKind, HolePattern> = {
 		holesPerUnit: 1,
 		documentOpen: `<div class="root">`,
 		documentClose: `</div>`,
-		staticsBeforeHoles: (_unitIndex, attributeText) => [
-			`<span${attributeText} class="alpha `,
-		],
+		staticsBeforeHoles: (_unitIndex, attributeText) => [`<span${attributeText} class="alpha `],
 		staticAfterUnit: (_unitIndex, filler) => ` omega">${filler}</span>`,
 		fillerIsDeclarations: false,
 	},
@@ -193,9 +181,7 @@ const HOLE_PATTERNS: Record<HoleKind, HolePattern> = {
 		holesPerUnit: 1,
 		documentOpen: `<div class="root">`,
 		documentClose: `</div>`,
-		staticsBeforeHoles: (_unitIndex, attributeText) => [
-			`<span${attributeText} `,
-		],
+		staticsBeforeHoles: (_unitIndex, attributeText) => [`<span${attributeText} `],
 		staticAfterUnit: (_unitIndex, filler) => `>${filler}</span>`,
 		fillerIsDeclarations: false,
 	},
@@ -203,9 +189,7 @@ const HOLE_PATTERNS: Record<HoleKind, HolePattern> = {
 		holesPerUnit: 1,
 		documentOpen: `<div class="root">`,
 		documentClose: `</div>`,
-		staticsBeforeHoles: (_unitIndex, attributeText) => [
-			`<span${attributeText} `,
-		],
+		staticsBeforeHoles: (_unitIndex, attributeText) => [`<span${attributeText} `],
 		staticAfterUnit: (_unitIndex, filler) => `="value">${filler}</span>`,
 		fillerIsDeclarations: false,
 	},
@@ -250,11 +234,7 @@ const assembleTemplate = (
 	let current = pattern.documentOpen;
 
 	for (let unitIndex = 0; unitIndex < unitCount; unitIndex++) {
-		const before = pattern.staticsBeforeHoles(
-			unitIndex,
-			attributeText,
-			fillerPerUnit,
-		);
+		const before = pattern.staticsBeforeHoles(unitIndex, attributeText, fillerPerUnit);
 		for (let holeIndex = 0; holeIndex < before.length; holeIndex++) {
 			current += before[holeIndex];
 			statics.push(current);
@@ -270,8 +250,7 @@ const assembleTemplate = (
 
 const totalCharactersOf = (statics: ReadonlyArray<string>): number => {
 	let total = 0;
-	for (let index = 0; index < statics.length; index++)
-		total += statics[index].length;
+	for (let index = 0; index < statics.length; index++) total += statics[index].length;
 	return total;
 };
 
@@ -279,16 +258,12 @@ const generateStaticOnlyTemplate = (
 	shape: CorpusShape,
 	templateIndex: number,
 ): RecordedTemplate => {
-	const attributeText = buildStaticAttributeText(
-		shape.staticAttributesPerElement,
-	);
+	const attributeText = buildStaticAttributeText(shape.staticAttributesPerElement);
 	const elementCount = Math.max(1, shape.elementsPerTemplate ?? 1);
 	const perElementMarkup = `<p${attributeText}></p>`;
 	const overhead = 25 + perElementMarkup.length * elementCount;
 	const filler = buildTextFiller(
-		Math.floor(
-			Math.max(0, shape.charactersPerTemplate - overhead) / elementCount,
-		),
+		Math.floor(Math.max(0, shape.charactersPerTemplate - overhead) / elementCount),
 		templateIndex,
 	);
 
@@ -300,26 +275,17 @@ const generateStaticOnlyTemplate = (
 	return { strings: [html], raw: [html] };
 };
 
-const generateTemplate = (
-	shape: CorpusShape,
-	templateIndex: number,
-): RecordedTemplate => {
-	if (shape.holesPerTemplate === 0)
-		return generateStaticOnlyTemplate(shape, templateIndex);
+const generateTemplate = (shape: CorpusShape, templateIndex: number): RecordedTemplate => {
+	if (shape.holesPerTemplate === 0) return generateStaticOnlyTemplate(shape, templateIndex);
 
 	const pattern = HOLE_PATTERNS[shape.holeKind];
-	const attributeText = buildStaticAttributeText(
-		shape.staticAttributesPerElement,
-	);
+	const attributeText = buildStaticAttributeText(shape.staticAttributesPerElement);
 	const unitCount = Math.ceil(shape.holesPerTemplate / pattern.holesPerUnit);
 
 	// Built once empty to learn the markup overhead, then the remaining
 	// character budget is spent on filler. Exact beats modelled here.
 	const withoutFiller = assembleTemplate(pattern, unitCount, attributeText, "");
-	const fillerBudget = Math.max(
-		0,
-		shape.charactersPerTemplate - totalCharactersOf(withoutFiller),
-	);
+	const fillerBudget = Math.max(0, shape.charactersPerTemplate - totalCharactersOf(withoutFiller));
 	const charactersPerUnit = Math.floor(fillerBudget / unitCount);
 	const filler = pattern.fillerIsDeclarations
 		? buildDeclarationFiller(charactersPerUnit, templateIndex)
@@ -334,11 +300,7 @@ export const generateCorpus = (shape: CorpusShape): GeneratedCorpus => {
 	let totalCharacters = 0;
 	let totalHoles = 0;
 
-	for (
-		let templateIndex = 0;
-		templateIndex < shape.templateCount;
-		templateIndex++
-	) {
+	for (let templateIndex = 0; templateIndex < shape.templateCount; templateIndex++) {
 		const template = generateTemplate(shape, templateIndex);
 		templates.push(template);
 		totalCharacters += totalCharactersOf(template.strings);
@@ -392,10 +354,7 @@ export const createFreshTemplateStringsArrays = (
 
 // --- shapes --------------------------------------------------------------
 
-const holeDensityShape = (
-	holeKind: HoleKind,
-	holesPerTemplate: number,
-): CorpusShape => ({
+const holeDensityShape = (holeKind: HoleKind, holesPerTemplate: number): CorpusShape => ({
 	name: `${holeKind === "adjacentContent" ? "adjacent" : "per element"} · ${holesPerTemplate} holes`,
 	group: "hole density",
 	hypothesis:
@@ -435,16 +394,13 @@ export const RECORDED_CORPUS_SHAPE: CorpusShape = {
 };
 
 export const CORPUS_SHAPES: ReadonlyArray<CorpusShape> = [
-	...[0, 8, 32, 128, 512].map((holes) =>
-		holeDensityShape("adjacentContent", holes),
-	),
+	...[0, 8, 32, 128, 512].map((holes) => holeDensityShape("adjacentContent", holes)),
 	...[8, 32, 128, 512].map((holes) => holeDensityShape("content", holes)),
 
 	...[3000, 6000, 12000, 24000].map((characters) => ({
 		name: `${characters / 1000}k chars · 32 holes`,
 		group: "part length" as const,
-		hypothesis:
-			"holes fixed, characters varied: flat ns/char means slicing is linear and cheap",
+		hypothesis: "holes fixed, characters varied: flat ns/char means slicing is linear and cheap",
 		templateCount: 8,
 		holesPerTemplate: 32,
 		charactersPerTemplate: characters,
@@ -460,8 +416,7 @@ export const CORPUS_SHAPES: ReadonlyArray<CorpusShape> = [
 	].map((split) => ({
 		name: `${split.templateCount} × ${split.charactersPerTemplate} chars`,
 		group: "template count" as const,
-		hypothesis:
-			"48k characters and ~256 holes either way: the spread is per-template fixed cost",
+		hypothesis: "48k characters and ~256 holes either way: the spread is per-template fixed cost",
 		holeKind: "content" as const,
 		staticAttributesPerElement: 0,
 		...split,
@@ -482,8 +437,7 @@ export const CORPUS_SHAPES: ReadonlyArray<CorpusShape> = [
 	...[0, 4, 12].map((attributeCount) => ({
 		name: `${attributeCount} attributes / element`,
 		group: "attribute density" as const,
-		hypothesis:
-			"no holes at all: the attribute scanner without a single binding allocation",
+		hypothesis: "no holes at all: the attribute scanner without a single binding allocation",
 		templateCount: 8,
 		holesPerTemplate: 0,
 		charactersPerTemplate: 6000,

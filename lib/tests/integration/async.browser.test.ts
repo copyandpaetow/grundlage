@@ -1,8 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { awaited, html, component } from "../../src/index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("components that yield promises", () => {
 	let tagId = 0;
@@ -162,9 +161,7 @@ describe("components that yield promises", () => {
 		await sleep(100);
 
 		expect(order).toEqual(["first", "second"]);
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"first,second",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("first,second");
 
 		cleanup(element);
 	});
@@ -180,9 +177,7 @@ describe("components that yield promises", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"async static",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("async static");
 
 		cleanup(element);
 	});
@@ -207,17 +202,13 @@ describe("components that yield promises", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep(50);
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"ready",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("ready");
 
 		data = "updated";
 		await element.update();
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"updated",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("updated");
 
 		cleanup(element);
 	});
@@ -285,9 +276,7 @@ describe("error handling", () => {
 
 	test("a yielded promise rejecting after disconnect paints nothing and stays silent", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		customElements.define(
 			tag,
@@ -314,9 +303,7 @@ describe("error handling", () => {
 
 	test("sync generator: update generator error is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield function* () {
@@ -328,18 +315,14 @@ describe("error handling", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.textContent).toContain(
-			"sync update generator error",
-		);
+		expect(element.shadowRoot?.textContent).toContain("sync update generator error");
 		consoleError.mockRestore();
 		cleanup(element);
 	});
 
 	test("sync generator: error in second yield is shown after the first paint", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield function* () {
@@ -361,9 +344,7 @@ describe("error handling", () => {
 
 	test("error in update() is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let shouldThrow = false;
 
 		const MyElement = component(function* () {
@@ -390,9 +371,7 @@ describe("error handling", () => {
 
 	test("rejected yielded promise is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield Promise.reject(new Error("promise rejection"));
@@ -437,9 +416,7 @@ describe("error handling", () => {
 
 	test("error stops further updates", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield function* () {
@@ -507,9 +484,7 @@ describe("error handling", () => {
 
 	test("a promise rejected in an update generator the body cannot catch is fatal and logs one console error", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield function* () {
@@ -591,9 +566,7 @@ describe("a superseded update generator run", () => {
 
 	test("does not fail the component when it rejects after a newer call", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let calls = 0;
 
 		const MyElement = component(function* () {
@@ -617,9 +590,7 @@ describe("a superseded update generator run", () => {
 		await sleep(60);
 		//the stale rejection reaches a superseded run: not fatal, not displayed
 		expect(element.shadowRoot?.textContent).toContain("call 2");
-		expect(element.shadowRoot?.textContent).not.toContain(
-			"superseded-rejection",
-		);
+		expect(element.shadowRoot?.textContent).not.toContain("superseded-rejection");
 		expect(consoleError).not.toHaveBeenCalled();
 		consoleError.mockRestore();
 		cleanup(element);

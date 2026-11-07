@@ -1,8 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, component } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("live state: value, checked, indeterminate, selected", () => {
 	let tagId = 0;
@@ -228,8 +227,7 @@ describe("live state: value, checked, indeterminate, selected", () => {
 		const element = mount(tag);
 		await sleep();
 		const textarea = element.shadowRoot?.querySelector("textarea");
-		if (!(textarea instanceof HTMLTextAreaElement))
-			throw new Error("no textarea");
+		if (!(textarea instanceof HTMLTextAreaElement)) throw new Error("no textarea");
 		expect(textarea.value).toBe("initial");
 		expect(textarea.hasAttribute("value")).toBe(false);
 
@@ -307,9 +305,7 @@ describe("live state: value, checked, indeterminate, selected", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining("<option selected="),
-		);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining("<option selected="));
 		warn.mockRestore();
 		element.remove();
 	});

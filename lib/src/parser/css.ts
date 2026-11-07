@@ -2,12 +2,7 @@ import { isLetterCode, isQuoteCode, isWhitespaceCode } from "./characters";
 import * as CHARACTER_CODE from "./character-code";
 import { ValueOf } from "../utils/types";
 import { NO_REINSERTION, STYLE_SHEET_NOT_COMPILED } from "./constants";
-import {
-	CompiledStyleSheet,
-	HoledDeclaration,
-	Part,
-	RuleCountCheck,
-} from "./types";
+import { CompiledStyleSheet, HoledDeclaration, Part, RuleCountCheck } from "./types";
 import { assertDuringDevelopment } from "../utils/diagnostics";
 import * as RULE_KIND from "./rule-kind";
 
@@ -49,8 +44,7 @@ const KEYFRAMES_AT_RULE_NAME = "keyframes";
 const isDigitCode = (code: number) =>
 	code >= CHARACTER_CODE.DIGIT_ZERO && code <= CHARACTER_CODE.DIGIT_NINE;
 
-const isAtRuleNameCode = (code: number) =>
-	isLetterCode(code) || code === CHARACTER_CODE.DASH;
+const isAtRuleNameCode = (code: number) => isLetterCode(code) || code === CHARACTER_CODE.DASH;
 
 const isStandardNameCode = (code: number) =>
 	isLetterCode(code) || isDigitCode(code) || code === CHARACTER_CODE.DASH;
@@ -104,17 +98,14 @@ const createRuleFrame = (
 	prelude: string,
 ): RuleFrame => {
 	const isInsideStyleRule =
-		parent !== null &&
-		(parent.kind === RULE_KIND.STYLE || parent.isInsideStyleRule);
+		parent !== null && (parent.kind === RULE_KIND.STYLE || parent.isInsideStyleRule);
 	const isInsideKeyframes =
-		parent !== null &&
-		(parent.kind === RULE_KIND.KEYFRAMES || parent.isInsideKeyframes);
+		parent !== null && (parent.kind === RULE_KIND.KEYFRAMES || parent.isInsideKeyframes);
 	const matchesHost =
 		!isInsideKeyframes &&
 		(MATCHES_HOST_PATTERN.test(prelude) ||
 			(parent !== null && parent.reinsertedRulePath !== NO_REINSERTION));
-	const inheritedReinsertedRulePath =
-		parent === null ? NO_REINSERTION : parent.reinsertedRulePath;
+	const inheritedReinsertedRulePath = parent === null ? NO_REINSERTION : parent.reinsertedRulePath;
 	return {
 		kind,
 		rulePath,
@@ -166,10 +157,7 @@ const endOfString = (source: string, openingQuoteIndex: number): number => {
 };
 
 const endOfComment = (source: string, commentStart: number): number => {
-	const commentClose = source.indexOf(
-		COMMENT_CLOSE,
-		commentStart + COMMENT_OPEN.length,
-	);
+	const commentClose = source.indexOf(COMMENT_CLOSE, commentStart + COMMENT_OPEN.length);
 	if (commentClose === -1) throw NOT_ADDRESSABLE;
 	failUnlessHoleFree(source, commentStart, commentClose);
 	return commentClose + COMMENT_CLOSE.length;
@@ -188,12 +176,9 @@ const skipWhitespaceAndComments = (source: string, index: number): number => {
 };
 
 const closingCodeOf = (openingCode: number): number | null => {
-	if (openingCode === CHARACTER_CODE.OPEN_PAREN)
-		return CHARACTER_CODE.CLOSE_PAREN;
-	if (openingCode === CHARACTER_CODE.OPEN_BRACKET)
-		return CHARACTER_CODE.CLOSE_BRACKET;
-	if (openingCode === CHARACTER_CODE.OPEN_BRACE)
-		return CHARACTER_CODE.CLOSE_BRACE;
+	if (openingCode === CHARACTER_CODE.OPEN_PAREN) return CHARACTER_CODE.CLOSE_PAREN;
+	if (openingCode === CHARACTER_CODE.OPEN_BRACKET) return CHARACTER_CODE.CLOSE_BRACKET;
+	if (openingCode === CHARACTER_CODE.OPEN_BRACE) return CHARACTER_CODE.CLOSE_BRACE;
 	return null;
 };
 
@@ -210,8 +195,7 @@ const readItem = (reader: StyleSheetReader): number => {
 		const code = source.charCodeAt(index);
 		if (code === CHARACTER_CODE.BACKSLASH) {
 			const escapesNothing =
-				index + 1 === source.length ||
-				source.charCodeAt(index + 1) === HOLE_CODE;
+				index + 1 === source.length || source.charCodeAt(index + 1) === HOLE_CODE;
 			if (escapesNothing) throw NOT_ADDRESSABLE;
 			index += 2;
 			continue;
@@ -227,8 +211,7 @@ const readItem = (reader: StyleSheetReader): number => {
 		const isInsideBlock = openBlockClosingCodes.length > 0;
 		const closingCode = closingCodeOf(code);
 		const opensNestedBlock =
-			closingCode !== null &&
-			(isInsideBlock || code !== CHARACTER_CODE.OPEN_BRACE);
+			closingCode !== null && (isInsideBlock || code !== CHARACTER_CODE.OPEN_BRACE);
 		if (opensNestedBlock) openBlockClosingCodes.push(closingCode);
 		else if (isInsideBlock) {
 			if (code === openBlockClosingCodes[openBlockClosingCodes.length - 1])
@@ -241,10 +224,7 @@ const readItem = (reader: StyleSheetReader): number => {
 			return index;
 		else if (code === CHARACTER_CODE.COLON) {
 			if (reader.itemColonIndex === NO_COLON) reader.itemColonIndex = index;
-		} else if (
-			code === CHARACTER_CODE.BANG &&
-			reader.itemColonIndex !== NO_COLON
-		)
+		} else if (code === CHARACTER_CODE.BANG && reader.itemColonIndex !== NO_COLON)
 			reader.itemTopLevelBangCount++;
 		index++;
 	}
@@ -297,17 +277,12 @@ const propertyNameOf = (
 		while (isStandardNameCode(source.charCodeAt(end))) end++;
 		name = source.slice(start, end).toLowerCase();
 	}
-	if (skipWhitespaceAndComments(source, end) < colonIndex)
-		return NOT_A_PROPERTY_NAME;
+	if (skipWhitespaceAndComments(source, end) < colonIndex) return NOT_A_PROPERTY_NAME;
 	return name;
 };
 
 //every hole passes through here exactly once and in order, which is what numbers it
-const valuePartsOf = (
-	reader: StyleSheetReader,
-	start: number,
-	end: number,
-): Array<Part> => {
+const valuePartsOf = (reader: StyleSheetReader, start: number, end: number): Array<Part> => {
 	const { source } = reader;
 	const parts: Array<Part> = [];
 	let sliceStart = start;
@@ -337,8 +312,7 @@ const splitTrailingImportantPriority = (
 		.slice(bangIndex + 1)
 		.trim()
 		.toLowerCase();
-	if (bangIndex === -1 || keywordAfterBang !== IMPORTANT_PRIORITY)
-		throw NOT_ADDRESSABLE;
+	if (bangIndex === -1 || keywordAfterBang !== IMPORTANT_PRIORITY) throw NOT_ADDRESSABLE;
 	const valueBeforeBang = lastValuePart.slice(0, bangIndex);
 	if (valueBeforeBang === "") valueParts.pop();
 	else valueParts[valueParts.length - 1] = valueBeforeBang;
@@ -391,17 +365,12 @@ const recordChildRule = (frame: RuleFrame): void => {
 
 //declarations after a nested rule sit in an implicit nested-declarations rule, so the block a
 //setProperty addresses is the frame's own or its open run's
-const holedRuleFor = (
-	reader: StyleSheetReader,
-	frame: RuleFrame,
-): OpenHoledRule => {
+const holedRuleFor = (reader: StyleSheetReader, frame: RuleFrame): OpenHoledRule => {
 	const isInRun = frame.openRunIndex !== NO_OPEN_RUN;
 	const existing = isInRun ? frame.runHoledRule : frame.ownHoledRule;
 	if (existing !== null) return existing;
 	const holedRule: OpenHoledRule = {
-		rulePath: isInRun
-			? frame.rulePath.concat(frame.openRunIndex)
-			: frame.rulePath,
+		rulePath: isInRun ? frame.rulePath.concat(frame.openRunIndex) : frame.rulePath,
 		reinsertedRulePath: frame.reinsertedRulePath,
 		declarations: [],
 	};
@@ -427,17 +396,14 @@ const readDeclaration = (
 	failUnlessHoleFree(source, declarationStart, colonIndex);
 	if (frame.doDeclarationsCreateRuns && frame.openRunIndex === NO_OPEN_RUN)
 		frame.openRunIndex = frame.childRuleCount++;
-	const isDeclarationHolder =
-		frame.kind === RULE_KIND.STYLE || frame.doDeclarationsCreateRuns;
+	const isDeclarationHolder = frame.kind === RULE_KIND.STYLE || frame.doDeclarationsCreateRuns;
 	const propertyName = isDeclarationHolder
 		? propertyNameOf(source, declarationStart, colonIndex)
 		: NOT_A_PROPERTY_NAME;
 	const valueHasHole = hasHoleBetween(source, colonIndex + 1, declarationEnd);
 	if (propertyName === NOT_A_PROPERTY_NAME) {
 		//an escaped name (`c\olor`) may spell a holed property, and its later write would win
-		const isEscapedName = source
-			.slice(declarationStart, colonIndex)
-			.includes("\\");
+		const isEscapedName = source.slice(declarationStart, colonIndex).includes("\\");
 		if (valueHasHole || isEscapedName) throw NOT_ADDRESSABLE;
 		return;
 	}
@@ -447,13 +413,9 @@ const readDeclaration = (
 	}
 	if (!claimHoledProperty(frame, propertyName)) throw NOT_ADDRESSABLE;
 	const valueParts = valuePartsOf(reader, colonIndex + 1, declarationEnd);
-	const priority = splitTrailingImportantPriority(
-		valueParts,
-		reader.itemTopLevelBangCount,
-	);
+	const priority = splitTrailingImportantPriority(valueParts, reader.itemTopLevelBangCount);
 	//a keyframe drops an !important declaration at parse time, leaving nothing to address
-	const isDroppedByKeyframe =
-		frame.isInsideKeyframes && priority === IMPORTANT_PRIORITY;
+	const isDroppedByKeyframe = frame.isInsideKeyframes && priority === IMPORTANT_PRIORITY;
 	if (isDroppedByKeyframe) throw NOT_ADDRESSABLE;
 	trimValueEdgeWhitespace(valueParts);
 	const declaration: HoledDeclaration = { propertyName, priority, valueParts };
@@ -474,12 +436,7 @@ const readNestedRule = (
 	const prelude = reader.source.slice(reader.index, openBraceIndex);
 	const ruleIndex = parent.childRuleCount;
 	recordChildRule(parent);
-	const frame = createRuleFrame(
-		kind,
-		parent.rulePath.concat(ruleIndex),
-		parent,
-		prelude,
-	);
+	const frame = createRuleFrame(kind, parent.rulePath.concat(ruleIndex), parent, prelude);
 	reader.index = openBraceIndex + 1;
 	reader.openFrames.push(frame);
 	readRuleContents(reader);
@@ -504,14 +461,11 @@ const readAtRule = (reader: StyleSheetReader, parent: RuleFrame): void => {
 	const name = source.slice(reader.index + 1, nameEnd).toLowerCase();
 	const preludeEnd = readItem(reader);
 	failUnlessHoleFree(source, reader.index, preludeEnd);
-	const isStatement =
-		source.charCodeAt(preludeEnd) !== CHARACTER_CODE.OPEN_BRACE;
+	const isStatement = source.charCodeAt(preludeEnd) !== CHARACTER_CODE.OPEN_BRACE;
 	if (isStatement) {
 		recordChildRule(parent);
 		reader.index =
-			source.charCodeAt(preludeEnd) === CHARACTER_CODE.SEMICOLON
-				? preludeEnd + 1
-				: preludeEnd;
+			source.charCodeAt(preludeEnd) === CHARACTER_CODE.SEMICOLON ? preludeEnd + 1 : preludeEnd;
 		return;
 	}
 	const kind = atRuleKindOf(name);
@@ -556,15 +510,11 @@ const readRuleContents = (reader: StyleSheetReader): void => {
 			continue;
 		}
 		//a custom property's value may hold a {} block, which no setProperty value spells
-		const holdsDeclarations =
-			frame.kind === RULE_KIND.STYLE || frame.doDeclarationsCreateRuns;
+		const holdsDeclarations = frame.kind === RULE_KIND.STYLE || frame.doDeclarationsCreateRuns;
 		const isCustomPropertyWithBlock =
 			holdsDeclarations &&
 			reader.itemColonIndex !== NO_COLON &&
-			source.startsWith(
-				CUSTOM_PROPERTY_PREFIX,
-				skipWhitespaceAndComments(source, reader.index),
-			);
+			source.startsWith(CUSTOM_PROPERTY_PREFIX, skipWhitespaceAndComments(source, reader.index));
 		if (isCustomPropertyWithBlock) throw NOT_ADDRESSABLE;
 		failUnlessHoleFree(source, reader.index, itemEnd);
 		readNestedRule(reader, frame, RULE_KIND.STYLE, itemEnd);

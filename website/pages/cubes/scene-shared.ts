@@ -13,8 +13,7 @@ export const GROUND_SIZE = GROUND_HALF_UNITS * 2 * UNIT_SIZE;
 
 export type Vector3 = [number, number, number];
 
-export const snapToGrid = (value: number): number =>
-	Math.round(value / GRID_SNAP) * GRID_SNAP;
+export const snapToGrid = (value: number): number => Math.round(value / GRID_SNAP) * GRID_SNAP;
 
 // Exported markup reads `2` and `1.5`, never `2.000000001`, `1.50` or `-0`.
 export const formatNumber = (value: number): string => {
@@ -96,11 +95,7 @@ export const placementStyles = html`
 	</style>
 `;
 
-export const placementVariables = ({
-	position,
-	rotation,
-	size,
-}: BlockTransform) => html`
+export const placementVariables = ({ position, rotation, size }: BlockTransform) => html`
 	<style>
 		:host {
 			--position-x: ${position[0]};
@@ -126,22 +121,14 @@ const asTriple =
 	(fallback: number): Resolve<Vector3> =>
 	(incoming) => {
 		if (Array.isArray(incoming))
-			return [
-				incoming[0] ?? fallback,
-				incoming[1] ?? fallback,
-				incoming[2] ?? fallback,
-			];
+			return [incoming[0] ?? fallback, incoming[1] ?? fallback, incoming[2] ?? fallback];
 		const values = String(incoming)
 			.trim()
 			.split(/\s+/)
 			.filter((token) => token !== "")
 			.map(Number);
 		if (values.length === 1) return [values[0], values[0], values[0]];
-		return [
-			values[0] ?? fallback,
-			values[1] ?? fallback,
-			values[2] ?? fallback,
-		];
+		return [values[0] ?? fallback, values[1] ?? fallback, values[2] ?? fallback];
 	};
 
 const asSizeTriple = asTriple(1);
@@ -214,9 +201,7 @@ const resolveTriple = (
 	return [alongX ?? seed[0], alongY ?? seed[1], alongZ ?? seed[2]];
 };
 
-export const blockTransformFromProps = (
-	props: TransformProps,
-): BlockTransform => ({
+export const blockTransformFromProps = (props: TransformProps): BlockTransform => ({
 	size: resolveTriple(props.size, props.width, props.height, props.depth, 1),
 	position: resolveTriple(props.position, props.x, props.y, props.z, 0),
 	rotation: resolveTriple(
@@ -228,11 +213,8 @@ export const blockTransformFromProps = (
 	),
 });
 
-const readTriple = (
-	parse: Resolve<Vector3>,
-	element: Element,
-	name: string,
-): Vector3 => parse(element.getAttribute(name) ?? "") as Vector3;
+const readTriple = (parse: Resolve<Vector3>, element: Element, name: string): Vector3 =>
+	parse(element.getAttribute(name) ?? "") as Vector3;
 
 const readNumber = (element: Element, name: string): number | undefined => {
 	const raw = element.getAttribute(name);
@@ -243,9 +225,7 @@ const readNumber = (element: Element, name: string): number | undefined => {
 
 // The editor authors markup, so it resolves transforms straight off attributes and
 // works on elements whose definition never loaded.
-export const blockTransformFromAttributes = (
-	element: Element,
-): BlockTransform =>
+export const blockTransformFromAttributes = (element: Element): BlockTransform =>
 	blockTransformFromProps({
 		size: readTriple(asSizeTriple, element, "size"),
 		width: readNumber(element, "width"),
@@ -270,7 +250,5 @@ export const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
 // so a following measure sees the committed state
 export const sceneElementRendered = (element: HTMLElement): Promise<void> => {
 	const update = (element as Partial<{ update: () => Promise<void> }>).update;
-	return typeof update === "function"
-		? update.call(element)
-		: Promise.resolve();
+	return typeof update === "function" ? update.call(element) : Promise.resolve();
 };

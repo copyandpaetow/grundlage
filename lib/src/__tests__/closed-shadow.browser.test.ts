@@ -7,11 +7,9 @@ import * as FORM_EVENTS from "../form-events";
 //rests on, that attachInternals().shadowRoot reaches a declaratively-created closed root
 const canRun =
 	typeof HTMLElement.prototype.attachInternals === "function" &&
-	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe ===
-		"function";
+	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe === "function";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `closed-el-${tagId++}-${Date.now()}`;
@@ -29,8 +27,7 @@ const prerenderClosed = (tag: string, shadowInner: string): HTMLElement => {
 };
 
 const closedRootOf = (host: HTMLElement): ShadowRoot =>
-	(host as unknown as { internals: ElementInternals }).internals
-		.shadowRoot as ShadowRoot;
+	(host as unknown as { internals: ElementInternals }).internals.shadowRoot as ShadowRoot;
 
 describe("closed shadow root — hydration + load replay", () => {
 	test.skipIf(!canRun)(

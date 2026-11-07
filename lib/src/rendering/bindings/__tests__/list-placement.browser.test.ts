@@ -43,8 +43,7 @@ describe("list placement moves the fewest rows", () => {
 		const reinsertedRows = new Set<Node>();
 		const collect = (records: Array<MutationRecord>) => {
 			for (const record of records)
-				for (const node of record.addedNodes)
-					if (rowsBefore.has(node)) reinsertedRows.add(node);
+				for (const node of record.addedNodes) if (rowsBefore.has(node)) reinsertedRows.add(node);
 		};
 		const observer = new MutationObserver(collect);
 		observer.observe(element.shadowRoot!, { childList: true, subtree: true });
@@ -104,9 +103,7 @@ describe("list placement moves the fewest rows", () => {
 				return element.update();
 			});
 
-			expect(listItems(element).map((item) => before.indexOf(item))).toEqual(
-				reordered,
-			);
+			expect(listItems(element).map((item) => before.indexOf(item))).toEqual(reordered);
 			expect(moved).toBe(fewestMoves);
 			element.remove();
 		},
@@ -169,9 +166,7 @@ describe("list placement moves the fewest rows", () => {
 			return element.update();
 		});
 
-		expect(listItems(element).map((item) => before.indexOf(item))).toEqual(
-			reordered,
-		);
+		expect(listItems(element).map((item) => before.indexOf(item))).toEqual(reordered);
 		expect(moved).toBe(2);
 		element.remove();
 	});
@@ -198,9 +193,7 @@ describe("list placement moves the fewest rows", () => {
 			return element.update();
 		});
 
-		expect(listItems(element).map((item) => before.indexOf(item))).toEqual(
-			reordered,
-		);
+		expect(listItems(element).map((item) => before.indexOf(item))).toEqual(reordered);
 		expect(listItems(element).map((item) => item.textContent)).toEqual(
 			reordered.map((id) => `second ${id}`),
 		);
@@ -226,9 +219,7 @@ describe("list placement moves the fewest rows", () => {
 	});
 
 	test("rows whose content all changed are patched where they stand, even when the old content repeated", async () => {
-		let order: Array<number | string> = inOrder.map((row) =>
-			row % 2 === 0 ? "even" : "odd",
-		);
+		let order: Array<number | string> = inOrder.map((row) => (row % 2 === 0 ? "even" : "odd"));
 		const element = mountRows(() => order);
 		await settle();
 		const before = listItems(element);
@@ -248,15 +239,11 @@ describe("list placement moves the fewest rows", () => {
 
 	test("a shuffle of many repeated rows moves every row with its own content, including hashes that probe past a used-up one", async () => {
 		let randomState = 1;
-		const nextRandom = () =>
-			(randomState = (Math.imul(randomState, 1103515245) + 12345) >>> 0);
+		const nextRandom = () => (randomState = (Math.imul(randomState, 1103515245) + 12345) >>> 0);
 		//a row's hash is a constant plus its number, so consecutive numbers never collide in the
 		//table; random ones do. 800 distinct values fill the 2048-entry table to 39%
 		const distinctValues = Array.from({ length: 800 }, nextRandom);
-		const repeatedRows = Array.from(
-			{ length: 1000 },
-			(_, index) => distinctValues[index % 800],
-		);
+		const repeatedRows = Array.from({ length: 1000 }, (_, index) => distinctValues[index % 800]);
 		const shuffled = repeatedRows.slice();
 		for (let index = shuffled.length - 1; index > 0; index--) {
 			const other = nextRandom() % (index + 1);
@@ -265,17 +252,13 @@ describe("list placement moves the fewest rows", () => {
 		let order: Array<number> = repeatedRows;
 		const element = mountRows(() => order);
 		await settle();
-		const textBefore = new Map(
-			listItems(element).map((item) => [item, item.textContent]),
-		);
+		const textBefore = new Map(listItems(element).map((item) => [item, item.textContent]));
 
 		order = shuffled;
 		await element.update();
 
 		const rowsAfter = listItems(element);
-		expect(rowsAfter.map((item) => item.textContent)).toEqual(
-			shuffled.map((row) => `row ${row}`),
-		);
+		expect(rowsAfter.map((item) => item.textContent)).toEqual(shuffled.map((row) => `row ${row}`));
 		const rowsPatchedOrMounted = rowsAfter.filter(
 			(item) => textBefore.get(item) !== item.textContent,
 		);

@@ -13,9 +13,7 @@ const record = (element: Element): Record<string, unknown> =>
 
 describe("isDeclaredPropName", () => {
 	test("a tag without a dash declares nothing", () => {
-		expect(isDeclaredPropName(document.createElement("div"), "tags")).toBe(
-			false,
-		);
+		expect(isDeclaredPropName(document.createElement("div"), "tags")).toBe(false);
 	});
 
 	test("an unregistered dashed tag declares nothing yet", () => {

@@ -1,11 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../../index";
 
-const normalizeWhitespace = (string: string) =>
-	string.replace(/\s+/g, " ").trim();
+const normalizeWhitespace = (string: string) => string.replace(/\s+/g, " ").trim();
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 //two platform claims a light-DOM mode would rest on, and nothing in the library exercises yet:
 //a prelude-less @scope is inert inside a shadow root, and it still parses to an addressable
@@ -33,8 +31,7 @@ describe("prelude-less @scope", () => {
 		probe.textContent = "@scope { p { color: red; } }";
 		document.body.appendChild(probe);
 		const firstRule = probe.sheet?.cssRules[0];
-		const parsed =
-			firstRule !== undefined && "cssRules" in (firstRule as CSSRule);
+		const parsed = firstRule !== undefined && "cssRules" in (firstRule as CSSRule);
 		probe.remove();
 		return parsed;
 	};
@@ -49,16 +46,13 @@ describe("prelude-less @scope", () => {
 		probe.attachShadow({ mode: "open" }).innerHTML =
 			"<style>@scope { p { color: rgb(255, 0, 0); } }</style><p></p>";
 		const resolved =
-			getComputedStyle(probe.shadowRoot!.querySelector("p")!).color ===
-			"rgb(255, 0, 0)";
+			getComputedStyle(probe.shadowRoot!.querySelector("p")!).color === "rgb(255, 0, 0)";
 		probe.remove();
 		return resolved;
 	};
 	const resolvesScopedStyles = detectScopedStyleResolution();
 
-	const innerRuleDeclarationOf = (
-		style: HTMLStyleElement,
-	): CSSStyleDeclaration => {
+	const innerRuleDeclarationOf = (style: HTMLStyleElement): CSSStyleDeclaration => {
 		const scopeRule = style.sheet!.cssRules[0] as CSSGroupingRule;
 		return (scopeRule.cssRules[0] as CSSStyleRule).style;
 	};
@@ -95,9 +89,7 @@ describe("prelude-less @scope", () => {
 			customElements.define(scopedTag, Scoped);
 			customElements.define(unscopedTag, Unscoped);
 			const scopedElement = mount(scopedTag) as InstanceType<typeof Scoped>;
-			const unscopedElement = mount(unscopedTag) as InstanceType<
-				typeof Unscoped
-			>;
+			const unscopedElement = mount(unscopedTag) as InstanceType<typeof Unscoped>;
 			await sleep();
 
 			const scopedParagraph = scopedElement.shadowRoot!.querySelector("p")!;
@@ -151,15 +143,13 @@ describe("prelude-less @scope", () => {
 		},
 	);
 
-	test.skipIf(!parsesScope)(
-		"keeps a value hole on the CSSOM update path",
-		async () => {
-			const tag = uniqueTag();
-			let color = "red";
+	test.skipIf(!parsesScope)("keeps a value hole on the CSSOM update path", async () => {
+		const tag = uniqueTag();
+		let color = "red";
 
-			const MyElement = component(function* () {
-				yield function* () {
-					yield html`<style>
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<style>
 							@scope {
 								p {
 									color: ${color};
@@ -167,36 +157,29 @@ describe("prelude-less @scope", () => {
 							}
 						</style>
 						<p>text</p>`;
-				};
-			});
+			};
+		});
 
-			customElements.define(tag, MyElement);
-			const element = mount(tag) as InstanceType<typeof MyElement>;
-			await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-			const style = element.shadowRoot!.querySelector("style")!;
-			const sheetTextNode = style.firstChild!;
-			expect(normalizeWhitespace(style.textContent)).toBe(
-				"@scope { p { color: red; } }",
-			);
+		const style = element.shadowRoot!.querySelector("style")!;
+		const sheetTextNode = style.firstChild!;
+		expect(normalizeWhitespace(style.textContent)).toBe("@scope { p { color: red; } }");
 
-			color = "blue";
-			await element.update();
-			await sleep();
+		color = "blue";
+		await element.update();
+		await sleep();
 
-			//the text keeps the mount values — a full-text rewrite would replace it, and that
-			//is the whole difference between the fast path and the fallback
-			expect(style.firstChild).toBe(sheetTextNode);
-			expect(normalizeWhitespace(style.textContent)).toBe(
-				"@scope { p { color: red; } }",
-			);
-			expect(innerRuleDeclarationOf(style).getPropertyValue("color")).toBe(
-				"blue",
-			);
+		//the text keeps the mount values — a full-text rewrite would replace it, and that
+		//is the whole difference between the fast path and the fallback
+		expect(style.firstChild).toBe(sheetTextNode);
+		expect(normalizeWhitespace(style.textContent)).toBe("@scope { p { color: red; } }");
+		expect(innerRuleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 
-			cleanup(element);
-		},
-	);
+		cleanup(element);
+	});
 
 	test.skipIf(!resolvesScopedStyles)(
 		"a scoped value hole reaches the rendered pixels",

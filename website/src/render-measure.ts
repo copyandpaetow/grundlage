@@ -75,9 +75,7 @@ export interface RunOptions {
 const median = (samples: ReadonlyArray<number>): number => {
 	const sorted = samples.slice().sort((left, right) => left - right);
 	const middle = sorted.length >> 1;
-	return sorted.length % 2 === 0
-		? (sorted[middle - 1] + sorted[middle]) / 2
-		: sorted[middle];
+	return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 };
 
 const collectGarbage = (): void => {
@@ -89,8 +87,7 @@ const collectGarbage = (): void => {
 	collect();
 };
 
-const yieldToBrowser = (): Promise<void> =>
-	new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToBrowser = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 interface MountedShape {
 	generated: GeneratedShape;
@@ -98,19 +95,13 @@ interface MountedShape {
 	container: Element;
 }
 
-const mountShape = (
-	generated: GeneratedShape,
-	container: Element,
-): MountedShape => {
+const mountShape = (generated: GeneratedShape, container: Element): MountedShape => {
 	const { templateStrings, valuesByParity } = generated;
 	const parsed = getParsedTemplate(templateStrings);
 	const fragment = cloneTemplateFragment(parsed, container);
-	const instance = mountInstance(
-		fragment,
-		html(templateStrings, ...valuesByParity[0]),
-		parsed,
-		{ needsStyleSheetRefreshOnMove: false },
-	);
+	const instance = mountInstance(fragment, html(templateStrings, ...valuesByParity[0]), parsed, {
+		needsStyleSheetRefreshOnMove: false,
+	});
 	container.replaceChildren(fragment);
 	return { generated, instance, container };
 };
@@ -150,17 +141,13 @@ const calibrateUpdatesPerPass = (mounted: MountedShape): number => {
 			updates *= 4;
 			continue;
 		}
-		if (best >= TARGET_PASS_MS * 0.75 && best <= TARGET_PASS_MS * 2)
-			return updates;
+		if (best >= TARGET_PASS_MS * 0.75 && best <= TARGET_PASS_MS * 2) return updates;
 		updates = Math.max(1, Math.round(updates * (TARGET_PASS_MS / best)));
 	}
 	return updates;
 };
 
-const readPropertyOfEveryChild = (
-	mounted: MountedShape,
-	propertyName: string,
-): string =>
+const readPropertyOfEveryChild = (mounted: MountedShape, propertyName: string): string =>
 	Array.from(mounted.container.children, (child) =>
 		String((child as unknown as Record<string, unknown>)[propertyName]),
 	).join(",");
@@ -200,10 +187,8 @@ const findVoidReasons = (
 	medianPassMs: number,
 ): Array<VoidReason> => {
 	const reasons: Array<VoidReason> = [];
-	if (shape.churn === "changing" && !stateMoved)
-		reasons.push("gate did not open");
-	if (shape.churn === "unchanged" && stateMoved)
-		reasons.push("gate did not close");
+	if (shape.churn === "changing" && !stateMoved) reasons.push("gate did not open");
+	if (shape.churn === "unchanged" && stateMoved) reasons.push("gate did not close");
 	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO)
 		reasons.push("unstable timing");
 	//calibration can size a pass off a cold reading and land far under target;
@@ -225,10 +210,7 @@ export const warmUpCommitShapes = (
 	container: Element,
 ): void => {
 	for (let index = 0; index < shapes.length; index++)
-		runPass(
-			mountShape(generateShape(shapes[index]), container),
-			WARM_UP_UPDATES,
-		);
+		runPass(mountShape(generateShape(shapes[index]), container), WARM_UP_UPDATES);
 	container.replaceChildren();
 };
 
@@ -239,10 +221,7 @@ export const warmUpCommitShapes = (
     The comparison it exists for is staticName against composedName — equal
     growth there means composing a hole-free name allocates nothing.
 */
-const measureHeapGrowthBytesPerCommit = (
-	mounted: MountedShape,
-	updates: number,
-): number | null => {
+const measureHeapGrowthBytesPerCommit = (mounted: MountedShape, updates: number): number | null => {
 	collectGarbage();
 	const before = readHeapMb();
 	if (before === null) return null;
@@ -353,15 +332,13 @@ const gapBetween = (
 	const above = usable(higher);
 	const below = usable(lower);
 	if (!above || !below) return null;
-	const nanosecondsPerCommit =
-		above.nanosecondsPerCommit - below.nanosecondsPerCommit;
+	const nanosecondsPerCommit = above.nanosecondsPerCommit - below.nanosecondsPerCommit;
 	return {
 		name,
 		question,
 		nanosecondsPerCommit,
 		isBelowResolution:
-			Math.abs(nanosecondsPerCommit) <
-			(above.nanosecondsPerCommit * resolutionPercent) / 100,
+			Math.abs(nanosecondsPerCommit) < (above.nanosecondsPerCommit * resolutionPercent) / 100,
 	};
 };
 

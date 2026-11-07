@@ -27,9 +27,7 @@ const resolveAgainstPage = (url: string, pageUrlPath: string): string =>
 
 //in a script, unlike in a `src`, a specifier without a leading `.` or `/` names a package
 const isPathSpecifier = (specifier: string): boolean =>
-	specifier.startsWith("./") ||
-	specifier.startsWith("../") ||
-	specifier.startsWith("/");
+	specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("/");
 
 const staticImportsOf = (code: string): Array<string> => {
 	const specifiers: Array<string> = [];
@@ -38,16 +36,12 @@ const staticImportsOf = (code: string): Array<string> => {
 			statement.type === "ImportDeclaration" ||
 			statement.type === "ExportAllDeclaration" ||
 			statement.type === "ExportNamedDeclaration";
-		if (isStaticImport && statement.source !== null)
-			specifiers.push(statement.source.value);
+		if (isStaticImport && statement.source !== null) specifiers.push(statement.source.value);
 	}
 	return specifiers;
 };
 
-export const findPageScripts = (
-	html: string,
-	pageUrlPath: string,
-): PageScripts => {
+export const findPageScripts = (html: string, pageUrlPath: string): PageScripts => {
 	const pageScripts: PageScripts = {
 		externalScriptUrls: [],
 		inlineScriptImports: [],
@@ -56,27 +50,20 @@ export const findPageScripts = (
 		const [, rawAttributes, inlineCode = ""] = match;
 		if (rawAttributes === undefined) continue;
 		const attributes = new Map(
-			parseAttributes(rawAttributes).map(([name, value]) => [
-				name.toLowerCase(),
-				value,
-			]),
+			parseAttributes(rawAttributes).map(([name, value]) => [name.toLowerCase(), value]),
 		);
 		if (attributes.get("type")?.toLowerCase() !== "module") continue;
 
 		const source = attributes.get("src");
 		if (source !== undefined) {
 			if (!isExternalUrl(source))
-				pageScripts.externalScriptUrls.push(
-					resolveAgainstPage(source, pageUrlPath),
-				);
+				pageScripts.externalScriptUrls.push(resolveAgainstPage(source, pageUrlPath));
 			continue;
 		}
 		for (const specifier of staticImportsOf(inlineCode)) {
 			if (isExternalUrl(specifier)) continue;
 			pageScripts.inlineScriptImports.push(
-				isPathSpecifier(specifier)
-					? resolveAgainstPage(specifier, pageUrlPath)
-					: specifier,
+				isPathSpecifier(specifier) ? resolveAgainstPage(specifier, pageUrlPath) : specifier,
 			);
 		}
 	}

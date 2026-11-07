@@ -1,8 +1,5 @@
 import { getFormAssociatedBaseClass } from "./forms";
-import {
-	applyAttributeValue,
-	isDeclaredPropName,
-} from "./rendering/bindings/attribute-apply";
+import { applyAttributeValue, isDeclaredPropName } from "./rendering/bindings/attribute-apply";
 import { ComponentRoot, createComponentRoot } from "./rendering/component-root";
 import {
 	ComponentRunner,
@@ -29,11 +26,7 @@ import {
 	Schema,
 	Template,
 } from "./types";
-import {
-	ensurePropNamesAreAvailable,
-	normalizeSchema,
-	Prop,
-} from "./props/schema";
+import { ensurePropNamesAreAvailable, normalizeSchema, Prop } from "./props/schema";
 import {
 	attributeSpellingOf,
 	createComponentProps,
@@ -93,9 +86,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		);
 	if (!isGeneratorFunction(componentGenerator))
 		throw new TypeError(
-			libraryMessage(
-				"component(fn) expects a generator function. Add the * after function.",
-			),
+			libraryMessage("component(fn) expects a generator function. Add the * after function."),
 		);
 	const mergedOptions = { ...defaultOptions, ...options };
 	const ParentClass: typeof HTMLElement = mergedOptions.formAssociated
@@ -147,8 +138,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 					},
 					set(this: BaseElement, incoming: unknown) {
 						if (!this.#claimPropChange(prop, incoming)) return;
-						if (prop.kind === PROP_KIND.ATTRIBUTE)
-							this.#reflect(attributeName, prop);
+						if (prop.kind === PROP_KIND.ATTRIBUTE) this.#reflect(attributeName, prop);
 						this.#scheduleAfterPropChange();
 					},
 				});
@@ -170,8 +160,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		//lands before the body reads them; START is a no-op unless the runner waits to start
 		#scheduleAfterPropChange(): void {
 			this.update();
-			if (requiredPropNames.length > 0)
-				queueMicrotask(this.#startAfterThisTask);
+			if (requiredPropNames.length > 0) queueMicrotask(this.#startAfterThisTask);
 		}
 
 		#reflect(attributeName: string, prop: Prop): void {
@@ -188,10 +177,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		constructor() {
 			super();
 			//only a closed root is worth reaching through internals, and reading them attaches them
-			const existingRoot =
-				mergedOptions.mode === "closed"
-					? findShadowRoot(this)
-					: this.shadowRoot;
+			const existingRoot = mergedOptions.mode === "closed" ? findShadowRoot(this) : this.shadowRoot;
 			this.#root = createComponentRoot(
 				this,
 				existingRoot ?? this.attachShadow(mergedOptions),
@@ -263,14 +249,12 @@ export const component = <DeclaredSchema extends Schema = {}>(
 				//upgrade replays a present attribute as null → "", which is the mark arriving; only its
 				//removal is the parent releasing this child
 				const parentHasSuppliedValues = newValue === null;
-				if (parentHasSuppliedValues)
-					sendRunnerRequest(this.#runner, RUNNER_REQUEST.START);
+				if (parentHasSuppliedValues) sendRunnerRequest(this.#runner, RUNNER_REQUEST.START);
 				return;
 			}
 			const prop = props.get(attributeName);
 			if (prop === undefined) return;
-			if (this.#claimPropChange(prop, newValue))
-				this.#scheduleAfterPropChange();
+			if (this.#claimPropChange(prop, newValue)) this.#scheduleAfterPropChange();
 		}
 
 		setProp(name: string, value: unknown, oldValue?: unknown) {

@@ -38,7 +38,7 @@ of truth.
   Gizmo writes only the gesture's one number (`--drag-x/y/z` in world units or `--drag-yaw`
   in degrees) and composes `--carrier-drag` from it in CSS on its own `:host`; it inherits
   across the slot to the direct child, whose `:host` prepends it (`transform:
-var(--carrier-drag,) var(--placement)`). The child and its contents ride the drag by pure
+  var(--carrier-drag,) var(--placement)`). The child and its contents ride the drag by pure
   CSS inheritance — the Gizmo touches nothing inside the child. Commit reads the transform
   the browser composed back off the child, writes the child's authored attributes, resets
   the drag (once the child has re-rendered against them, so no flash), and fires

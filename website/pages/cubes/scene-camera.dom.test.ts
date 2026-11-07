@@ -26,11 +26,9 @@ afterEach(async () => {
 	await flush();
 });
 
-const flush = (): Promise<void> =>
-	new Promise((resolve) => queueMicrotask(resolve));
+const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
 
-const readCamera = (name: string): number =>
-	parseFloat(world.getAttribute(`camera-${name}`) ?? "");
+const readCamera = (name: string): number => parseFloat(world.getAttribute(`camera-${name}`) ?? "");
 
 // The step loop runs on rAF, so a movement key needs real frames to show up.
 const holdKeyForTwoFrames = async (key: string): Promise<void> => {
@@ -136,9 +134,7 @@ describe("free-fly", () => {
 	});
 
 	test("the wheel is left to the page", () => {
-		camera.dispatchEvent(
-			new WheelEvent("wheel", { deltaY: 100, cancelable: true }),
-		);
+		camera.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, cancelable: true }));
 		expect(readCamera("z")).toBe(START.z);
 	});
 
@@ -161,22 +157,16 @@ describe("orbit", () => {
 	test("the wheel zooms by changing the radius", async () => {
 		await setMode("orbit");
 		const radius = readCamera("orbit-radius");
-		camera.dispatchEvent(
-			new WheelEvent("wheel", { deltaY: 100, cancelable: true }),
-		);
+		camera.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, cancelable: true }));
 		expect(readCamera("orbit-radius")).toBeCloseTo(radius + 100, 5);
 	});
 
 	test("zoom is clamped so the camera can neither reach the target nor leave", async () => {
 		await setMode("orbit");
-		camera.dispatchEvent(
-			new WheelEvent("wheel", { deltaY: -99999, cancelable: true }),
-		);
+		camera.dispatchEvent(new WheelEvent("wheel", { deltaY: -99999, cancelable: true }));
 		expect(readCamera("orbit-radius")).toBeCloseTo(120, 5);
 
-		camera.dispatchEvent(
-			new WheelEvent("wheel", { deltaY: 99999, cancelable: true }),
-		);
+		camera.dispatchEvent(new WheelEvent("wheel", { deltaY: 99999, cancelable: true }));
 		expect(readCamera("orbit-radius")).toBeCloseTo(4000, 5);
 	});
 
@@ -206,11 +196,7 @@ describe("switching modes", () => {
 
 		await setMode("free");
 		expect(readCamera("orbit-radius")).toBe(0);
-		const resolvedDistance = Math.hypot(
-			readCamera("x"),
-			readCamera("y"),
-			readCamera("z"),
-		);
+		const resolvedDistance = Math.hypot(readCamera("x"), readCamera("y"), readCamera("z"));
 		expect(resolvedDistance).toBeCloseTo(radius, 5);
 		expect(readCamera("x")).toBeLessThan(0);
 
@@ -222,19 +208,13 @@ describe("switching modes", () => {
 	test("the wheel stops zooming once orbit is left", async () => {
 		await setMode("orbit");
 		await setMode("free");
-		camera.dispatchEvent(
-			new WheelEvent("wheel", { deltaY: 100, cancelable: true }),
-		);
+		camera.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, cancelable: true }));
 		expect(readCamera("orbit-radius")).toBe(0);
 	});
 
 	test("re-entering orbit freezes the distance the free flight left behind", async () => {
 		await holdKeyForTwoFrames("w");
-		const flownDistance = Math.hypot(
-			readCamera("x"),
-			readCamera("y"),
-			readCamera("z"),
-		);
+		const flownDistance = Math.hypot(readCamera("x"), readCamera("y"), readCamera("z"));
 
 		await setMode("orbit");
 		expect(readCamera("orbit-radius")).toBeCloseTo(flownDistance, 5);

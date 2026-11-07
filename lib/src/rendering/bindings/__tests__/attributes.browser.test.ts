@@ -1,8 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, component } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("attribute updates", () => {
 	let tagId = 0;
@@ -32,17 +31,13 @@ describe("attribute updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("red");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("red");
 
 		cls = "blue";
 		await element.update();
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("blue");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("blue");
 
 		cleanup(element);
 	});
@@ -62,17 +57,13 @@ describe("attribute updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("hello world");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("hello world");
 
 		first = "foo";
 		await element.update();
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("foo world");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("foo world");
 
 		cleanup(element);
 	});

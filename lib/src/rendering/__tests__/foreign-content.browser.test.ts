@@ -1,21 +1,14 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import {
-	html,
-	component,
-	ComponentErrorEvent,
-	type Template,
-} from "../../index";
+import { html, component, ComponentErrorEvent, type Template } from "../../index";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const MATHML_NAMESPACE = "http://www.w3.org/1998/Math/MathML";
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 //happy-dom parses <math> children as html, so the MathML namespace is only observable in a browser
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `test-foreign-${tagId++}-${Date.now()}`;
@@ -44,13 +37,9 @@ const mount = async (buildTemplate: () => Template) => {
 
 describe("svg and mathml namespaces", () => {
 	test("a nested template inside <svg> mounts svg elements", async () => {
-		const { shadowRoot } = await mount(
-			() => html`<svg>${html`<circle r="3"></circle>`}</svg>`,
-		);
+		const { shadowRoot } = await mount(() => html`<svg>${html`<circle r="3"></circle>`}</svg>`);
 
-		expect(shadowRoot.querySelector("circle")?.namespaceURI).toBe(
-			SVG_NAMESPACE,
-		);
+		expect(shadowRoot.querySelector("circle")?.namespaceURI).toBe(SVG_NAMESPACE);
 	});
 
 	test("list rows inside <svg> mount svg elements", async () => {
@@ -63,27 +52,21 @@ describe("svg and mathml namespaces", () => {
 
 		const circles = [...shadowRoot.querySelectorAll("circle")];
 		expect(circles).toHaveLength(2);
-		for (const circle of circles)
-			expect(circle.namespaceURI).toBe(SVG_NAMESPACE);
+		for (const circle of circles) expect(circle.namespaceURI).toBe(SVG_NAMESPACE);
 	});
 
 	test.skipIf(!isRealBrowser)(
 		"a nested template inside <math> mounts mathml elements",
 		async () => {
-			const { shadowRoot } = await mount(
-				() => html`<math>${html`<mi>x</mi>`}</math>`,
-			);
+			const { shadowRoot } = await mount(() => html`<math>${html`<mi>x</mi>`}</math>`);
 
-			expect(shadowRoot.querySelector("mi")?.namespaceURI).toBe(
-				MATHML_NAMESPACE,
-			);
+			expect(shadowRoot.querySelector("mi")?.namespaceURI).toBe(MATHML_NAMESPACE);
 		},
 	);
 
 	test("a nested template inside <foreignObject> mounts html elements", async () => {
 		const { shadowRoot } = await mount(
-			() =>
-				html`<svg><foreignObject>${html`<p>text</p>`}</foreignObject></svg>`,
+			() => html`<svg><foreignObject>${html`<p>text</p>`}</foreignObject></svg>`,
 		);
 
 		expect(shadowRoot.querySelector("p")?.namespaceURI).toBe(HTML_NAMESPACE);
@@ -91,9 +74,7 @@ describe("svg and mathml namespaces", () => {
 
 	test("a dynamic tag inside <svg> keeps the svg namespace and the name's case", async () => {
 		const tag = "linearGradient";
-		const { shadowRoot } = await mount(
-			() => html`<svg><${tag} id="gradient"></${tag}></svg>`,
-		);
+		const { shadowRoot } = await mount(() => html`<svg><${tag} id="gradient"></${tag}></svg>`);
 
 		const gradient = shadowRoot.getElementById("gradient");
 		expect(gradient?.namespaceURI).toBe(SVG_NAMESPACE);
@@ -102,9 +83,7 @@ describe("svg and mathml namespaces", () => {
 
 	test("a hole inside CDATA ends the component with a remedy", async () => {
 		const value = "x";
-		const { errors } = await mount(
-			() => html`<svg><text><![CDATA[a < b ${value}]]></text></svg>`,
-		);
+		const { errors } = await mount(() => html`<svg><text><![CDATA[a < b ${value}]]></text></svg>`);
 
 		expect(errors).toHaveLength(1);
 		expect(String(errors[0])).toMatch(/Move the hole outside of it/);
@@ -112,9 +91,7 @@ describe("svg and mathml namespaces", () => {
 
 	test("a dynamic tag that becomes <svg> outside of svg ends the component with a remedy", async () => {
 		const tag = "svg";
-		const { errors } = await mount(
-			() => html`<div><${tag}><circle r="1"></circle></${tag}></div>`,
-		);
+		const { errors } = await mount(() => html`<div><${tag}><circle r="1"></circle></${tag}></div>`);
 
 		expect(errors).toHaveLength(1);
 		expect(String(errors[0])).toMatch(/cannot become <svg>/);
@@ -122,14 +99,10 @@ describe("svg and mathml namespaces", () => {
 
 	test("a dynamic tag that becomes <svg> inside svg paints", async () => {
 		const tag = "svg";
-		const { shadowRoot, errors } = await mount(
-			() => html`<svg><${tag} id="inner"></${tag}></svg>`,
-		);
+		const { shadowRoot, errors } = await mount(() => html`<svg><${tag} id="inner"></${tag}></svg>`);
 
 		expect(errors).toEqual([]);
-		expect(shadowRoot.getElementById("inner")?.namespaceURI).toBe(
-			SVG_NAMESPACE,
-		);
+		expect(shadowRoot.getElementById("inner")?.namespaceURI).toBe(SVG_NAMESPACE);
 	});
 });
 
@@ -157,13 +130,9 @@ describe("self-closing end after an unquoted value", () => {
 
 	test("a slash inside an unquoted value stays part of it", async () => {
 		const base = "/docs";
-		const { shadowRoot } = await mount(
-			() => html`<a href=${base}/intro>link</a>`,
-		);
+		const { shadowRoot } = await mount(() => html`<a href=${base}/intro>link</a>`);
 
-		expect(shadowRoot.querySelector("a")?.getAttribute("href")).toBe(
-			"/docs/intro",
-		);
+		expect(shadowRoot.querySelector("a")?.getAttribute("href")).toBe("/docs/intro");
 	});
 });
 

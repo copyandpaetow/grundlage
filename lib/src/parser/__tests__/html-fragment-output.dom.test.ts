@@ -103,9 +103,7 @@ describe("html parser — fragment output: complex structure", () => {
 		const parsed = parse` <section id="root">
 			<p class="${cls}">${text}</p>
 		</section>`;
-		const section = buildFragment(parsed.htmlWithMarkers).querySelector(
-			"section",
-		)!;
+		const section = buildFragment(parsed.htmlWithMarkers).querySelector("section")!;
 		expect(section.getAttribute("id")).toBe("root");
 		const p = section.querySelector("p")!;
 		expect(p).not.toBeNull();
@@ -116,9 +114,7 @@ describe("html parser — fragment output: complex structure", () => {
 		const b = "two";
 		const parsed = parse`<p class="${a}">one</p>
 			<p class="${b}">two</p>`;
-		const paragraphs = buildFragment(parsed.htmlWithMarkers).querySelectorAll(
-			"p",
-		);
+		const paragraphs = buildFragment(parsed.htmlWithMarkers).querySelectorAll("p");
 		expect(paragraphs).toHaveLength(2);
 		expect(paragraphs[0].textContent).toBe("one");
 		expect(paragraphs[1].textContent).toBe("two");

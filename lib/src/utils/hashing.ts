@@ -25,21 +25,13 @@ export const mixWordIntoLanes = (lanes: Int32Array, word: number): void => {
 
 //two UTF-16 code units per step halve the multiplies. Each step is written out: through a shared
 //helper, a 10k-object walk took 40 % longer in Firefox
-export const mixTextIntoLanes = (
-	lanes: Int32Array,
-	lengthWord: number,
-	text: string,
-): void => {
+export const mixTextIntoLanes = (lanes: Int32Array, lengthWord: number, text: string): void => {
 	let firstLane = Math.imul(lanes[0] ^ lengthWord, FIRST_LANE_MULTIPLIER);
 	firstLane ^= firstLane >>> 16;
 	let secondLane = Math.imul(lanes[1] ^ lengthWord, SECOND_LANE_MULTIPLIER);
 	secondLane ^= secondLane >>> 16;
 	let index = 0;
-	for (
-		const lastPairStart = text.length - 1;
-		index < lastPairStart;
-		index += 2
-	) {
+	for (const lastPairStart = text.length - 1; index < lastPairStart; index += 2) {
 		const word = text.charCodeAt(index) | (text.charCodeAt(index + 1) << 16);
 		firstLane = Math.imul(firstLane ^ word, FIRST_LANE_MULTIPLIER);
 		firstLane ^= firstLane >>> 16;
@@ -64,19 +56,14 @@ export const hashOfLanes = (firstLane: number, secondLane: number): number =>
 
 //each lane xors the value in before a multiply, and the low lane multiplies the accumulator first:
 //either argument alone changes the result, order counts, and a nested value cannot cancel out
-export const combineOrderedHash = (
-	accumulator: number,
-	valueHash: number,
-): number => {
+export const combineOrderedHash = (accumulator: number, valueHash: number): number => {
 	const lowWord = Math.imul(
 		Math.imul(accumulator, ACCUMULATOR_MULTIPLIER) ^ valueHash,
 		FIRST_LANE_MULTIPLIER,
 	);
 	const highWord =
-		Math.imul(
-			highWordOf(accumulator) ^ highWordOf(valueHash),
-			SECOND_LANE_MULTIPLIER,
-		) & HIGH_WORD_MASK;
+		Math.imul(highWordOf(accumulator) ^ highWordOf(valueHash), SECOND_LANE_MULTIPLIER) &
+		HIGH_WORD_MASK;
 	return highWord * LOW_WORD_SIZE + (lowWord >>> 0);
 };
 

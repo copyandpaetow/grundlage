@@ -11,8 +11,7 @@ const createElement = (
 	properties: Record<string, unknown> = {},
 ): HTMLElement => {
 	const element = document.createElement("div");
-	for (const [key, value] of Object.entries(attributes))
-		element.setAttribute(key, value);
+	for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
 	for (const [key, value] of Object.entries(properties))
 		(element as unknown as Record<string, unknown>)[key] = value;
 	return element;
@@ -39,46 +38,32 @@ describe("props on a plain element", () => {
 
 		it("reads the attribute under the lowercased prop name", () => {
 			const element = createElement({ userid: "8" });
-			expect(
-				prop.read(element, { userId: prop.optional(prop.attribute(String)) })
-					.userId,
-			).toBe("8");
+			expect(prop.read(element, { userId: prop.optional(prop.attribute(String)) }).userId).toBe(
+				"8",
+			);
 		});
 
 		it("resolves absence through the prop's own function", () => {
 			const element = createElement();
-			expect(
-				prop.read(element, { label: prop.optional(prop.attribute(String)) })
-					.label,
-			).toBe(undefined);
-			expect(
-				prop.read(element, { label: prop.attribute(String, "anon") }).label,
-			).toBe("anon");
-			expect(prop.read(element, { open: prop.attribute(Boolean) }).open).toBe(
-				false,
+			expect(prop.read(element, { label: prop.optional(prop.attribute(String)) }).label).toBe(
+				undefined,
 			);
+			expect(prop.read(element, { label: prop.attribute(String, "anon") }).label).toBe("anon");
+			expect(prop.read(element, { open: prop.attribute(Boolean) }).open).toBe(false);
 		});
 
 		it("treats an empty Number or BigInt attribute as absent", () => {
 			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 			const element = createElement({ count: "", total: "" });
-			expect(
-				prop.read(element, { count: prop.attribute(Number, 7) }).count,
-			).toBe(7);
-			expect(
-				prop.read(element, { total: prop.attribute(BigInt, 3n) }).total,
-			).toBe(3n);
+			expect(prop.read(element, { count: prop.attribute(Number, 7) }).count).toBe(7);
+			expect(prop.read(element, { total: prop.attribute(BigInt, 3n) }).total).toBe(3n);
 			warn.mockRestore();
 		});
 
 		it('reads x="false" as false for every boolean shape', () => {
 			const element = createElement({ open: "false" });
-			expect(prop.read(element, { open: prop.attribute(Boolean) }).open).toBe(
-				false,
-			);
-			expect(
-				prop.read(element, { open: prop.attribute(Boolean, true) }).open,
-			).toBe(false);
+			expect(prop.read(element, { open: prop.attribute(Boolean) }).open).toBe(false);
+			expect(prop.read(element, { open: prop.attribute(Boolean, true) }).open).toBe(false);
 		});
 
 		it("warns and keeps the absent value on a malformed number or bigint", () => {
@@ -115,21 +100,16 @@ describe("props on a plain element", () => {
 					userTags: payload,
 				},
 			);
-			expect(
-				prop.read(element, { userTags: prop.optional(prop.attribute(asList)) })
-					.userTags,
-			).toBe(payload);
+			expect(prop.read(element, { userTags: prop.optional(prop.attribute(asList)) }).userTags).toBe(
+				payload,
+			);
 		});
 
 		it("runs the prop's function on what it finds", () => {
 			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 			const element = createElement({}, { tags: "not-a-list" });
-			expect(
-				prop.read(element, { tags: prop.attribute(asList, []) }).tags,
-			).toEqual([]);
-			expect(warn).toHaveBeenCalledWith(
-				expect.stringContaining('prop "tags" refused a string'),
-			);
+			expect(prop.read(element, { tags: prop.attribute(asList, []) }).tags).toEqual([]);
+			expect(warn).toHaveBeenCalledWith(expect.stringContaining('prop "tags" refused a string'));
 			warn.mockRestore();
 		});
 
@@ -159,9 +139,7 @@ describe("props on a plain element", () => {
 			element.append(document.createElement("span"));
 			expect(
 				prop.read(element, {
-					children: prop.optional(
-						prop.attribute((incoming: unknown) => incoming),
-					),
+					children: prop.optional(prop.attribute((incoming: unknown) => incoming)),
 				}).children,
 			).toBe(undefined);
 		});
@@ -189,10 +167,7 @@ describe("props on a plain element", () => {
 	describe("mixed schema", () => {
 		it("resolves each mode independently", () => {
 			const tags = ["a"];
-			const element = createElement(
-				{ label: "hi", count: "3", open: "" },
-				{ tags },
-			);
+			const element = createElement({ label: "hi", count: "3", open: "" }, { tags });
 			expect(
 				prop.read(element, {
 					label: prop.optional(prop.attribute(String)),

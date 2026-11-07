@@ -181,12 +181,8 @@ describe("hashValue - reference types", () => {
 
 	test("a Symbol.for symbol hashes by identity instead of throwing", () => {
 		const order = Symbol.for("order");
-		expect(hashValue({ kind: order })).toBe(
-			hashValue({ kind: Symbol.for("order") }),
-		);
-		expect(hashValue({ kind: order })).not.toBe(
-			hashValue({ kind: Symbol.for("invoice") }),
-		);
+		expect(hashValue({ kind: order })).toBe(hashValue({ kind: Symbol.for("order") }));
+		expect(hashValue({ kind: order })).not.toBe(hashValue({ kind: Symbol.for("invoice") }));
 	});
 
 	test("two symbols with the same description hash apart", () => {
@@ -253,13 +249,11 @@ describe("hashValue - digits that could trade places", () => {
 	});
 
 	test("every three-character string over the common alphabet hashes uniquely", () => {
-		const alphabet =
-			"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
+		const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
 		const seen = new Set<number>();
 		for (const first of alphabet)
 			for (const second of alphabet)
-				for (const third of alphabet)
-					seen.add(stringHash(first + second + third));
+				for (const third of alphabet) seen.add(stringHash(first + second + third));
 		expect(seen.size).toBe(alphabet.length ** 3);
 	});
 });
@@ -337,8 +331,7 @@ describe("hashValue - shared and cyclic data", () => {
 
 	test("a value that reaches the same objects too often throws and names the fix", () => {
 		let shared: Record<string, unknown> = { leaf: true };
-		for (let level = 0; level < 22; level++)
-			shared = { left: shared, right: shared };
+		for (let level = 0; level < 22; level++) shared = { left: shared, right: shared };
 		expect(() => hashValue(shared)).toThrow(/class instance/);
 	});
 
@@ -389,9 +382,7 @@ describe("hashValue - where one value ends and the next begins", () => {
 	});
 
 	test("an object's end tells nesting apart", () => {
-		expect(hashValue({ outer: { inner: 1 } })).not.toBe(
-			hashValue({ outer: {}, inner: 1 }),
-		);
+		expect(hashValue({ outer: { inner: 1 } })).not.toBe(hashValue({ outer: {}, inner: 1 }));
 	});
 
 	test("a string's length tells a trailing NUL apart", () => {
@@ -403,16 +394,13 @@ describe("hashValue - changes that cancel out", () => {
 	//the words of {}, null and false differ only in their top byte, and a multiply carries a difference
 	//only upward: without a fold back down, this rotation read as unchanged
 	test("values that differ only in their tag words hash apart", () => {
-		expect(hashValue({ g: [{}, null, false] })).not.toBe(
-			hashValue({ g: [null, false, {}] }),
-		);
+		expect(hashValue({ g: [{}, null, false] })).not.toBe(hashValue({ g: [null, false, {}] }));
 	});
 
 	//a weighted sum, C + a·M + b with 4181·M = 2584·2^32 + 423877, read every move from (a, b) to
 	//(a − 4181, b + 423877) as unchanged
 	test("the pair that left a row stale hashes apart", () => {
-		const row = (first: number, second: number) =>
-			html`<li>${first}: ${second}</li>`;
+		const row = (first: number, second: number) => html`<li>${first}: ${second}</li>`;
 		expect(hashValue(row(4182, 0))).not.toBe(hashValue(row(1, 423877)));
 	});
 
@@ -422,11 +410,7 @@ describe("hashValue - changes that cancel out", () => {
 		for (let draw = 0; draw < 1_000; draw++) {
 			const first = 4181 + random(1_000_000);
 			const second = random(1_000_000);
-			if (
-				hashValue([first, second]) ===
-				hashValue([first - 4181, second + 423877])
-			)
-				collisions++;
+			if (hashValue([first, second]) === hashValue([first - 4181, second + 423877])) collisions++;
 		}
 		expect(collisions).toBe(0);
 	});
@@ -455,8 +439,7 @@ describe("hashValue - changes that cancel out", () => {
 		for (let draw = 0; draw < 200_000; draw++) {
 			let text = "";
 			const length = 6 + random(7);
-			for (let index = 0; index < length; index++)
-				text += String.fromCharCode(65 + random(58));
+			for (let index = 0; index < length; index++) text += String.fromCharCode(65 + random(58));
 			const hash = hashValue(text);
 			const earlier = textByHash.get(hash);
 			if (earlier === undefined) textByHash.set(hash, text);
@@ -474,23 +457,17 @@ describe("hashValue - seeded random inputs", () => {
 	const randomText = (random: (below: number) => number) => {
 		let text = "";
 		const length = random(12);
-		for (let index = 0; index < length; index++)
-			text += String.fromCharCode(65 + random(58));
+		for (let index = 0; index < length; index++) text += String.fromCharCode(65 + random(58));
 		return text;
 	};
 
-	const shapes: Array<
-		[string, (random: (below: number) => number) => unknown]
-	> = [
+	const shapes: Array<[string, (random: (below: number) => number) => unknown]> = [
 		["strings", randomText],
 		[
 			"small integers in short arrays",
 			(random) => Array.from({ length: 1 + random(4) }, () => random(64)),
 		],
-		[
-			"plain objects",
-			(random) => ({ [randomText(random)]: random(64), size: random(64) }),
-		],
+		["plain objects", (random) => ({ [randomText(random)]: random(64), size: random(64) })],
 	];
 
 	test.each(shapes)("%s: distinct inputs hash apart", (_shape, createInput) => {

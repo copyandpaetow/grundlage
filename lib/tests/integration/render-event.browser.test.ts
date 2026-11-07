@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { component, html } from "../../src/index";
 
-const sleep = (milliseconds = 0) =>
-	new Promise((resolve) => setTimeout(resolve, milliseconds));
+const sleep = (milliseconds = 0) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 //the same browser plays the server: the flag is what isServer() reads
 const serverFlagHolder = globalThis as { __grundlage_ssr__?: boolean };
@@ -31,8 +30,7 @@ const mountListening = (tag: string, cancelledTag: string | null = null) => {
 	container.addEventListener("grundlage-render", (event) => {
 		const origin = event.composedPath()[0];
 		announced.push({ event, origin });
-		if (origin instanceof Element && origin.localName === cancelledTag)
-			event.preventDefault();
+		if (origin instanceof Element && origin.localName === cancelledTag) event.preventDefault();
 	});
 	const element = document.createElement(tag);
 	container.append(element);

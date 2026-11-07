@@ -4,41 +4,26 @@ import * as BINDING from "../binding";
 import { composeParts } from "../../rendering/compose";
 
 //happy-dom's parser skips RCDATA decoding, so only chromium is an oracle
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 const HOLE_VALUE = "v";
 
-const templateStringsOf = (
-	tag: string,
-	before: string,
-	after: string,
-): TemplateStringsArray => {
+const templateStringsOf = (tag: string, before: string, after: string): TemplateStringsArray => {
 	const strings = [`<${tag}>${before}`, `${after}</${tag}>`];
 	return Object.assign(strings, {
 		raw: strings.slice(),
 	}) as unknown as TemplateStringsArray;
 };
 
-const composedByGrundlage = (
-	tag: string,
-	before: string,
-	after: string,
-): string => {
+const composedByGrundlage = (tag: string, before: string, after: string): string => {
 	const parsed = getParsedTemplate(templateStringsOf(tag, before, after));
-	const binding = parsed.bindings.find(
-		(binding) => binding.type === BINDING.RAW_CONTENT,
-	);
+	const binding = parsed.bindings.find((binding) => binding.type === BINDING.RAW_CONTENT);
 	if (binding === undefined || binding.type !== BINDING.RAW_CONTENT)
 		throw new Error("expected a raw content binding");
 	return composeParts(binding.parts, [HOLE_VALUE]);
 };
 
-const parsedByBrowser = (
-	tag: string,
-	before: string,
-	after: string,
-): string => {
+const parsedByBrowser = (tag: string, before: string, after: string): string => {
 	const host = document.createElement("div");
 	host.innerHTML = `<${tag}>${before}${HOLE_VALUE}${after}</${tag}>`;
 	return host.firstElementChild!.textContent!;
@@ -56,56 +41,31 @@ for (const tag of ["textarea", "title"])
 				["a line feed after the hole", "", "\nPorridge"],
 				["an inner CR and CRLF", "a\rb\r\nc ", ""],
 				["NULL", "a\0b ", ""],
-				[
-					"the named subset",
-					"&amp; &lt; &gt; &quot; &apos; &nbsp; ",
-					"&AMP; &LT; &GT; &QUOT;",
-				],
-				[
-					"legacy forms without a semicolon",
-					"&amp &lt, &gt. &quot&nbsp ",
-					"&AMP",
-				],
+				["the named subset", "&amp; &lt; &gt; &quot; &apos; &nbsp; ", "&AMP; &LT; &GT; &QUOT;"],
+				["legacy forms without a semicolon", "&amp &lt, &gt. &quot&nbsp ", "&AMP"],
 				["numeric references", "&#65; &#x42; &#X43; &#68x ", "&#x45"],
-				[
-					"numeric replacement cases",
-					"&#0; &#xD800; &#x110000; &#99999999999; ",
-					"",
-				],
+				["numeric replacement cases", "&#0; &#xD800; &#x110000; &#99999999999; ", ""],
 				["the windows-1252 remap", "&#128; &#x9F; &#x81; ", ""],
 				["a bare ampersand", "Salt & pepper &# &#x; ", "&"],
 			];
 			for (const [label, before, after] of cases) {
 				test(label, () => {
-					expect(composedByGrundlage(tag, before, after)).toBe(
-						parsedByBrowser(tag, before, after),
-					);
+					expect(composedByGrundlage(tag, before, after)).toBe(parsedByBrowser(tag, before, after));
 				});
 			}
 		},
 	);
 
 describe("a named reference outside the subset is a definition error", () => {
-	const references = [
-		"AT&T ",
-		"&copy; ",
-		"&copy2024 ",
-		"&ltimes; ",
-		"&ampx ",
-		"&apos ",
-	];
+	const references = ["AT&T ", "&copy; ", "&copy2024 ", "&ltimes; ", "&ampx ", "&apos "];
 	for (const reference of references) {
 		test(reference.trim(), () => {
-			expect(() => composedByGrundlage("textarea", reference, "")).toThrow(
-				/&amp;/,
-			);
+			expect(() => composedByGrundlage("textarea", reference, "")).toThrow(/&amp;/);
 		});
 	}
 
 	test("the message names the element", () => {
-		expect(() => composedByGrundlage("title", "&copy; ", "")).toThrow(
-			'"&copy;" in a <title>',
-		);
+		expect(() => composedByGrundlage("title", "&copy; ", "")).toThrow('"&copy;" in a <title>');
 	});
 });
 

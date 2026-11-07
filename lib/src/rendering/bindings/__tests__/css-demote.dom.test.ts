@@ -1,16 +1,10 @@
 import { describe, expect, test } from "vitest";
 import * as BINDING from "../../../parser/binding";
 import { NO_REINSERTION } from "../../../parser/constants";
-import {
-	CompiledStyleSheet,
-	RawContentStaticBinding,
-} from "../../../parser/types";
+import { CompiledStyleSheet, RawContentStaticBinding } from "../../../parser/types";
 import { UNSET_HASH } from "../../constants";
 import { commitRawContent } from "../content-raw";
-import {
-	createCSSOMStyleSheetLane,
-	TEXT_STYLE_SHEET_LANE,
-} from "../style-sheet";
+import { createCSSOMStyleSheetLane, TEXT_STYLE_SHEET_LANE } from "../style-sheet";
 import { RawContentLiveBinding } from "../types";
 
 //a <style> whose live sheet parses to a different rule count than the compiler recorded
@@ -49,9 +43,7 @@ describe("css demotion to the full-text lane", () => {
 			{
 				rulePath: [0],
 				reinsertedRulePath: NO_REINSERTION,
-				declarations: [
-					{ propertyName: "color", priority: "", valueParts: [0] },
-				],
+				declarations: [{ propertyName: "color", priority: "", valueParts: [0] }],
 			},
 		],
 		declarationCount: 1,

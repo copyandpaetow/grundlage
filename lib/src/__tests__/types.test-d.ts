@@ -26,10 +26,7 @@ export const everyEntryShape = component(
 		const three: Exact<typeof disabled, boolean> = true;
 		const four: Exact<typeof header, Template | undefined> = true;
 		const notAny: Exact<IsAny<typeof start>, false> = true;
-		const hostIsTheElement: Exact<
-			ReturnType<typeof host.update>,
-			Promise<void>
-		> = true;
+		const hostIsTheElement: Exact<ReturnType<typeof host.update>, Promise<void>> = true;
 		void [one, two, three, four, notAny, hostIsTheElement];
 		yield function* () {
 			yield html`<p>x</p>`;
@@ -66,8 +63,7 @@ export const writingGoesThroughHost = component(
 		//@ts-expect-error the props object is the store, not a way into it
 		componentProps.start = 5;
 		componentProps.host.start = 5;
-		const hostCarriesTheProps: Exact<typeof componentProps.host.start, number> =
-			true;
+		const hostCarriesTheProps: Exact<typeof componentProps.host.start, number> = true;
 		void hostCarriesTheProps;
 		yield function* () {
 			yield html`<p>x</p>`;
@@ -147,9 +143,7 @@ export const predicateEntry = component(
 	},
 	{
 		props: {
-			variant: prop.optional(
-				prop.attribute((incoming: unknown) => typeof incoming === "string"),
-			),
+			variant: prop.optional(prop.attribute((incoming: unknown) => typeof incoming === "string")),
 		},
 	},
 );

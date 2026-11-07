@@ -72,30 +72,18 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		minimumY: number,
 		maximumY: number,
 	): void => {
-		cellRange.firstColumn = Math.max(
-			0,
-			Math.floor(minimumX / OCCLUSION_CELL_PIXELS),
-		);
+		cellRange.firstColumn = Math.max(0, Math.floor(minimumX / OCCLUSION_CELL_PIXELS));
 		cellRange.lastColumn = Math.min(
 			coverageColumns - 1,
 			Math.floor(maximumX / OCCLUSION_CELL_PIXELS),
 		);
-		cellRange.firstRow = Math.max(
-			0,
-			Math.floor(minimumY / OCCLUSION_CELL_PIXELS),
-		);
-		cellRange.lastRow = Math.min(
-			coverageRows - 1,
-			Math.floor(maximumY / OCCLUSION_CELL_PIXELS),
-		);
+		cellRange.firstRow = Math.max(0, Math.floor(minimumY / OCCLUSION_CELL_PIXELS));
+		cellRange.lastRow = Math.min(coverageRows - 1, Math.floor(maximumY / OCCLUSION_CELL_PIXELS));
 	};
 
 	// Perspective divide: screen = viewport centre + view · perspective / depth.
 	// False when a corner lies at or behind the eye: that cube neither occludes nor is occluded.
-	const projectCorners = (
-		occludableCube: OccludableCube,
-		cubeIndex: number,
-	): boolean => {
+	const projectCorners = (occludableCube: OccludableCube, cubeIndex: number): boolean => {
 		const corners = occludableCube.worldCorners;
 		const offset = cubeIndex * 24;
 		let nearestDepth = Infinity;
@@ -109,10 +97,8 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 			);
 			if (viewPoint.depth < NEAREST_PROJECTABLE_DEPTH) return false;
 			const scale = view.perspective / viewPoint.depth;
-			projectedCorners[offset + cornerIndex * 3] =
-				view.halfWidth + viewPoint.x * scale;
-			projectedCorners[offset + cornerIndex * 3 + 1] =
-				view.halfHeight + viewPoint.y * scale;
+			projectedCorners[offset + cornerIndex * 3] = view.halfWidth + viewPoint.x * scale;
+			projectedCorners[offset + cornerIndex * 3 + 1] = view.halfHeight + viewPoint.y * scale;
 			projectedCorners[offset + cornerIndex * 3 + 2] = viewPoint.depth;
 			nearestDepth = Math.min(nearestDepth, viewPoint.depth);
 		}
@@ -130,36 +116,21 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 			const atTop = edgeYFactors[edgeIndex] * top;
 			const atBottom = edgeYFactors[edgeIndex] * (top + OCCLUSION_CELL_PIXELS);
 			const largest =
-				edgeConstants[edgeIndex] +
-				Math.max(atLeft, atRight) +
-				Math.max(atTop, atBottom);
+				edgeConstants[edgeIndex] + Math.max(atLeft, atRight) + Math.max(atTop, atBottom);
 			if (largest < 0) return CELL_OUTSIDE_FACE;
 			const smallest =
-				edgeConstants[edgeIndex] +
-				Math.min(atLeft, atRight) +
-				Math.min(atTop, atBottom);
+				edgeConstants[edgeIndex] + Math.min(atLeft, atRight) + Math.min(atTop, atBottom);
 			if (smallest < 0) crossingEdgeMask |= 1 << edgeIndex;
 		}
 		return crossingEdgeMask;
 	};
 
 	// Bit i is the sample at column i % 4, row ⌊i / 4⌋. Only the crossing edges can fail it.
-	const sampleMaskInsideFace = (
-		left: number,
-		top: number,
-		crossingEdgeMask: number,
-	): number => {
+	const sampleMaskInsideFace = (left: number, top: number, crossingEdgeMask: number): number => {
 		let sampleMask = 0;
-		for (
-			let sampleIndex = 0;
-			sampleIndex < SAMPLE_COUNT_PER_CELL;
-			sampleIndex++
-		) {
-			const sampleX =
-				left + SAMPLE_OFFSETS_PIXELS[sampleIndex % SAMPLES_PER_CELL_EDGE];
-			const sampleY =
-				top +
-				SAMPLE_OFFSETS_PIXELS[Math.floor(sampleIndex / SAMPLES_PER_CELL_EDGE)];
+		for (let sampleIndex = 0; sampleIndex < SAMPLE_COUNT_PER_CELL; sampleIndex++) {
+			const sampleX = left + SAMPLE_OFFSETS_PIXELS[sampleIndex % SAMPLES_PER_CELL_EDGE];
+			const sampleY = top + SAMPLE_OFFSETS_PIXELS[Math.floor(sampleIndex / SAMPLES_PER_CELL_EDGE)];
 			let isSampleInsideFace = true;
 			for (let edgeIndex = 0; edgeIndex < 4; edgeIndex++)
 				if (
@@ -177,10 +148,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		return sampleMask;
 	};
 
-	const coverFace = (
-		cubeIndex: number,
-		faceCorners: readonly number[],
-	): void => {
+	const coverFace = (cubeIndex: number, faceCorners: readonly number[]): void => {
 		const offset = cubeIndex * 24;
 		let farthestDepth = 0;
 		let minimumX = Infinity;
@@ -197,10 +165,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 			maximumX = Math.max(maximumX, x);
 			minimumY = Math.min(minimumY, y);
 			maximumY = Math.max(maximumY, y);
-			farthestDepth = Math.max(
-				farthestDepth,
-				projectedCorners[cornerOffset + 2],
-			);
+			farthestDepth = Math.max(farthestDepth, projectedCorners[cornerOffset + 2]);
 		}
 		writeCellRange(minimumX, maximumX, minimumY, maximumY);
 		const { firstColumn, lastColumn, firstRow, lastRow } = cellRange;
@@ -271,8 +236,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		const nearestDepth = nearestDepths[cubeIndex];
 		for (let row = firstRow; row <= lastRow; row++)
 			for (let column = firstColumn; column <= lastColumn; column++)
-				if (!(coveredDepths[row * coverageColumns + column] < nearestDepth))
-					return false;
+				if (!(coveredDepths[row * coverageColumns + column] < nearestDepth)) return false;
 		return true;
 	};
 
@@ -285,10 +249,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		isOccludedNow.fill(0);
 		frontToBackOrder.length = 0;
 		for (let cubeIndex = 0; cubeIndex < cubes.length; cubeIndex++)
-			if (
-				!cubes[cubeIndex].isOutsideView &&
-				projectCorners(cubes[cubeIndex], cubeIndex)
-			)
+			if (!cubes[cubeIndex].isOutsideView && projectCorners(cubes[cubeIndex], cubeIndex))
 				frontToBackOrder.push(cubeIndex);
 		frontToBackOrder.sort(byNearestDepth);
 		for (const cubeIndex of frontToBackOrder) {

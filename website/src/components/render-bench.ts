@@ -16,11 +16,7 @@ import {
 	warmUpCommitShapes,
 	type ShapeResult,
 } from "../render-measure";
-import {
-	COMMIT_SHAPES,
-	defineProbeElements,
-	PLAIN_CUSTOM_ELEMENT_NAME,
-} from "../render-shapes";
+import { COMMIT_SHAPES, defineProbeElements, PLAIN_CUSTOM_ELEMENT_NAME } from "../render-shapes";
 
 /*
     Runs every binding lane through patchInstance and reports ns per commit.
@@ -61,8 +57,7 @@ customElements.define(
 
 		defineProbeElements();
 
-		const mountTarget = (): Element =>
-			element.shadowRoot?.querySelector(".target") ?? element;
+		const mountTarget = (): Element => element.shadowRoot?.querySelector(".target") ?? element;
 
 		const runAllShapes = async () => {
 			if (isRunning) return;
@@ -79,32 +74,24 @@ customElements.define(
 				activeShape = COMMIT_SHAPES[index].name;
 				element.update();
 				await waitForPaint();
-				const result = await runCommitShape(
-					COMMIT_SHAPES[index],
-					mountTarget(),
-					{ passes, measureHeapGrowth: true },
-				);
+				const result = await runCommitShape(COMMIT_SHAPES[index], mountTarget(), {
+					passes,
+					measureHeapGrowth: true,
+				});
 				results.push(result);
 				console.log(
 					`shape ${index + 1}/${COMMIT_SHAPES.length} ${result.name} ${result.nanosecondsPerCommit.toFixed(1)} ns/commit${
-						result.voidReasons.length === 0
-							? ""
-							: ` — VOID: ${result.voidReasons.join(", ")}`
+						result.voidReasons.length === 0 ? "" : ` — VOID: ${result.voidReasons.join(", ")}`
 					}`,
 				);
 			}
 
 			gaps = deriveLaneGaps(results, RESOLUTION_PERCENT);
-			registryLookup = measureRegistryLookup(
-				PLAIN_CUSTOM_ELEMENT_NAME,
-				REGISTRY_LOOKUPS,
-			);
+			registryLookup = measureRegistryLookup(PLAIN_CUSTOM_ELEMENT_NAME, REGISTRY_LOOKUPS);
 			activeShape = null;
 			isRunning = false;
 			element.update();
-			console.log(
-				JSON.stringify({ passes, results, gaps, registryLookup }, null, 2),
-			);
+			console.log(JSON.stringify({ passes, results, gaps, registryLookup }, null, 2));
 		};
 
 		const promoteToBaseline = () => {
@@ -125,8 +112,7 @@ customElements.define(
 		const churnsInOrder = (): Array<string> => {
 			const seen: Array<string> = [];
 			for (let index = 0; index < results.length; index++)
-				if (!seen.includes(results[index].churn))
-					seen.push(results[index].churn);
+				if (!seen.includes(results[index].churn)) seen.push(results[index].churn);
 			return seen;
 		};
 
@@ -134,8 +120,7 @@ customElements.define(
 			results.filter((result) => result.voidReasons.length > 0).length;
 
 		const isBeyondResolution = (current: number, previous: number): boolean =>
-			previous !== 0 &&
-			Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
+			previous !== 0 && Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
 
 		yield function* view() {
 			yield html`
@@ -296,9 +281,7 @@ customElements.define(
 											>
 												<div class="gap-value">
 													${gap.nanosecondsPerCommit.toFixed(1)}
-													ns/commit${
-														gap.isBelowResolution ? " · under resolution" : ""
-													}
+													ns/commit${gap.isBelowResolution ? " · under resolution" : ""}
 												</div>
 												<div class="gap-label">
 													${gap.name} — ${gap.question}
@@ -364,9 +347,7 @@ customElements.define(
 																	${
 																		result.heapGrowthBytesPerCommit === null
 																			? "—"
-																			: result.heapGrowthBytesPerCommit.toFixed(
-																					1,
-																				)
+																			: result.heapGrowthBytesPerCommit.toFixed(1)
 																	}
 																</td>
 																<td

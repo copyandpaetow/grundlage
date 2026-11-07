@@ -2,8 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { html, component, load, prop } from "../../src/index";
 import { ComponentConstructor } from "../../src/types";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 //resolves as soon as the first-yield content lands; a fixed sleep flakes on slower
 //async-before-yield generators
@@ -92,9 +91,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			customElements.define(tag, MyElement);
-			const element = document.createElement(tag) as InstanceType<
-				typeof MyElement
-			>;
+			const element = document.createElement(tag) as InstanceType<typeof MyElement>;
 			document.body.appendChild(element);
 			await sleep();
 
@@ -217,27 +214,18 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const serialized = await serverRender(serverTag, makeComponent());
 				expect(serialized).toContain("loading");
 
-				const clientHTML = serialized.replace(
-					new RegExp(serverTag, "g"),
-					clientTag,
-				);
+				const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 				const element = hydrateFromHTML(clientHTML);
 
 				customElements.define(clientTag, makeComponent());
 				await sleep();
 				//server and client paint the same value here, so hydration compares and writes nothing
-				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-					"loading",
-				);
+				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("loading");
 
 				phase = "loaded";
-				await (
-					element as InstanceType<ReturnType<typeof makeComponent>>
-				).update();
+				await (element as InstanceType<ReturnType<typeof makeComponent>>).update();
 				await sleep();
-				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-					"loaded",
-				);
+				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("loaded");
 
 				cleanup(element);
 			});
@@ -260,23 +248,16 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const serialized = await serverRender(serverTag, makeComponent());
 				expect(serialized).toMatch(/<!--/);
 
-				const clientHTML = serialized.replace(
-					new RegExp(serverTag, "g"),
-					clientTag,
-				);
+				const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 				const element = hydrateFromHTML(clientHTML);
 				customElements.define(clientTag, makeComponent());
 				await sleep();
 
 				counter = 42;
-				await (
-					element as InstanceType<ReturnType<typeof makeComponent>>
-				).update();
+				await (element as InstanceType<ReturnType<typeof makeComponent>>).update();
 				await sleep();
 
-				expect(
-					element.shadowRoot?.querySelector("span")?.textContent,
-				).toContain("42");
+				expect(element.shadowRoot?.querySelector("span")?.textContent).toContain("42");
 
 				cleanup(element);
 			});
@@ -306,16 +287,12 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					});
 
 				const serialized = await serverRender(serverTag, makeComponent());
-				const clientHTML = serialized.replace(
-					new RegExp(serverTag, "g"),
-					clientTag,
-				);
+				const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 				const element = hydrateFromHTML(clientHTML);
 				customElements.define(clientTag, makeComponent());
 				await sleep();
 
-				const rows = () =>
-					Array.from(element.shadowRoot!.querySelectorAll("li"));
+				const rows = () => Array.from(element.shadowRoot!.querySelectorAll("li"));
 				const [aNode, bNode, cNode] = rows();
 				expect(rows().map((row) => row.className)).toEqual(["a", "b", "c"]);
 
@@ -324,9 +301,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					{ id: "a", text: "Alpha-2" },
 					{ id: "b", text: "Bravo-2" },
 				];
-				await (
-					element as InstanceType<ReturnType<typeof makeComponent>>
-				).update();
+				await (element as InstanceType<ReturnType<typeof makeComponent>>).update();
 				await sleep();
 
 				expect(rows()).toEqual([cNode, aNode, bNode]);
@@ -365,10 +340,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 				const fakeSerialized = `<${serverTag}><template shadowrootmode="open"><p>shared</p></template></${serverTag}>`;
-				const clientHTML = fakeSerialized.replace(
-					new RegExp(serverTag, "g"),
-					clientTag,
-				);
+				const clientHTML = fakeSerialized.replace(new RegExp(serverTag, "g"), clientTag);
 
 				const element = hydrateFromHTML(clientHTML);
 				customElements.define(clientTag, ClientComponent);
@@ -405,17 +377,12 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					};
 				});
 
-				const clientHTML = serialized.replace(
-					new RegExp(serverTag, "g"),
-					clientTag,
-				);
+				const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 				const element = hydrateFromHTML(clientHTML);
 				customElements.define(clientTag, ClientComponent);
 				await sleep();
 
-				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-					"inner-first",
-				);
+				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("inner-first");
 
 				cleanup(element);
 			});
@@ -447,17 +414,12 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					}
 				});
 
-				const clientHTML = serialized.replace(
-					new RegExp(serverTag, "g"),
-					clientTag,
-				);
+				const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 				const element = hydrateFromHTML(clientHTML);
 				customElements.define(clientTag, ClientComponent);
 				await sleep();
 
-				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-					"recovered",
-				);
+				expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("recovered");
 
 				cleanup(element);
 			});
@@ -479,9 +441,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					}),
 				);
 				const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-				const element = hydrateFromHTML(
-					serialized.replace(new RegExp(serverTag, "g"), clientTag),
-				);
+				const element = hydrateFromHTML(serialized.replace(new RegExp(serverTag, "g"), clientTag));
 				customElements.define(
 					clientTag,
 					component(function* () {
@@ -535,9 +495,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				);
 
 				expect(warned).toBe(true);
-				expect(element.shadowRoot!.querySelector("section")?.textContent).toBe(
-					"branch",
-				);
+				expect(element.shadowRoot!.querySelector("section")?.textContent).toBe("branch");
 				expect(element.shadowRoot!.textContent).not.toContain("server text");
 
 				cleanup(element);
@@ -558,9 +516,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				expect(serialized).toContain("data-ssr");
 
 				const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-				const element = hydrateFromHTML(
-					serialized.replace(new RegExp(serverTag, "g"), clientTag),
-				);
+				const element = hydrateFromHTML(serialized.replace(new RegExp(serverTag, "g"), clientTag));
 				//one binding more than the server wrote markers for, so the walk fails at the root
 				customElements.define(
 					clientTag,
@@ -575,13 +531,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
 				warnSpy.mockRestore();
 
+				expect(warnings.some((text) => text.includes("hydration mismatch"))).toBe(true);
 				expect(
-					warnings.some((text) => text.includes("hydration mismatch")),
-				).toBe(true);
-				expect(
-					warnings.some((text) =>
-						text.includes("1 load() result(s) from the server went unused"),
-					),
+					warnings.some((text) => text.includes("1 load() result(s) from the server went unused")),
 				).toBe(true);
 
 				cleanup(element);
@@ -609,10 +561,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 						>`;
 					};
 				});
-				const clientHTML = serialized.replace(
-					new RegExp(serverTag, "g"),
-					clientTag,
-				);
+				const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 				const element = hydrateFromHTML(clientHTML);
 				customElements.define(clientTag, ClientComponent);
 				await sleep();
@@ -681,9 +630,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 				customElements.define(clientTag, ClientComponent);
-				const element = document.createElement(clientTag) as InstanceType<
-					typeof ClientComponent
-				>;
+				const element = document.createElement(clientTag) as InstanceType<typeof ClientComponent>;
 				document.body.appendChild(element);
 				await sleep();
 
@@ -712,9 +659,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			await sleep();
 
 			//server-rendered content should be preserved (not replaced by CSR mount)
-			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-				"content",
-			);
+			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("content");
 
 			cleanup(element);
 		});
@@ -732,10 +677,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 			const serialized = await serverRender(serverTag, makeComponent());
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML);
 
 			customElements.define(clientTag, makeComponent());
@@ -761,10 +703,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 			const serialized = await serverRender(serverTag, makeComponent());
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 
 			const ClientComponent = makeComponent();
 			const element = hydrateFromHTML(clientHTML);
@@ -798,10 +737,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 			const serialized = await serverRender(serverTag, makeComponent());
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML);
 
 			customElements.define(clientTag, makeComponent());
@@ -829,10 +765,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 			const serialized = await serverRender(serverTag, makeComponent());
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 
 			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 			const element = hydrateFromHTML(clientHTML);
@@ -844,9 +777,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
 			warnSpy.mockRestore();
 
-			expect(
-				warnings.filter((text) => text.includes("hydration mismatch")).length,
-			).toBe(0);
+			expect(warnings.filter((text) => text.includes("hydration mismatch")).length).toBe(0);
 			expect(element.shadowRoot!.querySelectorAll("span").length).toBe(1);
 			expect(element.shadowRoot!.querySelector("span")).toBe(serverSpan);
 
@@ -866,10 +797,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					};
 				}),
 			);
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML);
 
 			customElements.define(
@@ -909,10 +837,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				);
 
 			const serialized = await serverRender(serverTag, makeComponent());
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML);
 
 			customElements.define(clientTag, makeComponent());
@@ -940,10 +865,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					};
 				}),
 			);
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML);
 
 			customElements.define(
@@ -972,10 +894,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				};
 			});
 			const serialized = await serverRender(serverTag, ServerComponent);
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 
 			const ClientComponent = component(function* () {
 				yield function* () {
@@ -986,9 +905,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			customElements.define(clientTag, ClientComponent);
 			await sleep();
 
-			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-				"client-value",
-			);
+			expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("client-value");
 
 			//no update() follow-up: both paints carry the same hardcoded expression, so it would see
 			//current === previous and skip
@@ -1009,10 +926,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				};
 			});
 			const serialized = await serverRender(serverTag, ServerComponent);
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 
 			const ClientComponent = component(function* () {
 				yield function* () {
@@ -1045,10 +959,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 			const serialized = await serverRender(serverTag, makeComponent());
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 
 			const ClientComponent = makeComponent();
 			const element = hydrateFromHTML(clientHTML);
@@ -1090,17 +1001,12 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const serialized = await serverRender(serverTag, makeComponent());
 			expect(serialized).toContain('data-static="kept"');
 
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML);
 			customElements.define(clientTag, makeComponent());
 			await sleep();
 
-			element
-				.shadowRoot!.querySelector("button")!
-				.dispatchEvent(new Event("click"));
+			element.shadowRoot!.querySelector("button")!.dispatchEvent(new Event("click"));
 			expect(clicks).toBe(1);
 
 			cleanup(element);
@@ -1122,10 +1028,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 			const serialized = await serverRender(serverTag, makeComponent());
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML);
 			customElements.define(clientTag, makeComponent());
 			await sleep();
@@ -1151,16 +1054,12 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				});
 
 			const serialized = await serverRender(serverTag, makeComponent());
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML);
 
 			const rewrittenAttributes: Array<string> = [];
 			const observer = new MutationObserver((records) => {
-				for (const record of records)
-					rewrittenAttributes.push(record.attributeName!);
+				for (const record of records) rewrittenAttributes.push(record.attributeName!);
 			});
 			observer.observe(element.shadowRoot!, {
 				attributes: true,
@@ -1195,10 +1094,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const serialized = await serverRender(serverTag, makeComponent());
 			expect(serialized).toContain("<title>Salt &amp; &lt;pepper&gt;</title>");
 
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML) as HTMLElement & {
 				rename: () => void;
 			};
@@ -1243,18 +1139,12 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const serialized = await serverRender(serverTag, makeComponent());
 			expect(serialized).toContain("color: red");
 
-			const clientHTML = serialized.replace(
-				new RegExp(serverTag, "g"),
-				clientTag,
-			);
+			const clientHTML = serialized.replace(new RegExp(serverTag, "g"), clientTag);
 			const element = hydrateFromHTML(clientHTML) as HTMLElement & {
 				recolor: () => void;
 			};
 
-			const setProperty = vi.spyOn(
-				CSSStyleDeclaration.prototype,
-				"setProperty",
-			);
+			const setProperty = vi.spyOn(CSSStyleDeclaration.prototype, "setProperty");
 			customElements.define(clientTag, makeComponent());
 			await sleep();
 
@@ -1266,9 +1156,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			//the lane still works: seeding the hashes must not read as a demotion to the text lane
 			expect(setProperty).toHaveBeenCalledTimes(1);
 			setProperty.mockRestore();
-			expect(
-				getComputedStyle(element.shadowRoot!.querySelector("p")!).color,
-			).toBe("rgb(0, 0, 255)");
+			expect(getComputedStyle(element.shadowRoot!.querySelector("p")!).color).toBe(
+				"rgb(0, 0, 255)",
+			);
 
 			cleanup(element);
 		});

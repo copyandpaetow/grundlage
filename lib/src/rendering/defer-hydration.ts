@@ -9,18 +9,14 @@ export const markDeferredHydration = (
 	element: Element,
 	attributeMode: ValueOf<typeof ATTRIBUTE_MODE>,
 ): void => {
-	const isLostFromServerMarkup =
-		isServer() && attributeMode === ATTRIBUTE_MODE.PROPERTY;
-	if (isLostFromServerMarkup)
-		element.setAttribute(DEFER_HYDRATION_ATTRIBUTE, "");
+	const isLostFromServerMarkup = isServer() && attributeMode === ATTRIBUTE_MODE.PROPERTY;
+	if (isLostFromServerMarkup) element.setAttribute(DEFER_HYDRATION_ATTRIBUTE, "");
 };
 
 //this root only: a released child releases its own children from its own paint, one level per
 //synchronous step, and a nested shadow root is not reachable from here anyway
 export const releaseDeferredChildren = (shadowRoot: ShadowRoot): void => {
-	const deferred = shadowRoot.querySelectorAll(
-		`[${DEFER_HYDRATION_ATTRIBUTE}]`,
-	);
+	const deferred = shadowRoot.querySelectorAll(`[${DEFER_HYDRATION_ATTRIBUTE}]`);
 	for (let index = 0; index < deferred.length; index++)
 		deferred[index].removeAttribute(DEFER_HYDRATION_ATTRIBUTE);
 };

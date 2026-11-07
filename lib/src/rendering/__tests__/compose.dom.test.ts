@@ -11,9 +11,7 @@ describe("composeParts", () => {
 	});
 
 	test("booleans, null and undefined compose as empty, like a content hole", () => {
-		expect(
-			composeParts(["card ", 0, 1, 2, 3], [false, true, null, undefined]),
-		).toBe("card ");
+		expect(composeParts(["card ", 0, 1, 2, 3], [false, true, null, undefined])).toBe("card ");
 	});
 
 	test("a parts array of only strings ignores values", () => {

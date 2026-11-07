@@ -34,10 +34,7 @@ export const UNRESOLVED_CONTENT: Readonly<UnresolvedContentState> = {
 	kind: CONTENT_KIND.UNRESOLVED,
 };
 
-type ResolvedContentKind = Exclude<
-	ValueOf<typeof CONTENT_KIND>,
-	typeof CONTENT_KIND.UNRESOLVED
->;
+type ResolvedContentKind = Exclude<ValueOf<typeof CONTENT_KIND>, typeof CONTENT_KIND.UNRESOLVED>;
 
 type ResolvedContentState = Exclude<ContentState, UnresolvedContentState>;
 
@@ -47,9 +44,7 @@ const contentKindOf = (value: unknown): ResolvedContentKind => {
 	return CONTENT_KIND.TEXT;
 };
 
-const createContentState = (
-	contentKind: ResolvedContentKind,
-): ResolvedContentState => {
+const createContentState = (contentKind: ResolvedContentKind): ResolvedContentState => {
 	switch (contentKind) {
 		case CONTENT_KIND.TEXT:
 			return { kind: CONTENT_KIND.TEXT, lastValueHash: UNSET_HASH };
@@ -76,10 +71,7 @@ const createContentState = (
 
 //an iterator is used up by reading it, so it is read once into the values; a hydration that falls
 //back to a commit reads the hole a second time
-const readContentValue = (
-	liveBinding: ContentLiveBinding,
-	values: Array<unknown>,
-): unknown => {
+const readContentValue = (liveBinding: ContentLiveBinding, values: Array<unknown>): unknown => {
 	const valueIndex = liveBinding.staticBinding.valueIndex;
 	const value = values[valueIndex];
 	if (!(value instanceof Iterator)) return value;
@@ -89,8 +81,7 @@ const readContentValue = (
 };
 
 const coerceToText = (value: unknown): string => {
-	const isAbsentContent =
-		value === null || value === undefined || typeof value === "boolean";
+	const isAbsentContent = value === null || value === undefined || typeof value === "boolean";
 	return isAbsentContent ? "" : stringifyPrimitive(value);
 };
 
@@ -139,16 +130,8 @@ export const commitContent = (
 				patchInstance(content.instance, template.values);
 				break;
 			}
-			const fragment = cloneTemplateFragment(
-				parsed,
-				liveBinding.openMarker.parentNode,
-			);
-			const instance = mountInstance(
-				fragment,
-				template.values,
-				parsed,
-				treeState,
-			);
+			const fragment = cloneTemplateFragment(parsed, liveBinding.openMarker.parentNode);
+			const instance = mountInstance(fragment, template.values, parsed, treeState);
 			clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
 			liveBinding.openMarker.after(fragment);
 			content.instance = instance;
@@ -164,10 +147,7 @@ export const commitContent = (
 
 //one text write destroys nothing, so an adoptable text range is repaired by commitText rather than
 //rejected; anything else in the range means the server rendered a different kind and it is not ours
-const isAdoptableTextRange = ({
-	openMarker,
-	closeMarker,
-}: ContentLiveBinding): boolean => {
+const isAdoptableTextRange = ({ openMarker, closeMarker }: ContentLiveBinding): boolean => {
 	const serverNode = openMarker.nextSibling;
 	return (
 		serverNode === closeMarker ||

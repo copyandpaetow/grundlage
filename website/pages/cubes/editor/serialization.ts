@@ -10,16 +10,10 @@ const childBlocksOf = (parent: Element): Element[] =>
 	Array.from(parent.children).flatMap((child) => {
 		if (isBlock(child)) return [child];
 		const tag = child.tagName.toLowerCase();
-		return tag === "scene-gizmo" || tag === "scene-select"
-			? childBlocksOf(child)
-			: [];
+		return tag === "scene-gizmo" || tag === "scene-select" ? childBlocksOf(child) : [];
 	});
 
-const serializeBlock = (
-	block: Element,
-	depth: number,
-	lines: string[],
-): void => {
+const serializeBlock = (block: Element, depth: number, lines: string[]): void => {
 	const indent = "\t".repeat(depth);
 	const tag = block.tagName.toLowerCase();
 	const isGroup = tag === "scene-group";

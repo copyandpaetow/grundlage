@@ -1,8 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, component, prop } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("root-template host attributes", () => {
 	let tagId = 0;
@@ -230,9 +229,7 @@ describe("root-template host attributes", () => {
 		await sleep();
 
 		expect(element.getAttribute("class")).toBe("host-cls");
-		expect(element.shadowRoot?.querySelector("p")?.getAttribute("class")).toBe(
-			"inner-cls",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.getAttribute("class")).toBe("inner-cls");
 
 		cleanup(element);
 	});
@@ -1020,9 +1017,7 @@ describe("root-template host attribute writes do not feed back into the componen
 		await sleep(50);
 
 		expect(runCount).toBe(2);
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"user-write",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("user-write");
 		//and the host attribute the framework owns is still in place
 		expect(element.getAttribute("class")).toBe("card");
 
@@ -1095,9 +1090,7 @@ describe("root-template host attributes are rejected when nested inside content"
 
 		//a synchronous setup throw on mount is not caught, and the parser cache hands the same failure
 		//to every later user
-		expect(element.shadowRoot?.textContent).toMatch(
-			/top level of the template a component yields/,
-		);
+		expect(element.shadowRoot?.textContent).toMatch(/top level of the template a component yields/);
 		expect(element.hasAttribute("class")).toBe(false);
 
 		cleanup(element);
@@ -1116,9 +1109,7 @@ describe("root-template host attributes are rejected when nested inside content"
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.textContent).toMatch(
-			/top level of the template a component yields/,
-		);
+		expect(element.shadowRoot?.textContent).toMatch(/top level of the template a component yields/);
 
 		cleanup(element);
 	});
@@ -1127,9 +1118,7 @@ describe("root-template host attributes are rejected when nested inside content"
 		//failing wipes the shadow root to error text; it must also revert host bindings, or
 		//the listener applied from the root <template> lingers as a dead closure on the host
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let shouldThrow = false;
 		let clicks = 0;
 		const handler = () => {

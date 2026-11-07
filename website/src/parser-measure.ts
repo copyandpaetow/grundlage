@@ -67,9 +67,7 @@ export interface RunOptions {
 const median = (samples: ReadonlyArray<number>): number => {
 	const sorted = samples.slice().sort((left, right) => left - right);
 	const middle = sorted.length >> 1;
-	return sorted.length % 2 === 0
-		? (sorted[middle - 1] + sorted[middle]) / 2
-		: sorted[middle];
+	return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 };
 
 const collectGarbage = (): void => {
@@ -81,8 +79,7 @@ const collectGarbage = (): void => {
 	collect();
 };
 
-const yieldToBrowser = (): Promise<void> =>
-	new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToBrowser = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 /*
     The whole measurement is void if the parse cache ever hits, so this proves
@@ -113,9 +110,7 @@ const findVoidReasons = (
     between the two readings. Either way there is no reading, and that is a lost
     column rather than a lost row — the pass times are untouched by it.
 */
-const rejectImpossibleReading = (
-	retainedBytesPerTemplate: number | null,
-): number | null =>
+const rejectImpossibleReading = (retainedBytesPerTemplate: number | null): number | null =>
 	retainedBytesPerTemplate !== null && retainedBytesPerTemplate > 0
 		? retainedBytesPerTemplate
 		: null;
@@ -128,9 +123,7 @@ const parseAll = (arrays: ReadonlyArray<TemplateStringsArray>): void => {
 	}
 };
 
-const measureRetainedBytesPerTemplate = (
-	corpus: GeneratedCorpus,
-): number | null => {
+const measureRetainedBytesPerTemplate = (corpus: GeneratedCorpus): number | null => {
 	collectGarbage();
 	const before = readHeapMb();
 	if (before === null) return null;
@@ -187,17 +180,14 @@ export const runShape = async (
 		group: shape.group,
 		holeKind: shape.holeKind,
 		templateCount: corpus.templates.length,
-		charactersPerTemplate: Math.round(
-			corpus.totalCharacters / corpus.templates.length,
-		),
+		charactersPerTemplate: Math.round(corpus.totalCharacters / corpus.templates.length),
 		totalCharacters: corpus.totalCharacters,
 		totalHoles: corpus.totalHoles,
 		repeatsPerPass,
 		bestPassMs,
 		medianPassMs,
 		nanosecondsPerCharacter: (bestPassMs * 1_000_000) / charactersPerPass,
-		nanosecondsPerHole:
-			holesPerPass === 0 ? null : (bestPassMs * 1_000_000) / holesPerPass,
+		nanosecondsPerHole: holesPerPass === 0 ? null : (bestPassMs * 1_000_000) / holesPerPass,
 		microsecondsPerTemplate: (bestPassMs * 1000) / templatesPerPass,
 		retainedBytesPerTemplate: rejectImpossibleReading(retainedBytesPerTemplate),
 		voidReasons: findVoidReasons(cacheStayedCold, bestPassMs, medianPassMs),
@@ -226,22 +216,14 @@ export const fitHoleCost = (
 	series: string,
 	seriesResults: ReadonlyArray<ShapeResult>,
 ): HoleCostFit | null => {
-	const results = seriesResults.filter(
-		(result) => result.voidReasons.length === 0,
-	);
+	const results = seriesResults.filter((result) => result.voidReasons.length === 0);
 	if (results.length < 2) return null;
 
-	const holeCounts = results.map(
-		(result) => result.totalHoles / result.templateCount,
-	);
-	const nanosecondsPerTemplate = results.map(
-		(result) => result.microsecondsPerTemplate * 1000,
-	);
-	const meanHoles =
-		holeCounts.reduce((sum, value) => sum + value, 0) / holeCounts.length;
+	const holeCounts = results.map((result) => result.totalHoles / result.templateCount);
+	const nanosecondsPerTemplate = results.map((result) => result.microsecondsPerTemplate * 1000);
+	const meanHoles = holeCounts.reduce((sum, value) => sum + value, 0) / holeCounts.length;
 	const meanNanoseconds =
-		nanosecondsPerTemplate.reduce((sum, value) => sum + value, 0) /
-		nanosecondsPerTemplate.length;
+		nanosecondsPerTemplate.reduce((sum, value) => sum + value, 0) / nanosecondsPerTemplate.length;
 
 	let covariance = 0;
 	let variance = 0;

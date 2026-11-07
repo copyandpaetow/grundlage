@@ -14,30 +14,16 @@ const BASELINE_STORAGE_KEY = "grundlage:perf-harness:baseline";
 // lower. Both use the same 2% band — window mode is wall-clock noisy, so frame
 // count (and the writes/frame ratio over it) drifts run to run.
 const classWhenHigherIsBetter = (current: number, previous: number): string =>
-	current > previous * 1.02
-		? "improve"
-		: current < previous * 0.98
-			? "regress"
-			: "";
+	current > previous * 1.02 ? "improve" : current < previous * 0.98 ? "regress" : "";
 
 const classWhenLowerIsBetter = (current: number, previous: number): string =>
-	current < previous * 0.98
-		? "improve"
-		: current > previous * 1.02
-			? "regress"
-			: "";
+	current < previous * 0.98 ? "improve" : current > previous * 1.02 ? "regress" : "";
 
 /*
     Window-mode probe — the direct-binding baseline. Twenty bars are bound
     individually in the template (no array, no list diff), so measured against
     raf-animation-list it isolates the cost of list reconciliation from the cost
     of plain per-hole updates.
-
-    Self-driving rAF loop; the shared measureWindow harness only OBSERVES it for
-    a wall-clock window and reports fps, frame time, DOM writes per frame, and
-    heap delta — the executable form of lib/STYLE_GUIDE.md's "Measuring"
-    contract. Heap numbers need Chrome --enable-precise-memory-info to be
-    byte-accurate; otherwise they round coarsely.
 */
 
 customElements.define(
@@ -67,9 +53,7 @@ customElements.define(
 
 		// Observe only the animating bars, not the controls/result chrome.
 		const barsRoot = (): Node =>
-			element.shadowRoot?.querySelector(".bars") ??
-			element.shadowRoot ??
-			element;
+			element.shadowRoot?.querySelector(".bars") ?? element.shadowRoot ?? element;
 
 		const measure = async () => {
 			if (isMeasuring) return;
@@ -100,17 +84,10 @@ customElements.define(
 
 		// One result row: the current value, plus a colored delta against the
 		// baseline when one is saved.
-		const metricRow = (
-			label: string,
-			formatted: string,
-			delta: string,
-			deltaClass: string,
-		) => html`
+		const metricRow = (label: string, formatted: string, delta: string, deltaClass: string) => html`
 			<span>${label}</span>
 			<span
-				>${formatted}${
-					delta ? html` <span class="delta ${deltaClass}">${delta}</span>` : ""
-				}</span
+				>${formatted}${delta ? html` <span class="delta ${deltaClass}">${delta}</span>` : ""}</span
 			>
 		`;
 
@@ -217,58 +194,29 @@ customElements.define(
 											${metricRow(
 												"fps",
 												formatNumber(result.framesPerSecond),
+												base ? formatDelta(result.framesPerSecond, base.framesPerSecond) : "",
 												base
-													? formatDelta(
-															result.framesPerSecond,
-															base.framesPerSecond,
-														)
-													: "",
-												base
-													? classWhenHigherIsBetter(
-															result.framesPerSecond,
-															base.framesPerSecond,
-														)
+													? classWhenHigherIsBetter(result.framesPerSecond, base.framesPerSecond)
 													: "",
 											)}
 											${metricRow(
 												"median frame",
 												`${formatNumber(result.medianFrameMs, 3)} ms`,
+												base ? formatDelta(result.medianFrameMs, base.medianFrameMs) : "",
 												base
-													? formatDelta(
-															result.medianFrameMs,
-															base.medianFrameMs,
-														)
-													: "",
-												base
-													? classWhenLowerIsBetter(
-															result.medianFrameMs,
-															base.medianFrameMs,
-														)
+													? classWhenLowerIsBetter(result.medianFrameMs, base.medianFrameMs)
 													: "",
 											)}
 											${metricRow("frames", String(result.frames), "", "")}
 											${metricRow(
 												"DOM writes / frame",
 												formatNumber(result.mutationsPerFrame),
+												base ? formatDelta(result.mutationsPerFrame, base.mutationsPerFrame) : "",
 												base
-													? formatDelta(
-															result.mutationsPerFrame,
-															base.mutationsPerFrame,
-														)
-													: "",
-												base
-													? classWhenLowerIsBetter(
-															result.mutationsPerFrame,
-															base.mutationsPerFrame,
-														)
+													? classWhenLowerIsBetter(result.mutationsPerFrame, base.mutationsPerFrame)
 													: "",
 											)}
-											${metricRow(
-												"DOM writes total",
-												String(result.mutations),
-												"",
-												"",
-											)}
+											${metricRow("DOM writes total", String(result.mutations), "", "")}
 											${metricRow(
 												"heap delta",
 												result.heapDeltaMb !== null

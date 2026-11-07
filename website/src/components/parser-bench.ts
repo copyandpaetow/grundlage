@@ -14,12 +14,7 @@ import {
 	RECORDED_CORPUS_SHAPE,
 	type RecordedTemplate,
 } from "../parser-corpus";
-import {
-	fitHoleCost,
-	type HoleCostFit,
-	runShape,
-	type ShapeResult,
-} from "../parser-measure";
+import { fitHoleCost, type HoleCostFit, runShape, type ShapeResult } from "../parser-measure";
 import recordedTemplates from "../../pages/parser-bench/recorded-corpus.json";
 
 /*
@@ -79,9 +74,7 @@ customElements.define(
 				results.push(result);
 				console.log(
 					`shape ${index + 1}/${corpora.length} ${result.name} ${result.nanosecondsPerCharacter.toFixed(2)} ns/char${
-						result.voidReasons.length === 0
-							? ""
-							: ` — VOID: ${result.voidReasons.join(", ")}`
+						result.voidReasons.length === 0 ? "" : ` — VOID: ${result.voidReasons.join(", ")}`
 					}`,
 				);
 			}
@@ -90,16 +83,13 @@ customElements.define(
 				fitHoleCost(
 					"adjacent holes",
 					results.filter(
-						(result) =>
-							result.group === "hole density" &&
-							result.holeKind === "adjacentContent",
+						(result) => result.group === "hole density" && result.holeKind === "adjacentContent",
 					),
 				),
 				fitHoleCost(
 					"one element per hole",
 					results.filter(
-						(result) =>
-							result.group === "hole density" && result.holeKind === "content",
+						(result) => result.group === "hole density" && result.holeKind === "content",
 					),
 				),
 			].filter((fit): fit is HoleCostFit => fit !== null);
@@ -128,8 +118,7 @@ customElements.define(
 		const groupsInOrder = (): Array<string> => {
 			const seen: Array<string> = [];
 			for (let index = 0; index < results.length; index++) {
-				if (!seen.includes(results[index].group))
-					seen.push(results[index].group);
+				if (!seen.includes(results[index].group)) seen.push(results[index].group);
 			}
 			return seen;
 		};
@@ -138,8 +127,7 @@ customElements.define(
 			results.filter((result) => result.voidReasons.length > 0).length;
 
 		const isBeyondResolution = (current: number, previous: number): boolean =>
-			previous !== 0 &&
-			Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
+			previous !== 0 && Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
 
 		yield function* view() {
 			yield html`
@@ -341,9 +329,7 @@ customElements.define(
 																	${
 																		result.retainedBytesPerTemplate === null
 																			? "—"
-																			: result.retainedBytesPerTemplate.toFixed(
-																					0,
-																				)
+																			: result.retainedBytesPerTemplate.toFixed(0)
 																	}
 																</td>
 																<td

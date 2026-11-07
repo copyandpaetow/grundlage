@@ -3,16 +3,9 @@ import {
 	createAttributeLaneLiveBinding,
 	revertHostBinding,
 } from "./bindings/live-binding";
-import {
-	AttributeLaneLiveBinding,
-	Instance,
-	TreeState,
-} from "./bindings/types";
+import { AttributeLaneLiveBinding, Instance, TreeState } from "./bindings/types";
 import { getParsedTemplate } from "../parser/html";
-import {
-	AttributeStaticBinding,
-	DynamicAttributeStaticBinding,
-} from "../parser/types";
+import { AttributeStaticBinding, DynamicAttributeStaticBinding } from "../parser/types";
 import { releaseUnclaimedPayloads } from "../load";
 import { TemplateValue } from "../template";
 import { ComponentErrorEvent } from "../runtime/component-error-event";
@@ -91,21 +84,13 @@ const mountOrPatchRoot = (
 		return current;
 	}
 	const fragment = cloneTemplateFragment(parsed, root.shadowRoot);
-	const instance = mountInstance(
-		fragment,
-		value.values,
-		parsed,
-		root.treeState,
-	);
+	const instance = mountInstance(fragment, value.values, parsed, root.treeState);
 	mountHostBindings(root, instance, value.values);
 	root.shadowRoot.replaceChildren(fragment);
 	return instance;
 };
 
-export const paintComponentRoot = (
-	root: ComponentRoot,
-	templateValue: TemplateValue,
-): void => {
+export const paintComponentRoot = (root: ComponentRoot, templateValue: TemplateValue): void => {
 	if (root.isHydrationPending) {
 		assertDuringDevelopment(
 			root.instance === null,
@@ -135,19 +120,14 @@ export const paintComponentRoot = (
 	} else root.instance = mountOrPatchRoot(root, root.instance, templateValue);
 };
 
-export const displayFatalErrorInRoot = (
-	root: ComponentRoot,
-	error: unknown,
-): void => {
+export const displayFatalErrorInRoot = (root: ComponentRoot, error: unknown): void => {
 	revertAllHostBindings(root);
 	//the server's markup goes with the rest, so a re-insertion mounts fresh
 	root.isHydrationPending = false;
 	root.instance = null;
 	root.shadowRoot.replaceChildren();
 	const { host } = root;
-	const isHandledByApp = !host.dispatchEvent(
-		new ComponentErrorEvent(error, host.localName),
-	);
+	const isHandledByApp = !host.dispatchEvent(new ComponentErrorEvent(error, host.localName));
 	if (isHandledByApp) return;
 	console.error(libraryMessage(`<${host.localName}> stopped running.`), error);
 	root.shadowRoot.textContent = `${error}`;

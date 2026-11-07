@@ -103,27 +103,24 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		["oncompositionend", "compositionend"],
 		["onfocusin", "focusin"],
 		["oncontextmenu", "contextmenu"],
-	])(
-		"binds %s via addEventListener and fires on %s",
-		(attributeKey, eventName) => {
-			const element = document.createElement("div");
-			//guard: if a future runtime drops one of these from the prototype the
-			//fast path would silently fall through to setAttribute and the test
-			//would still pass the dispatch check via inline handler, so assert the
-			//lookup so a regression surfaces here, not somewhere downstream
-			expect(attributeKey in element).toBe(true);
+	])("binds %s via addEventListener and fires on %s", (attributeKey, eventName) => {
+		const element = document.createElement("div");
+		//guard: if a future runtime drops one of these from the prototype the
+		//fast path would silently fall through to setAttribute and the test
+		//would still pass the dispatch check via inline handler, so assert the
+		//lookup so a regression surfaces here, not somewhere downstream
+		expect(attributeKey in element).toBe(true);
 
-			const received: Array<Event> = [];
-			const handler = (event: Event) => received.push(event);
+		const received: Array<Event> = [];
+		const handler = (event: Event) => received.push(event);
 
-			applyAttributeValue(element, attributeKey, handler);
-			expect(element.hasAttribute(attributeKey)).toBe(false);
+		applyAttributeValue(element, attributeKey, handler);
+		expect(element.hasAttribute(attributeKey)).toBe(false);
 
-			const dispatched = new Event(eventName);
-			element.dispatchEvent(dispatched);
-			expect(received).toEqual([dispatched]);
-		},
-	);
+		const dispatched = new Event(eventName);
+		element.dispatchEvent(dispatched);
+		expect(received).toEqual([dispatched]);
+	});
 
 	test("CustomEvent detail reaches a listener bound to a standard event slot", () => {
 		//the event is not unwrapped: the listener gets whatever dispatchEvent hands over, so callers
@@ -191,9 +188,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
-		applyAttributeValue(element, "onPointerDown", (event: Event) =>
-			received.push(event.type),
-		);
+		applyAttributeValue(element, "onPointerDown", (event: Event) => received.push(event.type));
 
 		element.dispatchEvent(new Event("pointerdown"));
 		expect(received).toEqual(["pointerdown"]);
@@ -214,9 +209,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		applyAttributeValue(element, "onmycustomevent", handler);
 
 		expect(addSpy).not.toHaveBeenCalled();
-		expect(
-			(element as unknown as { onmycustomevent: unknown }).onmycustomevent,
-		).toBe(handler);
+		expect((element as unknown as { onmycustomevent: unknown }).onmycustomevent).toBe(handler);
 		expect(element.hasAttribute("onmycustomevent")).toBe(false);
 	});
 
@@ -277,16 +270,12 @@ describe("applyAttributeValue - on- explicit listeners", () => {
 		const received: Array<string> = [];
 		const addSpy = vi.spyOn(element, "addEventListener");
 
-		applyAttributeValue(element, "on-form-reset", (event: Event) =>
-			received.push(event.type),
-		);
+		applyAttributeValue(element, "on-form-reset", (event: Event) => received.push(event.type));
 
 		expect(addSpy).toHaveBeenCalledWith("form-reset", expect.any(Function));
 		//must not leak as an attribute or a JS property
 		expect(element.hasAttribute("on-form-reset")).toBe(false);
-		expect(
-			(element as unknown as Record<string, unknown>)["on-form-reset"],
-		).toBeUndefined();
+		expect((element as unknown as Record<string, unknown>)["on-form-reset"]).toBeUndefined();
 
 		element.dispatchEvent(new Event("form-reset"));
 		expect(received).toEqual(["form-reset"]);
@@ -336,9 +325,7 @@ describe("applyAttributeValue - on- explicit listeners", () => {
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
-		applyAttributeValue(element, "on-MyEvent", (event: Event) =>
-			received.push(event.type),
-		);
+		applyAttributeValue(element, "on-MyEvent", (event: Event) => received.push(event.type));
 
 		element.dispatchEvent(new Event("myevent"));
 		expect(received).toEqual(["myevent"]);
@@ -505,13 +492,8 @@ describe("applyAttributeValue - non-stringable values", () => {
 		class ElementOfAnotherLibrary extends HTMLElement {
 			update = vi.fn();
 		}
-		customElements.define(
-			"element-of-another-library",
-			ElementOfAnotherLibrary,
-		);
-		const element = document.createElement(
-			"element-of-another-library",
-		) as ElementOfAnotherLibrary;
+		customElements.define("element-of-another-library", ElementOfAnotherLibrary);
+		const element = document.createElement("element-of-another-library") as ElementOfAnotherLibrary;
 
 		applyAttributeValue(element, "config", { nested: 1 });
 		expect(element.update).not.toHaveBeenCalled();

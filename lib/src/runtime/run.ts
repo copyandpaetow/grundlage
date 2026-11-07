@@ -7,15 +7,12 @@ import {
 } from "../utils/diagnostics";
 
 const generatorFunctionPrototype = Object.getPrototypeOf(function* () {});
-const asyncGeneratorFunctionPrototype = Object.getPrototypeOf(
-	async function* () {},
-);
+const asyncGeneratorFunctionPrototype = Object.getPrototypeOf(async function* () {});
 
 //a generator function's props signature is unknowable at runtime, so the narrowing is wider than the
 //check: any generator function reads as an UpdateGenerator
 export const isGeneratorFunction = (value: unknown): value is UpdateGenerator =>
-	typeof value === "function" &&
-	Object.getPrototypeOf(value) === generatorFunctionPrototype;
+	typeof value === "function" && Object.getPrototypeOf(value) === generatorFunctionPrototype;
 
 //there is no global Generator constructor to test with instanceof, but every generator object carries
 //this tag, from whichever realm made it
@@ -23,8 +20,7 @@ export const isGeneratorObject = (value: unknown): boolean =>
 	Object.prototype.toString.call(value) === "[object Generator]";
 
 export const isAsyncGeneratorFunction = (value: unknown): boolean =>
-	typeof value === "function" &&
-	Object.getPrototypeOf(value) === asyncGeneratorFunctionPrototype;
+	typeof value === "function" && Object.getPrototypeOf(value) === asyncGeneratorFunctionPrototype;
 
 //only the body waits this way, at the yield of an update generator, and only the first run of it
 //that finishes resumes the body
@@ -34,8 +30,7 @@ export const WAITING_FOR_UPDATE_GENERATOR_RUN: unique symbol = Symbol(
 
 //what a run waits on is its resume permit: only that promise's continuation, or that update
 //generator run, may step it. null while the driver loop holds the run
-export type Suspension =
-	typeof WAITING_FOR_UPDATE_GENERATOR_RUN | Promise<unknown>;
+export type Suspension = typeof WAITING_FOR_UPDATE_GENERATOR_RUN | Promise<unknown>;
 
 export interface Run {
 	runner: ComponentRunner;
@@ -72,12 +67,8 @@ interface TeardownPlace {
 	updateGeneratorRun: Run | null;
 }
 
-const isTeardownPlaceTaken = (
-	runner: ComponentRunner,
-	place: TeardownPlace,
-): boolean =>
-	runner.bodyRun !== place.bodyRun ||
-	runner.updateGeneratorRun !== place.updateGeneratorRun;
+const isTeardownPlaceTaken = (runner: ComponentRunner, place: TeardownPlace): boolean =>
+	runner.bodyRun !== place.bodyRun || runner.updateGeneratorRun !== place.updateGeneratorRun;
 
 //the async function sits outside tearDownRun, so a finally block that does not yield
 //never pays for its promise. Every turn waits on a promise the finally block yielded
@@ -105,9 +96,7 @@ const driveTeardownUntilDone = async (
 			return;
 		}
 		try {
-			result = isRejected
-				? run.generator.throw(rejection)
-				: run.generator.next(settledValue);
+			result = isRejected ? run.generator.throw(rejection) : run.generator.next(settledValue);
 		} catch (error) {
 			reportErrorFromUserCode(error);
 			return;

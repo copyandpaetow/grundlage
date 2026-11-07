@@ -16,12 +16,7 @@ import {
 	refreshStyleSheetsAfterMove,
 } from "../instance";
 import { clearRange, NO_LIST_TAIL, nextListTail } from "../markers";
-import {
-	TreeState,
-	ContentLiveBinding,
-	ListContentState,
-	ListItem,
-} from "./types";
+import { TreeState, ContentLiveBinding, ListContentState, ListItem } from "./types";
 import { assertDuringDevelopment } from "../../utils/diagnostics";
 
 const END_OF_CHAIN = -1;
@@ -38,10 +33,7 @@ const END_OF_SUBSEQUENCE = -1;
 export const EMPTY_LIST_SCRATCH = new Int32Array(0);
 export const EMPTY_HASH_SCRATCH = new Float64Array(0);
 
-const shapeOrKeyHashOf = (
-	value: TemplateValue,
-	parsed: ParsedTemplate,
-): number =>
+const shapeOrKeyHashOf = (value: TemplateValue, parsed: ParsedTemplate): number =>
 	parsed.keyValueParts === NO_KEY
 		? parsed.templateHash
 		: combinedPartsHash(parsed.keyValueParts, value.values);
@@ -75,8 +67,7 @@ export const commitList = (
 	while (
 		firstUnsettledIndex < endOfUnsettledIndexes &&
 		firstUnsettledIndex < endOfUnsettledPreviousRows &&
-		previousRows[firstUnsettledIndex].itemHash ===
-			itemHashes[firstUnsettledIndex]
+		previousRows[firstUnsettledIndex].itemHash === itemHashes[firstUnsettledIndex]
 	) {
 		resolvedRows[firstUnsettledIndex] = previousRows[firstUnsettledIndex];
 		firstUnsettledIndex++;
@@ -84,13 +75,11 @@ export const commitList = (
 	while (
 		endOfUnsettledIndexes > firstUnsettledIndex &&
 		endOfUnsettledPreviousRows > firstUnsettledIndex &&
-		previousRows[endOfUnsettledPreviousRows - 1].itemHash ===
-			itemHashes[endOfUnsettledIndexes - 1]
+		previousRows[endOfUnsettledPreviousRows - 1].itemHash === itemHashes[endOfUnsettledIndexes - 1]
 	) {
 		endOfUnsettledIndexes--;
 		endOfUnsettledPreviousRows--;
-		resolvedRows[endOfUnsettledIndexes] =
-			previousRows[endOfUnsettledPreviousRows];
+		resolvedRows[endOfUnsettledIndexes] = previousRows[endOfUnsettledPreviousRows];
 	}
 	if (endOfUnsettledPreviousRows > firstUnsettledIndex) {
 		matchUnsettledRows(
@@ -132,11 +121,7 @@ const tableIndexOfHash = (list: ListContentState, hash: number): number => {
 };
 
 //called from the last row back, so each chain starts at its leftmost row
-const chainRowByHash = (
-	list: ListContentState,
-	previousIndex: number,
-	hash: number,
-): void => {
+const chainRowByHash = (list: ListContentState, previousIndex: number, hash: number): void => {
 	const tableIndex = tableIndexOfHash(list, hash);
 	const currentHead = list.chainHeadAtTableIndex[tableIndex];
 	list.nextRowWithSameHash[previousIndex] =
@@ -145,11 +130,7 @@ const chainRowByHash = (
 	list.chainHeadAtTableIndex[tableIndex] = previousIndex;
 };
 
-const chainRowsByContentHash = (
-	list: ListContentState,
-	start: number,
-	end: number,
-): void => {
+const chainRowsByContentHash = (list: ListContentState, start: number, end: number): void => {
 	emptyRowHashTable(list);
 	for (let previousIndex = end - 1; previousIndex >= start; previousIndex--)
 		chainRowByHash(list, previousIndex, list.items[previousIndex].itemHash);
@@ -163,33 +144,21 @@ const chainUnclaimedRowsByShapeOrKey = (
 	emptyRowHashTable(list);
 	for (let previousIndex = end - 1; previousIndex >= start; previousIndex--) {
 		if (list.nextRowWithSameHash[previousIndex] === CLAIMED) continue;
-		chainRowByHash(
-			list,
-			previousIndex,
-			list.items[previousIndex].shapeOrKeyHash,
-		);
+		chainRowByHash(list, previousIndex, list.items[previousIndex].shapeOrKeyHash);
 	}
 };
 
-const claimLeftmostUnclaimedRow = (
-	list: ListContentState,
-	hash: number,
-): ListItem | undefined => {
+const claimLeftmostUnclaimedRow = (list: ListContentState, hash: number): ListItem | undefined => {
 	const tableIndex = tableIndexOfHash(list, hash);
 	const head = list.chainHeadAtTableIndex[tableIndex];
-	const hasNoUnclaimedRow =
-		head === UNUSED_TABLE_ENTRY || head === END_OF_CHAIN;
+	const hasNoUnclaimedRow = head === UNUSED_TABLE_ENTRY || head === END_OF_CHAIN;
 	if (hasNoUnclaimedRow) return undefined;
 	list.chainHeadAtTableIndex[tableIndex] = list.nextRowWithSameHash[head];
 	list.nextRowWithSameHash[head] = CLAIMED;
 	return list.items[head];
 };
 
-const removeUnclaimedRows = (
-	list: ListContentState,
-	start: number,
-	end: number,
-): void => {
+const removeUnclaimedRows = (list: ListContentState, start: number, end: number): void => {
 	for (let previousIndex = start; previousIndex < end; previousIndex++) {
 		if (list.nextRowWithSameHash[previousIndex] === CLAIMED) continue;
 		const row = list.items[previousIndex];
@@ -277,15 +246,11 @@ const findLongestIncreasingSubsequence = (
 			previousIndex,
 		);
 		nextInSubsequence[previousIndex] =
-			precededLength === 0
-				? END_OF_SUBSEQUENCE
-				: subsequenceStarts[precededLength - 1];
+			precededLength === 0 ? END_OF_SUBSEQUENCE : subsequenceStarts[precededLength - 1];
 		subsequenceStarts[precededLength] = previousIndex;
 		if (precededLength === longestLength) longestLength++;
 	}
-	return longestLength === 0
-		? END_OF_SUBSEQUENCE
-		: subsequenceStarts[longestLength - 1];
+	return longestLength === 0 ? END_OF_SUBSEQUENCE : subsequenceStarts[longestLength - 1];
 };
 
 const placeRows = (
@@ -301,41 +266,23 @@ const placeRows = (
 		list.subsequenceStarts = new Int32Array(previousRowCount);
 		list.nextInSubsequence = new Int32Array(previousRowCount);
 	}
-	let nextUnmovedPreviousIndex = findLongestIncreasingSubsequence(
-		list,
-		resolvedRows,
-	);
+	let nextUnmovedPreviousIndex = findLongestIncreasingSubsequence(list, resolvedRows);
 	const { itemHashes, nextInSubsequence } = list;
 	let cursor: ChildNode = openMarker;
 	for (let index = 0; index < resolvedRows.length; index++) {
 		let row = resolvedRows[index];
 		if (row === undefined)
-			row = mountRowAfter(
-				cursor,
-				index,
-				itemValues[index],
-				itemHashes[index],
-				treeState,
-			);
+			row = mountRowAfter(cursor, index, itemValues[index], itemHashes[index], treeState);
 		else {
 			//every other row the match found was already equal in content
 			if (row.itemHash !== itemHashes[index]) {
 				const value = coerceToTemplate(itemValues[index]);
 				const parsed = parseNestedTemplate(value);
 				row.itemHash = itemHashes[index];
-				if (isPatchableInPlace(row.instance, parsed))
-					patchInstance(row.instance, value.values);
+				if (isPatchableInPlace(row.instance, parsed)) patchInstance(row.instance, value.values);
 				else {
-					const fragment = cloneTemplateFragment(
-						parsed,
-						row.tailMarker.parentNode,
-					);
-					const instance = mountInstance(
-						fragment,
-						value.values,
-						parsed,
-						treeState,
-					);
+					const fragment = cloneTemplateFragment(parsed, row.tailMarker.parentNode);
+					const instance = mountInstance(fragment, value.values, parsed, treeState);
 					clearRange(row.startNode, row.tailMarker);
 					row.startNode = fragment.firstChild ?? row.tailMarker;
 					row.tailMarker.before(fragment);
@@ -410,17 +357,8 @@ export const hydrateListItems = (
 		const value = coerceToTemplate(itemValues[index]);
 		const parsed = parseNestedTemplate(value);
 		const startNode = walker.currentNode.nextSibling;
-		assertDuringDevelopment(
-			startNode !== null,
-			"a list row starts before the list's close marker",
-		);
-		const instance = hydrateInstance(
-			walker,
-			value,
-			parsed,
-			liveBinding.closeMarker,
-			treeState,
-		);
+		assertDuringDevelopment(startNode !== null, "a list row starts before the list's close marker");
+		const instance = hydrateInstance(walker, value, parsed, liveBinding.closeMarker, treeState);
 		if (instance === HYDRATION_MISMATCH) return HYDRATION_MISMATCH;
 		const tailMarker = nextListTail(walker, liveBinding.closeMarker);
 		if (tailMarker === NO_LIST_TAIL) return HYDRATION_MISMATCH;
@@ -434,7 +372,6 @@ export const hydrateListItems = (
 		};
 	}
 
-	if (walker.currentNode.nextSibling !== liveBinding.closeMarker)
-		return HYDRATION_MISMATCH;
+	if (walker.currentNode.nextSibling !== liveBinding.closeMarker) return HYDRATION_MISMATCH;
 	return items;
 };

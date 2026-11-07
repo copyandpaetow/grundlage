@@ -3,10 +3,7 @@ import { CommentLiveBinding } from "./types";
 import { ensureCommentText } from "./verbatim-text";
 import { assertDuringDevelopment } from "../../utils/diagnostics";
 
-export const commitComment = (
-	liveBinding: CommentLiveBinding,
-	values: Array<unknown>,
-): void => {
+export const commitComment = (liveBinding: CommentLiveBinding, values: Array<unknown>): void => {
 	const { parts } = liveBinding.staticBinding;
 	const hash = combinedPartsHash(parts, values);
 	if (hash === liveBinding.lastValueHash) return;

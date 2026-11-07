@@ -14,8 +14,7 @@ interface RelativeImport {
 	specifier: string;
 }
 
-const isPublicEntry = ({ specifier }: RelativeImport): boolean =>
-	PUBLIC_ENTRY.test(specifier);
+const isPublicEntry = ({ specifier }: RelativeImport): boolean => PUBLIC_ENTRY.test(specifier);
 
 //a namespace import is an enum module, plain constants like a type, so the bundle cannot disagree
 const isNotLibraryCode = ({ clause, specifier }: RelativeImport): boolean =>
@@ -47,12 +46,7 @@ const publicEntryTests = (pattern: string): Array<string> =>
 const testBundleAliasOf = (projectName: string) => [
 	{
 		find: PUBLIC_ENTRY,
-		replacement: join(
-			libraryDirectory,
-			".test-bundle",
-			projectName,
-			"index.mjs",
-		),
+		replacement: join(libraryDirectory, ".test-bundle", projectName, "index.mjs"),
 	},
 ];
 
@@ -64,11 +58,7 @@ export default defineConfig({
 				test: {
 					name: "unit",
 					include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
-					exclude: [
-						...configDefaults.exclude,
-						"**/*.browser.test.ts",
-						"**/*.dom.test.ts",
-					],
+					exclude: [...configDefaults.exclude, "**/*.browser.test.ts", "**/*.dom.test.ts"],
 					environment: "node",
 					benchmark: {
 						include: [],

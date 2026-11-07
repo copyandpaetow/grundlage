@@ -50,9 +50,9 @@ interface EnvironmentLoader {
 	moduleLoadAttempts: Map<string, Promise<void>>;
 }
 
-type RealmHTMLSerializerClass = new (options: {
-	shadowRoots: Array<ShadowRoot>;
-}) => { serializeToString(node: Node): string };
+type RealmHTMLSerializerClass = new (options: { shadowRoots: Array<ShadowRoot> }) => {
+	serializeToString(node: Node): string;
+};
 
 export interface ServerRealm {
 	window: HappyDomWindow;
@@ -175,13 +175,8 @@ const wrapAttachShadow = (): void => {
 			HTMLElement: { prototype: Record<string, unknown> };
 		}
 	).HTMLElement.prototype;
-	const attachShadow = elementPrototype.attachShadow as (
-		init: ShadowRootInit,
-	) => ShadowRoot;
-	elementPrototype.attachShadow = function (
-		this: object,
-		init: ShadowRootInit,
-	) {
+	const attachShadow = elementPrototype.attachShadow as (init: ShadowRootInit) => ShadowRoot;
+	elementPrototype.attachShadow = function (this: object, init: ShadowRootInit) {
 		if (init?.mode === "closed") hostsWithClosedRoot.add(this);
 		const shadowRoot = attachShadow.call(this, { ...init, clonable: false });
 		requestedInitOfShadowRoot.set(shadowRoot, init);
@@ -251,9 +246,7 @@ export const markServerRealmStale = (): void => {
 export const runInServerRealm = <Result>(
 	work: (realm: ServerRealm) => Promise<Result>,
 ): Promise<Result> => {
-	const run = pendingRealmWork.then(async () =>
-		work(await currentOrFreshRealm()),
-	);
+	const run = pendingRealmWork.then(async () => work(await currentOrFreshRealm()));
 	//the caller sees the failure; the queue only needs to know the task is over
 	pendingRealmWork = run.catch(() => undefined);
 	return run;
@@ -273,9 +266,7 @@ export const closeServerRealm = (): Promise<void> => {
 //a vite dev server is the only loader that applies the project's own resolution — TypeScript,
 //extensionless and directory imports, aliases — to component source files. the watcher is off
 //so it never holds a finished build open
-const startModuleLoaderServer = (
-	loader: ModuleLoaderConfig,
-): Promise<ViteDevServer> => {
+const startModuleLoaderServer = (loader: ModuleLoaderConfig): Promise<ViteDevServer> => {
 	const serverKey = `${loader.configFile}\n${loader.root}`;
 	const running = moduleLoaderServers.get(serverKey);
 	if (running) return running;
@@ -312,9 +303,7 @@ const startModuleLoaderServer = (
 export const prerenderEnvironmentOfLoader = async (
 	loader: ModuleLoaderConfig,
 ): Promise<DevEnvironment> =>
-	(await startModuleLoaderServer(loader)).environments[
-		PRERENDER_ENVIRONMENT_NAME
-	];
+	(await startModuleLoaderServer(loader)).environments[PRERENDER_ENVIRONMENT_NAME];
 
 export const closeModuleLoaderServers = async (): Promise<void> => {
 	const starting = [...moduleLoaderServers.values()];
@@ -322,10 +311,7 @@ export const closeModuleLoaderServers = async (): Promise<void> => {
 	await Promise.all(starting.map(async (server) => (await server).close()));
 };
 
-const loaderOf = (
-	realm: ServerRealm,
-	environment: DevEnvironment,
-): EnvironmentLoader => {
+const loaderOf = (realm: ServerRealm, environment: DevEnvironment): EnvironmentLoader => {
 	const existing = realm.loaders.get(environment);
 	if (existing !== undefined) return existing;
 	const created: EnvironmentLoader = {
@@ -336,10 +322,7 @@ const loaderOf = (
 	return created;
 };
 
-const importOnce = (
-	loader: EnvironmentLoader,
-	moduleUrl: string,
-): Promise<void> => {
+const importOnce = (loader: EnvironmentLoader, moduleUrl: string): Promise<void> => {
 	const attempted = loader.moduleLoadAttempts.get(moduleUrl);
 	if (attempted) return attempted;
 	const attempt = loader.runner.import(moduleUrl).then(
@@ -406,10 +389,7 @@ const classifyTag = (tagName: string): TagSupportKind => {
 		: TAG_SUPPORT.NO_SERIALIZABLE_ROOT;
 };
 
-export const tagSupportOf = (
-	realm: ServerRealm,
-	tagName: string,
-): TagSupportKind => {
+export const tagSupportOf = (realm: ServerRealm, tagName: string): TagSupportKind => {
 	const known = realm.tagSupport.get(tagName);
 	if (known !== undefined) return known;
 	const support = classifyTag(tagName);
@@ -453,10 +433,7 @@ const waitForPendingTasks = async (
 		await new Promise((resolve) => setTimeout(resolve, 16));
 };
 
-const hasUnsettledTask = (
-	unsettledTasks: ReadonlySet<PendingTask>,
-	host: EventTarget,
-): boolean => {
+const hasUnsettledTask = (unsettledTasks: ReadonlySet<PendingTask>, host: EventTarget): boolean => {
 	for (const task of unsettledTasks) if (task.host === host) return true;
 	return false;
 };
@@ -479,8 +456,7 @@ const isLeftForTheBrowser = (element: Element): boolean => {
 			current.localName,
 			current.getAttribute(PRERENDER_ATTRIBUTE),
 		);
-		if (choice !== PRERENDER_CHOICE.INHERIT)
-			return choice === PRERENDER_CHOICE.OFF;
+		if (choice !== PRERENDER_CHOICE.INHERIT) return choice === PRERENDER_CHOICE.OFF;
 	}
 	return false;
 };
@@ -494,11 +470,7 @@ const shadowRootsToSerialize = (
 	const shadowRoots: Array<ShadowRoot> = [];
 	//each shadow root is pushed once, by its own host, so the search ends with the render's elements
 	const treesToSearch: Array<Element | ShadowRoot> = [renderContainer];
-	for (
-		let tree = treesToSearch.pop();
-		tree !== undefined;
-		tree = treesToSearch.pop()
-	) {
+	for (let tree = treesToSearch.pop(); tree !== undefined; tree = treesToSearch.pop()) {
 		const elements = tree.querySelectorAll("*");
 		for (let index = 0; index < elements.length; index++) {
 			const shadowRoot = elements[index].shadowRoot;
@@ -518,8 +490,7 @@ const shadowRootsToSerialize = (
 
 //an attribute value cannot hold this, its quotes are escaped: the first match in a host's markup is
 //the template of the host's own root
-const DECLARATIVE_SHADOW_ROOT_START_TAG =
-	/<template shadowrootmode="[^"]*"[^>]*>/;
+const DECLARATIVE_SHADOW_ROOT_START_TAG = /<template shadowrootmode="[^"]*"[^>]*>/;
 
 const declarativeShadowRootStartTagOf = (shadowRoot: ShadowRoot): string => {
 	const requestedInit = requestedInitOfShadowRoot.get(shadowRoot);
@@ -542,8 +513,7 @@ const serializeWithDeclarativeShadowRoots = (
 		override serializeToString(node: Node): string {
 			const html = super.serializeToString(node);
 			const shadowRoot = node instanceof Element ? node.shadowRoot : null;
-			if (shadowRoot === null || !shadowRootsToShip.includes(shadowRoot))
-				return html;
+			if (shadowRoot === null || !shadowRootsToShip.includes(shadowRoot)) return html;
 			return html.replace(DECLARATIVE_SHADOW_ROOT_START_TAG, () =>
 				declarativeShadowRootStartTagOf(shadowRoot),
 			);
@@ -581,8 +551,7 @@ export const renderHost = async (
 	//cancelled, so a component under ssr="false" stays unstarted and first runs in the browser
 	renderContainer.addEventListener(COMPONENT_RENDER_EVENT_NAME, (event) => {
 		const host = event.composedPath()[0];
-		if (host instanceof Element && isLeftForTheBrowser(host))
-			event.preventDefault();
+		if (host instanceof Element && isLeftForTheBrowser(host)) event.preventDefault();
 	});
 	const unsettledTasks = new Set<PendingTask>();
 	//in the capture phase: a loading container is asked to stop the event, which must not hide a
@@ -600,16 +569,14 @@ export const renderHost = async (
 	);
 	try {
 		const host = document.createElement(tagName);
-		for (const [name, value] of parseAttributes(rawAttributes))
-			host.setAttribute(name, value);
+		for (const [name, value] of parseAttributes(rawAttributes)) host.setAttribute(name, value);
 		//children are in place before the host connects, so slot-reading components see them
 		if (lightDomHtml !== "") host.innerHTML = lightDomHtml;
 		renderContainer.appendChild(host);
 		document.body.appendChild(renderContainer);
 
 		await waitForPendingTasks(unsettledTasks, firstYieldTimeoutMs);
-		const hasPainted =
-			host.shadowRoot !== null && host.shadowRoot.childNodes.length > 0;
+		const hasPainted = host.shadowRoot !== null && host.shadowRoot.childNodes.length > 0;
 		if (!hasPainted && !hostsThatThrew.has(host)) {
 			console.warn(
 				hasUnsettledTask(unsettledTasks, host)
@@ -620,10 +587,8 @@ export const renderHost = async (
 		}
 		for (const task of unsettledTasks) {
 			const waitingHost = task.host;
-			const isNestedHost =
-				waitingHost !== host && waitingHost instanceof Element;
-			if (!isNestedHost || realm.reportedTags.has(waitingHost.localName))
-				continue;
+			const isNestedHost = waitingHost !== host && waitingHost instanceof Element;
+			if (!isNestedHost || realm.reportedTags.has(waitingHost.localName)) continue;
 			realm.reportedTags.add(waitingHost.localName);
 			console.warn(
 				`[prerender] <${waitingHost.localName}> was still waiting after ${firstYieldTimeoutMs}ms — left for the browser.`,

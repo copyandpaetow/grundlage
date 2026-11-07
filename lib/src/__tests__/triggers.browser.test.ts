@@ -2,8 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { component, html, prop } from "../index";
 import { BaseComponent } from "../types";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `trigger-el-${tagId++}-${Date.now()}`;
@@ -248,9 +247,7 @@ describe("a component writing its own host attributes", () => {
 				{ props: { label: prop.attribute(String, "") } },
 			),
 		);
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const element = mount(tag);
 		await sleep(50);
 		consoleError.mockRestore();

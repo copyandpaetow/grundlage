@@ -6,12 +6,7 @@
 // transform never reaches JS.
 
 import { createOcclusionGrid } from "./scene-occlusion";
-import {
-	createView,
-	type View,
-	type ViewPoint,
-	writeViewPoint,
-} from "./scene-view";
+import { createView, type View, type ViewPoint, writeViewPoint } from "./scene-view";
 
 const FACE_NAMES = ["front", "back", "right", "left", "top", "bottom"] as const;
 
@@ -46,17 +41,12 @@ const CAMERA_ATTRIBUTE_NAMES = [
 	"camera-orbit-radius",
 ];
 
-const cubeToWorldMatrix = (
-	cube: HTMLElement,
-	world: HTMLElement,
-): DOMMatrix => {
+const cubeToWorldMatrix = (cube: HTMLElement, world: HTMLElement): DOMMatrix => {
 	const matrix = new DOMMatrix();
 	// A world chunk repeats the camera transform, so world space ends there too
 	for (
 		let element: HTMLElement | null = cube;
-		element !== null &&
-		element !== world &&
-		!element.hasAttribute("world-chunk");
+		element !== null && element !== world && !element.hasAttribute("world-chunk");
 		element = element.parentElement
 	) {
 		const transform = getComputedStyle(element).transform;
@@ -117,12 +107,9 @@ type Eye = { x: number; y: number; z: number };
 // The eye in cube space, local = worldToCube · eye, against each face plane
 const hiddenFaceMaskOf = (culledCube: CulledCube, eye: Eye): number => {
 	const matrix = culledCube.worldToCube;
-	const localX =
-		matrix[0] * eye.x + matrix[4] * eye.y + matrix[8] * eye.z + matrix[12];
-	const localY =
-		matrix[1] * eye.x + matrix[5] * eye.y + matrix[9] * eye.z + matrix[13];
-	const localZ =
-		matrix[2] * eye.x + matrix[6] * eye.y + matrix[10] * eye.z + matrix[14];
+	const localX = matrix[0] * eye.x + matrix[4] * eye.y + matrix[8] * eye.z + matrix[12];
+	const localY = matrix[1] * eye.x + matrix[5] * eye.y + matrix[9] * eye.z + matrix[13];
+	const localZ = matrix[2] * eye.x + matrix[6] * eye.y + matrix[10] * eye.z + matrix[14];
 	// A face shows only while the eye is outside its plane. Screen +Y is down, so the
 	// top face sits at -extentY.
 	let mask = NO_FACE_HIDDEN;
@@ -136,30 +123,21 @@ const hiddenFaceMaskOf = (culledCube: CulledCube, eye: Eye): number => {
 };
 
 const hiddenFacesAttributeOf = (mask: number): string =>
-	FACE_NAMES.filter((_, faceIndex) => (mask & (1 << faceIndex)) !== 0).join(
-		" ",
-	);
+	FACE_NAMES.filter((_, faceIndex) => (mask & (1 << faceIndex)) !== 0).join(" ");
 
 // Each side plane passes through the eye. The right one has the normal
 // (perspective, -halfWidth) / √(perspective² + halfWidth²) in (x, depth), so a sphere lies
 // outside when (perspective·x - halfWidth·depth) / √(…) > radius.
-const isSphereOutsideView = (
-	view: View,
-	center: ViewPoint,
-	radius: number,
-): boolean => {
+const isSphereOutsideView = (view: View, center: ViewPoint, radius: number): boolean => {
 	if (center.depth <= -radius) return true;
 	const horizontalPlaneLength = Math.hypot(view.perspective, view.halfWidth);
 	const verticalPlaneLength = Math.hypot(view.perspective, view.halfHeight);
 	const horizontalReach = view.halfWidth * center.depth;
 	const verticalReach = view.halfHeight * center.depth;
 	return (
-		view.perspective * center.x - horizontalReach >
-			radius * horizontalPlaneLength ||
-		-view.perspective * center.x - horizontalReach >
-			radius * horizontalPlaneLength ||
-		view.perspective * center.y - verticalReach >
-			radius * verticalPlaneLength ||
+		view.perspective * center.x - horizontalReach > radius * horizontalPlaneLength ||
+		-view.perspective * center.x - horizontalReach > radius * horizontalPlaneLength ||
+		view.perspective * center.y - verticalReach > radius * verticalPlaneLength ||
 		-view.perspective * center.y - verticalReach > radius * verticalPlaneLength
 	);
 };
@@ -183,9 +161,7 @@ export const startSceneCulling = (
 
 	const remeasure = (): void => {
 		const cubes = world.querySelectorAll<HTMLElement>(cubeSelector);
-		const previousByCube = new Map(
-			culledCubes.map((culledCube) => [culledCube.cube, culledCube]),
-		);
+		const previousByCube = new Map(culledCubes.map((culledCube) => [culledCube.cube, culledCube]));
 		const measured: CulledCube[] = [];
 		for (const cube of cubes) {
 			if (cube.closest(dragCarrierSelector) !== null) {
@@ -202,9 +178,7 @@ export const startSceneCulling = (
 			culledCube.isOccluded = previous?.isOccluded ?? false;
 			measured.push(culledCube);
 		}
-		view.perspective = parseFloat(
-			getComputedStyle(world).getPropertyValue("--camera-perspective"),
-		);
+		view.perspective = parseFloat(getComputedStyle(world).getPropertyValue("--camera-perspective"));
 		culledCubes = measured;
 		occlusionGrid.resizeCubeBuffers(measured.length);
 		isGeometryStale = false;
@@ -232,18 +206,8 @@ export const startSceneCulling = (
 		for (let cubeIndex = 0; cubeIndex < culledCubes.length; cubeIndex++) {
 			const culledCube = culledCubes[cubeIndex];
 			if (hasMeasuredViewport) {
-				writeViewPoint(
-					view,
-					culledCube.centerX,
-					culledCube.centerY,
-					culledCube.centerZ,
-					viewPoint,
-				);
-				const isOutsideView = isSphereOutsideView(
-					view,
-					viewPoint,
-					culledCube.boundingRadius,
-				);
+				writeViewPoint(view, culledCube.centerX, culledCube.centerY, culledCube.centerZ, viewPoint);
+				const isOutsideView = isSphereOutsideView(view, viewPoint, culledCube.boundingRadius);
 				if (isOutsideView !== culledCube.isOutsideView) {
 					culledCube.isOutsideView = isOutsideView;
 					culledCube.cube.toggleAttribute("outside-view", isOutsideView);
@@ -252,10 +216,7 @@ export const startSceneCulling = (
 			const mask = hiddenFaceMaskOf(culledCube, eye);
 			if (mask === culledCube.hiddenFaceMask) continue;
 			culledCube.hiddenFaceMask = mask;
-			culledCube.cube.setAttribute(
-				"hidden-faces",
-				hiddenFacesAttributeOf(mask),
-			);
+			culledCube.cube.setAttribute("hidden-faces", hiddenFacesAttributeOf(mask));
 		}
 		if (hasMeasuredViewport) occlusionGrid.occlude(culledCubes);
 	};
@@ -273,15 +234,7 @@ export const startSceneCulling = (
 		subtree: true,
 		childList: true,
 		attributes: true,
-		attributeFilter: [
-			"position",
-			"rotation",
-			"size",
-			"x",
-			"y",
-			"z",
-			"see-through",
-		],
+		attributeFilter: ["position", "rotation", "size", "x", "y", "z", "see-through"],
 	});
 	const resizeObserver = new ResizeObserver(([entry]) => {
 		view.halfWidth = entry.contentRect.width / 2;
@@ -293,9 +246,7 @@ export const startSceneCulling = (
 	// Cubes render a frame after they connect, so the first cull waits for them.
 	let animationFrame = requestAnimationFrame(function cullOnceRendered() {
 		cull();
-		animationFrame = isGeometryStale
-			? requestAnimationFrame(cullOnceRendered)
-			: 0;
+		animationFrame = isGeometryStale ? requestAnimationFrame(cullOnceRendered) : 0;
 	});
 
 	return () => {

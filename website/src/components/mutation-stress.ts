@@ -95,10 +95,7 @@ customElements.define(
 			target.splice(middleIndex, count, ...inserts);
 		};
 
-		const runOperation = (
-			label: string,
-			operation: (rows: Array<Row>) => void,
-		) => {
+		const runOperation = (label: string, operation: (rows: Array<Row>) => void) => {
 			operation(rows);
 			const startTime = performance.now();
 			element.update();
@@ -106,8 +103,7 @@ customElements.define(
 
 			const previous = measurements.get(label);
 			const sampleCount = (previous?.sampleCount ?? 0) + 1;
-			const cumulativeMs =
-				(previous?.averageDurationMs ?? 0) * (sampleCount - 1) + durationMs;
+			const cumulativeMs = (previous?.averageDurationMs ?? 0) * (sampleCount - 1) + durationMs;
 			measurements.set(label, {
 				label,
 				itemCount: rows.length,
@@ -224,42 +220,34 @@ customElements.define(
 
 				<menu>
 					<button
-						onclick="${() =>
-							runOperation("push ×50", (target) => pushMany(target, 50))}"
+						onclick="${() => runOperation("push ×50", (target) => pushMany(target, 50))}"
 					>
 						push ×50
 					</button>
 					<button
-						onclick="${() =>
-							runOperation("pop ×50", (target) => popMany(target, 50))}"
+						onclick="${() => runOperation("pop ×50", (target) => popMany(target, 50))}"
 					>
 						pop ×50
 					</button>
 					<button
-						onclick="${() =>
-							runOperation("unshift ×50", (target) => unshiftMany(target, 50))}"
+						onclick="${() => runOperation("unshift ×50", (target) => unshiftMany(target, 50))}"
 					>
 						unshift ×50
 					</button>
 					<button
-						onclick="${() =>
-							runOperation("shift ×50", (target) => shiftMany(target, 50))}"
+						onclick="${() => runOperation("shift ×50", (target) => shiftMany(target, 50))}"
 					>
 						shift ×50
 					</button>
 					<button
 						onclick="${() =>
-							runOperation("replace middle ×10", (target) =>
-								replaceMiddleRange(target, 10),
-							)}"
+							runOperation("replace middle ×10", (target) => replaceMiddleRange(target, 10))}"
 					>
 						replace middle ×10
 					</button>
 					<button
 						onclick="${() =>
-							runOperation("replace middle ×100", (target) =>
-								replaceMiddleRange(target, 100),
-							)}"
+							runOperation("replace middle ×100", (target) => replaceMiddleRange(target, 100))}"
 					>
 						replace middle ×100
 					</button>

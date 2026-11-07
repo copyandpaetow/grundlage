@@ -15,29 +15,17 @@ import { AttributeLiveBinding, TreeState } from "./types";
 //one hole is the whole value and keeps its type; any text around a hole makes a string
 export const isSingleHoleValue = (
 	valueParts: ReadonlyArray<Part>,
-): valueParts is readonly [number] =>
-	valueParts.length === 1 && typeof valueParts[0] === "number";
+): valueParts is readonly [number] => valueParts.length === 1 && typeof valueParts[0] === "number";
 
-const attributeGateHash = (
-	staticBinding: AttributeStaticBinding,
-	values: Array<unknown>,
-): number =>
+const attributeGateHash = (staticBinding: AttributeStaticBinding, values: Array<unknown>): number =>
 	combineOrderedHash(
 		combinedPartsHash(staticBinding.nameParts, values),
 		combinedPartsHash(staticBinding.valueParts, values),
 	);
 
-export const removeWrittenAttribute = (
-	liveBinding: AttributeLiveBinding,
-	name: string,
-): void => {
+export const removeWrittenAttribute = (liveBinding: AttributeLiveBinding, name: string): void => {
 	if (isSingleHoleValue(liveBinding.staticBinding.valueParts))
-		applyAttributeValue(
-			liveBinding.anchor,
-			name,
-			undefined,
-			liveBinding.lastValue,
-		);
+		applyAttributeValue(liveBinding.anchor, name, undefined, liveBinding.lastValue);
 	else liveBinding.anchor.removeAttribute(name);
 };
 
@@ -56,8 +44,7 @@ export const commitAttribute = (
 
 	const leavesStaleAttribute =
 		!keepsSameName && liveBinding.lastComposedName !== NO_ATTRIBUTE_WRITTEN;
-	if (leavesStaleAttribute)
-		removeWrittenAttribute(liveBinding, liveBinding.lastComposedName);
+	if (leavesStaleAttribute) removeWrittenAttribute(liveBinding, liveBinding.lastComposedName);
 	liveBinding.lastComposedName = name;
 
 	//applyAttributeValue would read `onclick="alert(${x})"` as an event, find a string instead of a
@@ -74,12 +61,6 @@ export const commitAttribute = (
 	const isLiveState = isLiveStatePropertyOf(element, name);
 	if (isLiveState && keepsSameName) applyLiveState(element, name, value);
 	else if (isLiveState) applyLiveStateDefault(element, name, value);
-	else
-		applyAttributeValue(
-			element,
-			name,
-			value,
-			keepsSameName ? liveBinding.lastValue : undefined,
-		);
+	else applyAttributeValue(element, name, value, keepsSameName ? liveBinding.lastValue : undefined);
 	liveBinding.lastValue = value;
 };

@@ -31,10 +31,7 @@ afterEach(async () => {
 	world.remove();
 });
 
-const addBlock = (
-	tag: string,
-	attributes: Record<string, string> = {},
-): HTMLElement => {
+const addBlock = (tag: string, attributes: Record<string, string> = {}): HTMLElement => {
 	const block = document.createElement(tag);
 	for (const [name, value] of Object.entries(attributes)) {
 		block.setAttribute(name, value);
@@ -45,9 +42,7 @@ const addBlock = (
 
 // The handler reads only MouseEvent fields and composedPath
 const pointerDown = (target: EventTarget, meta = false): void => {
-	target.dispatchEvent(
-		new MouseEvent("pointerdown", { bubbles: true, button: 0, metaKey: meta }),
-	);
+	target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, metaKey: meta }));
 };
 
 const pressKey = (key: string): void => {
@@ -57,18 +52,14 @@ const pressKey = (key: string): void => {
 const moveOverFloor = (x: number, z: number): void => {
 	world
 		.querySelector("scene-ground")
-		?.dispatchEvent(
-			new CustomEvent("scene-floor-point", { bubbles: true, detail: { x, z } }),
-		);
+		?.dispatchEvent(new CustomEvent("scene-floor-point", { bubbles: true, detail: { x, z } }));
 };
 
 const paletteShadow = (): ShadowRoot | null =>
-	(editor.shadowRoot?.querySelector("scene-palette") as HTMLElement | null)
-		?.shadowRoot ?? null;
+	(editor.shadowRoot?.querySelector("scene-palette") as HTMLElement | null)?.shadowRoot ?? null;
 
 // The palette re-renders a microtask after the editor sets its inspector prop
-const flush = (): Promise<void> =>
-	new Promise((resolve) => queueMicrotask(resolve));
+const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
 
 const clickPaletteButton = (selector: string): void => {
 	const button = paletteShadow()?.querySelector(selector);
@@ -76,15 +67,12 @@ const clickPaletteButton = (selector: string): void => {
 };
 
 const gizmo = (): HTMLElement | null => world.querySelector("scene-gizmo");
-const sceneSelect = (): HTMLElement | null =>
-	world.querySelector("scene-select");
+const sceneSelect = (): HTMLElement | null => world.querySelector("scene-select");
 const selectedBlocks = (): HTMLElement[] => {
 	const select = sceneSelect();
 	if (select === null) return [];
 	return [...select.children].filter((child) =>
-		["scene-cube", "scene-wall", "scene-ramp", "scene-group"].includes(
-			child.tagName.toLowerCase(),
-		),
+		["scene-cube", "scene-wall", "scene-ramp", "scene-group"].includes(child.tagName.toLowerCase()),
 	) as HTMLElement[];
 };
 const inspector = (): HTMLElement | null =>

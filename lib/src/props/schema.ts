@@ -15,8 +15,7 @@ const resolveString: Resolve<string> = (incoming) =>
 const resolveNumber: Resolve<number> = (incoming) => {
 	if (incoming === undefined || incoming === "") return undefined;
 	const parsed = Number(incoming);
-	const isUnparsable =
-		Number.isNaN(parsed) && String(incoming).trim() !== "NaN";
+	const isUnparsable = Number.isNaN(parsed) && String(incoming).trim() !== "NaN";
 	if (isUnparsable) return undefined;
 	return parsed;
 };
@@ -56,10 +55,7 @@ export type NormalizedSchema = ReadonlyMap<string, Prop>;
 const isCopiedPerElement = (fallback: unknown): fallback is object =>
 	fallback !== null && typeof fallback === "object" && !isTemplate(fallback);
 
-export const issueMessagesOf = (
-	standardSchema: StandardSchemaV1,
-	value: unknown,
-): string => {
+export const issueMessagesOf = (standardSchema: StandardSchemaV1, value: unknown): string => {
 	const result = standardSchema["~standard"].validate(value);
 	if (result instanceof Promise || result.issues === undefined) return "";
 	return result.issues.map((issue) => issue.message).join("; ");
@@ -115,15 +111,14 @@ const ensureFallbackIsUsable = (
 const ensureIsPropDefinition: (
 	propName: string,
 	definition: unknown,
-) => asserts definition is PropDefinition<
-	unknown,
-	"required" | "fallback" | "optional"
-> = (propName, definition) => {
+) => asserts definition is PropDefinition<unknown, "required" | "fallback" | "optional"> = (
+	propName,
+	definition,
+) => {
 	const isPropDefinition =
 		typeof definition === "object" &&
 		definition !== null &&
-		(definition as Partial<PropDefinition<unknown, "required">>).parser !==
-			undefined;
+		(definition as Partial<PropDefinition<unknown, "required">>).parser !== undefined;
 	if (!isPropDefinition)
 		throw new TypeError(
 			libraryMessage(
@@ -147,9 +142,7 @@ const ensurePropNameIsUsable = (propName: string): void => {
 		);
 	if (propName === "host")
 		throw new TypeError(
-			libraryMessage(
-				`"host" is reserved: the props object carries the element under that name.`,
-			),
+			libraryMessage(`"host" is reserved: the props object carries the element under that name.`),
 		);
 	if (propName === DEFER_HYDRATION_ATTRIBUTE)
 		throw new TypeError(
@@ -207,9 +200,7 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 			? resolveWithoutFallback
 			: (incoming) => {
 					if (incoming !== undefined) return resolveWithoutFallback(incoming);
-					return resolveWithoutFallback(
-						mustCopyFallback ? structuredClone(fallback) : fallback,
-					);
+					return resolveWithoutFallback(mustCopyFallback ? structuredClone(fallback) : fallback);
 				};
 
 		props.set(attributeName, {
@@ -220,9 +211,7 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 			//prop.attribute(Boolean, true) is the one shape where removing the attribute would read back as the
 			//opposite, so reflection writes "false" instead; only the shipped token's absence rule is
 			//documented, so a user-supplied boolean function is left out of it
-			isTrueWhenAbsent:
-				resolveWithoutFallback === resolveBoolean &&
-				resolve(undefined) === true,
+			isTrueWhenAbsent: resolveWithoutFallback === resolveBoolean && resolve(undefined) === true,
 			standardSchema: definition.standardSchema,
 		});
 	}

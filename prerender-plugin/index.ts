@@ -1,10 +1,6 @@
 import { relative } from "node:path";
 import { createFilter, normalizePath, type Plugin } from "vite";
-import {
-	findPageScripts,
-	NO_PAGE_SCRIPTS,
-	type PageScripts,
-} from "./page-scripts";
+import { findPageScripts, NO_PAGE_SCRIPTS, type PageScripts } from "./page-scripts";
 import {
 	choosePrerenderRoots,
 	type CustomElementRecord,
@@ -38,18 +34,12 @@ export interface PrerenderOptions {
 	firstYieldTimeoutMs?: number;
 }
 
-type UnprerenderableTagSupportKind = Exclude<
-	TagSupportKind,
-	typeof TAG_SUPPORT.PRERENDERABLE
->;
+type UnprerenderableTagSupportKind = Exclude<TagSupportKind, typeof TAG_SUPPORT.PRERENDERABLE>;
 
 const toPatternArray = (patterns: string | Array<string> | undefined) =>
 	typeof patterns === "string" ? [patterns] : patterns;
 
-const warningFor = (
-	tagName: string,
-	support: UnprerenderableTagSupportKind,
-): string => {
+const warningFor = (tagName: string, support: UnprerenderableTagSupportKind): string => {
 	switch (support) {
 		case TAG_SUPPORT.UNDEFINED:
 			return `[prerender] no module the page imports defines <${tagName}> => left for the browser. If the page script defines it, move the definition into a module the page imports: a page script's own body never runs on the server.`;
@@ -71,22 +61,18 @@ const reportUnprerenderableElements = (
 	elements: ReadonlyArray<CustomElementRecord>,
 ): void => {
 	for (const element of elements) {
-		if (!element.isPrerendered || realm.reportedTags.has(element.tagName))
-			continue;
+		if (!element.isPrerendered || realm.reportedTags.has(element.tagName)) continue;
 		const support = tagSupportOf(realm, element.tagName);
 		if (support === TAG_SUPPORT.PRERENDERABLE) continue;
 		const isQuietFallback =
-			support === TAG_SUPPORT.NO_SERIALIZABLE_ROOT &&
-			!element.hasOwnPrerenderAttribute;
+			support === TAG_SUPPORT.NO_SERIALIZABLE_ROOT && !element.hasOwnPrerenderAttribute;
 		if (isQuietFallback) continue;
 		realm.reportedTags.add(element.tagName);
 		console.warn(warningFor(element.tagName, support));
 	}
 };
 
-export const prerenderWebcomponents = (
-	options: PrerenderOptions = {},
-): Array<Plugin> => {
+export const prerenderWebcomponents = (options: PrerenderOptions = {}): Array<Plugin> => {
 	const includePatterns = toPatternArray(options.include) ?? ["**"];
 	const excludePatterns = toPatternArray(options.exclude) ?? [];
 
@@ -151,10 +137,7 @@ export const prerenderWebcomponents = (
 				root: config.root,
 				//without a config file on disk there is nothing to re-run, so the bare loader
 				//and its forwarded resolve options are all we can offer
-				configFile:
-					options.componentLoader === "isolated"
-						? false
-						: (config.configFile ?? false),
+				configFile: options.componentLoader === "isolated" ? false : (config.configFile ?? false),
 				mode: config.mode,
 				resolveOptions: {
 					alias: config.resolve.alias,
@@ -180,16 +163,14 @@ export const prerenderWebcomponents = (
 			const environment = context.server
 				? context.server.environments[PRERENDER_ENVIRONMENT_NAME]
 				: await prerenderEnvironmentOfLoader(moduleLoader);
-			const pageScripts =
-				pageScriptsByPage.get(context.filename) ?? NO_PAGE_SCRIPTS;
+			const pageScripts = pageScriptsByPage.get(context.filename) ?? NO_PAGE_SCRIPTS;
 
 			return runInServerRealm(async (realm) => {
 				await loadPageModules(realm, environment, pageScripts);
 				reportUnprerenderableElements(realm, elements);
 				const roots = choosePrerenderRoots(
 					elements,
-					(tagName) =>
-						tagSupportOf(realm, tagName) === TAG_SUPPORT.PRERENDERABLE,
+					(tagName) => tagSupportOf(realm, tagName) === TAG_SUPPORT.PRERENDERABLE,
 				);
 
 				let transformedHtml = "";
@@ -203,8 +184,7 @@ export const prerenderWebcomponents = (
 						options.firstYieldTimeoutMs,
 					);
 					if (prerendered === null) continue;
-					transformedHtml +=
-						html.slice(copiedUpToIndex, root.startIndex) + prerendered;
+					transformedHtml += html.slice(copiedUpToIndex, root.startIndex) + prerendered;
 					copiedUpToIndex = root.endIndex;
 				}
 				return transformedHtml + html.slice(copiedUpToIndex);

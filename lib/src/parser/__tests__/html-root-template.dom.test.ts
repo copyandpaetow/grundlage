@@ -11,12 +11,8 @@ describe("html parser — root template detection", () => {
 	test("clean root template strips the wrapper and produces no host bindings", () => {
 		const parsed = parse`<template><p>hi</p></template>`;
 
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).toBeNull();
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("p")?.textContent,
-		).toBe("hi");
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("p")?.textContent).toBe("hi");
 		expect(parsed.hostBindingCount).toBe(0);
 	});
 
@@ -45,9 +41,7 @@ describe("html parser — root template static attributes", () => {
 			nameParts: ["id"],
 			valueParts: ["host"],
 		});
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).toBeNull();
 	});
 
 	test("multiple static attributes preserve source order", () => {
@@ -56,9 +50,7 @@ describe("html parser — root template static attributes", () => {
 		expect(parsed.hostBindingCount).toBe(3);
 		expect(parsed.bindings).toHaveLength(3);
 		expect(
-			parsed.bindings.map(
-				(binding) => (binding as AttributeStaticBinding).nameParts[0],
-			),
+			parsed.bindings.map((binding) => (binding as AttributeStaticBinding).nameParts[0]),
 		).toEqual(["data-z", "data-a", "data-m"]);
 	});
 
@@ -197,10 +189,7 @@ describe("html parser — root template binding ordering", () => {
 		const parsed = parse`<template id="${id}"><p>${text}</p></template>`;
 
 		expect(parsed.hostBindingCount).toBe(1);
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.CONTENT,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.CONTENT]);
 	});
 
 	test("multiple host bindings followed by inner bindings retain ordering", () => {
@@ -259,9 +248,7 @@ describe("html parser — root template binding ordering", () => {
 		>`;
 
 		expect(parsed.bindings).toHaveLength(2);
-		expect(
-			parsed.bindings.every((binding) => binding.type === BINDING.CONTENT),
-		).toBe(true);
+		expect(parsed.bindings.every((binding) => binding.type === BINDING.CONTENT)).toBe(true);
 	});
 });
 
@@ -274,9 +261,7 @@ describe("html parser — root template tolerated siblings", () => {
 			nameParts: ["id"],
 			valueParts: ["x"],
 		});
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).toBeNull();
 	});
 
 	test("trailing whitespace after root template is tolerated", () => {
@@ -287,9 +272,7 @@ describe("html parser — root template tolerated siblings", () => {
 			nameParts: ["id"],
 			valueParts: ["x"],
 		});
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).toBeNull();
 	});
 
 	test("only-whitespace template literal around root template still parses as root", () => {
@@ -310,9 +293,7 @@ describe("html parser — root template tolerated siblings", () => {
 			nameParts: ["id"],
 			valueParts: ["x"],
 		});
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).toBeNull();
 	});
 
 	test("trailing static comment is tolerated", () => {
@@ -347,9 +328,7 @@ describe("html parser — root template misdetection and reparse", () => {
 
 		expect(parsed.hostBindingCount).toBe(0);
 		expect(
-			buildFragment(parsed.htmlWithMarkers)
-				.querySelector("template")
-				?.getAttribute("id"),
+			buildFragment(parsed.htmlWithMarkers).querySelector("template")?.getAttribute("id"),
 		).toBe("x");
 	});
 
@@ -358,9 +337,7 @@ describe("html parser — root template misdetection and reparse", () => {
 
 		expect(parsed.hostBindingCount).toBe(0);
 		expect(
-			buildFragment(parsed.htmlWithMarkers)
-				.querySelector("template")
-				?.getAttribute("id"),
+			buildFragment(parsed.htmlWithMarkers).querySelector("template")?.getAttribute("id"),
 		).toBe("x");
 	});
 
@@ -369,12 +346,8 @@ describe("html parser — root template misdetection and reparse", () => {
 			<div id="other"></div>`;
 
 		expect(parsed.hostBindingCount).toBe(0);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).not.toBeNull();
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("div"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("div")).not.toBeNull();
 	});
 
 	test("element sibling before template prevents root detection", () => {
@@ -382,12 +355,8 @@ describe("html parser — root template misdetection and reparse", () => {
 			<template></template>`;
 
 		expect(parsed.hostBindingCount).toBe(0);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).not.toBeNull();
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("div"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("div")).not.toBeNull();
 	});
 
 	test("dynamic attribute on a template after another element is not a host binding", () => {
@@ -405,9 +374,7 @@ describe("html parser — root template misdetection and reparse", () => {
 
 		expect(parsed.bindings).toHaveLength(1);
 		expect(parsed.bindings[0].type).toBe(BINDING.TEMPLATE_CONTENT);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).not.toBeNull();
 	});
 
 	test("misdetected template still records its dynamic attributes as regular bindings", () => {
@@ -430,9 +397,7 @@ describe("html parser — root template misdetection and reparse", () => {
 			nameParts: ["id"],
 			valueParts: ["after"],
 		});
-		expect(
-			buildFragment(clean.htmlWithMarkers).querySelector("template"),
-		).toBeNull();
+		expect(buildFragment(clean.htmlWithMarkers).querySelector("template")).toBeNull();
 	});
 
 	test("reparse path does not leak across an inner-then-clean sequence", () => {
@@ -450,9 +415,7 @@ describe("html parser — root template misdetection and reparse", () => {
 		expect(parsed.hostBindingCount).toBe(0);
 		expect(parsed.bindings).toHaveLength(1);
 		expect(parsed.bindings[0].type).toBe(BINDING.TAG);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).toBeNull();
 	});
 
 	test("dynamic outer tag with dynamic attribute does not produce host bindings", () => {
@@ -461,10 +424,7 @@ describe("html parser — root template misdetection and reparse", () => {
 		const parsed = parse`<${tag} id="${id}"></${tag}>`;
 
 		expect(parsed.hostBindingCount).toBe(0);
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.TAG,
-			BINDING.ATTRIBUTE,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.TAG, BINDING.ATTRIBUTE]);
 	});
 
 	test("non-template literal after a misdetection does not inherit state", () => {
@@ -473,9 +433,7 @@ describe("html parser — root template misdetection and reparse", () => {
 
 		const plain = parse`<section>${"hello"}</section>`;
 		expect(plain.hostBindingCount).toBe(0);
-		expect(
-			buildFragment(plain.htmlWithMarkers).querySelector("section"),
-		).not.toBeNull();
+		expect(buildFragment(plain.htmlWithMarkers).querySelector("section")).not.toBeNull();
 	});
 });
 
@@ -492,9 +450,7 @@ describe("html parser — root template nested cases", () => {
 			valueParts: ["host"],
 		});
 		expect(parsed.bindings[1].type).toBe(BINDING.TEMPLATE_CONTENT);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("template"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("template")).not.toBeNull();
 	});
 
 	test("template inside another element is not the root", () => {

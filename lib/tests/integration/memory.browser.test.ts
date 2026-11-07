@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../src/index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 //the leak assertions need global.gc, which is Chromium with `--expose-gc` or vitest run the same
 //way. Without it they skip rather than guess from whatever heuristic collection happened to run

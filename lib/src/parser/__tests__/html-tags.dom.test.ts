@@ -3,11 +3,7 @@ import { getParsedTemplate } from "../html";
 import { buildFragment } from "../../rendering/dom";
 import { DYNAMIC_TAG_PLACEHOLDER } from "../constants";
 import * as BINDING from "../binding";
-import {
-	AttributeStaticBinding,
-	StaticBinding,
-	TagStaticBinding,
-} from "../types";
+import { AttributeStaticBinding, StaticBinding, TagStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
@@ -42,10 +38,7 @@ describe("html parser — tag bindings", () => {
 		const parsed = parse`
 			<${tag}>${value}</${tag}>`;
 
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.TAG,
-			BINDING.CONTENT,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.TAG, BINDING.CONTENT]);
 		expect((parsed.bindings[0] as TagStaticBinding).parts).toEqual([0]);
 	});
 
@@ -56,11 +49,7 @@ describe("html parser — tag bindings", () => {
 		const parsed = parse`
 			<${outer}><${inner}>${value}</${inner}></${outer}>`;
 
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.TAG,
-			BINDING.TAG,
-			BINDING.CONTENT,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.TAG, BINDING.TAG, BINDING.CONTENT]);
 	});
 
 	test("dynamic self-closing tag", () => {
@@ -234,9 +223,6 @@ describe("html parser — tag bindings", () => {
 		const parsed = parse`<${first} /><${second}>x</${second}>`;
 
 		expect(tagBindings(parsed.bindings)).toHaveLength(2);
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.TAG,
-			BINDING.TAG,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.TAG, BINDING.TAG]);
 	});
 });

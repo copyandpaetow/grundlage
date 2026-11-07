@@ -6,11 +6,9 @@ import { BaseComponent } from "../types";
 //dropping the own property an author assigned before the definition arrived — nor paints a
 //component nested inside another component's shadow root at all (true of 0.7.0 as well). Both
 //are exactly what the pre-upgrade and parent-binding cases are about, so chromium carries them
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `declared-prop-${tagId++}-${Date.now()}`;
@@ -31,11 +29,7 @@ const mount = (tag: string): BaseComponent => {
 const readProp = (element: BaseComponent, propName: string): unknown =>
 	(element as unknown as Record<string, unknown>)[propName];
 
-const writeProp = (
-	element: BaseComponent,
-	propName: string,
-	value: unknown,
-): void => {
+const writeProp = (element: BaseComponent, propName: string, value: unknown): void => {
 	(element as unknown as Record<string, unknown>)[propName] = value;
 };
 
@@ -84,9 +78,7 @@ describe("props the attribute cannot carry", () => {
 
 		writeProp(element, "tags", "nope");
 		expect(readProp(element, "tags")).toEqual(["a"]);
-		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining('prop "tags" refused a string'),
-		);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('prop "tags" refused a string'));
 		warn.mockRestore();
 		element.remove();
 	});
@@ -117,9 +109,7 @@ describe("props the attribute cannot carry", () => {
 		expect(readProp(element, "count")).toBe(7);
 		//markup is left as written: only a property assignment reflects
 		expect(element.getAttribute("count")).toBe("abc");
-		expect(warn).toHaveBeenCalledWith(
-			expect.stringContaining('prop "count" refused a string'),
-		);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('prop "count" refused a string'));
 		warn.mockRestore();
 		element.remove();
 	});
@@ -245,9 +235,7 @@ describe("fallbacks", () => {
 				},
 				{
 					props: {
-						openedAt: prop.optional(
-							prop.attribute((incoming: unknown) => incoming ?? new Date()),
-						),
+						openedAt: prop.optional(prop.attribute((incoming: unknown) => incoming ?? new Date())),
 					},
 				},
 			),
@@ -338,10 +326,7 @@ describe("define-time checks", () => {
 				},
 				{
 					props: {
-						quote: prop.attribute(
-							(incoming: unknown) => incoming,
-							new Quote("hi"),
-						),
+						quote: prop.attribute((incoming: unknown) => incoming, new Quote("hi")),
 					},
 				},
 			),
@@ -424,8 +409,7 @@ describe("mount", () => {
 						props: {
 							tags: prop.optional(
 								prop.attribute((incoming: unknown) => {
-									if (incoming === "boom")
-										throw new Error("grundlage-test: the prop threw");
+									if (incoming === "boom") throw new Error("grundlage-test: the prop threw");
 									return incoming;
 								}),
 							),
@@ -435,9 +419,7 @@ describe("mount", () => {
 			);
 			await sleep();
 
-			expect(element.shadowRoot?.textContent).toContain(
-				"grundlage-test: the prop threw",
-			);
+			expect(element.shadowRoot?.textContent).toContain("grundlage-test: the prop threw");
 			expect(element.shadowRoot?.textContent).not.toContain("painted");
 			warn.mockRestore();
 			element.remove();
@@ -458,8 +440,7 @@ describe("mount", () => {
 		);
 		class Extended extends Base {
 			static observedAttributes = [
-				...(Base as unknown as { observedAttributes: Array<string> })
-					.observedAttributes,
+				...(Base as unknown as { observedAttributes: Array<string> }).observedAttributes,
 				"data-extra",
 			];
 		}
@@ -488,182 +469,177 @@ describe("mount", () => {
 	});
 });
 
-describe.skipIf(!isRealBrowser)(
-	"a declared name routes through its accessor",
-	() => {
-		const childOf = (element: BaseComponent, tag: string): BaseComponent =>
-			element.shadowRoot?.querySelector(tag) as BaseComponent;
+describe.skipIf(!isRealBrowser)("a declared name routes through its accessor", () => {
+	const childOf = (element: BaseComponent, tag: string): BaseComponent =>
+		element.shadowRoot?.querySelector(tag) as BaseComponent;
 
-		test("false against [Boolean, true] reads back false, not the fallback", async () => {
-			customElements.define(
-				"route-child-boolean",
-				component(
-					function* ({ host }) {
-						yield function* () {
-							yield html`<p>${String(readProp(host, "closable"))}</p>`;
-						};
-					},
-					{ props: { closable: prop.attribute(Boolean, true) } },
-				),
-			);
-			const parentTag = uniqueTag();
-			customElements.define(
-				parentTag,
-				component(function* () {
+	test("false against [Boolean, true] reads back false, not the fallback", async () => {
+		customElements.define(
+			"route-child-boolean",
+			component(
+				function* ({ host }) {
 					yield function* () {
-						yield html`<route-child-boolean
+						yield html`<p>${String(readProp(host, "closable"))}</p>`;
+					};
+				},
+				{ props: { closable: prop.attribute(Boolean, true) } },
+			),
+		);
+		const parentTag = uniqueTag();
+		customElements.define(
+			parentTag,
+			component(function* () {
+				yield function* () {
+					yield html`<route-child-boolean
 							closable=${false}
 						></route-child-boolean>`;
-					};
-				}),
-			);
-			const parent = mount(parentTag);
-			await sleep();
+				};
+			}),
+		);
+		const parent = mount(parentTag);
+		await sleep();
 
-			const child = childOf(parent, "route-child-boolean");
-			expect(child.shadowRoot?.textContent).toContain("false");
-			//absence reads true for this shape, so removing the attribute would say the opposite
-			expect(child.getAttribute("closable")).toBe("false");
-			parent.remove();
-		});
+		const child = childOf(parent, "route-child-boolean");
+		expect(child.shadowRoot?.textContent).toContain("false");
+		//absence reads true for this shape, so removing the attribute would say the opposite
+		expect(child.getAttribute("closable")).toBe("false");
+		parent.remove();
+	});
 
-		test("a value the child's prop refuses warns in the parent's frame and paints on", async () => {
-			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-			customElements.define(
-				"route-child-refusing",
-				component(
-					function* ({ host }) {
-						yield function* () {
-							yield html`<p>${String(readProp(host, "tags"))}</p>`;
-						};
-					},
-					{ props: { tags: prop.optional(prop.attribute(asList)) } },
-				),
-			);
-			const parentTag = uniqueTag();
-			customElements.define(
-				parentTag,
-				component(function* () {
+	test("a value the child's prop refuses warns in the parent's frame and paints on", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		customElements.define(
+			"route-child-refusing",
+			component(
+				function* ({ host }) {
 					yield function* () {
-						yield html`<route-child-refusing
+						yield html`<p>${String(readProp(host, "tags"))}</p>`;
+					};
+				},
+				{ props: { tags: prop.optional(prop.attribute(asList)) } },
+			),
+		);
+		const parentTag = uniqueTag();
+		customElements.define(
+			parentTag,
+			component(function* () {
+				yield function* () {
+					yield html`<route-child-refusing
 							tags=${"oops"}
 						></route-child-refusing>`;
-					};
-				}),
-			);
-			const parent = mount(parentTag);
-			await sleep();
+				};
+			}),
+		);
+		const parent = mount(parentTag);
+		await sleep();
 
-			const child = childOf(parent, "route-child-refusing");
-			expect(child.shadowRoot?.textContent).toContain("undefined");
-			expect(warn).toHaveBeenCalledWith(
-				expect.stringContaining('prop "tags" refused a string'),
-			);
-			warn.mockRestore();
-			parent.remove();
-		});
+		const child = childOf(parent, "route-child-refusing");
+		expect(child.shadowRoot?.textContent).toContain("undefined");
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('prop "tags" refused a string'));
+		warn.mockRestore();
+		parent.remove();
+	});
 
-		test("a dropped binding writes absence, and the fallback comes back", async () => {
-			customElements.define(
-				"route-child-cleared",
-				component(
-					function* ({ host }) {
-						yield function* () {
-							yield html`<p>
+	test("a dropped binding writes absence, and the fallback comes back", async () => {
+		customElements.define(
+			"route-child-cleared",
+			component(
+				function* ({ host }) {
+					yield function* () {
+						yield html`<p>
 								${(readProp(host, "tags") as Array<string>).join()}
 							</p>`;
-						};
-					},
-					{ props: { tags: prop.attribute(asList, ["default"]) } },
-				),
-			);
-			const parentTag = uniqueTag();
-			let tags: Array<string> | null = ["bound"];
-			customElements.define(
-				parentTag,
-				component(function* () {
-					yield function* () {
-						yield html`<route-child-cleared
+					};
+				},
+				{ props: { tags: prop.attribute(asList, ["default"]) } },
+			),
+		);
+		const parentTag = uniqueTag();
+		let tags: Array<string> | null = ["bound"];
+		customElements.define(
+			parentTag,
+			component(function* () {
+				yield function* () {
+					yield html`<route-child-cleared
 							tags=${tags}
 						></route-child-cleared>`;
-					};
-				}),
-			);
-			const parent = mount(parentTag);
-			await sleep();
-			const child = childOf(parent, "route-child-cleared");
-			expect(child.shadowRoot?.textContent).toContain("bound");
+				};
+			}),
+		);
+		const parent = mount(parentTag);
+		await sleep();
+		const child = childOf(parent, "route-child-cleared");
+		expect(child.shadowRoot?.textContent).toContain("bound");
 
-			tags = null;
-			await parent.update();
-			await sleep();
+		tags = null;
+		await parent.update();
+		await sleep();
 
-			expect(child.shadowRoot?.textContent).toContain("default");
-			parent.remove();
-		});
+		expect(child.shadowRoot?.textContent).toContain("default");
+		parent.remove();
+	});
 
-		test("a prop bound before its definition arrives survives to the first run", async () => {
-			const parentTag = uniqueTag();
-			customElements.define(
-				parentTag,
-				component(function* () {
+	test("a prop bound before its definition arrives survives to the first run", async () => {
+		const parentTag = uniqueTag();
+		customElements.define(
+			parentTag,
+			component(function* () {
+				yield function* () {
+					yield html`<route-child-late slug=${"ada"}></route-child-late>`;
+				};
+			}),
+		);
+		const parent = mount(parentTag);
+		await sleep();
+
+		customElements.define(
+			"route-child-late",
+			component(
+				function* ({ host }) {
 					yield function* () {
-						yield html`<route-child-late slug=${"ada"}></route-child-late>`;
+						yield html`<p>${readProp(host, "slug")}</p>`;
 					};
-				}),
-			);
-			const parent = mount(parentTag);
-			await sleep();
+				},
+				{ props: { slug: prop.attribute(asSlug, "anon") } },
+			),
+		);
+		await sleep();
 
-			customElements.define(
-				"route-child-late",
-				component(
-					function* ({ host }) {
-						yield function* () {
-							yield html`<p>${readProp(host, "slug")}</p>`;
-						};
-					},
-					{ props: { slug: prop.attribute(asSlug, "anon") } },
-				),
-			);
-			await sleep();
+		const child = childOf(parent, "route-child-late");
+		expect(child.shadowRoot?.textContent).toContain("ada");
+		parent.remove();
+	});
 
-			const child = childOf(parent, "route-child-late");
-			expect(child.shadowRoot?.textContent).toContain("ada");
-			parent.remove();
-		});
-
-		test("false bound before its definition arrives does not read back as the fallback", async () => {
-			const parentTag = uniqueTag();
-			customElements.define(
-				parentTag,
-				component(function* () {
-					yield function* () {
-						yield html`<route-child-late-boolean
+	test("false bound before its definition arrives does not read back as the fallback", async () => {
+		const parentTag = uniqueTag();
+		customElements.define(
+			parentTag,
+			component(function* () {
+				yield function* () {
+					yield html`<route-child-late-boolean
 							closable=${false}
 						></route-child-late-boolean>`;
+				};
+			}),
+		);
+		const parent = mount(parentTag);
+		await sleep();
+
+		customElements.define(
+			"route-child-late-boolean",
+			component(
+				function* ({ host }) {
+					yield function* () {
+						yield html`<p>${String(readProp(host, "closable"))}</p>`;
 					};
-				}),
-			);
-			const parent = mount(parentTag);
-			await sleep();
+				},
+				{ props: { closable: prop.attribute(Boolean, true) } },
+			),
+		);
+		await sleep();
 
-			customElements.define(
-				"route-child-late-boolean",
-				component(
-					function* ({ host }) {
-						yield function* () {
-							yield html`<p>${String(readProp(host, "closable"))}</p>`;
-						};
-					},
-					{ props: { closable: prop.attribute(Boolean, true) } },
-				),
-			);
-			await sleep();
-
-			const child = childOf(parent, "route-child-late-boolean");
-			expect(child.shadowRoot?.textContent).toContain("false");
-			parent.remove();
-		});
-	},
-);
+		const child = childOf(parent, "route-child-late-boolean");
+		expect(child.shadowRoot?.textContent).toContain("false");
+		parent.remove();
+	});
+});

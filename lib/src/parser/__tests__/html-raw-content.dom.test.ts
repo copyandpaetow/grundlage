@@ -55,8 +55,7 @@ describe("html parser — raw content bindings", () => {
 
 		expect(parsed.bindings).toHaveLength(1);
 		const [binding] = parsed.bindings;
-		if (binding.type !== BINDING.TEMPLATE_CONTENT)
-			throw new Error("expected a template binding");
+		if (binding.type !== BINDING.TEMPLATE_CONTENT) throw new Error("expected a template binding");
 		expect(binding.valueIndices).toEqual([0, 1]);
 		expect(binding.content.bindings.map((inner) => inner.type)).toEqual([
 			BINDING.ATTRIBUTE,
@@ -77,9 +76,7 @@ describe("html parser — raw content bindings", () => {
 		expect(parsed.bindings).toHaveLength(1);
 		const binding = parsed.bindings[0] as RawContentStaticBinding;
 		expect(binding.type).toBe(BINDING.RAW_CONTENT);
-		expect(binding.parts.filter((part) => typeof part === "number")).toEqual([
-			0, 1,
-		]);
+		expect(binding.parts.filter((part) => typeof part === "number")).toEqual([0, 1]);
 	});
 
 	test("static raw content produces no bindings", () => {
@@ -143,9 +140,7 @@ describe("html parser — raw content bindings", () => {
 			BINDING.RAW_CONTENT,
 			BINDING.RAW_CONTENT,
 		]);
-		const styles = buildFragment(parsed.htmlWithMarkers).querySelectorAll(
-			"style",
-		);
+		const styles = buildFragment(parsed.htmlWithMarkers).querySelectorAll("style");
 		expect(styles).toHaveLength(2);
 	});
 
@@ -155,9 +150,7 @@ describe("html parser — raw content bindings", () => {
 				log("</other>");
 			}
 		</script>`;
-		const script = buildFragment(parsed.htmlWithMarkers).querySelector(
-			"script",
-		)!;
+		const script = buildFragment(parsed.htmlWithMarkers).querySelector("script")!;
 		expect(script).not.toBeNull();
 		expect(script.textContent).toContain("</other>");
 	});
@@ -166,9 +159,7 @@ describe("html parser — raw content bindings", () => {
 		const parsed = parse`<script>
 			if (a < b) return;
 		</script>`;
-		const script = buildFragment(parsed.htmlWithMarkers).querySelector(
-			"script",
-		)!;
+		const script = buildFragment(parsed.htmlWithMarkers).querySelector("script")!;
 		expect(script.textContent).toContain("<");
 	});
 });
@@ -206,9 +197,7 @@ describe("html parser — css plan attachment", () => {
 		const selector = "div";
 		const parsed = parse`<style>${selector} { color: red; }</style>`;
 
-		expect(rawContentBinding(parsed).compiledStyleSheet).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(rawContentBinding(parsed).compiledStyleSheet).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("script and textarea holes get no css plan", () => {
@@ -217,12 +206,8 @@ describe("html parser — css plan attachment", () => {
 		const scriptParsed = parse`<script>${code}</script>`;
 		const textareaParsed = parse`<textarea>${value}</textarea>`;
 
-		expect(rawContentBinding(scriptParsed).compiledStyleSheet).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
-		expect(rawContentBinding(textareaParsed).compiledStyleSheet).toBe(
-			STYLE_SHEET_NOT_COMPILED,
-		);
+		expect(rawContentBinding(scriptParsed).compiledStyleSheet).toBe(STYLE_SHEET_NOT_COMPILED);
+		expect(rawContentBinding(textareaParsed).compiledStyleSheet).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	//values live on each instance's own CSSStyleSheet, so a host style binding no longer
@@ -244,8 +229,7 @@ describe("html parser — css plan attachment", () => {
 		const parsed = parse`<style>.a { color: ${a}; }</style
 		><style>.b { width: ${b}; }</style>`;
 
-		const [firstBinding, secondBinding] =
-			parsed.bindings as Array<RawContentStaticBinding>;
+		const [firstBinding, secondBinding] = parsed.bindings as Array<RawContentStaticBinding>;
 		expect(addressedDeclarationsOf(firstBinding)).toEqual([
 			{
 				rulePath: [0],

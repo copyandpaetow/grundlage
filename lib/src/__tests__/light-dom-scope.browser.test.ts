@@ -3,8 +3,7 @@ import { expect, test } from "vitest";
 //the platform measurement PLAN §2 rests on, kept executable because R4's whole idiom follows from
 //it: `:host` and `:scope` are disjoint, so the pair is a selector list rather than a rewrite.
 //happy-dom has no cascade to ask — it returns the authored string and ignores @scope entirely
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 const mount = (markup: string): HTMLElement => {
 	const holder = document.createElement("div");
@@ -52,8 +51,9 @@ test.skipIf(!isRealBrowser)(
 	() => {
 		const holder = mount(`<user-card></user-card>`);
 		const host = holder.querySelector("user-card")!;
-		host.attachShadow({ mode: "open" }).innerHTML =
-			`<style>:scope { background: blue } :host { background: red }</style>`;
+		host.attachShadow({
+			mode: "open",
+		}).innerHTML = `<style>:scope { background: blue } :host { background: red }</style>`;
 		expect(paintOf(host)).toBe(RED);
 
 		const other = mount(`<other-card></other-card>`);
@@ -76,8 +76,9 @@ test.skipIf(!isRealBrowser)(
 
 		const shadow = mount(`<b-card></b-card>`);
 		const host = shadow.querySelector("b-card")!;
-		host.attachShadow({ mode: "open" }).innerHTML =
-			`<style>:host, :scope { background: red }</style>`;
+		host.attachShadow({
+			mode: "open",
+		}).innerHTML = `<style>:host, :scope { background: red }</style>`;
 		expect(paintOf(host)).toBe(RED);
 	},
 );
@@ -93,10 +94,8 @@ test.skipIf(!isRealBrowser)(
 	},
 );
 
-test.skipIf(!isRealBrowser)(
-	"R5: a nested light host is styleable, its interior is not",
-	() => {
-		const holder = mount(`
+test.skipIf(!isRealBrowser)("R5: a nested light host is styleable, its interior is not", () => {
+	const holder = mount(`
 			<outer-card light-dom>
 				<style>
 					@scope to (:scope [light-dom] *) {
@@ -107,11 +106,10 @@ test.skipIf(!isRealBrowser)(
 				<inner-card light-dom><b>note</b></inner-card>
 				<b>own</b>
 			</outer-card>`);
-		expect(paintOf(holder.querySelector("inner-card")!)).toBe(RED);
-		expect(paintOf(holder.querySelector("outer-card > b")!)).toBe(RED);
-		expect(paintOf(holder.querySelector("inner-card b")!)).toBe(UNPAINTED);
-	},
-);
+	expect(paintOf(holder.querySelector("inner-card")!)).toBe(RED);
+	expect(paintOf(holder.querySelector("outer-card > b")!)).toBe(RED);
+	expect(paintOf(holder.querySelector("inner-card b")!)).toBe(UNPAINTED);
+});
 
 test.skipIf(!isRealBrowser)(
 	"both halves of the limit are load-bearing: to ([light-dom]) alone loses the nested host",
@@ -125,19 +123,16 @@ test.skipIf(!isRealBrowser)(
 	},
 );
 
-test.skipIf(!isRealBrowser)(
-	"a nested shadow child stops the parent's rules on its own",
-	() => {
-		const holder = mount(`
+test.skipIf(!isRealBrowser)("a nested shadow child stops the parent's rules on its own", () => {
+	const holder = mount(`
 			<e-card light-dom>
 				<style>@scope to (:scope [light-dom] *) { b { background: red } }</style>
 				<shadow-child></shadow-child>
 			</e-card>`);
-		const child = holder.querySelector("shadow-child")!;
-		child.attachShadow({ mode: "open" }).innerHTML = `<b>note</b>`;
-		expect(paintOf(child.shadowRoot!.querySelector("b")!)).toBe(UNPAINTED);
-	},
-);
+	const child = holder.querySelector("shadow-child")!;
+	child.attachShadow({ mode: "open" }).innerHTML = `<b>note</b>`;
+	expect(paintOf(child.shadowRoot!.querySelector("b")!)).toBe(UNPAINTED);
+});
 
 test.skipIf(!isRealBrowser)(
 	"R6: the tag-name fallback contains the descendant rules and drops the host rule",

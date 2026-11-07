@@ -14,31 +14,26 @@
 		<main>
 			<h1>CSS-3D scene</h1>
 			<p class="scene-hint">
-				<strong>Look:</strong> hold <kbd>Alt</kbd> and drag.
-				<strong>Move:</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>,
-				<kbd>Space</kbd> up / <kbd>Shift</kbd> down.
-				<strong>Edit:</strong> left-click a block to select — a gizmo wraps it;
-				drag a handle to move (yellow handle rotates).
-				<kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click adds more blocks for grouping. Set
-				size with the palette inputs. <strong>Place:</strong> click
-				<em>+ Cube/Wall/Ramp</em>, move over the grid floor, click to drop.
-				<strong>Group:</strong> <kbd>G</kbd> groups, <kbd>U</kbd> ungroups.
-				<kbd>Delete</kbd> removes, <kbd>Esc</kbd> cancels / deselects.
-				<em>Camera</em> toggles free-fly / orbit (orbit: <kbd>Alt</kbd>-drag to
-				swing, wheel to zoom). <em>Export</em> copies portable markup.
+				<strong>Look:</strong> hold <kbd>Alt</kbd> and drag. <strong>Move:</strong> <kbd>W</kbd
+				><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, <kbd>Space</kbd> up / <kbd>Shift</kbd> down.
+				<strong>Edit:</strong> left-click a block to select — a gizmo wraps it; drag a handle to
+				move (yellow handle rotates). <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click adds more blocks for
+				grouping. Set size with the palette inputs. <strong>Place:</strong> click
+				<em>+ Cube/Wall/Ramp</em>, move over the grid floor, click to drop. <strong>Group:</strong>
+				<kbd>G</kbd> groups, <kbd>U</kbd> ungroups. <kbd>Delete</kbd> removes,
+				<kbd>Esc</kbd> cancels / deselects. <em>Camera</em> toggles free-fly / orbit (orbit:
+				<kbd>Alt</kbd>-drag to swing, wheel to zoom). <em>Export</em> copies portable markup.
 			</p>
 
 			<p class="scene-hint">
 				Compare: the bench grid at
 				<a href="?cubes=100">100</a> · <a href="?cubes=500">500</a> ·
-				<a href="?cubes=1000">1000</a> · <a href="?cubes=2000">2000</a> cubes,
-				as a lattice, a cube of cubes, at
-				<a href="?cubes=125&layout=lattice">125</a> ·
+				<a href="?cubes=1000">1000</a> · <a href="?cubes=2000">2000</a> cubes, as a lattice, a cube
+				of cubes, at <a href="?cubes=125&layout=lattice">125</a> ·
 				<a href="?cubes=1000&layout=lattice">1000</a> ·
-				<a href="?cubes=2197&layout=lattice">2197</a> cubes, as a solid lattice
-				at <a href="?cubes=1000&layout=solid-lattice">1000</a> cubes, or the
-				same scene without grundlage on the
-				<a href="/grundlage/pages/cubes-vanilla/?cubes=1000">vanilla page</a>.
+				<a href="?cubes=2197&layout=lattice">2197</a> cubes, as a solid lattice at
+				<a href="?cubes=1000&layout=solid-lattice">1000</a> cubes, or the same scene without
+				grundlage on the <a href="/grundlage/pages/cubes-vanilla/?cubes=1000">vanilla page</a>.
 			</p>
 
 			<!-- Cubes sharing one rotation at different positions are the case naive
@@ -54,17 +49,9 @@
 						<scene-cube position="3 0 -3" rotation="0 25 0"></scene-cube>
 						<scene-cube position="-3 0 -3" rotation="0 25 0"></scene-cube>
 
-						<scene-cube
-							position="0 2 -3"
-							rotation="20 45 0"
-							size="1.5"
-						></scene-cube>
+						<scene-cube position="0 2 -3" rotation="20 45 0" size="1.5"></scene-cube>
 						<scene-cube position="-3 1 0" size="1 2 1"></scene-cube>
-						<scene-cube
-							position="3 0 3"
-							width="2"
-							rotation="0 -30 10"
-						></scene-cube>
+						<scene-cube position="3 0 3" width="2" rotation="0 -30 10"></scene-cube>
 
 						<scene-wall position="-1.5 0 3" size="3 1.5 1"></scene-wall>
 						<scene-ramp position="1.5 0 -3"></scene-ramp>
@@ -80,12 +67,10 @@
 
 			<h2>Bench</h2>
 			<p class="scene-hint">
-				<em>Find break points</em> finds the most cubes the camera fly and a
-				50-cube drag render while holding this display's refresh rate. It swaps
-				the scene above for a generated grid, doubles the cube count until
-				frames run late, then narrows the gap. No throttling: the workload
-				scales instead. Save a baseline before you optimize; later runs compare
-				against it.
+				<em>Find break points</em> finds the most cubes the camera fly and a 50-cube drag render
+				while holding this display's refresh rate. It swaps the scene above for a generated grid,
+				doubles the cube count until frames run late, then narrows the gap. No throttling: the
+				workload scales instead. Save a baseline before you optimize; later runs compare against it.
 			</p>
 			<scene-bench></scene-bench>
 		</main>

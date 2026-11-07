@@ -3,8 +3,7 @@ import { type FormAssociatedBase, getFormAssociatedBaseClass } from "../forms";
 import * as FORM_EVENTS from "../form-events";
 import { html, component, type BaseComponent } from "../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = (prefix: string) => `${prefix}-${tagId++}-${Date.now()}`;
@@ -47,9 +46,7 @@ describe("FormAssociatedBase - static surface", () => {
 			component(function* () {}, { mode: "open", formAssociated: true }),
 		);
 		const el = document.createElement(tag) as BaseComponent;
-		expect(el.internals === null || typeof el.internals === "object").toBe(
-			true,
-		);
+		expect(el.internals === null || typeof el.internals === "object").toBe(true);
 	});
 });
 
@@ -134,12 +131,8 @@ describe("component(..., { formAssociated }) parent selection", () => {
 		}, formOptions);
 		customElements.define(tag, Element);
 
-		expect(
-			(Element as unknown as { formAssociated?: boolean }).formAssociated,
-		).toBe(true);
-		expect(document.createElement(tag)).toBeInstanceOf(
-			getFormAssociatedBaseClass(),
-		);
+		expect((Element as unknown as { formAssociated?: boolean }).formAssociated).toBe(true);
+		expect(document.createElement(tag)).toBeInstanceOf(getFormAssociatedBaseClass());
 	});
 
 	test("the default component is a plain element, never form-associated", () => {
@@ -151,12 +144,8 @@ describe("component(..., { formAssociated }) parent selection", () => {
 		});
 		customElements.define(tag, Element);
 
-		expect(
-			(Element as unknown as { formAssociated?: boolean }).formAssociated,
-		).toBeUndefined();
-		expect(document.createElement(tag)).not.toBeInstanceOf(
-			getFormAssociatedBaseClass(),
-		);
+		expect((Element as unknown as { formAssociated?: boolean }).formAssociated).toBeUndefined();
+		expect(document.createElement(tag)).not.toBeInstanceOf(getFormAssociatedBaseClass());
 	});
 
 	test("a declared on-form-reset listener runs when the host resets", async () => {

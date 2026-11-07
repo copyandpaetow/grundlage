@@ -13,8 +13,7 @@ import { createRandom } from "./html-template-generator";
 
 //token soup: whatever the parsers make of it, they answer with a result or a library error, never a
 //crash, an invariant or a hole read twice
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 const HOLE = null;
 type Token = string | typeof HOLE;
@@ -162,9 +161,7 @@ const holeIndexesOf = (parsed: ParsedTemplate): Array<number> => {
 };
 
 const describeError = (error: unknown) =>
-	error instanceof Error
-		? `${error.constructor.name}: ${error.message}`
-		: String(error);
+	error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error);
 
 test.each([1, 2, 3])(
 	"the html parser answers every token soup with a result or a library error (seed %i)",
@@ -193,14 +190,10 @@ test.each([1, 2, 3])(
 			const isEachHoleReadOnce =
 				new Set(holeIndexes).size === holeIndexes.length &&
 				holeIndexes.every((index) => index >= 0 && index < strings.length - 1);
-			if (!isEachHoleReadOnce)
-				wrong.push(`holes ${JSON.stringify(holeIndexes)} in ${source}`);
+			if (!isEachHoleReadOnce) wrong.push(`holes ${JSON.stringify(holeIndexes)} in ${source}`);
 			if (!isRealBrowser) continue;
 			try {
-				ensureFragmentKeptEveryBinding(
-					buildFragment(parsed.htmlWithMarkers),
-					parsed,
-				);
+				ensureFragmentKeptEveryBinding(buildFragment(parsed.htmlWithMarkers), parsed);
 			} catch (error) {
 				if (isLibraryError(error)) tally.refusedByFragmentCheck++;
 				else wrong.push(`fragment ${describeError(error)} in ${source}`);
@@ -226,22 +219,10 @@ const UNSETTLED = "unsettled";
 const settledWithin = (update: Promise<void>) =>
 	Promise.race([
 		update,
-		new Promise<typeof UNSETTLED>((resolve) =>
-			setTimeout(() => resolve(UNSETTLED), 1000),
-		),
+		new Promise<typeof UNSETTLED>((resolve) => setTimeout(() => resolve(UNSETTLED), 1000)),
 	]);
 
-const SOUP_VALUES = [
-	"x",
-	"",
-	"section",
-	3,
-	null,
-	false,
-	true,
-	{ a: "b" },
-	["c"],
-];
+const SOUP_VALUES = ["x", "", "section", 3, null, false, true, { a: "b" }, ["c"]];
 
 test.runIf(isRealBrowser).each([4, 5])(
 	"a painted token soup ends in a paint or a library error, never an invariant or a hang (seed %i)",
@@ -271,9 +252,7 @@ test.runIf(isRealBrowser).each([4, 5])(
 			}
 			currentStrings = asTemplateStrings(strings);
 			const valuesOf = () =>
-				strings
-					.slice(1)
-					.map(() => SOUP_VALUES[Math.floor(random() * SOUP_VALUES.length)]);
+				strings.slice(1).map(() => SOUP_VALUES[Math.floor(random() * SOUP_VALUES.length)]);
 			currentValues = valuesOf();
 			const errorCountBefore = errors.length;
 			const host = document.createElement(SOUP_TAG) as BaseComponent;
@@ -308,15 +287,10 @@ test.each([1, 2, 3])(
 		const random = createRandom(seed);
 		const tally = { compiled: 0, notCompiled: 0 };
 		const wrong: Array<string> = [];
-		for (
-			let caseIndex = 0;
-			caseIndex < 20000 && wrong.length < 8;
-			caseIndex++
-		) {
+		for (let caseIndex = 0; caseIndex < 20000 && wrong.length < 8; caseIndex++) {
 			const strings = stringsOf(random, CSS_TOKENS);
 			const parts: Array<Part> = [strings[0]];
-			for (let index = 1; index < strings.length; index++)
-				parts.push(index - 1, strings[index]);
+			for (let index = 1; index < strings.length; index++) parts.push(index - 1, strings[index]);
 			try {
 				const compiled = compileStyleSheet(parts);
 				if (compiled === STYLE_SHEET_NOT_COMPILED) tally.notCompiled++;

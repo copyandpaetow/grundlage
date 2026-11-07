@@ -68,11 +68,9 @@ export const commitDynamic = (
 		const desiredValueHash = hashValue(desiredValue);
 		const appliedEntry = appliedAttributes.get(name);
 		if (appliedEntry?.hash === desiredValueHash) continue;
-		if (treeState.isTemplateContent)
-			ensureKeptByCopies(element, name, desiredValue);
+		if (treeState.isTemplateContent) ensureKeptByCopies(element, name, desiredValue);
 		const isLiveState = isLiveStatePropertyOf(element, name);
-		if (isLiveState && appliedEntry !== undefined)
-			applyLiveState(element, name, desiredValue);
+		if (isLiveState && appliedEntry !== undefined) applyLiveState(element, name, desiredValue);
 		else if (isLiveState) applyLiveStateDefault(element, name, desiredValue);
 		else applyAttributeValue(element, name, desiredValue, appliedEntry?.value);
 		appliedAttributes.set(name, {

@@ -2,8 +2,7 @@ import { describe, expect, test } from "vitest";
 import { component, html, prop } from "../index";
 import { BaseComponent, ComponentProps, PropDefinition } from "../types";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `props-object-${tagId++}-${Date.now()}`;

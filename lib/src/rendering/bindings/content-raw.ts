@@ -41,15 +41,11 @@ export const commitRawContent = (
 	const liveSheet = lane.styleElement.sheet;
 	//the sheet will parse from the text written here, so its declarations already hold these values
 	if (liveSheet === null) {
-		if (writeRawContentAsText(liveBinding, values))
-			seedDeclarationValueHashes(lane, values);
+		if (writeRawContentAsText(liveBinding, values)) seedDeclarationValueHashes(lane, values);
 		return;
 	}
 	if (lane.boundSheet?.sheet !== liveSheet) {
-		const matchedSheet = matchCompiledStyleSheet(
-			lane.compiledStyleSheet,
-			liveSheet,
-		);
+		const matchedSheet = matchCompiledStyleSheet(lane.compiledStyleSheet, liveSheet);
 		if (matchedSheet === RULE_STRUCTURE_MISMATCH) {
 			liveBinding.styleSheetLane = TEXT_STYLE_SHEET_LANE;
 			writeRawContentAsText(liveBinding, values);

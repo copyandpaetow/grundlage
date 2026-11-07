@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("multiple bindings", () => {
 	let tagId = 0;
@@ -112,9 +111,7 @@ describe("multiple bindings", () => {
 		await sleep();
 
 		expect(runCount).toBe(initialRunCount + 1);
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain(
-			"3",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toContain("3");
 
 		cleanup(element);
 	});

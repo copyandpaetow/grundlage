@@ -30,10 +30,7 @@ import { exportScene } from "./serialization";
 const SIZED_TAGS = new Set(["scene-cube", "scene-wall", "scene-ramp"]);
 
 // Editing a shorthand clears the per-axis override it would otherwise lose to.
-const FIELD_SPECIFIC: Record<
-	InspectorField,
-	readonly [string, string, string]
-> = {
+const FIELD_SPECIFIC: Record<InspectorField, readonly [string, string, string]> = {
 	position: POSITION_SPECIFIC,
 	rotation: ROTATION_SPECIFIC,
 	size: SIZE_SPECIFIC,
@@ -84,8 +81,7 @@ customElements.define(
 			if (block === null) {
 				inspector = undefined;
 			} else {
-				const { position, rotation, size } =
-					blockTransformFromAttributes(block);
+				const { position, rotation, size } = blockTransformFromAttributes(block);
 				inspector = {
 					position,
 					rotation,
@@ -109,15 +105,10 @@ customElements.define(
 			updateInspector,
 		});
 
-		const editField = (
-			field: InspectorField,
-			axis: number,
-			value: number,
-		): void => {
+		const editField = (field: InspectorField, axis: number, value: number): void => {
 			const block = primaryBlock(state);
 			if (block === null) return;
-			if (field === "size" && !SIZED_TAGS.has(block.tagName.toLowerCase()))
-				return;
+			if (field === "size" && !SIZED_TAGS.has(block.tagName.toLowerCase())) return;
 
 			const triple = blockTransformFromAttributes(block)[field];
 			triple[axis] = value;
@@ -135,10 +126,7 @@ customElements.define(
 
 		const toggleCamera = (): void => {
 			if (cameraElement === null) return;
-			cameraElement.setAttribute(
-				"mode",
-				cameraMode() === "orbit" ? "free" : "orbit",
-			);
+			cameraElement.setAttribute("mode", cameraMode() === "orbit" ? "free" : "orbit");
 			void host.update();
 		};
 
@@ -198,10 +186,8 @@ customElements.define(
 				selection.deselectAll();
 				return;
 			}
-			if (event.key === "Delete" || event.key === "Backspace")
-				selection.deleteSelection();
-			if (event.key.toLowerCase() === "g")
-				grouping.wrapSelection("scene-group");
+			if (event.key === "Delete" || event.key === "Backspace") selection.deleteSelection();
+			if (event.key.toLowerCase() === "g") grouping.wrapSelection("scene-group");
 			if (event.key.toLowerCase() === "u") grouping.unwrapSelection();
 		};
 

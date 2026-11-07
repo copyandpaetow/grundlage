@@ -8,8 +8,7 @@ import { html, component, ComponentErrorEvent, prop } from "../../index";
 
 let counter = 0;
 const uniqueTag = () => `test-engine-${counter++}-${Date.now()}`;
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 const mount = (constructor: CustomElementConstructor): HTMLElement => {
 	const tag = uniqueTag();
@@ -25,9 +24,7 @@ afterEach(() => {
 
 describe("engine terminal", () => {
 	test("an uncaught error logs exactly one console error", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield function* () {
@@ -48,12 +45,13 @@ describe("engine terminal", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const attachShadow = HTMLElement.prototype.attachShadow;
 		let closedRoot: ShadowRoot | undefined;
-		vi.spyOn(HTMLElement.prototype, "attachShadow").mockImplementation(
-			function (this: HTMLElement, init: ShadowRootInit) {
-				closedRoot = attachShadow.call(this, init);
-				return closedRoot;
-			},
-		);
+		vi.spyOn(HTMLElement.prototype, "attachShadow").mockImplementation(function (
+			this: HTMLElement,
+			init: ShadowRootInit,
+		) {
+			closedRoot = attachShadow.call(this, init);
+			return closedRoot;
+		});
 
 		const element = mount(
 			component(
@@ -124,9 +122,7 @@ describe("engine terminal", () => {
 	test("an outer parked on a yielded promise cannot catch its inner's failure", async () => {
 		//the yield a throw would land at is owned by the pending promise: catching there would let
 		//that promise step the generator a second time, from a position it had already left
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let rejectInnerPromise: (error: Error) => void = () => {};
 		const innerPromise = new Promise((_resolve, reject) => {
 			rejectInnerPromise = reject;
@@ -215,9 +211,7 @@ describe("the component error event", () => {
 	});
 
 	test("preventDefault skips the console error and the error text", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag();
 		customElements.define(
 			tag,
@@ -228,9 +222,7 @@ describe("the component error event", () => {
 			}),
 		);
 		const element = document.createElement(tag);
-		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
-			event.preventDefault(),
-		);
+		element.addEventListener(ComponentErrorEvent.eventName, (event) => event.preventDefault());
 		document.body.appendChild(element);
 		await sleep();
 
@@ -271,9 +263,7 @@ describe("a prop resolver that throws", () => {
 		const element = mountWithRefusingProp();
 		await sleep();
 		const received: Array<unknown> = [];
-		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
-			received.push(event.error),
-		);
+		element.addEventListener(ComponentErrorEvent.eventName, (event) => received.push(event.error));
 
 		expect(() => element.setAttribute("label", "refused")).not.toThrow();
 		expect(received).toHaveLength(1);
@@ -286,9 +276,7 @@ describe("a prop resolver that throws", () => {
 		const element = mountWithRefusingProp();
 		await sleep();
 		const received: Array<unknown> = [];
-		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
-			received.push(event.error),
-		);
+		element.addEventListener(ComponentErrorEvent.eventName, (event) => received.push(event.error));
 
 		expect(() => (element.label = "refused")).not.toThrow();
 		expect(received).toHaveLength(1);
@@ -314,9 +302,7 @@ describe("a prop resolver that throws", () => {
 	});
 
 	test("from the body's own write, the body's finally block runs once its step is over", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let hasFinallyRun = false;
 		const element = mount(
 			component(
@@ -374,9 +360,7 @@ describe("a prop resolver that throws", () => {
 		);
 		const element = document.createElement(tag);
 		const received: Array<unknown> = [];
-		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
-			received.push(event.error),
-		);
+		element.addEventListener(ComponentErrorEvent.eventName, (event) => received.push(event.error));
 		document.body.appendChild(element);
 		await sleep();
 
@@ -488,8 +472,7 @@ describe("a prop resolver that throws", () => {
 		const tag = uniqueTag();
 		//created before the definition, so the upgrade finds a root to hydrate
 		const element = document.createElement(tag);
-		element.attachShadow({ mode: "open" }).innerHTML =
-			"<p>painted on the server</p>";
+		element.attachShadow({ mode: "open" }).innerHTML = "<p>painted on the server</p>";
 		document.body.appendChild(element);
 		customElements.define(
 			tag,
@@ -578,10 +561,7 @@ describe("a prop resolver that throws", () => {
 		const element = mount(
 			component(
 				function* ({ host }) {
-					yield function* (
-						_props: unknown,
-						_refusal = (host.label = "refused"),
-					) {
+					yield function* (_props: unknown, _refusal = (host.label = "refused")) {
 						hasRun = true;
 						yield html`<p>painted after the error</p>`;
 					};
@@ -597,9 +577,7 @@ describe("a prop resolver that throws", () => {
 	});
 
 	test("from an update generator's parameter default that then throws, the throw is reported instead of ending the component again", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const failure = new Error("thrown after the refusal");
 		let isCaughtByBody = false;
 		const tag = uniqueTag();
@@ -626,9 +604,7 @@ describe("a prop resolver that throws", () => {
 		);
 		const element = document.createElement(tag);
 		const received: Array<unknown> = [];
-		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
-			received.push(event.error),
-		);
+		element.addEventListener(ComponentErrorEvent.eventName, (event) => received.push(event.error));
 		document.body.appendChild(element);
 		await sleep();
 
@@ -640,9 +616,7 @@ describe("a prop resolver that throws", () => {
 	});
 
 	test("from a child's setter in the paint, a hole that throws later in that paint is reported instead of thrown at the yield", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const failure = new Error("thrown later in the paint");
 		//a paint reads the iterator in a hole, so its throw is the paint's
 		function* failingRows() {
@@ -666,9 +640,7 @@ describe("a prop resolver that throws", () => {
 		);
 		const element = document.createElement(tag);
 		const received: Array<unknown> = [];
-		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
-			received.push(event.error),
-		);
+		element.addEventListener(ComponentErrorEvent.eventName, (event) => received.push(event.error));
 		document.body.appendChild(element);
 		await sleep();
 
@@ -746,9 +718,7 @@ describe("a prop resolver that throws", () => {
 	});
 
 	test("from the finally block of a failing update generator, the body does not go on to catch the failure, which is reported", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let isCaughtByBody = false;
 		let hasFinallyGoneOn = false;
 		const element = mount(
@@ -876,9 +846,7 @@ describe("the refire enters the driver loop", () => {
 	//the two ways a throwing cleanup was observable before it was guarded: the paint it precedes
 	//never happened, and the sibling cleanup queued behind it never ran
 	test("a branch cleanup that throws does not eat the paint that tore it down", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const element = mount(
 			component(function* () {
 				yield function* () {
@@ -1087,9 +1055,7 @@ describe("the refire enters the driver loop", () => {
 	});
 
 	test("a paint throw during an update logs exactly one console error and is fatal", async () => {
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let bad = false;
 		const element = mount(
 			component(function* () {

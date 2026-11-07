@@ -1,10 +1,5 @@
 import { blockTransformFromAttributes, type Vector3 } from "../scene-shared";
-import {
-	eulerFromMatrix,
-	fromScreenPoint,
-	rotationMatrix,
-	toScreenPoint,
-} from "../scene-geometry";
+import { eulerFromMatrix, fromScreenPoint, rotationMatrix, toScreenPoint } from "../scene-geometry";
 
 export const addVectors = (a: Vector3, b: Vector3): Vector3 => [
 	a[0] + b[0],
@@ -31,10 +26,6 @@ export const liftThroughFrame = (
 	frame: DOMMatrix,
 	parentRotation: DOMMatrix,
 ): { position: Vector3; rotation: Vector3 } => ({
-	position: fromScreenPoint(
-		frame.transformPoint(toScreenPoint(readPosition(child))),
-	),
-	rotation: eulerFromMatrix(
-		parentRotation.multiply(rotationMatrix(readRotation(child))),
-	),
+	position: fromScreenPoint(frame.transformPoint(toScreenPoint(readPosition(child)))),
+	rotation: eulerFromMatrix(parentRotation.multiply(rotationMatrix(readRotation(child)))),
 });

@@ -89,9 +89,7 @@ describe("html parser — attribute bindings", () => {
 			BINDING.DYNAMIC_ATTRIBUTE,
 			BINDING.ATTRIBUTE,
 		]);
-		expect((parsed.bindings[1] as AttributeStaticBinding).nameParts).toEqual([
-			"class",
-		]);
+		expect((parsed.bindings[1] as AttributeStaticBinding).nameParts).toEqual(["class"]);
 	});
 });
 
@@ -246,13 +244,11 @@ describe("html parser — attribute edge cases", () => {
 	test("an on-prefixed non-handler keeps its whole name (no eventType slice)", () => {
 		const value = () => {};
 		//the whole name survives to commit-time resolution; the old bug sliced "once" → event "ce"
-		const once = parse` <button once=${value}></button>`
-			.bindings[0] as AttributeStaticBinding;
+		const once = parse` <button once=${value}></button>`.bindings[0] as AttributeStaticBinding;
 		expect(once.type).toBe(BINDING.ATTRIBUTE);
 		expect(once.nameParts).toEqual(["once"]);
 
-		const online = parse` <button online=${value}></button>`
-			.bindings[0] as AttributeStaticBinding;
+		const online = parse` <button online=${value}></button>`.bindings[0] as AttributeStaticBinding;
 		expect(online.type).toBe(BINDING.ATTRIBUTE);
 		expect(online.nameParts).toEqual(["online"]);
 	});
@@ -273,9 +269,7 @@ describe("html parser — custom element and namespaced attribute names", () => 
 	test("hyphenated custom element tag with static attribute", () => {
 		const parsed = parse`<my-component id="x"></my-component>`;
 		expect(parsed.bindings).toHaveLength(0);
-		const element = buildFragment(parsed.htmlWithMarkers).querySelector(
-			"my-component",
-		)!;
+		const element = buildFragment(parsed.htmlWithMarkers).querySelector("my-component")!;
 		expect(element).not.toBeNull();
 		expect(element.getAttribute("id")).toBe("x");
 	});
@@ -286,9 +280,7 @@ describe("html parser — custom element and namespaced attribute names", () => 
 		expect(parsed.bindings).toHaveLength(1);
 		const binding = parsed.bindings[0] as AttributeStaticBinding;
 		expect(binding.nameParts).toEqual(["class"]);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("my-component"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("my-component")).not.toBeNull();
 	});
 
 	test("aria-* and data-* attribute names preserve hyphens", () => {

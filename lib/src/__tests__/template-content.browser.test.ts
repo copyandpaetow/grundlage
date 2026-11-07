@@ -28,8 +28,7 @@ const mountView = async (view: () => unknown) => {
 	return { host, errors };
 };
 
-const templateOf = (host: BaseComponent) =>
-	host.shadowRoot!.querySelector("template")!;
+const templateOf = (host: BaseComponent) => host.shadowRoot!.querySelector("template")!;
 
 describe("holes inside a nested <template> fill its content like any other hole", () => {
 	test("a text value stays text", async () => {
@@ -55,8 +54,7 @@ describe("holes inside a nested <template> fill its content like any other hole"
 					<template><img src="${value}" /><img src=${unquoted} /></template>
 				</div>`,
 		);
-		const [quotedImage, unquotedImage] =
-			templateOf(host).content.querySelectorAll("img");
+		const [quotedImage, unquotedImage] = templateOf(host).content.querySelectorAll("img");
 		expect(quotedImage.getAttribute("src")).toBe(value);
 		expect(unquotedImage.getAttribute("src")).toBe(unquoted);
 		expect(quotedImage.hasAttribute("onerror")).toBe(false);
@@ -198,8 +196,7 @@ describe("holes inside a nested <template> fill its content like any other hole"
 		await host.update();
 		expect(errors).toHaveLength(2);
 		expect(String(errors[0])).toMatch(/grundlage: <style> .*"<\/style"/);
-		const styleText =
-			templateOf(host).content.querySelector("style")!.textContent;
+		const styleText = templateOf(host).content.querySelector("style")!.textContent;
 		expect(styleText).toContain("color: red;");
 		expect(styleText).not.toContain("<img");
 		host.remove();
@@ -218,8 +215,7 @@ describe("holes inside a nested <template> fill its content like any other hole"
 });
 
 describe("a nested <template>'s content takes only what copies of it keep", () => {
-	const copiesKeepOnly =
-		/grundlage: a <template>'s content expects attributes and text/;
+	const copiesKeepOnly = /grundlage: a <template>'s content expects attributes and text/;
 
 	test("a listener inside the content throws", async () => {
 		const { host, errors } = await mountView(
@@ -259,8 +255,7 @@ describe("a nested <template>'s content takes only what copies of it keep", () =
 			),
 		);
 		const { host, errors } = await mountView(
-			() =>
-				html`<div><template><${childTag} label=${"x"}></${childTag}></template></div>`,
+			() => html`<div><template><${childTag} label=${"x"}></${childTag}></template></div>`,
 		);
 		expect(errors).toHaveLength(1);
 		expect(String(errors[0])).toMatch(copiesKeepOnly);
@@ -372,16 +367,13 @@ describe("a nested <template>'s content takes only what copies of it keep", () =
 		config = { open: true };
 		await host.update();
 		expect(errors).toHaveLength(1);
-		expect(templateOf(host).content.querySelector("b")!.textContent).toBe(
-			"before",
-		);
+		expect(templateOf(host).content.querySelector("b")!.textContent).toBe("before");
 		host.remove();
 	});
 });
 
 describe("a nested <template> with shadowrootmode", () => {
-	const noShadowRootMode =
-		/grundlage: a nested <template> expects no shadowrootmode/;
+	const noShadowRootMode = /grundlage: a nested <template> expects no shadowrootmode/;
 
 	test("shadowrootmode throws, since a paint keeps a plain <template>", async () => {
 		const { host, errors } = await mountView(
@@ -405,8 +397,7 @@ describe("a nested <template> with shadowrootmode", () => {
 });
 
 const canPrerender =
-	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe ===
-	"function";
+	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe === "function";
 
 describe("a nested <template> from the server", () => {
 	test.skipIf(!canPrerender)(
@@ -432,9 +423,7 @@ describe("a nested <template> from the server", () => {
 			const tag = uniqueTag();
 			const holder = document.createElement("div");
 			document.body.append(holder);
-			(
-				holder as unknown as { setHTMLUnsafe(html: string): void }
-			).setHTMLUnsafe(
+			(holder as unknown as { setHTMLUnsafe(html: string): void }).setHTMLUnsafe(
 				`<${tag}><template shadowrootmode="open">${serverMarkup}</template></${tag}>`,
 			);
 			const host = holder.firstElementChild as BaseComponent;
@@ -450,9 +439,7 @@ describe("a nested <template> from the server", () => {
 
 			label = "client";
 			await host.update();
-			expect(templateOf(host).content.querySelector("p")!.textContent).toBe(
-				"client",
-			);
+			expect(templateOf(host).content.querySelector("p")!.textContent).toBe("client");
 			warn.mockRestore();
 			holder.remove();
 		},

@@ -11,11 +11,7 @@ import type { ComponentRunner } from "../runtime/driver";
 //happy-dom env: the payload protocol, from the server's record and flush to the browser's claim and
 //release. The driver decides when each runs; tests/integration/load.browser.test.ts covers that
 
-type LoadGenerator = Generator<
-	LoadRequest | Promise<unknown>,
-	unknown,
-	unknown
->;
+type LoadGenerator = Generator<LoadRequest | Promise<unknown>, unknown, unknown>;
 
 const createHostWithShadow = (): HTMLElement => {
 	const host = document.createElement("div");
@@ -40,10 +36,7 @@ const createHydratingRunner = (host: HTMLElement): ComponentRunner =>
 	}) as unknown as ComponentRunner;
 
 //what the driver does for a fetcher that returns at once: answer the request, take the result
-const finishSynchronousLoad = (
-	generator: LoadGenerator,
-	runner: ComponentRunner,
-): unknown => {
+const finishSynchronousLoad = (generator: LoadGenerator, runner: ComponentRunner): unknown => {
 	expect(generator.next()).toEqual({ done: false, value: LOAD_REQUEST });
 	const step = generator.next(runner);
 	expect(step.done).toBe(true);
@@ -61,8 +54,7 @@ const payloadScript = (
 	const script = document.createElement("script");
 	script.setAttribute("type", "application/json");
 	script.setAttribute("data-ssr", "");
-	for (const [name, value] of Object.entries(attributes))
-		script.setAttribute(name, value);
+	for (const [name, value] of Object.entries(attributes)) script.setAttribute(name, value);
 	if (content !== null) script.textContent = content;
 	return script;
 };
@@ -102,9 +94,7 @@ describe("the server writes one script per load, in call order, at the first pai
 	test("a failed load keeps its position as an empty placeholder", () => {
 		const host = createHostWithShadow();
 		const runner = createServerRunner(host);
-		expect(() => finishSynchronousLoad(load(failingFetcher), runner)).toThrow(
-			"offline",
-		);
+		expect(() => finishSynchronousLoad(load(failingFetcher), runner)).toThrow("offline");
 		finishSynchronousLoad(
 			load(() => "second"),
 			runner,
@@ -226,9 +216,7 @@ describe("a key the server already recorded throws", () => {
 
 	test("a failed load holds its key too", () => {
 		const runner = createServerRunner(createHostWithShadow());
-		expect(() =>
-			finishSynchronousLoad(load("post", failingFetcher), runner),
-		).toThrow("offline");
+		expect(() => finishSynchronousLoad(load("post", failingFetcher), runner)).toThrow("offline");
 
 		expect(() =>
 			finishSynchronousLoad(
@@ -242,10 +230,7 @@ describe("a key the server already recorded throws", () => {
 describe("a hydrating browser claims a server value and removes its script", () => {
 	test("positional values come back in order without fetching, and each claim removes its script", () => {
 		const host = createHostWithShadow();
-		host.shadowRoot!.append(
-			payloadScript('{"name":"Ada"}'),
-			payloadScript('{"name":"Lin"}'),
-		);
+		host.shadowRoot!.append(payloadScript('{"name":"Ada"}'), payloadScript('{"name":"Lin"}'));
 		const runner = createHydratingRunner(host);
 		const fetcher = vi.fn(() => "fetched");
 
@@ -283,10 +268,7 @@ describe("a hydrating browser claims a server value and removes its script", () 
 
 	test("a failed placeholder is removed and claims nothing, so the browser fetches", () => {
 		const host = createHostWithShadow();
-		host.shadowRoot!.append(
-			payloadScript(null, { "data-failed": "" }),
-			payloadScript('"second"'),
-		);
+		host.shadowRoot!.append(payloadScript(null, { "data-failed": "" }), payloadScript('"second"'));
 		const runner = createHydratingRunner(host);
 
 		expect(
@@ -346,9 +328,7 @@ describe("a hydrating browser claims a server value and removes its script", () 
 
 		const warnings = warnSpy.mock.calls.map((call) => String(call[0]));
 		expect(ownScript.isConnected).toBe(true);
-		expect(warnings.some((warning) => warning.includes("went unused"))).toBe(
-			false,
-		);
+		expect(warnings.some((warning) => warning.includes("went unused"))).toBe(false);
 		warnSpy.mockRestore();
 	});
 

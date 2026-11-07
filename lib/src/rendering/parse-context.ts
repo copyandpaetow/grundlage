@@ -1,8 +1,5 @@
 import { ValueOf } from "../utils/types";
-import {
-	isDevelopmentBuild,
-	warnDuringDevelopment,
-} from "../utils/diagnostics";
+import { isDevelopmentBuild, warnDuringDevelopment } from "../utils/diagnostics";
 import * as PARSE_CONTEXT from "./parse-context-kind";
 
 export const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
@@ -13,24 +10,12 @@ export const FOREIGN_CONTENT_ROOT_TAGS = new Set(["svg", "math"]);
 
 export type ParseContextKind = ValueOf<typeof PARSE_CONTEXT>;
 
-export const WRAPPER_TAG_BY_PARSE_CONTEXT: Record<ParseContextKind, string> = [
-	"",
-	"svg",
-	"math",
-];
+export const WRAPPER_TAG_BY_PARSE_CONTEXT: Record<ParseContextKind, string> = ["", "svg", "math"];
 
 const SVG_HTML_INTEGRATION_POINTS = new Set(["foreignObject", "desc", "title"]);
-const MATHML_TEXT_INTEGRATION_POINTS = new Set([
-	"mi",
-	"mo",
-	"mn",
-	"ms",
-	"mtext",
-]);
+const MATHML_TEXT_INTEGRATION_POINTS = new Set(["mi", "mo", "mn", "ms", "mtext"]);
 
-export const parseContextOfChildren = (
-	parent: Node | null,
-): ParseContextKind => {
+export const parseContextOfChildren = (parent: Node | null): ParseContextKind => {
 	if (!(parent instanceof Element)) return PARSE_CONTEXT.HTML;
 	switch (parent.namespaceURI) {
 		case SVG_NAMESPACE:
@@ -104,11 +89,7 @@ const PARAGRAPH_SCOPE_BOUNDARIES = new Set([
 ]);
 
 const hasParagraphInButtonScope = (parent: Node | null): boolean => {
-	for (
-		let ancestor = parent;
-		ancestor instanceof Element;
-		ancestor = ancestor.parentNode
-	) {
+	for (let ancestor = parent; ancestor instanceof Element; ancestor = ancestor.parentNode) {
 		if (ancestor.namespaceURI !== HTML_NAMESPACE) return false;
 		if (ancestor.localName === "p") return true;
 		if (PARAGRAPH_SCOPE_BOUNDARIES.has(ancestor.localName)) return false;
@@ -117,10 +98,7 @@ const hasParagraphInButtonScope = (parent: Node | null): boolean => {
 };
 
 //the DOM accepts a <div> inside a <p>, the HTML parser does not: server markup would split the <p>
-export const warnWhenParsingWouldSplitParagraph = (
-	tagName: string,
-	parent: Node | null,
-): void => {
+export const warnWhenParsingWouldSplitParagraph = (tagName: string, parent: Node | null): void => {
 	if (!isDevelopmentBuild) return;
 	if (!TAGS_THAT_CLOSE_PARAGRAPH.has(tagName.toLowerCase())) return;
 	if (!hasParagraphInButtonScope(parent)) return;

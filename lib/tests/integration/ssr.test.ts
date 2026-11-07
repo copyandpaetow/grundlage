@@ -12,9 +12,7 @@ const uniqueTag = () => `ssr-node-${nextTagId++}-${Date.now()}`;
 
 const mount = async (tag: string, ComponentClass: ComponentConstructor) => {
 	customElements.define(tag, ComponentClass);
-	const element = document.createElement(tag) as InstanceType<
-		typeof ComponentClass
-	>;
+	const element = document.createElement(tag) as InstanceType<typeof ComponentClass>;
 	document.body.appendChild(element);
 	//let synchronous generators reach their first yield
 	await flushMicrotasks();
@@ -299,9 +297,7 @@ describe("SSR: server stops at the first paint", () => {
 		//the fatal display logs, so the console error is silenced here
 		const tag = uniqueTag();
 		let postYieldRan = false;
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const Component = component(function* () {
 			yield Promise.reject(new Error("boom"));
@@ -400,9 +396,7 @@ describe("SSR: server stops at the first paint", () => {
 
 		const element = track(await mount(tag, Component));
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"fallback",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("fallback");
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();
 	});
@@ -621,9 +615,7 @@ describe("SSR: a nested <template>", () => {
 		const element = track(await mount(tag, Component));
 		const template = element.shadowRoot!.querySelector("template")!;
 
-		expect(template.innerHTML).toBe(
-			'<p title="x&quot; onerror=&quot;y">&lt;img src=x&gt;</p>',
-		);
+		expect(template.innerHTML).toBe('<p title="x&quot; onerror=&quot;y">&lt;img src=x&gt;</p>');
 	});
 });
 

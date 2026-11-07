@@ -2,10 +2,7 @@ import { Part } from "../parser/types";
 import { combineOrderedHash, PARTS_HASH_SEED } from "../utils/hashing";
 import { hashValue } from "./value-hashing";
 
-export const composeParts = (
-	parts: ReadonlyArray<Part>,
-	values: Array<unknown>,
-): string => {
+export const composeParts = (parts: ReadonlyArray<Part>, values: Array<unknown>): string => {
 	let result = "";
 	for (let index = 0; index < parts.length; index++) {
 		const part = parts[index];
@@ -21,10 +18,7 @@ export const composeParts = (
 	return result;
 };
 
-export const combinedPartsHash = (
-	parts: ReadonlyArray<Part>,
-	values: Array<unknown>,
-): number => {
+export const combinedPartsHash = (parts: ReadonlyArray<Part>, values: Array<unknown>): number => {
 	let hash = PARTS_HASH_SEED;
 	for (let index = 0; index < parts.length; index++) {
 		const part = parts[index];

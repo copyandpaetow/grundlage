@@ -30,9 +30,7 @@ test("hoisted schema infers without satisfies", () => {
 		}) {
 			expectTypeOf(habit).toEqualTypeOf<Habit>();
 			expectTypeOf(checkIns).toEqualTypeOf<Array<CheckIn>>();
-			expectTypeOf(milestoneAward).toEqualTypeOf<
-				{ label: string } | undefined
-			>();
+			expectTypeOf(milestoneAward).toEqualTypeOf<{ label: string } | undefined>();
 			expectTypeOf(today).toEqualTypeOf<string>();
 			expectTypeOf(headingLevel).toEqualTypeOf<number>();
 			expectTypeOf(variant).toEqualTypeOf<"primary" | "secondary">();
@@ -93,9 +91,7 @@ test("element type carries the props", () => {
 	const StreakHabit = component(function* () {}, { props: streakHabitProps });
 	const element = new StreakHabit();
 	expectTypeOf(element.habit).toEqualTypeOf<Habit>();
-	expectTypeOf(element.milestoneAward).toEqualTypeOf<
-		{ label: string } | undefined
-	>();
+	expectTypeOf(element.milestoneAward).toEqualTypeOf<{ label: string } | undefined>();
 });
 
 test("positives are not any", () => {

@@ -34,10 +34,7 @@ const makeGroup = (transform: string, children: HTMLElement[]): HTMLElement => {
 	return group;
 };
 
-const expectVectorClose = (
-	actual: readonly number[],
-	expected: readonly number[],
-): void => {
+const expectVectorClose = (actual: readonly number[], expected: readonly number[]): void => {
 	for (let axis = 0; axis < 3; axis++) {
 		expect(actual[axis]).toBeCloseTo(expected[axis], 5);
 	}
@@ -74,9 +71,7 @@ describe("blocksBoundsPx — the world-aligned cage volume", () => {
 	});
 
 	test("centres on the block's translation, tight when axis-aligned", () => {
-		const bounds = blocksBoundsPx([
-			makeLeaf("translate3d(120px, -60px, 240px)"),
-		]);
+		const bounds = blocksBoundsPx([makeLeaf("translate3d(120px, -60px, 240px)")]);
 		expect(bounds).not.toBeNull();
 		expectVectorClose(bounds!.center, [120, -60, 240]);
 		expectVectorClose(bounds!.half, [HALF_UNIT, HALF_UNIT, HALF_UNIT]);

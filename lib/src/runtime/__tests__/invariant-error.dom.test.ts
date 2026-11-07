@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { component, html, prop } from "../../index";
-import {
-	assertDuringDevelopment,
-	InvariantError,
-} from "../../utils/diagnostics";
+import { assertDuringDevelopment, InvariantError } from "../../utils/diagnostics";
 
 //a library bug has to reach whoever develops the library: no user catch may hide it, and no cleanup
 //may run on the state it broke. happy-dom throws a connectedCallback error out of appendChild, where
@@ -88,8 +85,7 @@ describe("an invariant error thrown inside a prop claim", () => {
 					props: {
 						level: prop.optional(
 							prop.attribute((incoming: unknown) => {
-								if (incoming === "broken")
-									throw new InvariantError("library bug");
+								if (incoming === "broken") throw new InvariantError("library bug");
 								return incoming;
 							}),
 						),
@@ -129,8 +125,7 @@ describe("an invariant error thrown while recovering pre-upgrade assignments", (
 					props: {
 						level: prop.optional(
 							prop.attribute((incoming: unknown) => {
-								if (incoming === "broken")
-									throw new InvariantError("library bug");
+								if (incoming === "broken") throw new InvariantError("library bug");
 								return incoming;
 							}),
 						),

@@ -73,10 +73,7 @@ customElements.define(
 		let rows: Array<Row> = buildRows(itemCount);
 		const measurements = new Map<string, Measurement>();
 
-		const runOperation = (
-			label: string,
-			operation: (rows: Array<Row>) => void,
-		) => {
+		const runOperation = (label: string, operation: (rows: Array<Row>) => void) => {
 			operation(rows);
 			const startTime = performance.now();
 			element.update();
@@ -84,8 +81,7 @@ customElements.define(
 
 			const previous = measurements.get(label);
 			const sampleCount = (previous?.sampleCount ?? 0) + 1;
-			const cumulativeMs =
-				(previous?.averageDurationMs ?? 0) * (sampleCount - 1) + durationMs;
+			const cumulativeMs = (previous?.averageDurationMs ?? 0) * (sampleCount - 1) + durationMs;
 			measurements.set(label, {
 				label,
 				itemCount: rows.length,

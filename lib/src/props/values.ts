@@ -1,20 +1,13 @@
 import { BaseComponent } from "../types";
-import {
-	isDevelopmentBuild,
-	warnDuringDevelopment,
-} from "../utils/diagnostics";
+import { isDevelopmentBuild, warnDuringDevelopment } from "../utils/diagnostics";
 import * as PROP_KIND from "./prop-kind";
 import { issueMessagesOf, NormalizedSchema, Prop } from "./schema";
 
 export type PropValues = Record<string, unknown>;
 
-export const createComponentProps = (
-	props: NormalizedSchema,
-	host: BaseComponent,
-): PropValues => {
+export const createComponentProps = (props: NormalizedSchema, host: BaseComponent): PropValues => {
 	const componentProps: PropValues = { host };
-	for (const prop of props.values())
-		componentProps[prop.propName] = prop.resolve(undefined);
+	for (const prop of props.values()) componentProps[prop.propName] = prop.resolve(undefined);
 	return componentProps;
 };
 
@@ -25,8 +18,7 @@ export const claimPropValueChange = (
 ): boolean => {
 	//an attribute's removal arrives as null, so only a property prop can hold null as a value
 	const isAbsent =
-		incoming === undefined ||
-		(incoming === null && prop.kind !== PROP_KIND.PROPERTY);
+		incoming === undefined || (incoming === null && prop.kind !== PROP_KIND.PROPERTY);
 	if (isAbsent && prop.isRequired) {
 		warnDuringDevelopment(
 			`prop "${prop.propName}" is required and cannot become ${String(incoming)}, so the previous value stays.`,
@@ -49,18 +41,14 @@ export const claimPropValueChange = (
 
 	const cannotChangeBehindReference =
 		next === null || (typeof next !== "object" && typeof next !== "function");
-	const isUnchanged =
-		Object.is(values[prop.propName], next) && cannotChangeBehindReference;
+	const isUnchanged = Object.is(values[prop.propName], next) && cannotChangeBehindReference;
 	if (isUnchanged) return false;
 
 	values[prop.propName] = next;
 	return true;
 };
 
-export const attributeSpellingOf = (
-	prop: Prop,
-	value: unknown,
-): string | null => {
+export const attributeSpellingOf = (prop: Prop, value: unknown): string | null => {
 	switch (typeof value) {
 		case "string":
 			return value;
@@ -85,8 +73,7 @@ export const recoverPreUpgradeAssignments = (
 		if (!Object.hasOwn(record, prop.propName)) continue;
 		//the binding also wrote the attribute for CSS before definition, and a property prop would never
 		//update it again
-		if (prop.kind === PROP_KIND.PROPERTY)
-			element.removeAttribute(prop.propName.toLowerCase());
+		if (prop.kind === PROP_KIND.PROPERTY) element.removeAttribute(prop.propName.toLowerCase());
 		const assigned = record[prop.propName];
 		delete record[prop.propName];
 		record[prop.propName] = assigned;

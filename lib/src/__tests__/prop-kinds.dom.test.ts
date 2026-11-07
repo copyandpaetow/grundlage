@@ -112,9 +112,7 @@ describe("a required prop", () => {
 		expect(element.habit).toBe(habit);
 		expect(runs).toEqual(["d:undefined"]);
 		expect(warnings).toEqual([
-			expect.stringContaining(
-				'prop "habit" is required and cannot become undefined',
-			),
+			expect.stringContaining('prop "habit" is required and cannot become undefined'),
 		]);
 	});
 
@@ -144,9 +142,7 @@ describe("a required prop", () => {
 		const { tag } = defineHabitCard();
 		mount(document.createElement(tag));
 		await nextFrame();
-		expect(warnings).toEqual([
-			expect.stringContaining('waits for its required prop "habit"'),
-		]);
+		expect(warnings).toEqual([expect.stringContaining('waits for its required prop "habit"')]);
 	});
 
 	test("on the server, a missing one ends the component with the fix in the message", async () => {
@@ -265,9 +261,7 @@ describe("a binding before definition", () => {
 			),
 		);
 		await sleep();
-		expect(seen).toEqual([
-			{ data: { id: "g" }, label: "hello", level: 2, open: true },
-		]);
+		expect(seen).toEqual([{ data: { id: "g" }, label: "hello", level: 2, open: true }]);
 		expect(child.hasAttribute("label")).toBe(false);
 		expect(child.getAttribute("level")).toBe("2");
 		expect(Object.keys(child)).toEqual([]);
@@ -331,9 +325,7 @@ describe("a dropped binding", () => {
 			{ selected: null, items: ["fallback"] },
 		]);
 		expect(warnings).toEqual([
-			expect.stringContaining(
-				'prop "selected" is required and cannot become undefined',
-			),
+			expect.stringContaining('prop "selected" is required and cannot become undefined'),
 		]);
 	});
 });
@@ -343,9 +335,7 @@ const habitSchema: StandardSchemaV1<unknown, Habit> = {
 		version: 1,
 		vendor: "test",
 		validate: (value) =>
-			typeof value === "object" &&
-			value !== null &&
-			typeof (value as Habit).id === "string"
+			typeof value === "object" && value !== null && typeof (value as Habit).id === "string"
 				? { value: value as Habit }
 				: { issues: [{ message: "a habit needs an id" }] },
 	},
@@ -374,9 +364,7 @@ describe("a Standard Schema", () => {
 		element.habit = { name: "no id" };
 		await sleep();
 		expect(runs).toEqual([]);
-		expect(warnings).toContainEqual(
-			expect.stringContaining("a habit needs an id"),
-		);
+		expect(warnings).toContainEqual(expect.stringContaining("a habit needs an id"));
 
 		element.habit = { id: "h" };
 		await sleep();
@@ -424,10 +412,7 @@ describe("prop.oneOf", () => {
 				},
 				{
 					props: {
-						variant: prop.attribute(
-							prop.oneOf("primary", "secondary"),
-							"primary",
-						),
+						variant: prop.attribute(prop.oneOf("primary", "secondary"), "primary"),
 					},
 				},
 			),
@@ -436,9 +421,7 @@ describe("prop.oneOf", () => {
 		host.innerHTML = `<${tag} variant="tertiary"></${tag}>`;
 		await sleep();
 		expect(seen).toEqual(["primary"]);
-		expect(warnings).toEqual([
-			expect.stringContaining('prop "variant" refused a string'),
-		]);
+		expect(warnings).toEqual([expect.stringContaining('prop "variant" refused a string')]);
 	});
 });
 

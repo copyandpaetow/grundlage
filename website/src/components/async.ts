@@ -1,17 +1,15 @@
 import { awaited, component, html } from "../../../lib/src";
 
 const mockFetch = () =>
-	new Promise<{ name: string; lastName: string; age: string }>(
-		(resolve, reject) => {
-			setTimeout(
-				() =>
-					Math.random() > 0.5
-						? resolve({ name: "tim", lastName: "timson", age: "999" })
-						: reject("faulty"),
-				2000 * Math.random(),
-			);
-		},
-	);
+	new Promise<{ name: string; lastName: string; age: string }>((resolve, reject) => {
+		setTimeout(
+			() =>
+				Math.random() > 0.5
+					? resolve({ name: "tim", lastName: "timson", age: "999" })
+					: reject("faulty"),
+			2000 * Math.random(),
+		);
+	});
 
 customElements.define(
 	"async-component",

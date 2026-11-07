@@ -1,8 +1,6 @@
 import { libraryMessage } from "./diagnostics";
 
-export const isStringable = (
-	value: unknown,
-): value is string | number | bigint | boolean =>
+export const isStringable = (value: unknown): value is string | number | bigint | boolean =>
 	typeof value === "string" ||
 	typeof value === "number" ||
 	typeof value === "bigint" ||
@@ -18,9 +16,8 @@ export const stringifyPrimitive = (value: unknown): string => {
 	return String(value);
 };
 
-export const isPlainObject = (
-	entry: unknown,
-): entry is Record<string, unknown> => entry?.constructor === Object;
+export const isPlainObject = (entry: unknown): entry is Record<string, unknown> =>
+	entry?.constructor === Object;
 
 export const isServer = (): boolean =>
 	typeof window === "undefined" ||

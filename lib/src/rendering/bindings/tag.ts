@@ -28,8 +28,7 @@ export const commitTag = (
 	const newTag = composeParts(parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
 	const switchesIntoForeignContent =
-		FOREIGN_CONTENT_ROOT_TAGS.has(newTag.toLowerCase()) &&
-		element.namespaceURI === HTML_NAMESPACE;
+		FOREIGN_CONTENT_ROOT_TAGS.has(newTag.toLowerCase()) && element.namespaceURI === HTML_NAMESPACE;
 	if (switchesIntoForeignContent)
 		throw new Error(
 			libraryMessage(
@@ -39,8 +38,7 @@ export const commitTag = (
 
 	const focusRoot = element.getRootNode() as ShadowRoot | Document;
 	const focusedNode = focusRoot.activeElement as HTMLElement | null;
-	const focusElement =
-		focusedNode && element.contains(focusedNode) ? focusedNode : null;
+	const focusElement = focusedNode && element.contains(focusedNode) ? focusedNode : null;
 
 	//the placeholder was parsed in the namespace of its position, which an SVG or MathML tag needs
 	let newElement: Element;
@@ -69,14 +67,9 @@ export const commitTag = (
 		sibling.anchor = newElement;
 		//a composed value is a string, so the attribute copy above already carries it
 		const isSingleHoleAttribute =
-			isAttributeBinding(sibling) &&
-			isSingleHoleValue(sibling.staticBinding.valueParts);
+			isAttributeBinding(sibling) && isSingleHoleValue(sibling.staticBinding.valueParts);
 		if (isSingleHoleAttribute)
-			reapplyValueOnSwap(
-				newElement,
-				sibling.lastComposedName,
-				sibling.lastValue,
-			);
+			reapplyValueOnSwap(newElement, sibling.lastComposedName, sibling.lastValue);
 		else if (isDynamicAttributeBinding(sibling))
 			for (const [name, entry] of sibling.appliedAttributes)
 				reapplyValueOnSwap(newElement, name, entry.value);

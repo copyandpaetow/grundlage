@@ -21,15 +21,7 @@ const TOP_SELECTORS = [
 	"li:nth-child(2n + 1)",
 	":host .inner",
 ];
-const NESTED_SELECTORS = [
-	"&:hover",
-	"& .b",
-	".c",
-	"&.d",
-	"> .e",
-	"a:hover",
-	":host &",
-];
+const NESTED_SELECTORS = ["&:hover", "& .b", ".c", "&.d", "> .e", "a:hover", ":host &"];
 const GROUPING_PRELUDES = [
 	"@media (min-width: 600px)",
 	"@supports (display: grid)",
@@ -94,8 +86,7 @@ const writeDeclarations = (builder: Builder) => {
 			builder,
 			`${random() < 0.1 ? name.toUpperCase().replace(/^--.*/, name) : name}:${random() < 0.5 ? " " : ""}`,
 		);
-		for (const slot of slots)
-			slot === null ? writeHole(builder) : write(builder, slot);
+		for (const slot of slots) slot === null ? writeHole(builder) : write(builder, slot);
 		if (random() < 0.1) write(builder, " !important");
 		write(builder, random() < 0.2 ? " /* note */; " : "; ");
 	}
@@ -134,8 +125,7 @@ const writeTopLevelItem = (builder: Builder, depth: number) => {
 		write(builder, "@keyframes spin { from { opacity: 0 } to { ");
 		writeDeclarations(builder);
 		write(builder, "} }\n");
-	} else if (roll < 0.82)
-		write(builder, "@font-face { font-family: x; src: url(x.woff2) }\n");
+	} else if (roll < 0.82) write(builder, "@font-face { font-family: x; src: url(x.woff2) }\n");
 	else if (roll < 0.88 && depth === 0) write(builder, "@layer one, two;\n");
 	else write(builder, "/* } { */\n");
 };

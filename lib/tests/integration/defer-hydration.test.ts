@@ -7,8 +7,7 @@ import { component, html, type YieldableValue, prop } from "../../src/index";
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 let nextTagId = 0;
-const uniqueTag = (role: string) =>
-	`defer-${role}-${nextTagId++}-${Date.now()}`;
+const uniqueTag = (role: string) => `defer-${role}-${nextTagId++}-${Date.now()}`;
 
 const trackedElements: Array<HTMLElement> = [];
 afterEach(() => {
@@ -69,9 +68,7 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 			};
 		});
 
-		expect(
-			shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration"),
-		).toBe(true);
+		expect(shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration")).toBe(true);
 	});
 
 	test("a declared prop with a string spelling rides its attribute and is not marked", async () => {
@@ -82,9 +79,7 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 			};
 		});
 
-		expect(
-			shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration"),
-		).toBe(false);
+		expect(shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration")).toBe(false);
 	});
 
 	test("an undeclared name taking the property mode marks the child", async () => {
@@ -95,9 +90,7 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 			};
 		});
 
-		expect(
-			shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration"),
-		).toBe(true);
+		expect(shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration")).toBe(true);
 	});
 
 	test("a spread carrying an object marks the child, a spread of strings does not", async () => {
@@ -111,12 +104,8 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 			};
 		});
 
-		expect(
-			shadowRoot.querySelector("#carried")!.hasAttribute("defer-hydration"),
-		).toBe(true);
-		expect(
-			shadowRoot.querySelector("#spelled")!.hasAttribute("defer-hydration"),
-		).toBe(false);
+		expect(shadowRoot.querySelector("#carried")!.hasAttribute("defer-hydration")).toBe(true);
+		expect(shadowRoot.querySelector("#spelled")!.hasAttribute("defer-hydration")).toBe(false);
 	});
 
 	//the mark is written into the parent's detached fragment, so it is already on the child when
@@ -154,9 +143,7 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 			};
 		});
 
-		expect(
-			shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration"),
-		).toBe(true);
+		expect(shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration")).toBe(true);
 		expect(childBodyRuns).toBe(1);
 		expect(quoteSeenByChild).toBe("said out loud");
 	});

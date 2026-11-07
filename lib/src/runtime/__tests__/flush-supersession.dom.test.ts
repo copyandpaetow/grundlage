@@ -13,8 +13,7 @@ import { html, component } from "../../index";
 
 let counter = 0;
 const uniqueTag = () => `test-flush-${counter++}-${Date.now()}`;
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 const mount = (constructor: CustomElementConstructor): HTMLElement => {
 	const tag = uniqueTag();
@@ -133,10 +132,7 @@ describe("flush supersession", () => {
 		//parent to settle it, so historically the DOM landed but this update() promise never resolved
 		suspend = false;
 		const settled = element.update().then(() => "resolved");
-		const outcome = await Promise.race([
-			settled,
-			sleep(1000).then(() => "hung"),
-		]);
+		const outcome = await Promise.race([settled, sleep(1000).then(() => "hung")]);
 		expect(outcome).toBe("resolved");
 
 		gate.resolve(); //releasing the abandoned run must not revive it

@@ -144,14 +144,11 @@ export type LiveBinding =
 	| CommentLiveBinding
 	| TemplateContentLiveBinding;
 
-export type AttributeLaneLiveBinding =
-	AttributeLiveBinding | DynamicAttributeLiveBinding;
+export type AttributeLaneLiveBinding = AttributeLiveBinding | DynamicAttributeLiveBinding;
 
 //a switch on `staticBinding.type` narrows the static binding and leaves the live binding as the
 //whole union, so the kind test lives here once per kind instead of as a cast at every call site
-export const isAttributeBinding = (
-	liveBinding: LiveBinding,
-): liveBinding is AttributeLiveBinding =>
+export const isAttributeBinding = (liveBinding: LiveBinding): liveBinding is AttributeLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.ATTRIBUTE;
 
 export const isDynamicAttributeBinding = (
@@ -159,15 +156,12 @@ export const isDynamicAttributeBinding = (
 ): liveBinding is DynamicAttributeLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
 
-export const isContentBinding = (
-	liveBinding: LiveBinding,
-): liveBinding is ContentLiveBinding =>
+export const isContentBinding = (liveBinding: LiveBinding): liveBinding is ContentLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.CONTENT;
 
 export const isRawContentBinding = (
 	liveBinding: LiveBinding,
-): liveBinding is RawContentLiveBinding =>
-	liveBinding.staticBinding.type === BINDING.RAW_CONTENT;
+): liveBinding is RawContentLiveBinding => liveBinding.staticBinding.type === BINDING.RAW_CONTENT;
 
 export const isTemplateContentBinding = (
 	liveBinding: LiveBinding,

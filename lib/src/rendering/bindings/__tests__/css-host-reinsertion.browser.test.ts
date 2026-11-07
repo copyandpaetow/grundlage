@@ -4,8 +4,7 @@ import { html, component } from "../../../index";
 //WebKit serves a host's style from before a setProperty on a rule that matches it, so such a rule
 //is re-inserted after a change; every other rule keeps its object
 //happy-dom resolves no :host inheritance, so only the rule objects are checked there
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 describe("re-inserting a changed rule that can match the host", () => {
 	let tagIndex = 0;
@@ -47,9 +46,7 @@ describe("re-inserting a changed rule that can match the host", () => {
 			values.offset = offset;
 			await host.update();
 			if (isRealBrowser)
-				expect(getComputedStyle(innerOf()).getPropertyValue("--offset")).toBe(
-					`${offset}px`,
-				);
+				expect(getComputedStyle(innerOf()).getPropertyValue("--offset")).toBe(`${offset}px`);
 		}
 		expect(sheetOf().cssRules[0]).not.toBe(hostRuleBefore);
 		expect(sheetOf().cssRules[1]).toBe(innerRuleBefore);

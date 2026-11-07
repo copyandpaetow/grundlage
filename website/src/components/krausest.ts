@@ -15,11 +15,6 @@ import {
     js-framework-benchmark operation suite (create, replace, partial update,
     select, swap, remove, append, clear) against the renderer.
 
-    All measurement (paint-gated timing, DOM-mutation count, baseline/delta)
-    comes from the shared ../measure harness — the executable form of the
-    "Measuring" contract in lib/STYLE_GUIDE.md. This component only defines the
-    operations and renders the results.
-
     "Run suite" executes every op a configurable number of times (with one
     warmup) and records the median. Results can be frozen as a baseline in
     localStorage; subsequent runs render a delta % column against it so
@@ -104,8 +99,7 @@ customElements.define(
 		let baseline: Baseline<OperationResult[]> | null =
 			loadBaseline<OperationResult[]>(BASELINE_STORAGE_KEY);
 
-		const buildLabel = () =>
-			`${pickRandom(ADJECTIVES)} ${pickRandom(COLORS)} ${pickRandom(NOUNS)}`;
+		const buildLabel = () => `${pickRandom(ADJECTIVES)} ${pickRandom(COLORS)} ${pickRandom(NOUNS)}`;
 
 		const buildRows = (count: number): Array<Row> => {
 			const next = new Array<Row>(count);
@@ -209,8 +203,7 @@ customElements.define(
 				},
 				apply: () => {
 					const more = buildRows(1000);
-					for (let index = 0; index < more.length; index++)
-						rows.push(more[index]);
+					for (let index = 0; index < more.length; index++) rows.push(more[index]);
 				},
 			},
 			{
@@ -229,9 +222,7 @@ customElements.define(
 		// reflect the op under test. The list container is structurally stable
 		// across renders; fall back to the shadow root before the first paint.
 		const listRoot = (): Node =>
-			element.shadowRoot?.querySelector(".list-shell") ??
-			element.shadowRoot ??
-			element;
+			element.shadowRoot?.querySelector(".list-shell") ?? element.shadowRoot ?? element;
 
 		// Wrap a domain op as a measurable one: apply mutates state AND triggers
 		// the render (the harness times to paint), and records the painted count.
@@ -287,10 +278,7 @@ customElements.define(
 
 		const promoteToBaseline = () => {
 			if (measurements.size === 0) return;
-			baseline = saveBaseline(
-				BASELINE_STORAGE_KEY,
-				Array.from(measurements.values()),
-			);
+			baseline = saveBaseline(BASELINE_STORAGE_KEY, Array.from(measurements.values()));
 			element.update();
 		};
 
@@ -455,11 +443,7 @@ customElements.define(
 				</div>
 
 				<div class="status">
-					${
-						isRunning
-							? html`running: ${activeOperation ?? "suite"}…`
-							: html`idle`
-					}
+					${isRunning ? html`running: ${activeOperation ?? "suite"}…` : html`idle`}
 				</div>
 
 				${
@@ -482,8 +466,7 @@ customElements.define(
 											? ""
 											: measurement.minAppliedMs > previous.minAppliedMs * 1.02
 												? "regress"
-												: measurement.minAppliedMs <
-													  previous.minAppliedMs * 0.98
+												: measurement.minAppliedMs < previous.minAppliedMs * 0.98
 													? "improve"
 													: "";
 										const writesClass = !previous
@@ -505,10 +488,7 @@ customElements.define(
 													previous
 														? html`
 																<span class="${msClass}"
-																	>${formatDelta(
-																		measurement.minAppliedMs,
-																		previous.minAppliedMs,
-																	)}
+																	>${formatDelta(measurement.minAppliedMs, previous.minAppliedMs)}
 																	ms</span
 																>
 																<span class="${writesClass}"
@@ -536,9 +516,7 @@ customElements.define(
 								(row) => html`
 									<!--${row.identifier}-->
 									<tr
-										class="${
-											row.identifier === selectedIdentifier ? "selected" : ""
-										}"
+										class="${row.identifier === selectedIdentifier ? "selected" : ""}"
 									>
 										<td>${row.identifier}</td>
 										<td>${row.label}</td>

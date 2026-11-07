@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html, component, prop } from "../../src/index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("BaseComponent.setProp", () => {
 	let tagId = 0;
@@ -35,9 +34,7 @@ describe("BaseComponent.setProp", () => {
 		await sleep(50);
 
 		expect(element.getAttribute("data-label")).toBe("hello");
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"hello",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("hello");
 
 		element.remove();
 	});
@@ -89,17 +86,12 @@ describe("dynamic comment bindings", () => {
 		});
 
 		customElements.define(tag, MyElement);
-		const element = document.createElement(tag) as InstanceType<
-			typeof MyElement
-		>;
+		const element = document.createElement(tag) as InstanceType<typeof MyElement>;
 		document.body.appendChild(element);
 		await sleep();
 
 		const findDynamicComment = () => {
-			const walker = document.createTreeWalker(
-				element.shadowRoot!,
-				NodeFilter.SHOW_COMMENT,
-			);
+			const walker = document.createTreeWalker(element.shadowRoot!, NodeFilter.SHOW_COMMENT);
 			let node: Node | null;
 			while ((node = walker.nextNode())) {
 				//markers start with the "^.^" identifier — ignore them
@@ -125,15 +117,11 @@ describe("dynamic comment bindings", () => {
 
 describe("component() input validation", () => {
 	test("a plain function throws a naming error at definition time", () => {
-		expect(() => component((() => html`<p>x</p>`) as never)).toThrow(
-			/generator function/,
-		);
+		expect(() => component((() => html`<p>x</p>`) as never)).toThrow(/generator function/);
 	});
 
 	test("an async non-generator function throws at definition time", () => {
-		expect(() => component((async () => {}) as never)).toThrow(
-			/generator function/,
-		);
+		expect(() => component((async () => {}) as never)).toThrow(/generator function/);
 	});
 
 	test("a sync generator function is accepted", () => {
@@ -142,9 +130,7 @@ describe("component() input validation", () => {
 
 	test("an async generator function throws with the remedy", () => {
 		//the type layer rejects it, which is what the runtime check is for
-		expect(() => component(async function* () {} as never)).toThrow(
-			"yield each promise",
-		);
+		expect(() => component(async function* () {} as never)).toThrow("yield each promise");
 	});
 });
 
@@ -189,8 +175,7 @@ describe("BaseComponent.setProp on a declared prop", () => {
 				{
 					props: {
 						evenOnly: prop.attribute(
-							(incoming: unknown) =>
-								Number(incoming) % 2 === 0 ? Number(incoming) : undefined,
+							(incoming: unknown) => (Number(incoming) % 2 === 0 ? Number(incoming) : undefined),
 							0,
 						),
 					},

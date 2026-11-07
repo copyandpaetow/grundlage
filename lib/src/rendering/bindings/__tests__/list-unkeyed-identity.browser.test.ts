@@ -27,9 +27,7 @@ describe("unkeyed lists of identical rows", () => {
 		Array.from(element.shadowRoot!.querySelectorAll("li"));
 
 	const inputValues = (element: HTMLElement) =>
-		Array.from(element.shadowRoot!.querySelectorAll("input")).map(
-			(input) => input.value,
-		);
+		Array.from(element.shadowRoot!.querySelectorAll("input")).map((input) => input.value);
 
 	test("editing the first row leaves the other rows' nodes untouched", async () => {
 		let texts = ["same", "same", "same"];

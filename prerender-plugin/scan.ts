@@ -22,8 +22,7 @@ export const NOT_CLOSED = -1;
 export const PRERENDER_ATTRIBUTE = "ssr";
 
 export const PRERENDER_CHOICE = { INHERIT: 0, ON: 1, OFF: 2 } as const;
-type PrerenderChoiceKind =
-	(typeof PRERENDER_CHOICE)[keyof typeof PRERENDER_CHOICE];
+type PrerenderChoiceKind = (typeof PRERENDER_CHOICE)[keyof typeof PRERENDER_CHOICE];
 
 const customElementName = "[a-z][a-z0-9._]*-[a-z0-9._-]*";
 const attributeText = `((?:"[^"]*"|'[^']*'|[^>])*)`;
@@ -36,12 +35,9 @@ const elementScanPattern = new RegExp(
 	"g",
 );
 
-const attributePattern =
-	/([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+const attributePattern = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 
-export const parseAttributes = (
-	rawAttributes: string,
-): Array<[string, string]> => {
+export const parseAttributes = (rawAttributes: string): Array<[string, string]> => {
 	const pairs: Array<[string, string]> = [];
 	for (const match of rawAttributes.matchAll(attributePattern)) {
 		const [, name, doubleQuoted, singleQuoted, bare] = match;
@@ -57,18 +53,14 @@ export const prerenderChoiceOfValue = (
 ): PrerenderChoiceKind => {
 	if (value === null) return PRERENDER_CHOICE.INHERIT;
 	const lowercasedValue = value.toLowerCase();
-	if (lowercasedValue === "" || lowercasedValue === "true")
-		return PRERENDER_CHOICE.ON;
+	if (lowercasedValue === "" || lowercasedValue === "true") return PRERENDER_CHOICE.ON;
 	if (lowercasedValue === "false") return PRERENDER_CHOICE.OFF;
 	throw new Error(
 		`[prerender] ssr="${value}" on <${tagName}> is not a value the plugin reads. Use ssr or ssr="true" to prerender the element, ssr="false" to leave it for the browser.`,
 	);
 };
 
-const prerenderChoiceOf = (
-	tagName: string,
-	rawAttributes: string,
-): PrerenderChoiceKind => {
+const prerenderChoiceOf = (tagName: string, rawAttributes: string): PrerenderChoiceKind => {
 	const attribute = parseAttributes(rawAttributes).find(
 		([name]) => name.toLowerCase() === PRERENDER_ATTRIBUTE,
 	);
@@ -79,13 +71,10 @@ const resolvePrerenderChoice = (
 	choice: PrerenderChoiceKind,
 	isInheritedPrerendered: boolean,
 ): boolean =>
-	choice === PRERENDER_CHOICE.INHERIT
-		? isInheritedPrerendered
-		: choice === PRERENDER_CHOICE.ON;
+	choice === PRERENDER_CHOICE.INHERIT ? isInheritedPrerendered : choice === PRERENDER_CHOICE.ON;
 
 //a cheap first look for pages no setting includes: a match only means the full scan runs
-export const mayCarryPrerenderAttribute = (html: string): boolean =>
-	/\sssr(?=[\s=/>])/i.test(html);
+export const mayCarryPrerenderAttribute = (html: string): boolean => /\sssr(?=[\s=/>])/i.test(html);
 
 export const findCustomElements = (
 	html: string,
@@ -124,9 +113,7 @@ export const findCustomElements = (
 				hasOwnPrerenderAttribute: choice !== PRERENDER_CHOICE.INHERIT,
 				isPrerendered: resolvePrerenderChoice(
 					choice,
-					parentIndex === NO_PARENT
-						? isPagePrerendered
-						: elements[parentIndex].isPrerendered,
+					parentIndex === NO_PARENT ? isPagePrerendered : elements[parentIndex].isPrerendered,
 				),
 				parentIndex,
 				startIndex: match.index,

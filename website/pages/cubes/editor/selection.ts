@@ -20,18 +20,14 @@ export type SelectionApi = {
 	pickBlock: (event: PointerEvent) => HTMLElement | null;
 };
 
-export const createSelection = (
-	state: EditorState,
-	deps: SelectionDeps,
-): SelectionApi => {
+export const createSelection = (state: EditorState, deps: SelectionDeps): SelectionApi => {
 	const { updateInspector } = deps;
 
 	// The gizmo and cage read their content only when rendering, so whoever changes it
 	// re-renders them
 	const repaintSelection = (): void => {
 		if (state.gizmo !== null) void sceneElementRendered(state.gizmo);
-		if (state.sceneSelect !== null)
-			void sceneElementRendered(state.sceneSelect);
+		if (state.sceneSelect !== null) void sceneElementRendered(state.sceneSelect);
 	};
 
 	// An inspector edit re-renders the block asynchronously; the selection chrome only
@@ -132,24 +128,16 @@ export const createSelection = (
 	const pickBlock = (event: PointerEvent): HTMLElement | null => {
 		const blocksOutermostFirst = event
 			.composedPath()
-			.filter(
-				(node): node is HTMLElement =>
-					node instanceof HTMLElement && isBlock(node),
-			)
+			.filter((node): node is HTMLElement => node instanceof HTMLElement && isBlock(node))
 			.reverse();
 		const selectionParent = state.gizmo?.parentElement ?? null;
 		const selectionParentIndex =
-			selectionParent === null
-				? -1
-				: blocksOutermostFirst.indexOf(selectionParent);
+			selectionParent === null ? -1 : blocksOutermostFirst.indexOf(selectionParent);
 		const candidates = blocksOutermostFirst.slice(selectionParentIndex + 1);
 
-		const selectedIndex = candidates.findIndex((block) =>
-			state.selection.has(block),
-		);
+		const selectedIndex = candidates.findIndex((block) => state.selection.has(block));
 		const isTogglingSelection = event.metaKey || event.ctrlKey;
-		if (selectedIndex === -1 || isTogglingSelection)
-			return candidates[0] ?? null;
+		if (selectedIndex === -1 || isTogglingSelection) return candidates[0] ?? null;
 		return candidates[selectedIndex + 1] ?? candidates[selectedIndex];
 	};
 

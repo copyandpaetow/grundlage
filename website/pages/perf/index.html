@@ -13,12 +13,11 @@
 		<main>
 			<h1>perf harness</h1>
 			<p>
-				The direct-binding baseline: twenty bars bound individually in the
-				template (no array, no list diff). Self-drives; <em>measure</em> hands
-				its loop to the shared <code>measureWindow</code> harness and reports
-				fps, frame time, DOM writes per frame, and heap delta. Compare against
-				<code>raf-animation-list</code> to isolate list-reconciliation cost from
-				plain per-hole updates. <code>duration</code> sets the window length.
+				The direct-binding baseline: twenty bars bound individually in the template (no array, no
+				list diff). Self-drives; <em>measure</em> hands its loop to the shared
+				<code>measureWindow</code> harness and reports fps, frame time, DOM writes per frame, and
+				heap delta. Compare against <code>raf-animation-list</code> to isolate list-reconciliation
+				cost from plain per-hole updates. <code>duration</code> sets the window length.
 			</p>
 			<perf-harness duration="3000"></perf-harness>
 		</main>

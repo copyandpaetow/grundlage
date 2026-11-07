@@ -1,7 +1,6 @@
 //loaded by the plugin through vite's ssr pipeline, never imported by the test file itself:
 //it needs the happy-dom globals the plugin installs first
-import { component, html } from "../../lib/src";
-import { load } from "../../lib/src/load";
+import { awaited, component, html, load } from "../../lib/src";
 import { TAGS } from "./tags";
 
 customElements.define(
@@ -62,7 +61,7 @@ customElements.define(
 customElements.define(
 	TAGS.asyncPreYield,
 	component(function* () {
-		const value: string = yield Promise.resolve("resolved-value");
+		const value = yield* awaited(Promise.resolve("resolved-value"));
 		yield function* view() {
 			yield html`<p>${value}</p>`;
 		};
@@ -202,9 +201,7 @@ customElements.define(
 	TAGS.withoutShadowRoot,
 	class extends HTMLElement {
 		connectedCallback() {
-			(
-				globalThis as { withoutShadowRootConnected?: boolean }
-			).withoutShadowRootConnected = true;
+			(globalThis as { withoutShadowRootConnected?: boolean }).withoutShadowRootConnected = true;
 		}
 	},
 );
@@ -269,9 +266,7 @@ customElements.define(
 		yield new Promise((resolve) => setTimeout(resolve, 20));
 		//a second level, so the plugin also waits for a child that only exists once its parent waited
 		const grandchild =
-			depth === 1
-				? html`<ssr-waiting-child data-depth="2"></ssr-waiting-child>`
-				: null;
+			depth === 1 ? html`<ssr-waiting-child data-depth="2"></ssr-waiting-child>` : null;
 		yield html`<b>${`waiting-child-${depth}`}</b>${grandchild}`;
 	}),
 );
@@ -322,8 +317,7 @@ customElements.define(
 	TAGS.foreignPainter,
 	class extends HTMLElement {
 		connectedCallback() {
-			this.attachShadow({ mode: "open", serializable: true }).innerHTML =
-				"<p>foreign-painted</p>";
+			this.attachShadow({ mode: "open", serializable: true }).innerHTML = "<p>foreign-painted</p>";
 		}
 	},
 );
