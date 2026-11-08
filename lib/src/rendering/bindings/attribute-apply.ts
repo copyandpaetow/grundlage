@@ -43,6 +43,7 @@ export const isDeclaredPropName = (element: Element, name: string): boolean => {
 	const cached = declaredPropNamesByLocalName.get(localName);
 	if (cached !== undefined) return cached.has(name);
 	//the registry types a definition as a bare constructor; a component class adds the static
+	//oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- the cast adds the static read below
 	const definition = customElements.get(localName) as
 		| (CustomElementConstructor & {
 				[DECLARED_PROP_NAMES]?: ReadonlySet<string>;

@@ -6,8 +6,8 @@ import {
 	placementVariables,
 } from "../scene-shared";
 
-// The geometries' authoring contract minus `size`, which would distort the children, so
-// the editor drags a group with a cube's code path
+//The geometries' authoring contract minus `size`, which would distort the children, so
+//the editor drags a group with a cube's code path
 
 const groupStyles = html`
 	<style>

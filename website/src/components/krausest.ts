@@ -121,9 +121,9 @@ customElements.define(
 			return next;
 		};
 
-		// Each op returns a function that mutates `rows` (and possibly selection)
-		// to its target state. Preconditions (e.g. "partial update needs 1000
-		// rows") are handled per-op so the suite can run them in any order.
+		//Each op returns a function that mutates `rows` (and possibly selection)
+		//to its target state. Preconditions (e.g. "partial update needs 1000
+		//rows") are handled per-op so the suite can run them in any order.
 		const operations: Array<{
 			label: string;
 			prepare: () => void;
@@ -230,14 +230,14 @@ customElements.define(
 			},
 		];
 
-		// Observe only the list, not the harness chrome, so mutation counts
-		// reflect the op under test. The list container is structurally stable
-		// across renders; fall back to the shadow root before the first paint.
+		//Observe only the list, not the harness chrome, so mutation counts
+		//reflect the op under test. The list container is structurally stable
+		//across renders; fall back to the shadow root before the first paint.
 		const listRoot = (): Node =>
 			element.shadowRoot?.querySelector(".list-shell") ?? element.shadowRoot ?? element;
 
-		// Wrap a domain op as a measurable one: apply mutates state AND triggers
-		// the render (the harness times to paint), and records the painted count.
+		//Wrap a domain op as a measurable one: apply mutates state AND triggers
+		//the render (the harness times to paint), and records the painted count.
 		const measurableOf = (op: (typeof operations)[number]): Operation => ({
 			label: op.label,
 			prepare: () => {
@@ -274,7 +274,7 @@ customElements.define(
 			for (let index = 0; index < operations.length; index++) {
 				await runOperation(operations[index]);
 			}
-			// eslint-disable-next-line no-console
+			//eslint-disable-next-line no-console
 			console.log(
 				"[krausest] suite results",
 				JSON.stringify(
@@ -471,9 +471,9 @@ customElements.define(
 									<div class="head">vs baseline</div>
 									${Array.from(measurements.values()).map((measurement) => {
 										const previous = baselineFor(measurement.label);
-										// the delta rides on min applied ms — the one timing here that resolves
-										// a change smaller than a frame. DOM writes are deterministic, so
-										// compare them exactly — any drift is a real false-write signal.
+										//the delta rides on min applied ms — the one timing here that resolves
+										//a change smaller than a frame. DOM writes are deterministic, so
+										//compare them exactly — any drift is a real false-write signal.
 										const msClass = previous
 											? timeClassOf(measurement.minAppliedMs, previous.minAppliedMs)
 											: "";

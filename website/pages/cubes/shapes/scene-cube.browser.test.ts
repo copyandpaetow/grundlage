@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "vitest";
 import "./scene-cube";
 
-// Real Chromium, because the size lives in registered custom properties: happy-dom
-// ignores the registration, so a scale that never reaches the faces passes there.
-// No perspective is set, so a front face measures its true width on screen.
+//Real Chromium, because the size lives in registered custom properties: happy-dom
+//ignores the registration, so a scale that never reaches the faces passes there.
+//No perspective is set, so a front face measures its true width on screen.
 
 const created: HTMLElement[] = [];
 

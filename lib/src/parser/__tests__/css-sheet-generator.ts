@@ -1,12 +1,15 @@
 import { Part } from "../types";
 
 //well-formed sheets with holes only in declaration values, the shape real components write
-export const createRandom = (seed: number) => () => {
-	seed = (seed * 1664525 + 1013904223) >>> 0;
-	return seed / 2 ** 32;
-};
 
 type Random = () => number;
+
+export const createRandom =
+	(seed: number): Random =>
+	() => {
+		seed = (seed * 1664525 + 1013904223) >>> 0;
+		return seed / 2 ** 32;
+	};
 
 const pick = <Item>(random: Random, items: ReadonlyArray<Item>): Item =>
 	items[Math.floor(random() * items.length)];
@@ -133,7 +136,7 @@ const writeTopLevelItem = (builder: Builder, depth: number) => {
 	else write(builder, "/* } { */\n");
 };
 
-export const generateSheet = (random: Random) => {
+export const generateSheet = (random: Random): Pick<Builder, "parts" | "holeValues"> => {
 	const builder: Builder = {
 		random,
 		parts: [],

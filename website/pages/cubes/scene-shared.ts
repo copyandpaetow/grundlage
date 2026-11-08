@@ -1,8 +1,8 @@
-import { html, prop, type Resolve } from "../../../lib/src";
+import { html, prop, type Resolve, type Template } from "../../../lib/src";
 import { UNIT_SIZE } from "./unit-size";
 
-// Attributes are the committed, serializable state; --position-*, --rotation-* and
-// --size-* carry raw numbers, and CSS does the arithmetic.
+//Attributes are the committed, serializable state; --position-*, --rotation-* and
+//--size-* carry raw numbers, and CSS does the arithmetic.
 
 export { UNIT_SIZE };
 export const HALF_UNIT = UNIT_SIZE / 2;
@@ -15,13 +15,13 @@ export type Vector3 = [number, number, number];
 
 export const snapToGrid = (value: number): number => Math.round(value / GRID_SNAP) * GRID_SNAP;
 
-// Exported markup reads `2` and `1.5`, never `2.000000001`, `1.50` or `-0`.
+//Exported markup reads `2` and `1.5`, never `2.000000001`, `1.50` or `-0`.
 export const formatNumber = (value: number): string => {
 	const rounded = Math.round(value * 1000) / 1000;
 	return Object.is(rounded, -0) ? "0" : String(rounded);
 };
 
-// Non-inheriting: inherited, a group's rotation would apply to each member twice
+//Non-inheriting: inherited, a group's rotation would apply to each member twice
 const registeredProperties: PropertyDefinition[] = [
 	{
 		name: "--unit",
@@ -48,7 +48,7 @@ const registeredProperties: PropertyDefinition[] = [
 			inherits: false,
 			initialValue: "1",
 		},
-		// Bounds read these back as px, which an unregistered calc() would never resolve to
+		//Bounds read these back as px, which an unregistered calc() would never resolve to
 		{
 			name: `--block-extent-${axis}`,
 			syntax: "<length>",
@@ -62,13 +62,13 @@ export const registerProperties = (definitions: PropertyDefinition[]): void => {
 		try {
 			CSS.registerProperty(definition);
 		} catch {
-			// A hot reload evaluates this module again, and the first registration stands
+			//A hot reload evaluates this module again, and the first registration stands
 		}
 	}
 };
 registerProperties(registeredProperties);
 
-// Author +Y is up and screen +Y is down; Y is negated here and nowhere else
+//Author +Y is up and screen +Y is down; Y is negated here and nowhere else
 export const placementStyles = html`
 	<style>
 		:host {
@@ -95,7 +95,7 @@ export const placementStyles = html`
 	</style>
 `;
 
-export const placementVariables = ({ position, rotation, size }: BlockTransform) => html`
+export const placementVariables = ({ position, rotation, size }: BlockTransform): Template => html`
 	<style>
 		:host {
 			--position-x: ${position[0]};
@@ -111,12 +111,12 @@ export const placementVariables = ({ position, rotation, size }: BlockTransform)
 	</style>
 `;
 
-// The size does not inherit, so the body gets its own copy of the host's; pulled down with
-// `inherit` instead, WebKit never re-resolves the scale when the size changes
+//The size does not inherit, so the body gets its own copy of the host's; pulled down with
+//`inherit` instead, WebKit never re-resolves the scale when the size changes
 export const bodySizeVariables = ([sizeX, sizeY, sizeZ]: Vector3): string =>
 	`--size-x: ${sizeX}; --size-y: ${sizeY}; --size-z: ${sizeZ};`;
 
-// Never refuses, so malformed markup keeps the element rendering
+//Never refuses, so malformed markup keeps the element rendering
 const asTriple =
 	(fallback: number): Resolve<Vector3> =>
 	(incoming) => {
@@ -156,7 +156,7 @@ const rotationProps = {
 	"rotate-z": prop.optional(prop.attribute(Number)),
 };
 
-// Declared, so the editor's setAttribute re-renders the element without driving it
+//Declared, so the editor's setAttribute re-renders the element without driving it
 export const geometryProps = {
 	...sizeProps,
 	...positionProps,
@@ -224,8 +224,8 @@ const readNumber = (element: Element, name: string): number | undefined => {
 	return Number.isNaN(parsed) ? undefined : parsed;
 };
 
-// The editor authors markup, so it resolves transforms straight off attributes and
-// works on elements whose definition never loaded.
+//The editor authors markup, so it resolves transforms straight off attributes and
+//works on elements whose definition never loaded.
 export const blockTransformFromAttributes = (element: Element): BlockTransform =>
 	blockTransformFromProps({
 		size: readTriple(asSizeTriple, element, "size"),
@@ -242,13 +242,13 @@ export const blockTransformFromAttributes = (element: Element): BlockTransform =
 		"rotate-z": readNumber(element, "rotate-z"),
 	});
 
-// The per-axis attributes an edit to a shorthand has to clear.
+//The per-axis attributes an edit to a shorthand has to clear.
 export const SIZE_SPECIFIC = ["width", "height", "depth"] as const;
 export const POSITION_SPECIFIC = ["x", "y", "z"] as const;
 export const ROTATION_SPECIFIC = ["rotate-x", "rotate-y", "rotate-z"] as const;
 
-// Joins the render an attribute write scheduled, or starts one for a content change,
-// so a following measure sees the committed state
+//Joins the render an attribute write scheduled, or starts one for a content change,
+//so a following measure sees the committed state
 export const sceneElementRendered = (element: HTMLElement): Promise<void> => {
 	const update = (element as Partial<{ update: () => Promise<void> }>).update;
 	return typeof update === "function" ? update.call(element) : Promise.resolve();

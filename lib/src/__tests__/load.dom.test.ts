@@ -155,7 +155,7 @@ describe("the server writes one script per load, in call order, at the first pai
 		const [script] = payloadScriptsOf(host.shadowRoot!);
 		expect(script.textContent).not.toContain("</script>");
 		expect(script.textContent).toContain("\\u003c/script>");
-		expect(JSON.parse(script.textContent!)).toEqual(value);
+		expect(JSON.parse(script.textContent)).toEqual(value);
 	});
 
 	test("undefined is written as null, since JSON.stringify(undefined) is no string", () => {

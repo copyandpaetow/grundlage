@@ -1,4 +1,4 @@
-// The CSS perspective is the focal length
+//The CSS perspective is the focal length
 export type View = {
 	cameraX: number;
 	cameraY: number;
@@ -13,12 +13,12 @@ export type View = {
 	halfHeight: number;
 };
 
-// A world point in camera space: x right, y down, depth away from the eye.
+//A world point in camera space: x right, y down, depth away from the eye.
 export type ViewPoint = { x: number; y: number; depth: number };
 
-// view = Rx(-pitch) · Ry(-yaw) · (point - camera), as scene-world's transform applies it.
-// The world backs off by the orbit radius before it rotates, so depth = orbitRadius - view.z.
-// Writes into `viewPoint`, so a frame's thousands of corners allocate nothing.
+//view = Rx(-pitch) · Ry(-yaw) · (point - camera), as scene-world's transform applies it.
+//The world backs off by the orbit radius before it rotates, so depth = orbitRadius - view.z.
+//Writes into `viewPoint`, so a frame's thousands of corners allocate nothing.
 export const writeViewPoint = (
 	view: View,
 	worldX: number,

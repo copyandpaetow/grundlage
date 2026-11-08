@@ -2,14 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { component, html, prop } from "../index";
 import * as grundlage from "../index";
 import { DECLARED_PROP_NAMES } from "../rendering/constants";
-import {
-	BaseComponent,
-	ComponentOptions,
-	ComponentProps,
-	Schema,
-	PropDefinition,
-	Template,
-} from "../types";
+import { BaseComponent, ComponentOptions, ComponentProps, Schema, PropDefinition } from "../types";
 
 //The slot half of the light-DOM spec (light-dom/RULES.md R8—R22). Slots are a schema entry, so
 //most of these rules hold in both modes; the mode only decides what happens to a child no entry
@@ -125,7 +118,7 @@ describe("R8—R9 — a slot is a prop", () => {
 						yield html`<p>x</p>`;
 					};
 				},
-				{ mode: "closed", props: { heading: Slot } } as ComponentOptions,
+				{ mode: "closed", props: { heading: Slot } },
 			),
 		);
 		expect(warnings.length).toBe(1);
@@ -301,7 +294,7 @@ describe("R10—R12 — the value", () => {
 			const host = withChildren(tag, "");
 			await sleep();
 
-			writeSlot(host, "heading", html`<h2>Ada</h2>` as Template);
+			writeSlot(host, "heading", html`<h2>Ada</h2>`);
 			await host.update();
 			expect(host.querySelectorAll("h2").length).toBe(2);
 
@@ -442,7 +435,7 @@ describe("R16—R20 — fallbacks and ownership", () => {
 			holder.innerHTML = `<${tag}><h2 slot="heading">Ada</h2></${tag}>`;
 			const host = holder.firstElementChild as BaseComponent;
 			const [, warnings] = silenced(() => {
-				writeSlot(host, "heading", html`<h2>Grace</h2>` as Template);
+				writeSlot(host, "heading", html`<h2>Grace</h2>`);
 				document.body.append(holder);
 			});
 			await sleep();
@@ -547,7 +540,7 @@ describe("R21—R22 — <slot> and late children", () => {
 							yield html`<slot name="heading"></slot>`;
 						};
 					},
-					{ props: { heading: Slot } } as ComponentOptions,
+					{ props: { heading: Slot } },
 				),
 				"",
 			);
@@ -568,7 +561,7 @@ describe("R21—R22 — <slot> and late children", () => {
 							yield html`<slot name="badges"></slot>`;
 						};
 					},
-					{ props: { heading: Slot } } as ComponentOptions,
+					{ props: { heading: Slot } },
 				),
 				`<span slot="badges">1843</span>`,
 			);

@@ -475,8 +475,12 @@ describe("parentheses", () => {
 	});
 
 	test("a bracket closes only its own block", () => {
-		const plan = compileOrThrow([".a{grid-area:[a);b];width:", 0, "}"]);
-		expect(plan.declarations.map(({ propertyName }) => propertyName)).toEqual(["width"]);
+		const plan = compileOrThrow([".a{width:", 0, " [a);b]}"]);
+		expect(plan.declarations[0].valueParts).toEqual([0, " [a);b]"]);
+	});
+
+	test("an unclosed parenthesis in an at-rule's prelude bails", () => {
+		expect(compileStyleSheet([".a{width:", 0, "}@media (x"])).toBe(STYLE_SHEET_NOT_COMPILED);
 	});
 
 	test("a backslash that ends the sheet bails instead of reading past the end", () => {

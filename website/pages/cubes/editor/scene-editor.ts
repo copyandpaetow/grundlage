@@ -23,20 +23,20 @@ import { createPlacement } from "./placement";
 import { createGrouping } from "./grouping";
 import { exportScene } from "./serialization";
 
-// The editor is never the source of truth: selection is DOM-native and the gizmo writes
-// the block's own attributes, so the world's markup is the whole scene
+//The editor is never the source of truth: selection is DOM-native and the gizmo writes
+//the block's own attributes, so the world's markup is the whole scene
 
-// A scaled group would distort its children
+//A scaled group would distort its children
 const SIZED_TAGS = new Set(["scene-cube", "scene-wall", "scene-ramp"]);
 
-// Editing a shorthand clears the per-axis override it would otherwise lose to.
+//Editing a shorthand clears the per-axis override it would otherwise lose to.
 const FIELD_SPECIFIC: Record<InspectorField, readonly [string, string, string]> = {
 	position: POSITION_SPECIFIC,
 	rotation: ROTATION_SPECIFIC,
 	size: SIZE_SPECIFIC,
 };
 
-// One literal for both paints, so adding the palette patches the shell, not the slot
+//One literal for both paints, so adding the palette patches the shell, not the slot
 const editorShell = (palette: Template | null) => html`
 	<style>
 		:host {
@@ -51,7 +51,7 @@ const editorShell = (palette: Template | null) => html`
 	${palette}
 `;
 
-// A press on the chrome is never a click into the scene behind it.
+//A press on the chrome is never a click into the scene behind it.
 const keepPointerOutOfScene = (event: Event): void => event.stopPropagation();
 
 customElements.define(
@@ -59,7 +59,7 @@ customElements.define(
 	component(function* ({ host }) {
 		yield editorShell(null);
 
-		// Client only, so a server render emits the scene without editor chrome
+		//Client only, so a server render emits the scene without editor chrome
 		const world = host.querySelector<HTMLElement>("scene-world");
 		if (world === null) return;
 		const cameraElement = host.querySelector("scene-camera");
@@ -73,7 +73,7 @@ customElements.define(
 			placement: null,
 		};
 
-		// Undefined while zero or many blocks are selected, which hides the panel.
+		//Undefined while zero or many blocks are selected, which hides the panel.
 		let inspector: InspectorState | undefined;
 
 		const updateInspector = (): void => {
@@ -92,7 +92,7 @@ customElements.define(
 			void host.update();
 		};
 
-		// Injected, so no two subsystems import each other
+		//Injected, so no two subsystems import each other
 		const selection = createSelection(state, { updateInspector });
 		const placement = createPlacement(state, {
 			select: selection.select,
@@ -118,7 +118,7 @@ customElements.define(
 			void selection.signalGizmoResync(block);
 		};
 
-		// Read off the camera's own attribute rather than mirrored, so it cannot drift.
+		//Read off the camera's own attribute rather than mirrored, so it cannot drift.
 		const cameraMode = (): CameraMode | null => {
 			if (cameraElement === null) return null;
 			return cameraElement.getAttribute("mode") === "orbit" ? "orbit" : "free";
@@ -161,7 +161,7 @@ customElements.define(
 
 		const onPointerDown = (event: PointerEvent): void => {
 			if (event.button !== 0) return;
-			// Alt + drag is the camera's look gesture, so it is never a selection click.
+			//Alt + drag is the camera's look gesture, so it is never a selection click.
 			if (event.altKey) return;
 			if (state.placement !== null) {
 				event.preventDefault();
@@ -179,7 +179,7 @@ customElements.define(
 		};
 
 		const onKeyDown = (event: KeyboardEvent): void => {
-			// At window scope the target is retargeted to the input's shadow host
+			//At window scope the target is retargeted to the input's shadow host
 			if (event.composedPath()[0] instanceof HTMLInputElement) return;
 			if (event.key === "Escape") {
 				placement.cancelPlacement();

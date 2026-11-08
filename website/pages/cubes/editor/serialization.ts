@@ -1,11 +1,11 @@
 import { blockTransformFromAttributes, formatNumber } from "../scene-shared";
 import { isBlock } from "../scene-geometry";
 
-// Shorthand and per-axis attributes collapse into one triple, so a reader never resolves
-// precedence
+//Shorthand and per-axis attributes collapse into one triple, so a reader never resolves
+//precedence
 
-// A selected block sits inside scene-gizmo > scene-select, at any depth; the placement
-// ghost is a transient preview and stays out.
+//A selected block sits inside scene-gizmo > scene-select, at any depth; the placement
+//ghost is a transient preview and stays out.
 const childBlocksOf = (parent: Element): Element[] =>
 	Array.from(parent.children).flatMap((child) => {
 		if (isBlock(child)) return [child];

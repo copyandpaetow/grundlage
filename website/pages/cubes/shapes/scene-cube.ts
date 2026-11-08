@@ -7,8 +7,8 @@ import {
 	placementVariables,
 } from "../scene-shared";
 
-// Size is scale3d on the .body alone, never a layout property, so child blocks keep the
-// world grid
+//Size is scale3d on the .body alone, never a layout property, so child blocks keep the
+//world grid
 
 const cubeStyles = html`
 	<style>

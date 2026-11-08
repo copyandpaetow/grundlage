@@ -7,8 +7,8 @@ import {
 	placementVariables,
 } from "../scene-shared";
 
-// Authored as a flat surface, so the baked depth is a fraction of the unit that `depth`
-// still scales. Slim edge faces keep the slab solid at grazing angles.
+//Authored as a flat surface, so the baked depth is a fraction of the unit that `depth`
+//still scales. Slim edge faces keep the slab solid at grazing angles.
 
 const wallStyles = html`
 	<style>

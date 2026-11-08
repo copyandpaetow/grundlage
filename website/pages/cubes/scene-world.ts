@@ -2,9 +2,9 @@ import { html, component, prop } from "../../../lib/src";
 import { startSceneCulling } from "./scene-culling";
 import { registerProperties } from "./scene-shared";
 
-// One inverse-camera transform the whole scene inherits, so a camera move is one write and
-// no per-block work. The view lives in the world's own camera-* attributes, so a copied world
-// keeps it.
+//One inverse-camera transform the whole scene inherits, so a camera move is one write and
+//no per-block work. The view lives in the world's own camera-* attributes, so a copied world
+//keeps it.
 const props = {
 	"camera-x": prop.attribute(String, "0px"),
 	"camera-y": prop.attribute(String, "0px"),
@@ -15,9 +15,9 @@ const props = {
 	"camera-orbit-radius": prop.attribute(String, "0px"),
 };
 
-// Non-inheriting, so a camera frame restyles the world alone, not every element of every
-// block. Bound on .world itself: pulled down with `inherit`, WebKit never re-resolves them
-// when the host's value changes, and as stylesheet holes they double Chrome's style time.
+//Non-inheriting, so a camera frame restyles the world alone, not every element of every
+//block. Bound on .world itself: pulled down with `inherit`, WebKit never re-resolves them
+//when the host's value changes, and as stylesheet holes they double Chrome's style time.
 registerProperties([
 	...["x", "y", "z", "perspective", "orbit-radius"].map((name) => ({
 		name: `--camera-${name}`,
@@ -41,7 +41,7 @@ customElements.define(
 				host,
 				"scene-cube",
 				"scene-gizmo",
-				// The placement preview is translucent
+				//The placement preview is translucent
 				"[see-through], scene-ghost *",
 			);
 			yield function* view(componentProps) {

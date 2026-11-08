@@ -38,6 +38,12 @@ describe.runIf(isRealBrowser)("bindings the HTML parser moves", () => {
 		);
 	});
 
+	test("a bound <B> written in capitals is checked for copies too", () => {
+		expect(() => ensureKept`<p><B class=${"x"}>a<div>b</div></B></p>`).toThrow(
+			/copied by the HTML parser/,
+		);
+	});
+
 	test("a bound <i> the parser copies past a misnested end tag names the fix", () => {
 		expect(() => ensureKept`<b><i class=${"x"}>a</b>b</i>`).toThrow(/copied by the HTML parser/);
 	});

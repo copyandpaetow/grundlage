@@ -843,10 +843,8 @@ describe("framework-parity patterns", () => {
 		const titleSlot = element.shadowRoot?.querySelector("slot[name=title]") as HTMLSlotElement;
 		const defaultSlot = element.shadowRoot?.querySelector("slot:not([name])") as HTMLSlotElement;
 
-		expect((titleSlot.assignedElements() as Element[]).map((node) => node.tagName)).toEqual(["H1"]);
-		expect((defaultSlot.assignedElements() as Element[]).map((node) => node.tagName)).toEqual([
-			"P",
-		]);
+		expect(titleSlot.assignedElements().map((node) => node.tagName)).toEqual(["H1"]);
+		expect(defaultSlot.assignedElements().map((node) => node.tagName)).toEqual(["P"]);
 
 		element.remove();
 	});

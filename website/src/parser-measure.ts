@@ -73,7 +73,7 @@ const median = (samples: ReadonlyArray<number>): number => {
 const collectGarbage = (): void => {
 	const collect = (globalThis as { gc?: () => void }).gc;
 	if (!collect) return;
-	// V8 lags on recent garbage; one call is routinely not enough.
+	//V8 lags on recent garbage; one call is routinely not enough.
 	collect();
 	collect();
 	collect();
@@ -137,7 +137,7 @@ const measureRetainedBytesPerTemplate = (corpus: GeneratedCorpus): number | null
 
 	collectGarbage();
 	const after = readHeapMb();
-	// `held` has to outlive the reading or the thing being measured is gone.
+	//`held` has to outlive the reading or the thing being measured is gone.
 	const heldCount = held.length;
 	held.length = 0;
 	if (after === null || heldCount === 0) return null;
@@ -195,7 +195,7 @@ export const runShape = async (
 	};
 };
 
-// --- derived: the two numbers the hole-density series exists to produce ---
+//--- derived: the two numbers the hole-density series exists to produce ---
 
 export interface HoleCostFit {
 	series: string;

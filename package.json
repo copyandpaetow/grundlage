@@ -31,13 +31,14 @@
 		"release:plugin": "npm run build -w vite-plugin-grundlage && npm test -- --run && npm publish -w vite-plugin-grundlage"
 	},
 	"devDependencies": {
+		"@oxlint/plugins": "1.92.0",
 		"@types/node": "^26.0.1",
 		"@vitest/browser-playwright": "^5.0.2",
 		"@vitest/coverage-v8": "^5.0.2",
 		"happy-dom": "^21.0.3",
 		"oxfmt": "^0.77.0",
-		"oxlint": "^1.92.0",
-		"oxlint-tsgolint": "^7.0.2006",
+		"oxlint": "1.92.0",
+		"oxlint-tsgolint": "7.0.2006",
 		"typescript": "^7.0.2",
 		"vite": "^8.0.1",
 		"vitest": "^5.0.2"

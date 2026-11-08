@@ -327,6 +327,34 @@ describe("tag updates", () => {
 		cleanup(element);
 	});
 
+	test("a spread changed after a tag swap writes to the swapped-in element", async () => {
+		const tag = uniqueTag();
+		let tagName = "div";
+		let attributes = { title: "before" };
+
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`
+                <${tagName} ${attributes}>content</${tagName}>`;
+			};
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		tagName = "section";
+		await element.update();
+		attributes = { title: "after" };
+		await element.update();
+		await sleep();
+
+		const section = element.shadowRoot?.querySelector("section")!;
+		expect(section.getAttribute("title")).toBe("after");
+
+		cleanup(element);
+	});
+
 	test("tag swap with concurrent content change updates the inner text on the new element", async () => {
 		//the content binding sits inside the dynamic tag, and a rewrap keeps the marker comments inside
 		//it, so the content update still finds its anchor on the new element's child list
@@ -447,11 +475,11 @@ describe("tag updates", () => {
 		const realRemove = button.removeEventListener.bind(button);
 		button.addEventListener = ((...args: Parameters<typeof realAdd>) => {
 			adds++;
-			return realAdd(...args);
+			realAdd(...args);
 		}) as typeof button.addEventListener;
 		button.removeEventListener = ((...args: Parameters<typeof realRemove>) => {
 			removes++;
-			return realRemove(...args);
+			realRemove(...args);
 		}) as typeof button.removeEventListener;
 
 		await element.update();

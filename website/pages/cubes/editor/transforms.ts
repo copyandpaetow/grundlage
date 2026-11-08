@@ -19,8 +19,8 @@ export const readPosition = (block: Element): Vector3 =>
 export const readRotation = (block: Element): Vector3 =>
 	blockTransformFromAttributes(block).rotation;
 
-// Rotations compose by matrix, so any parent rotation lifts correctly, not only a yaw.
-// Unsnapped: each caller applies its own snapping.
+//Rotations compose by matrix, so any parent rotation lifts correctly, not only a yaw.
+//Unsnapped: each caller applies its own snapping.
 export const liftThroughFrame = (
 	child: Element,
 	frame: DOMMatrix,

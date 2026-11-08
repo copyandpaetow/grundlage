@@ -706,8 +706,8 @@ describe("yield* awaited(promise)", () => {
 		await sleep();
 		const updated = element.update();
 		await sleep();
-		pending[0]!.resolve("superseded");
-		pending[1]!.resolve("newest");
+		pending[0].resolve("superseded");
+		pending[1].resolve("newest");
 		await updated;
 		await sleep();
 		expect(element.shadowRoot?.textContent).toBe("newest");

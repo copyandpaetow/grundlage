@@ -15,8 +15,8 @@ import {
 import { primaryBlock, type EditorState } from "./context";
 import { liftThroughFrame, readPosition, readRotation, subtractVectors } from "./transforms";
 
-// Structure is baked into the geometry, never into a hidden wrapper, so exported markup is
-// the whole scene
+//Structure is baked into the geometry, never into a hidden wrapper, so exported markup is
+//the whole scene
 
 export type GroupingDeps = {
 	select: (block: HTMLElement) => void;
@@ -42,13 +42,13 @@ export const createGrouping = (state: EditorState, deps: GroupingDeps): Grouping
 
 		deps.clearSelection();
 
-		// Every member has to sit in one parent's frame, or one rebase cannot hold them all
+		//Every member has to sit in one parent's frame, or one rebase cannot hold them all
 		const parent = members[0].parentElement;
 		if (parent === null || members.some((block) => block.parentElement !== parent)) {
 			throw new Error("Wrap blocks that share one parent; these sit in different ones.");
 		}
 
-		// Measured after clearSelection, so the bounds are in the parent's frame, not the cage's
+		//Measured after clearSelection, so the bounds are in the parent's frame, not the cage's
 		const bounds = blocksBoundsPx(members);
 		if (bounds === null) {
 			throw new Error("Wrap blocks that have rendered; these have no bounds yet.");
@@ -75,7 +75,7 @@ export const createGrouping = (state: EditorState, deps: GroupingDeps): Grouping
 		deps.select(wrapper);
 	};
 
-	// A cube keeps its own geometry when its children leave; a group is nothing without them.
+	//A cube keeps its own geometry when its children leave; a group is nothing without them.
 	const unwrapSelection = (): void => {
 		const wrapper = primaryBlock(state);
 		if (wrapper === null) return;
@@ -97,8 +97,8 @@ export const createGrouping = (state: EditorState, deps: GroupingDeps): Grouping
 		deps.updateInspector();
 	};
 
-	// The blocks stay the single source of truth, so the gizmo's move on the cage is baked
-	// into them
+	//The blocks stay the single source of truth, so the gizmo's move on the cage is baked
+	//into them
 	const flattenSelection = (): void => {
 		if (state.sceneSelect === null) return;
 		const cage = state.sceneSelect;
@@ -109,7 +109,7 @@ export const createGrouping = (state: EditorState, deps: GroupingDeps): Grouping
 		const cageRotation = rotationMatrix(readRotation(cage));
 		for (const block of blocks) {
 			const { position, rotation } = liftThroughFrame(block, frame, cageRotation);
-			// The move snaps, not the pose, so an off-grid block stays off-grid on axes the drag never touched
+			//The move snaps, not the pose, so an off-grid block stays off-grid on axes the drag never touched
 			const positionBeforeDrag = readPosition(block);
 			const world = position.map(
 				(coordinate, axis) =>
@@ -122,7 +122,7 @@ export const createGrouping = (state: EditorState, deps: GroupingDeps): Grouping
 			block.removeAttribute("y");
 			block.removeAttribute("z");
 		}
-		// Both flip in one batch and cage · block equals the new pose, so nothing flashes
+		//Both flip in one batch and cage · block equals the new pose, so nothing flashes
 		cage.setAttribute("position", "0 0 0");
 		cage.setAttribute("rotation", "0 0 0");
 		void Promise.all([cage, ...blocks].map((node) => sceneElementRendered(node))).then(

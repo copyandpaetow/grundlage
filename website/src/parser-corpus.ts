@@ -72,7 +72,7 @@ export interface GeneratedCorpus {
 	totalHoles: number;
 }
 
-// --- filler --------------------------------------------------------------
+//--- filler --------------------------------------------------------------
 
 const FILLER_WORDS = [
 	"alpha",
@@ -131,7 +131,7 @@ const buildStaticAttributeText = (attributeCount: number): string => {
 	return text;
 };
 
-// --- hole patterns -------------------------------------------------------
+//--- hole patterns -------------------------------------------------------
 
 interface HolePattern {
 	holesPerUnit: number;
@@ -222,7 +222,7 @@ const HOLE_PATTERNS: Record<HoleKind, HolePattern> = {
 	},
 };
 
-// --- generation ----------------------------------------------------------
+//--- generation ----------------------------------------------------------
 
 const assembleTemplate = (
 	pattern: HolePattern,
@@ -282,8 +282,8 @@ const generateTemplate = (shape: CorpusShape, templateIndex: number): RecordedTe
 	const attributeText = buildStaticAttributeText(shape.staticAttributesPerElement);
 	const unitCount = Math.ceil(shape.holesPerTemplate / pattern.holesPerUnit);
 
-	// Built once empty to learn the markup overhead, then the remaining
-	// character budget is spent on filler. Exact beats modelled here.
+	//Built once empty to learn the markup overhead, then the remaining
+	//character budget is spent on filler. Exact beats modelled here.
 	const withoutFiller = assembleTemplate(pattern, unitCount, attributeText, "");
 	const fillerBudget = Math.max(0, shape.charactersPerTemplate - totalCharactersOf(withoutFiller));
 	const charactersPerUnit = Math.floor(fillerBudget / unitCount);
@@ -345,14 +345,14 @@ export const createFreshTemplateStringsArrays = (
 			arrays.push(
 				Object.assign(template.strings.slice(), {
 					raw: template.raw.slice(),
-				}) as unknown as TemplateStringsArray,
+				}),
 			);
 		}
 	}
 	return arrays;
 };
 
-// --- shapes --------------------------------------------------------------
+//--- shapes --------------------------------------------------------------
 
 const holeDensityShape = (holeKind: HoleKind, holesPerTemplate: number): CorpusShape => ({
 	name: `${holeKind === "adjacentContent" ? "adjacent" : "per element"} · ${holesPerTemplate} holes`,

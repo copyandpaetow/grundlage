@@ -1,13 +1,13 @@
 import { html, component } from "../../../../lib/src";
 import { GROUND_HALF_UNITS, GROUND_SIZE, UNIT_SIZE } from "../scene-shared";
 
-// The sheet lies axis-flat, so offsetX/offsetY arrive with the perspective already
-// inverted and no projection math is needed
+//The sheet lies axis-flat, so offsetX/offsetY arrive with the perspective already
+//inverted and no projection math is needed
 
 customElements.define(
 	"scene-ground",
 	component(function* ({ host: element }) {
-		// Unsnapped: snapping is the editor's policy
+		//Unsnapped: snapping is the editor's policy
 		const onPointerMove = (event: PointerEvent): void => {
 			const half = GROUND_HALF_UNITS * UNIT_SIZE;
 			element.dispatchEvent(

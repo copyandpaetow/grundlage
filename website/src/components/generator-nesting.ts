@@ -13,7 +13,7 @@ customElements.define(
 		yield function* view() {
 			const controller = new AbortController();
 
-			// Pre-yield: capture current positions (old DOM)
+			//Pre-yield: capture current positions (old DOM)
 			const positions = new Map();
 			for (const child of host.shadowRoot!.querySelectorAll("li")) {
 				positions.set(child.dataset.id, child.getBoundingClientRect());
@@ -26,7 +26,7 @@ customElements.define(
 				</ul>
 			`;
 
-			// Post-yield: measure new positions, animate the delta
+			//Post-yield: measure new positions, animate the delta
 			for (const child of host.shadowRoot!.querySelectorAll("li")) {
 				const before = positions.get(child.dataset.id);
 				if (!before) continue;
@@ -42,7 +42,7 @@ customElements.define(
 				);
 			}
 
-			// Async work; user-owned cancellation
+			//Async work; user-owned cancellation
 			try {
 				yield new Promise((resolve, reject) => {
 					const id = setTimeout(resolve, 1000);
@@ -53,7 +53,7 @@ customElements.define(
 				});
 				console.log("post-render settled for order:", items.join(","));
 			} catch {
-				// aborted
+				//aborted
 			}
 
 			return () => {

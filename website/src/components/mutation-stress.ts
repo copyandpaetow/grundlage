@@ -85,8 +85,8 @@ customElements.define(
 			target.splice(middleIndex, 1);
 		};
 
-		// Hits the general-middle path: both ends peel, but the spliced region
-		// forces hash-claim + structural fallback + move over a bounded range.
+		//Hits the general-middle path: both ends peel, but the spliced region
+		//forces hash-claim + structural fallback + move over a bounded range.
 		const replaceMiddleRange = (target: Array<Row>, count: number) => {
 			if (target.length < count) return;
 			const middleIndex = Math.floor((target.length - count) / 2);

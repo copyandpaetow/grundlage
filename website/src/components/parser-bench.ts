@@ -12,7 +12,6 @@ import {
 	CORPUS_SHAPES,
 	generateCorpus,
 	RECORDED_CORPUS_SHAPE,
-	type RecordedTemplate,
 } from "../parser-corpus";
 import { fitHoleCost, type HoleCostFit, runShape, type ShapeResult } from "../parser-measure";
 import recordedTemplates from "../../pages/parser-bench/recorded-corpus.json";
@@ -48,10 +47,7 @@ customElements.define(
 
 		const buildCorpora = () => [
 			...CORPUS_SHAPES.map(generateCorpus),
-			corpusFromRecordedTemplates(
-				RECORDED_CORPUS_SHAPE,
-				recordedTemplates as Array<RecordedTemplate>,
-			),
+			corpusFromRecordedTemplates(RECORDED_CORPUS_SHAPE, recordedTemplates),
 		];
 
 		const runAllShapes = async () => {

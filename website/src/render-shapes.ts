@@ -66,7 +66,7 @@ export const defineProbeElements = (): void => {
 const asTemplateStringsArray = (parts: ReadonlyArray<string>): TemplateStringsArray =>
 	Object.assign(parts.slice(), {
 		raw: parts.slice(),
-	}) as unknown as TemplateStringsArray;
+	});
 
 /*
     Values are strings of a few characters. hashValue walks every character, so
@@ -194,7 +194,7 @@ export const generateShape = (shape: CommitShape): GeneratedShape => {
 	};
 };
 
-// --- shapes ---------------------------------------------------------------
+//--- shapes ---------------------------------------------------------------
 
 const BINDINGS_PER_TEMPLATE = 400;
 

@@ -892,14 +892,14 @@ describe("rapid restart with in-flight inner async work", () => {
 		//coalesces into exactly one reflush carrying the latest state
 		phase = "second";
 		const flush = element.update();
-		await sleep(); // gen2 ("second") is mid-flight at its await
+		await sleep(); //gen2 ("second") is mid-flight at its await
 		phase = "third";
-		element.update(); // mid-flight: tears gen2 down and starts the run that reads "third"
+		element.update(); //mid-flight: tears gen2 down and starts the run that reads "third"
 
 		//the superseded mount run's late await fires while the batch is still in flight
 		releaseOld();
 
-		await flush; // resolves after the reflushed run ("third") lands
+		await flush; //resolves after the reflushed run ("third") lands
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("third");
 		expect(element.shadowRoot?.textContent).not.toContain("mount-late");
 

@@ -8,6 +8,7 @@ const createFormAssociatedBaseClass = () =>
 			this.dispatchEvent(new CustomEvent(FORM_EVENTS.ASSOCIATED, { detail: { form } }));
 		}
 
+		//oxlint-disable-next-line guide/no-boolean-parameter -- the platform calls it with a boolean
 		formDisabledCallback(disabled: boolean) {
 			this.dispatchEvent(new CustomEvent(FORM_EVENTS.DISABLED, { detail: { disabled } }));
 		}
@@ -27,5 +28,5 @@ export type FormAssociatedBase = InstanceType<ReturnType<typeof createFormAssoci
 //then on so every form-associated component stays a single `instanceof` lineage
 let sharedFormAssociatedBaseClass: ReturnType<typeof createFormAssociatedBaseClass> | null = null;
 
-export const getFormAssociatedBaseClass = () =>
+export const getFormAssociatedBaseClass = (): ReturnType<typeof createFormAssociatedBaseClass> =>
 	(sharedFormAssociatedBaseClass ??= createFormAssociatedBaseClass());

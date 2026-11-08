@@ -1,8 +1,8 @@
 import { html, component, prop } from "../../../lib/src";
 
-// The pose is written as the world's camera-* attributes, so a copied world carries the
-// flown view with it. Each mode is its own update generator, so switching tears down
-// the other's listeners and neither needs a mode check.
+//The pose is written as the world's camera-* attributes, so a copied world carries the
+//flown view with it. Each mode is its own update generator, so switching tears down
+//the other's listeners and neither needs a mode check.
 
 const props = { mode: prop.attribute(prop.oneOf("free", "orbit"), "free") };
 
@@ -11,7 +11,7 @@ const LOOK_DEGREES_PER_PIXEL = 0.18;
 const MAX_PITCH = 89;
 const DEFAULT_ORBIT_RADIUS = 600;
 
-// [right, up, forward] in camera space. Screen +Y is down, so up is -1.
+//[right, up, forward] in camera space. Screen +Y is down, so up is -1.
 const MOVE_AXES: Record<string, [number, number, number]> = {
 	w: [0, 0, 1],
 	s: [0, 0, -1],
@@ -27,7 +27,7 @@ const clamp = (value: number, minimum: number, maximum: number): number =>
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
-// No box of its own, so the world keeps its perspective box
+//No box of its own, so the world keeps its perspective box
 const transparentShell = html`
 	<style>
 		:host {
@@ -52,10 +52,10 @@ customElements.define(
 				pitch: 0,
 				orbitRadius: 0,
 			};
-			// The slotted element, so a stray unslotted child is never taken for the world
+			//The slotted element, so a stray unslotted child is never taken for the world
 			let world: HTMLElement | null = null;
 
-			// Write-only, so it never forces a synchronous layout
+			//Write-only, so it never forces a synchronous layout
 			const writeCameraVariables = (): void => {
 				if (world === null) return;
 				world.setAttribute("camera-x", `${camera.x}px`);
@@ -67,8 +67,8 @@ customElements.define(
 			};
 
 			const onLookMove = (event: PointerEvent): void => {
-				// The world applies rotateY(-yaw), so dragging right must DECREASE yaw to
-				// face +X; dragging down looks down.
+				//The world applies rotateY(-yaw), so dragging right must DECREASE yaw to
+				//face +X; dragging down looks down.
 				camera.yaw -= event.movementX * LOOK_DEGREES_PER_PIXEL;
 				camera.pitch = clamp(
 					camera.pitch + event.movementY * LOOK_DEGREES_PER_PIXEL,
@@ -83,7 +83,7 @@ customElements.define(
 				window.removeEventListener("pointerup", onLookUp);
 			};
 
-			// Alt + left-drag is the look gesture: touchpad-safe, no right button.
+			//Alt + left-drag is the look gesture: touchpad-safe, no right button.
 			const onPointerDown = (event: PointerEvent): void => {
 				if (event.button !== 0 || !event.altKey) return;
 				event.preventDefault();
@@ -95,10 +95,10 @@ customElements.define(
 				const pressedKeys = new Set<string>();
 				let animationFrame = 0;
 
-				// The world applies rotateY(-yaw), so the heading is its inverse:
+				//The world applies rotateY(-yaw), so the heading is its inverse:
 				//   forward = Ry(yaw)·(0, 0, -1) = (-sin yaw, 0, -cos yaw)
 				//   right   = Ry(yaw)·(1, 0, 0)  = (cos yaw, 0, -sin yaw)
-				// Other signs invert WASD after a turn.
+				//Other signs invert WASD after a turn.
 				const stepWhileKeysHeld = (): void => {
 					const yawRadians = toRadians(camera.yaw);
 					const forwardX = -Math.sin(yawRadians);
@@ -120,8 +120,8 @@ customElements.define(
 				};
 
 				const onKeyDown = (event: KeyboardEvent): void => {
-					// The editor's inputs live in shadow DOM, so at window scope
-					// event.target is retargeted to the host; composedPath()[0] is real.
+					//The editor's inputs live in shadow DOM, so at window scope
+					//event.target is retargeted to the host; composedPath()[0] is real.
 					if (event.composedPath()[0] instanceof HTMLInputElement) return;
 					const key = event.key.toLowerCase();
 					if (!MOVEMENT_KEYS.has(key)) return;
@@ -145,7 +145,7 @@ customElements.define(
 				};
 			}
 
-			// Entering keeps the current distance as the radius, so the view does not zoom
+			//Entering keeps the current distance as the radius, so the view does not zoom
 			function* orbitCamera() {
 				camera.orbitRadius = Math.hypot(camera.x, camera.y, camera.z) || DEFAULT_ORBIT_RADIUS;
 				camera.x = 0;
@@ -163,7 +163,7 @@ customElements.define(
 				writeCameraVariables();
 				element.addEventListener("wheel", onWheel, { passive: false });
 
-				// Free flight moves a position, so leaving resolves the eye the orbit implied:
+				//Free flight moves a position, so leaving resolves the eye the orbit implied:
 				//   r·(sin yaw·cos pitch, -sin pitch, cos yaw·cos pitch)
 				return () => {
 					const yawRadians = toRadians(camera.yaw);
@@ -179,8 +179,8 @@ customElements.define(
 
 			yield transparentShell;
 
-			// Client only: the server stops at the yield above, so the world renders at its
-			// default angle
+			//Client only: the server stops at the yield above, so the world renders at its
+			//default angle
 			const slot = element.shadowRoot?.querySelector("slot");
 			world = (slot?.assignedElements()[0] as HTMLElement | undefined) ?? null;
 			writeCameraVariables();

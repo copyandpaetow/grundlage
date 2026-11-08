@@ -8,13 +8,13 @@ import {
 } from "../scene-shared";
 import { blocksBoundsPx, eulerFromMatrix, fromScreenPoint } from "../scene-geometry";
 
-// The drag in flight moves the child inside the gizmo's own carrier, so its attributes
-// change once, on drop, and the gizmo works on any child.
+//The drag in flight moves the child inside the gizmo's own carrier, so its attributes
+//change once, on drop, and the gizmo works on any child.
 
-// Every value is bound on the element that reads it: WebKit never re-resolves a value pulled
-// down with `inherit` when the parent's changes. The drag's are non-inheriting, so a drag
-// frame never restyles the dragged blocks; only the handles' lengths and the camera turn
-// inherit, from .mirror into the handles alone.
+//Every value is bound on the element that reads it: WebKit never re-resolves a value pulled
+//down with `inherit` when the parent's changes. The drag's are non-inheriting, so a drag
+//frame never restyles the dragged blocks; only the handles' lengths and the camera turn
+//inherit, from .mirror into the handles alone.
 registerProperties([
 	...["x", "y", "z", "yaw"].map((axis) => ({
 		name: `--drag-${axis}`,
@@ -50,7 +50,7 @@ registerProperties([
 
 const HANDLE_LENGTH = UNIT_SIZE;
 const YAW_PER_PIXEL = 0.5;
-// Screen px a knob sits beyond the child's box, so handles clear the cage at any size.
+//Screen px a knob sits beyond the child's box, so handles clear the cage at any size.
 const HANDLE_MARGIN = 44;
 
 type ScreenPoint = { x: number; y: number };
@@ -238,8 +238,8 @@ customElements.define(
 			yawDegrees: number;
 		} | null = null;
 
-		// Copied once per turn, not forwarded by every block each frame. A world without the
-		// attributes shows its default turn of 0deg.
+		//Copied once per turn, not forwarded by every block each frame. A world without the
+		//attributes shows its default turn of 0deg.
 		const world = element.closest<HTMLElement>("scene-world");
 		let cameraYaw = "0deg";
 		let cameraPitch = "0deg";
@@ -282,7 +282,7 @@ customElements.define(
 			if (active.mode === "yaw") {
 				active.yawDegrees = delta.x * YAW_PER_PIXEL;
 			} else {
-				// Scalar projection: (delta · a) / (a · a), with a = one world unit on screen
+				//Scalar projection: (delta · a) / (a · a), with a = one world unit on screen
 				const lengthSquared = dot(active.screenOffsetPerWorldUnit, active.screenOffsetPerWorldUnit);
 				active.unitsAlongAxis =
 					lengthSquared === 0 ? 0 : dot(delta, active.screenOffsetPerWorldUnit) / lengthSquared;
@@ -297,12 +297,12 @@ customElements.define(
 			if (carrier === null || carrier === undefined) {
 				throw new Error("The gizmo dropped a drag before rendering its carrier.");
 			}
-			// The child's placement in the gizmo's frame: carrier · placement
+			//The child's placement in the gizmo's frame: carrier · placement
 			const matrix = new DOMMatrix(getComputedStyle(carrier).transform).multiply(
 				new DOMMatrix(getComputedStyle(target).transform),
 			);
-			// Unsnapped: the editor snaps the leaf blocks on flatten, and snapping this
-			// carrier too would add a grid-sized jump, worst after an off-centre yaw.
+			//Unsnapped: the editor snaps the leaf blocks on flatten, and snapping this
+			//carrier too would add a grid-sized jump, worst after an off-centre yaw.
 			const position = fromScreenPoint(new DOMPoint(matrix.m41, matrix.m42, matrix.m43));
 			const rotation = eulerFromMatrix(matrix);
 			target.setAttribute("position", position.map(formatNumber).join(" "));
@@ -314,8 +314,8 @@ customElements.define(
 			window.removeEventListener("pointermove", onPointerMove);
 			window.removeEventListener("pointerup", commitDrag);
 
-			// The drag clears only after the child re-rendered from its new attributes, so
-			// both transforms agree for one frame and nothing flashes.
+			//The drag clears only after the child re-rendered from its new attributes, so
+			//both transforms agree for one frame and nothing flashes.
 			const settledChild = sceneElementRendered(target);
 			drag = null;
 			void settledChild.then(() => {
@@ -331,7 +331,7 @@ customElements.define(
 			const handle = (event.target as HTMLElement)?.closest("[data-axis]");
 			if (!(handle instanceof HTMLElement)) return;
 			const mode = handle.dataset.axis as DragMode;
-			// The editor would read this as a select or deselect
+			//The editor would read this as a select or deselect
 			event.preventDefault();
 			event.stopPropagation();
 
@@ -340,7 +340,7 @@ customElements.define(
 			if (mode !== "yaw") {
 				const origin = handlePoint("#origin");
 				const tip = handlePoint(`#knob-${mode}`);
-				// Measured on screen, so no camera matrix is needed
+				//Measured on screen, so no camera matrix is needed
 				const worldUnitsOut = handleLengthsPx[axisIndex] / UNIT_SIZE;
 				const scale = worldUnitsOut === 0 ? 0 : 1 / worldUnitsOut;
 				screenOffsetPerWorldUnit = {
@@ -367,7 +367,7 @@ customElements.define(
 				: 0;
 
 		yield function* view() {
-			// The frame is the drag's pivot, so it holds still while a drag is in flight.
+			//The frame is the drag's pivot, so it holds still while a drag is in flight.
 			if (drag === null) {
 				const target = child();
 				const bounds = blocksBoundsPx(target === null ? [] : [target]);
@@ -410,7 +410,7 @@ customElements.define(
 			`;
 		};
 
-		// Torn down mid-drag, the child leaves the carrier and falls back on its own placement
+		//Torn down mid-drag, the child leaves the carrier and falls back on its own placement
 		return () => {
 			window.removeEventListener("pointermove", onPointerMove);
 			window.removeEventListener("pointerup", commitDrag);

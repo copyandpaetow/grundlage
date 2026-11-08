@@ -53,9 +53,9 @@ customElements.define(
 		let durationMs = Number(element.getAttribute("duration") ?? 3000);
 		let baseline = loadBaseline<Measurement>(BASELINE_STORAGE_KEY);
 
-		// The animation only runs while a measurement is in flight — clicking
-		// measure starts it, the window ends it. Idle, the list sits on its last
-		// frame (no rAF, no DOM churn).
+		//The animation only runs while a measurement is in flight — clicking
+		//measure starts it, the window ends it. Idle, the list sits on its last
+		//frame (no rAF, no DOM churn).
 		const tick = () => {
 			if (!animating) return;
 			time += 1 / 60;
@@ -63,7 +63,7 @@ customElements.define(
 			requestAnimationFrame(tick);
 		};
 
-		// Observe only the animating list, not the controls/result chrome.
+		//Observe only the animating list, not the controls/result chrome.
 		const barsRoot = (): Node =>
 			element.shadowRoot?.querySelector(".bars") ?? element.shadowRoot ?? element;
 
@@ -122,8 +122,8 @@ customElements.define(
 
 		const formatNumber = (value: number, digits = 2) => value.toFixed(digits);
 
-		// One result row: the current value, plus a colored delta against the
-		// baseline when one is saved.
+		//One result row: the current value, plus a colored delta against the
+		//baseline when one is saved.
 		const metricRow = (label: string, formatted: string, delta: string, deltaClass: string) => html`
 			<span>${label}</span>
 			<span

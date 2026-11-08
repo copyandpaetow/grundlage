@@ -1,11 +1,14 @@
 //well-formed templates with holes where the bindings table allows them, each hole tagged with how
 //the browser would read its value if the app had written it into the markup itself
-export const createRandom = (seed: number) => () => {
-	seed = (seed * 1664525 + 1013904223) >>> 0;
-	return seed / 2 ** 32;
-};
 
 type Random = () => number;
+
+export const createRandom =
+	(seed: number): Random =>
+	() => {
+		seed = (seed * 1664525 + 1013904223) >>> 0;
+		return seed / 2 ** 32;
+	};
 
 const pick = <Item>(random: Random, items: ReadonlyArray<Item>): Item =>
 	items[Math.floor(random() * items.length)];
@@ -272,7 +275,7 @@ export const generateTemplate = (random: Random): GeneratedTemplate => {
 	});
 	//a hand-built strings array stands in for the one a tagged template hands over
 	return {
-		strings: strings as unknown as TemplateStringsArray,
+		strings: strings,
 		handWrittenStrings,
 		contexts,
 		valuesOf,

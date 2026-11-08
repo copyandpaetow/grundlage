@@ -1,14 +1,14 @@
 import { component, html } from "../../../lib/src";
 
-// const list = css`
+//const list = css`
 // 	border: 1px solid black;
 
 // 	li {
 // 		list-style: none;
 // 	}
-// `;
+//`;
 
-// const style = css`
+//const style = css`
 // 	* {
 // 		margin: 0;
 // 	}
@@ -19,7 +19,7 @@ import { component, html } from "../../../lib/src";
 // 		display: grid;
 // 		gap: 1rem;
 // 	}
-// `;
+//`;
 
 customElements.define(
 	"list-component",

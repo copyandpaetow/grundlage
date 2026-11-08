@@ -127,7 +127,7 @@ describe("a value that would end its element in server markup throws", () => {
 				</script>`,
 		]);
 		expect(errors).toEqual([]);
-		expect(shadowRoot.querySelector("script")!.textContent!.trim()).toBe(value);
+		expect(shadowRoot.querySelector("script")!.textContent.trim()).toBe(value);
 	});
 
 	//the first dynamic comment is the key and never reaches the DOM

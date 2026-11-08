@@ -402,12 +402,6 @@ export const tagSupportOf = (realm: ServerRealm, tagName: string): TagSupportKin
 //container from any depth of shadow trees
 const COMPONENT_ERROR_EVENT_NAME = "grundlage-error";
 
-//the library's ComponentErrorEvent, read by shape: its class belongs to the page's copy of grundlage
-interface ComponentErrorEventShape extends Event {
-	readonly error: unknown;
-	readonly tagName: string;
-}
-
 //dispatched composed and cancelable by the library on a host about to run on the server
 const COMPONENT_RENDER_EVENT_NAME = "grundlage-render";
 
@@ -542,7 +536,7 @@ export const renderHost = async (
 		event.preventDefault();
 		hostsThatThrew.add(event.composedPath()[0]);
 		//the listener only ever receives the library's own event
-		const { error, tagName: thrownTagName } = event as ComponentErrorEventShape;
+		const { error, tagName: thrownTagName } = event;
 		if (realm.reportedTags.has(thrownTagName)) return;
 		realm.reportedTags.add(thrownTagName);
 		console.warn(

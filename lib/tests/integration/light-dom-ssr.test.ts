@@ -220,7 +220,7 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 						yield html`<article>${props.heading}</article>`;
 					};
 				},
-				{ props: { heading: Slot } } as ComponentOptions,
+				{ props: { heading: Slot } },
 			),
 			`<h2 slot="heading">Ada</h2>`,
 		);
@@ -343,7 +343,7 @@ describe("§4.6 / R24 — the discard warning, on the side that knows", () => {
 								yield html`<article>${props.heading}</article>`;
 							};
 						},
-						{ props: { heading: Slot } } as ComponentOptions,
+						{ props: { heading: Slot } },
 					),
 					`<h2 slot="heading">Ada</h2><p slot="note">kept</p>`,
 				),

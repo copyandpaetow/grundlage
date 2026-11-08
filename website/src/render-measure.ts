@@ -79,7 +79,7 @@ const median = (samples: ReadonlyArray<number>): number => {
 const collectGarbage = (): void => {
 	const collect = (globalThis as { gc?: () => void }).gc;
 	if (!collect) return;
-	// V8 lags on recent garbage; one call is routinely not enough.
+	//V8 lags on recent garbage; one call is routinely not enough.
 	collect();
 	collect();
 	collect();
@@ -283,7 +283,7 @@ export const runCommitShape = async (
 	};
 };
 
-// --- derived: the gaps the shapes exist to produce ------------------------
+//--- derived: the gaps the shapes exist to produce ------------------------
 
 export interface LaneGap {
 	name: string;

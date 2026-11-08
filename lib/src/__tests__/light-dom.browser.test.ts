@@ -191,7 +191,7 @@ describe("R4—R7 — styles", () => {
 				};
 			}, light()),
 		);
-		const sheetText = host.querySelector("style")!.textContent!;
+		const sheetText = host.querySelector("style")!.textContent;
 
 		expect(sheetText).toContain(":host, :scope");
 		expect(sheetText).toContain("@scope");

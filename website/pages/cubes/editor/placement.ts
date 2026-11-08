@@ -2,7 +2,7 @@ import { formatNumber, snapToGrid } from "../scene-shared";
 import type { EditorState } from "./context";
 import "./scene-ground";
 
-// The ghost and the ground exist only while placing, so there is no visibility flag
+//The ghost and the ground exist only while placing, so there is no visibility flag
 
 export type PlacementDeps = {
 	select: (block: HTMLElement) => void;
@@ -40,7 +40,7 @@ export const createPlacement = (state: EditorState, deps: PlacementDeps): Placem
 		state.placement = { tag, ghost, child, ground, position: null };
 	};
 
-	// Snapped here, so the floor stays policy-free
+	//Snapped here, so the floor stays policy-free
 	const onFloorPoint = (event: Event): void => {
 		if (state.placement === null) return;
 		const { x, z } = (event as CustomEvent<{ x: number; z: number }>).detail;
@@ -54,7 +54,7 @@ export const createPlacement = (state: EditorState, deps: PlacementDeps): Placem
 	};
 
 	const dropPlacement = (): void => {
-		// The pointer never crossed the grid, so the block would land at the origin
+		//The pointer never crossed the grid, so the block would land at the origin
 		if (state.placement === null || state.placement.position === null) return;
 		const { child, position } = state.placement;
 		child.setAttribute("position", position.map(formatNumber).join(" "));

@@ -405,7 +405,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 						yield function* inner() {
 							//an object in a content hole throws, and an inner generator's throw reaches the
 							//outer's yield rather than the fatal display
-							yield html`<p>${new Date() as unknown as string}</p>`;
+							yield html`<p>${new Date()}</p>`;
 						};
 					} catch {
 						yield function* () {
@@ -578,7 +578,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				const Component = component(function* () {
 					const data = yield Promise.resolve("server-data");
 					yield function* () {
-						yield html`<p>${data as string}</p>`;
+						yield html`<p>${data}</p>`;
 					};
 					postYieldRan = true;
 					yield function* () {

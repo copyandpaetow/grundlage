@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { Schema } from "../../types";
-import { normalizeSchema, Prop } from "../schema";
+import { normalizeSchema } from "../schema";
 import {
 	attributeSpellingOf,
 	PropValues,
@@ -129,7 +129,7 @@ describe("the write flow", () => {
 describe("the attribute spelling", () => {
 	const spellingOf = (schema: Schema, value: unknown) => {
 		const props = normalizeSchema(schema);
-		return attributeSpellingOf([...props.values()][0] as Prop, value);
+		return attributeSpellingOf([...props.values()][0], value);
 	};
 
 	test("a string, number and bigint spell themselves", () => {

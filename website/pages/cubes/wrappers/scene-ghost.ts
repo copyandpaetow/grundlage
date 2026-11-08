@@ -6,8 +6,8 @@ import {
 	placementVariables,
 } from "../scene-shared";
 
-// `opacity` here would flatten the child's preserve-3d into a 2D silhouette, so the child
-// inherits --block-opacity and its faces apply it one plane at a time
+//`opacity` here would flatten the child's preserve-3d into a 2D silhouette, so the child
+//inherits --block-opacity and its faces apply it one plane at a time
 
 const ghostStyles = html`
 	<style>

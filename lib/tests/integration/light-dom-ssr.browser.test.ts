@@ -387,7 +387,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 								yield html`<article>${props.heading}</article>`;
 							};
 						},
-						{ props: { heading: Slot } } as ComponentOptions,
+						{ props: { heading: Slot } },
 					);
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();

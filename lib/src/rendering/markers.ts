@@ -3,7 +3,7 @@ import * as CHARACTER_CODE from "../parser/character-code";
 import { DYNAMIC_TAG_PLACEHOLDER } from "../parser/constants";
 import * as OPEN_CONSTRUCT from "../parser/open-construct";
 import * as BINDING from "../parser/binding";
-import { ParsedTemplate } from "../parser/types";
+import { ParsedTemplate, StaticBinding } from "../parser/types";
 import {
 	assertDuringDevelopment,
 	libraryMessage,
@@ -58,6 +58,34 @@ const writtenStartTagCountOf = (markup: string, tagName: string) =>
 
 const bindingIndexOfMarker = (data: string) => Number(data.slice(data.indexOf("-") + 1));
 
+const isElementBinding = (
+	binding: StaticBinding,
+): binding is Extract<StaticBinding, { elementName: string }> =>
+	binding.type === BINDING.ATTRIBUTE ||
+	binding.type === BINDING.DYNAMIC_ATTRIBUTE ||
+	binding.type === BINDING.RAW_CONTENT ||
+	binding.type === BINDING.TEMPLATE_CONTENT;
+
+const parentNameOf = (marker: Comment) => marker.parentElement?.localName ?? "the template root";
+
+const ensureNoBoundFormattingCopies = (fragment: DocumentFragment, parsed: ParsedTemplate) => {
+	const boundFormattingTags = new Set(
+		parsed.bindings
+			.filter(isElementBinding)
+			.map((binding) => binding.elementName.toLowerCase())
+			.filter((tagName) => FORMATTING_TAGS.has(tagName)),
+	);
+	for (const tagName of boundFormattingTags) {
+		const builtCount = fragment.querySelectorAll(tagName).length;
+		if (builtCount <= writtenStartTagCountOf(parsed.htmlWithMarkers, tagName)) continue;
+		throw new Error(
+			libraryMessage(
+				`a bound <${tagName}> is copied by the HTML parser past a block it does not close (a <div> inside <p><${tagName}>) or a misnested end tag, and the copies never get the bound value. Fix the nesting.`,
+			),
+		);
+	}
+};
+
 //the HTML parser relocates an element its content model forbids (a <tr> inside <table> moves in
 //front of it, a <div> closes the <p> around it) and reads markers inside <![CDATA[…]]> as text
 export const ensureFragmentKeptEveryBinding = (
@@ -68,18 +96,16 @@ export const ensureFragmentKeptEveryBinding = (
 	const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT);
 	let openMarkerCount = 0;
 	let lastBindingIndex = -1;
-	const boundFormattingTags = new Set<string>();
 	let node: Comment | null;
 	while ((node = walker.nextNode() as Comment | null)) {
 		if (!isOpenMarkerData(node.data)) continue;
 		openMarkerCount++;
-		const parentName = node.parentElement?.localName ?? "the template root";
 		//markers are numbered in source order, so one that arrives early was moved there
 		const bindingIndex = bindingIndexOfMarker(node.data);
 		if (bindingIndex < lastBindingIndex) {
 			throw new Error(
 				libraryMessage(
-					`the HTML parser moved a bound node ahead of one inside <${parentName}>, as it moves a <p> or <div> out of a <table>. Fix the nesting.`,
+					`the HTML parser moved a bound node ahead of one inside <${parentNameOf(node)}>, as it moves a <p> or <div> out of a <table>. Fix the nesting.`,
 				),
 			);
 		}
@@ -89,38 +115,20 @@ export const ensureFragmentKeptEveryBinding = (
 			if (elementAfterMarkerRun(node)?.localName === DYNAMIC_TAG_PLACEHOLDER) continue;
 			throw new Error(
 				libraryMessage(
-					`a dynamic tag <\${…}> inside <${parentName}> was moved by the HTML parser, which only allows specific elements there (a <tr> in a <table>, an <option> in a <select>). Write that tag statically.`,
+					`a dynamic tag <\${…}> inside <${parentNameOf(node)}> was moved by the HTML parser, which only allows specific elements there (a <tr> in a <table>, an <option> in a <select>). Write that tag statically.`,
 				),
 			);
 		}
-		const bindsElement =
-			binding.type === BINDING.ATTRIBUTE ||
-			binding.type === BINDING.DYNAMIC_ATTRIBUTE ||
-			binding.type === BINDING.RAW_CONTENT ||
-			binding.type === BINDING.TEMPLATE_CONTENT;
-		if (!bindsElement) continue;
+		if (!isElementBinding(binding)) continue;
 		const element = elementAfterMarkerRun(node);
 		const isBoundElement =
 			element !== null && element.localName.toLowerCase() === binding.elementName.toLowerCase();
-		if (isBoundElement) {
-			if (FORMATTING_TAGS.has(element.localName)) boundFormattingTags.add(element.localName);
-			continue;
-		}
+		if (isBoundElement) continue;
 		throw new Error(
 			libraryMessage(
-				`a bound element inside <${parentName}> was moved by the HTML parser, which closes or relocates an element its parent cannot hold (a <div> in a <p>, a <textarea> in a <table>, a <tbody> around a bare <tr>). Fix the nesting.`,
+				`a bound element inside <${parentNameOf(node)}> was moved by the HTML parser, which closes or relocates an element its parent cannot hold (a <div> in a <p>, a <textarea> in a <table>, a <tbody> around a bare <tr>). Fix the nesting.`,
 			),
 		);
-	}
-	for (const tagName of boundFormattingTags) {
-		const builtCount = fragment.querySelectorAll(tagName).length;
-		if (builtCount > writtenStartTagCountOf(parsed.htmlWithMarkers, tagName)) {
-			throw new Error(
-				libraryMessage(
-					`a bound <${tagName}> is copied by the HTML parser past a block it does not close (a <div> inside <p><${tagName}>) or a misnested end tag, and the copies never get the bound value. Fix the nesting.`,
-				),
-			);
-		}
 	}
 	if (openMarkerCount !== expectedOpenMarkerCount) {
 		throw new Error(
@@ -129,6 +137,7 @@ export const ensureFragmentKeptEveryBinding = (
 			),
 		);
 	}
+	ensureNoBoundFormattingCopies(fragment, parsed);
 };
 
 //a binding's open marker sits directly before the element it binds

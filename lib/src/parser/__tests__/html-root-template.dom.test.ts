@@ -81,6 +81,17 @@ describe("html parser — root template static attributes", () => {
 			valueParts: [""],
 		});
 	});
+
+	test("shadowrootmode is a host attribute like any other, since the root template's tag is never written", () => {
+		const parsed = parse`<template shadowrootmode="open"><p>hi</p></template>`;
+
+		expect(parsed.hostBindingCount).toBe(1);
+		expect(parsed.bindings[0]).toMatchObject({
+			type: BINDING.ATTRIBUTE,
+			nameParts: ["shadowrootmode"],
+			valueParts: ["open"],
+		});
+	});
 });
 
 describe("html parser — root template dynamic attributes", () => {

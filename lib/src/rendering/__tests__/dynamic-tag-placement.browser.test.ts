@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { html, component, ComponentErrorEvent, type Template } from "../../index";
+import { html, component, type Template } from "../../index";
 
 const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
@@ -20,7 +20,7 @@ describe("dynamic tag placement", () => {
 		const element = document.createElement(tag);
 		const errors: Array<unknown> = [];
 		element.addEventListener("grundlage-error", (event) => {
-			errors.push((event as ComponentErrorEvent).error);
+			errors.push(event.error);
 			event.preventDefault();
 		});
 		document.body.appendChild(element);

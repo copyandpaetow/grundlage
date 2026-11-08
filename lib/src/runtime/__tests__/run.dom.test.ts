@@ -204,7 +204,7 @@ describe("a paint error is thrown at the yield that painted", () => {
 		const element = mount(
 			component(function* () {
 				try {
-					yield html`<p>${{} as never}</p>`;
+					yield html`<p>${{}}</p>`;
 				} catch {
 					yield html`<p>caught</p>`;
 				}
@@ -220,7 +220,7 @@ describe("a paint error is thrown at the yield that painted", () => {
 			component(function* () {
 				yield function* () {
 					try {
-						yield html`<p>${value as never}</p>`;
+						yield html`<p>${value}</p>`;
 					} catch {
 						yield html`<p>fallback</p>`;
 					}

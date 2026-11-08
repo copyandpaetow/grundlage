@@ -123,9 +123,9 @@ describe("update() scheduling contract", () => {
 
 		phase = "b";
 		const first = element.update();
-		await sleep(); // let the restart begin and park at its yield
+		await sleep(); //let the restart begin and park at its yield
 		phase = "c";
-		const second = element.update(); // mid-flight: tears the waiting run down and starts a fresh one
+		const second = element.update(); //mid-flight: tears the waiting run down and starts a fresh one
 
 		await Promise.all([first, second]);
 
@@ -272,7 +272,7 @@ describe("update() scheduling contract", () => {
 		expect(runs).toBe(1);
 
 		element.remove();
-		await element.update(); // not connected: resolves, no run
+		await element.update(); //not connected: resolves, no run
 		expect(runs).toBe(1);
 	});
 
@@ -350,10 +350,10 @@ describe("update() scheduling contract", () => {
 		customElements.define(tag, Component);
 
 		const element = mount(tag) as InstanceType<typeof Component>;
-		await sleep(); // the mount's run is parked at its 20ms yield, not yet painted
+		await sleep(); //the mount's run is parked at its 20ms yield, not yet painted
 
 		value = "new";
-		await element.update(); // tears the waiting mount run down, restarts with "new"
+		await element.update(); //tears the waiting mount run down, restarts with "new"
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("new");
 
 		//the superseded run's promise now settles; its yield must be contained

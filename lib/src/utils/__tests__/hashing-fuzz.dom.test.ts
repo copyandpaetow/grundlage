@@ -163,7 +163,7 @@ const serialize = (value: unknown, containersOnPath: Array<object>): string => {
 		case "undefined":
 			break;
 	}
-	const object = value as object;
+	const object = value;
 	const serializeChild = (child: unknown) => serialize(child, containersOnPath);
 	if (isTemplate(object)) {
 		return `template ${JSON.stringify([...object.__templateStrings])}(${object.values.map(serializeChild).join(",")})`;

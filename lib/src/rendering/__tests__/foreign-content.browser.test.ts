@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { html, component, ComponentErrorEvent, type Template } from "../../index";
+import { html, component, type Template } from "../../index";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const MATHML_NAMESPACE = "http://www.w3.org/1998/Math/MathML";
@@ -26,7 +26,7 @@ const mount = async (buildTemplate: () => Template) => {
 	const element = document.createElement(tag);
 	const errors: Array<unknown> = [];
 	element.addEventListener("grundlage-error", (event) => {
-		errors.push((event as ComponentErrorEvent).error);
+		errors.push(event.error);
 		event.preventDefault();
 	});
 	document.body.appendChild(element);

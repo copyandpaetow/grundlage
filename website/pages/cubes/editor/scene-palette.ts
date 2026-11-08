@@ -1,7 +1,7 @@
 import { html, component, prop } from "../../../../lib/src";
 import type { WrapperTagName } from "./grouping";
 
-// Owns no editor state: it answers with one `palette-command` event per intent
+//Owns no editor state: it answers with one `palette-command` event per intent
 
 export type InspectorField = "position" | "rotation" | "size";
 
@@ -18,8 +18,8 @@ export type PaletteCommand =
 
 export type PaletteCommandEvent = CustomEvent<PaletteCommand>;
 
-// Absent while zero or many blocks are selected, which hides the panel. `sized` is false
-// for a group, which has no size of its own.
+//Absent while zero or many blocks are selected, which hides the panel. `sized` is false
+//for a group, which has no size of its own.
 export type InspectorState = {
 	position: readonly [number, number, number];
 	rotation: readonly [number, number, number];
@@ -27,7 +27,7 @@ export type InspectorState = {
 	sized: boolean;
 };
 
-// `cameraMode` stays absent when the scene has no <scene-camera>, which hides the button.
+//`cameraMode` stays absent when the scene has no <scene-camera>, which hides the button.
 const props = {
 	inspector: prop.optional(prop.property<InspectorState>()),
 	cameraMode: prop.optional(prop.attribute(prop.oneOf("free", "orbit"))),
@@ -67,15 +67,15 @@ customElements.define(
 				if (command !== undefined) sendCommand(command);
 			};
 
-			// On `change`, not per keystroke: the echoed normalized number would rewrite a
-			// half-typed "-0.5"
+			//On `change`, not per keystroke: the echoed normalized number would rewrite a
+			//half-typed "-0.5"
 			const onFieldCommit = (event: Event): void => {
 				const target = event.target;
 				if (!(target instanceof HTMLInputElement)) return;
 				const field = target.dataset.field;
 				const axis = target.dataset.axis;
 				if (!isInspectorField(field) || axis === undefined) return;
-				// An emptied field is NaN here, where Number("") would move the block to 0.
+				//An emptied field is NaN here, where Number("") would move the block to 0.
 				const value = target.valueAsNumber;
 				if (Number.isNaN(value)) return;
 				if (field === "size" && value <= 0) return;
@@ -84,7 +84,7 @@ customElements.define(
 
 			yield function* view({ inspector, cameraMode }) {
 				const sized = inspector?.sized ?? false;
-				// Empty while nothing is selected: the panel is hidden then, so it is never seen.
+				//Empty while nothing is selected: the panel is hidden then, so it is never seen.
 				const fieldValue = (field: InspectorField, axis: number): string =>
 					inspector ? String(inspector[field][axis]) : "";
 

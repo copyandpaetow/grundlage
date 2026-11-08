@@ -12,7 +12,7 @@ const templateStringsOf = (tag: string, before: string, after: string): Template
 	const strings = [`<${tag}>${before}`, `${after}</${tag}>`];
 	return Object.assign(strings, {
 		raw: strings.slice(),
-	}) as unknown as TemplateStringsArray;
+	});
 };
 
 const composedByGrundlage = (tag: string, before: string, after: string): string => {
@@ -27,7 +27,7 @@ const composedByGrundlage = (tag: string, before: string, after: string): string
 const parsedByBrowser = (tag: string, before: string, after: string): string => {
 	const host = document.createElement("div");
 	host.innerHTML = `<${tag}>${before}${HOLE_VALUE}${after}</${tag}>`;
-	return host.firstElementChild!.textContent!;
+	return host.firstElementChild!.textContent;
 };
 
 for (const tag of ["textarea", "title"]) {

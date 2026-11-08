@@ -10,9 +10,9 @@ import {
 
 const BASELINE_STORAGE_KEY = "grundlage:perf-harness:baseline";
 
-// fps reads better when higher; frame time and writes/frame read better when
-// lower. Both use the same 2% band — window mode is wall-clock noisy, so frame
-// count (and the writes/frame ratio over it) drifts run to run.
+//fps reads better when higher; frame time and writes/frame read better when
+//lower. Both use the same 2% band — window mode is wall-clock noisy, so frame
+//count (and the writes/frame ratio over it) drifts run to run.
 const classWhenHigherIsBetter = (current: number, previous: number): string => {
 	if (current > previous * 1.02) return "improve";
 	if (current < previous * 0.98) return "regress";
@@ -44,8 +44,8 @@ customElements.define(
 		let durationMs = Number(element.getAttribute("duration") ?? 3000);
 		let baseline = loadBaseline<WindowResult>(BASELINE_STORAGE_KEY);
 
-		// Animates only while a measurement is in flight: measure starts it, the
-		// window ends it. Idle, the bars sit still (no rAF, no DOM churn).
+		//Animates only while a measurement is in flight: measure starts it, the
+		//window ends it. Idle, the bars sit still (no rAF, no DOM churn).
 		const tick = () => {
 			if (!animating) return;
 			frame++;
@@ -57,7 +57,7 @@ customElements.define(
 			requestAnimationFrame(tick);
 		};
 
-		// Observe only the animating bars, not the controls/result chrome.
+		//Observe only the animating bars, not the controls/result chrome.
 		const barsRoot = (): Node =>
 			element.shadowRoot?.querySelector(".bars") ?? element.shadowRoot ?? element;
 
@@ -88,8 +88,8 @@ customElements.define(
 
 		const formatNumber = (value: number, digits = 2) => value.toFixed(digits);
 
-		// One result row: the current value, plus a colored delta against the
-		// baseline when one is saved.
+		//One result row: the current value, plus a colored delta against the
+		//baseline when one is saved.
 		const metricRow = (label: string, formatted: string, delta: string, deltaClass: string) => html`
 			<span>${label}</span>
 			<span

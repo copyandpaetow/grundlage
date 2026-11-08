@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import "./scene-camera";
 
-// A plain <div> stands in for the world: the camera reads nothing off it, and the world's
-// own rendering stays out of the picture.
+//A plain <div> stands in for the world: the camera reads nothing off it, and the world's
+//own rendering stays out of the picture.
 
-// The pose the camera starts at, and the distance from the origin it implies.
+//The pose the camera starts at, and the distance from the origin it implies.
 const START = { x: 0, y: -160, z: 600 };
 const START_DISTANCE = Math.hypot(START.x, START.y, START.z);
 
@@ -22,9 +22,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-	// disconnectedCallback fires teardown a microtask later (it waits to rule out a move),
-	// and the free-fly branch's key listeners live on window, so let that settle before the
-	// next test presses a key.
+	//disconnectedCallback fires teardown a microtask later (it waits to rule out a move),
+	//and the free-fly branch's key listeners live on window, so let that settle before the
+	//next test presses a key.
 	camera.remove();
 	await flush();
 });
@@ -34,7 +34,7 @@ const readCamera = (name: string): number => parseFloat(world.getAttribute(`came
 const nextFrame = (): Promise<void> =>
 	new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
-// The step loop runs on rAF, so a movement key needs real frames to show up.
+//The step loop runs on rAF, so a movement key needs real frames to show up.
 const holdKeyForTwoFrames = async (key: string): Promise<void> => {
 	window.dispatchEvent(new KeyboardEvent("keydown", { key }));
 	await nextFrame();
@@ -47,7 +47,7 @@ const setMode = async (mode: string): Promise<void> => {
 	await camera.update();
 };
 
-// Alt + left-drag is the look gesture; the move listeners sit on window.
+//Alt + left-drag is the look gesture; the move listeners sit on window.
 const lookDrag = (movementX: number, movementY: number): void => {
 	camera.dispatchEvent(
 		new MouseEvent("pointerdown", {

@@ -15,6 +15,29 @@ import {
 	TagLiveBinding,
 } from "./types";
 
+const repointAnchoredBindings = (
+	siblings: ReadonlyArray<LiveBinding | undefined>,
+	element: Element,
+	newElement: Element,
+): void => {
+	for (let index = 0; index < siblings.length; index++) {
+		const sibling = siblings[index];
+		if (sibling === undefined) continue;
+		if (isAttributeBinding(sibling) && sibling.anchor === element) {
+			sibling.anchor = newElement;
+			//a composed value is a string, so the attribute copy already carries it
+			if (isSingleHoleValue(sibling.staticBinding.valueParts)) {
+				reapplyValueOnSwap(newElement, sibling.lastComposedName, sibling.lastValue);
+			}
+		} else if (isDynamicAttributeBinding(sibling) && sibling.anchor === element) {
+			sibling.anchor = newElement;
+			for (const [name, entry] of sibling.appliedAttributes) {
+				reapplyValueOnSwap(newElement, name, entry.value);
+			}
+		}
+	}
+};
+
 export const commitTag = (
 	liveBinding: TagLiveBinding,
 	values: Array<unknown>,
@@ -57,27 +80,7 @@ export const commitTag = (
 		newElement.setAttribute(attribute.name, attribute.value);
 	}
 	while (element.firstChild) newElement.appendChild(element.firstChild);
-
-	for (let index = 0; index < siblings.length; index++) {
-		const sibling = siblings[index];
-		const isAnchoredToSwappedElement =
-			sibling !== undefined &&
-			(isAttributeBinding(sibling) || isDynamicAttributeBinding(sibling)) &&
-			sibling.anchor === element;
-		if (!isAnchoredToSwappedElement) continue;
-		sibling.anchor = newElement;
-		//a composed value is a string, so the attribute copy above already carries it
-		const isSingleHoleAttribute =
-			isAttributeBinding(sibling) && isSingleHoleValue(sibling.staticBinding.valueParts);
-		if (isSingleHoleAttribute) {
-			reapplyValueOnSwap(newElement, sibling.lastComposedName, sibling.lastValue);
-		} else if (isDynamicAttributeBinding(sibling)) {
-			for (const [name, entry] of sibling.appliedAttributes) {
-				reapplyValueOnSwap(newElement, name, entry.value);
-			}
-		}
-	}
-
+	repointAnchoredBindings(siblings, element, newElement);
 	element.replaceWith(newElement);
 	focusElement?.focus();
 };

@@ -159,6 +159,14 @@ export default defineConfig({
 					},
 				},
 			},
+			{
+				root: "./lint",
+				test: {
+					name: "lint",
+					include: ["*.test.ts"],
+					environment: "node",
+				},
+			},
 		],
 	},
 });

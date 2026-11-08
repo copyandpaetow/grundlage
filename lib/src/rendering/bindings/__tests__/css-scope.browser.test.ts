@@ -31,7 +31,7 @@ describe("prelude-less @scope", () => {
 		probe.textContent = "@scope { p { color: red; } }";
 		document.body.appendChild(probe);
 		const firstRule = probe.sheet?.cssRules[0];
-		const parsed = firstRule !== undefined && "cssRules" in (firstRule as CSSRule);
+		const parsed = firstRule !== undefined && "cssRules" in firstRule;
 		probe.remove();
 		return parsed;
 	};

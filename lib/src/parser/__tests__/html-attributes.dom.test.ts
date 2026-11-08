@@ -263,6 +263,12 @@ describe("html parser — attribute edge cases", () => {
 		expect(binding.nameParts).toEqual(["on", 0]);
 		expect(binding.valueParts).toEqual([1]);
 	});
+
+	test("a hole right after a quoted value throws, since it belongs to no attribute", () => {
+		expect(() => parse` <div a="1"${"b"}></div>`).toThrow(
+			/grundlage: a \$\{…\} right after a quoted attribute value belongs to no attribute/,
+		);
+	});
 });
 
 describe("html parser — custom element and namespaced attribute names", () => {

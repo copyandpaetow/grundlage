@@ -1,6 +1,7 @@
 {
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
 	"plugins": ["typescript", "unicorn", "import"],
+	"jsPlugins": ["./lint/guide-plugin.ts"],
 	"rules": {
 		"curly": ["error", "multi-line"],
 		"no-nested-ternary": "error",
@@ -31,7 +32,12 @@
 		"max-depth": ["warn", 4],
 		"max-lines-per-function": ["warn", { "max": 70, "skipBlankLines": true, "skipComments": true }],
 		"typescript/no-floating-promises": "off",
-		"unicorn/no-new-array": "off"
+		"unicorn/no-new-array": "off",
+		"typescript/no-unnecessary-type-assertion": "error",
+		"typescript/explicit-module-boundary-types": "error",
+		"typescript/no-confusing-void-expression": ["error", { "ignoreArrowShorthand": true }],
+		"guide/no-boolean-parameter": "warn",
+		"guide/comment-format": "error"
 	},
 	"overrides": [
 		{
@@ -60,7 +66,7 @@
 			}
 		},
 		{
-			"files": ["**/*.config.ts"],
+			"files": ["**/*.config.ts", "lint/guide-plugin.ts"],
 			"rules": { "import/no-default-export": "off" }
 		}
 	]

@@ -1,11 +1,11 @@
 import { type View, type ViewPoint, writeViewPoint } from "./scene-view";
 
-// Occlusion culling: a cube is hidden when nearer cubes cover its whole screen rectangle.
-// The grid holds, per 8px screen cell, the depth beyond which everything is hidden. Faces
-// that each cover part of a cell add up through its 4×4 sample mask, so touching cubes
-// cover the seam between them together.
+//Occlusion culling: a cube is hidden when nearer cubes cover its whole screen rectangle.
+//The grid holds, per 8px screen cell, the depth beyond which everything is hidden. Faces
+//that each cover part of a cell add up through its 4×4 sample mask, so touching cubes
+//cover the seam between them together.
 
-// Corners of each face in scene-culling's FACE_NAMES order, walked around its edge
+//Corners of each face in scene-culling's FACE_NAMES order, walked around its edge
 const FACE_CORNER_INDICES = [
 	[4, 5, 7, 6],
 	[0, 1, 3, 2],
@@ -16,22 +16,22 @@ const FACE_CORNER_INDICES = [
 ] as const;
 
 const OCCLUSION_CELL_PIXELS = 8;
-// 4×4 samples per cell, at pixel centres two pixels apart
+//4×4 samples per cell, at pixel centres two pixels apart
 const SAMPLES_PER_CELL_EDGE = 4;
 const SAMPLE_COUNT_PER_CELL = SAMPLES_PER_CELL_EDGE ** 2;
 const SAMPLE_OFFSETS_PIXELS = [1, 3, 5, 7];
 const ALL_SAMPLES_MASK = (1 << SAMPLE_COUNT_PER_CELL) - 1;
-// A corner this close to the eye or behind it does not project; its cube neither occludes
-// nor is occluded
+//A corner this close to the eye or behind it does not project; its cube neither occludes
+//nor is occluded
 const NEAREST_PROJECTABLE_DEPTH = 1;
-// Crossing-edge masks run 0 to 15, so this one cannot be mistaken for a mask
+//Crossing-edge masks run 0 to 15, so this one cannot be mistaken for a mask
 const CELL_OUTSIDE_FACE = -1;
 
 export type OccludableCube = {
 	cube: HTMLElement;
-	// Eight corners in world space, x y z each; corner bit 0 picks +x, bit 1 +y, bit 2 +z
+	//Eight corners in world space, x y z each; corner bit 0 picks +x, bit 1 +y, bit 2 +z
 	worldCorners: Float64Array;
-	// Bit i hides face i of FACE_CORNER_INDICES
+	//Bit i hides face i of FACE_CORNER_INDICES
 	hiddenFaceMask: number;
 	isOutsideView: boolean;
 	isSeeThrough: boolean;
@@ -59,8 +59,8 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 	const viewPoint: ViewPoint = { x: 0, y: 0, depth: 0 };
 	const faceXs = new Float64Array(4);
 	const faceYs = new Float64Array(4);
-	// Each face edge from corner a to b as E(p) = A·x + B·y + C = cross(b - a, p - a),
-	// flipped by the winding so E ≥ 0 inside
+	//Each face edge from corner a to b as E(p) = A·x + B·y + C = cross(b - a, p - a),
+	//flipped by the winding so E ≥ 0 inside
 	const edgeXFactors = new Float64Array(4);
 	const edgeYFactors = new Float64Array(4);
 	const edgeConstants = new Float64Array(4);
@@ -81,8 +81,8 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		cellRange.lastRow = Math.min(coverageRows - 1, Math.floor(maximumY / OCCLUSION_CELL_PIXELS));
 	};
 
-	// Perspective divide: screen = viewport centre + view · perspective / depth.
-	// False when a corner lies at or behind the eye: that cube neither occludes nor is occluded.
+	//Perspective divide: screen = viewport centre + view · perspective / depth.
+	//False when a corner lies at or behind the eye: that cube neither occludes nor is occluded.
 	const projectCorners = (occludableCube: OccludableCube, cubeIndex: number): boolean => {
 		const corners = occludableCube.worldCorners;
 		const offset = cubeIndex * 24;
@@ -106,8 +106,8 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		return true;
 	};
 
-	// E is linear, so its extremes over the cell sit at corners, per axis: all below 0 is
-	// outside, all at least 0 is inside, else the edge crosses the cell and sets its bit
+	//E is linear, so its extremes over the cell sit at corners, per axis: all below 0 is
+	//outside, all at least 0 is inside, else the edge crosses the cell and sets its bit
 	const crossingEdgeMaskOf = (left: number, top: number): number => {
 		let crossingEdgeMask = 0;
 		for (let edgeIndex = 0; edgeIndex < 4; edgeIndex++) {
@@ -125,7 +125,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		return crossingEdgeMask;
 	};
 
-	// Bit i is the sample at column i % 4, row ⌊i / 4⌋. Only the crossing edges can fail it.
+	//Bit i is the sample at column i % 4, row ⌊i / 4⌋. Only the crossing edges can fail it.
 	const sampleMaskInsideFace = (left: number, top: number, crossingEdgeMask: number): number => {
 		let sampleMask = 0;
 		for (let sampleIndex = 0; sampleIndex < SAMPLE_COUNT_PER_CELL; sampleIndex++) {
@@ -170,7 +170,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		}
 		writeCellRange(minimumX, maximumX, minimumY, maximumY);
 		const { firstColumn, lastColumn, firstRow, lastRow } = cellRange;
-		// Sign of cross(c1 - c0, c2 - c0): which way round the projected corners run
+		//Sign of cross(c1 - c0, c2 - c0): which way round the projected corners run
 		const windingSign =
 			(faceXs[1] - faceXs[0]) * (faceYs[2] - faceYs[0]) -
 				(faceYs[1] - faceYs[0]) * (faceXs[2] - faceXs[0]) >
@@ -191,7 +191,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 				const left = column * OCCLUSION_CELL_PIXELS;
 				const top = row * OCCLUSION_CELL_PIXELS;
 				const cellIndex = row * coverageColumns + column;
-				// A cell already hidden at this face's depth or nearer gains nothing from it
+				//A cell already hidden at this face's depth or nearer gains nothing from it
 				if (coveredDepths[cellIndex] <= farthestDepth) continue;
 				const crossingEdgeMask = crossingEdgeMaskOf(left, top);
 				if (crossingEdgeMask === CELL_OUTSIDE_FACE) continue;
@@ -201,7 +201,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 				}
 				const sampleMask = sampleMaskInsideFace(left, top, crossingEdgeMask);
 				if (sampleMask === 0) continue;
-				// Partial covers hide only what lies behind the farthest of them
+				//Partial covers hide only what lies behind the farthest of them
 				partialSampleMasks[cellIndex] |= sampleMask;
 				partialFarthestDepths[cellIndex] = Math.max(
 					partialFarthestDepths[cellIndex],
@@ -217,8 +217,8 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		}
 	};
 
-	// Every cell under the cube's screen rectangle hides what lies beyond its nearest corner.
-	// `!(covered < nearest)` keeps an uncovered Infinity cell, and any NaN, visible.
+	//Every cell under the cube's screen rectangle hides what lies beyond its nearest corner.
+	//`!(covered < nearest)` keeps an uncovered Infinity cell, and any NaN, visible.
 	const isCovered = (cubeIndex: number): boolean => {
 		const offset = cubeIndex * 24;
 		let minimumX = Infinity;
@@ -245,8 +245,8 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		return true;
 	};
 
-	// Front to back by nearest corner, so each cube is tested against all that could cover
-	// it. A cube never hides itself: no face of it lies nearer than its nearest corner.
+	//Front to back by nearest corner, so each cube is tested against all that could cover
+	//it. A cube never hides itself: no face of it lies nearer than its nearest corner.
 	const occlude = (cubes: readonly OccludableCube[]): void => {
 		coveredDepths.fill(Infinity);
 		partialSampleMasks.fill(0);

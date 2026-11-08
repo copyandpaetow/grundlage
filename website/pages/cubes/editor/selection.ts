@@ -2,8 +2,8 @@ import { sceneElementRendered } from "../scene-shared";
 import { isBlock } from "../scene-geometry";
 import type { EditorState } from "./context";
 
-// Every selected block sits in one cage, so one and many blocks share one structure and
-// the gizmo moves them alike
+//Every selected block sits in one cage, so one and many blocks share one structure and
+//the gizmo moves them alike
 
 export type SelectionDeps = {
 	updateInspector: () => void;
@@ -23,21 +23,21 @@ export type SelectionApi = {
 export const createSelection = (state: EditorState, deps: SelectionDeps): SelectionApi => {
 	const { updateInspector } = deps;
 
-	// The gizmo and cage read their content only when rendering, so whoever changes it
-	// re-renders them
+	//The gizmo and cage read their content only when rendering, so whoever changes it
+	//re-renders them
 	const repaintSelection = (): void => {
 		if (state.gizmo !== null) void sceneElementRendered(state.gizmo);
 		if (state.sceneSelect !== null) void sceneElementRendered(state.sceneSelect);
 	};
 
-	// An inspector edit re-renders the block asynchronously; the selection chrome only
-	// re-pins correctly once that has landed.
+	//An inspector edit re-renders the block asynchronously; the selection chrome only
+	//re-pins correctly once that has landed.
 	const signalGizmoResync = async (block: HTMLElement): Promise<void> => {
 		await sceneElementRendered(block);
 		repaintSelection();
 	};
 
-	// The anchor keeps DOM order, and so Export, stable across gather and release
+	//The anchor keeps DOM order, and so Export, stable across gather and release
 	const foldIn = (block: HTMLElement): void => {
 		if (state.sceneSelect === null) return;
 		const anchor = document.createComment("scene-selection-anchor");
@@ -59,8 +59,8 @@ export const createSelection = (state: EditorState, deps: SelectionDeps): Select
 		state.selection.delete(block);
 	};
 
-	// Callers decide what happens to the blocks FIRST: clearSelection folds them back
-	// out, deleteSelection discards them with the gizmo.
+	//Callers decide what happens to the blocks FIRST: clearSelection folds them back
+	//out, deleteSelection discards them with the gizmo.
 	const teardownSelection = (): void => {
 		state.gizmo?.remove();
 		state.gizmo = null;
@@ -87,7 +87,7 @@ export const createSelection = (state: EditorState, deps: SelectionDeps): Select
 		if (state.selection.size === 1 && state.selection.has(block)) return;
 		clearSelection();
 		buildSelection(block);
-		// Both ran their first render against an empty fresh cage.
+		//Both ran their first render against an empty fresh cage.
 		repaintSelection();
 		updateInspector();
 	};
@@ -114,18 +114,18 @@ export const createSelection = (state: EditorState, deps: SelectionDeps): Select
 
 	const deleteSelection = (): void => {
 		if (state.gizmo === null) return;
-		// Removing the gizmo takes the cage and every wrapped block with it; the anchors
-		// stay behind in the host, so clear them too.
+		//Removing the gizmo takes the cage and every wrapped block with it; the anchors
+		//stay behind in the host, so clear them too.
 		for (const anchor of state.anchors.values()) anchor.remove();
 		state.anchors.clear();
 		teardownSelection();
 		updateInspector();
 	};
 
-	// Outermost selectable in the path, so a grouped child resolves to its group and a
-	// wrapped block resolves to the block (the gizmo is not selectable). Clicking a
-	// selected block again picks the block one level inside it. While the selection sits
-	// inside a block, clicks within that block pick among its contents.
+	//Outermost selectable in the path, so a grouped child resolves to its group and a
+	//wrapped block resolves to the block (the gizmo is not selectable). Clicking a
+	//selected block again picks the block one level inside it. While the selection sits
+	//inside a block, clicks within that block pick among its contents.
 	const pickBlock = (event: PointerEvent): HTMLElement | null => {
 		const blocksOutermostFirst = event
 			.composedPath()

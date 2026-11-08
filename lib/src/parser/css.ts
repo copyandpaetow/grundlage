@@ -172,6 +172,20 @@ const skipWhitespaceAndComments = (source: string, index: number): number => {
 	return index;
 };
 
+//the index past an escape, string or comment that starts at index, or index when none starts there
+const endOfEscapeStringOrComment = (source: string, index: number): number => {
+	const code = source.charCodeAt(index);
+	if (code === CHARACTER_CODE.BACKSLASH) {
+		const escapesNothing =
+			index + 1 === source.length || source.charCodeAt(index + 1) === HOLE_CODE;
+		if (escapesNothing) throw NOT_ADDRESSABLE;
+		return index + 2;
+	}
+	if (isQuoteCode(code)) return endOfString(source, index);
+	if (source.startsWith(COMMENT_OPEN, index)) return endOfComment(source, index);
+	return index;
+};
+
 const closingCodeOf = (openingCode: number): number | null => {
 	if (openingCode === CHARACTER_CODE.OPEN_PAREN) return CHARACTER_CODE.CLOSE_PAREN;
 	if (openingCode === CHARACTER_CODE.OPEN_BRACKET) return CHARACTER_CODE.CLOSE_BRACKET;
@@ -179,78 +193,59 @@ const closingCodeOf = (openingCode: number): number | null => {
 	return null;
 };
 
-//a declaration or a rule's prelude, up to its top-level ";", "{" or "}"; strings, comments,
-//escapes and nested blocks are stepped over whole. Inside a block only its own closer ends it,
+//the index past the block that opens at openIndex. Inside it only the innermost closer counts,
 //so `({);` swallows the `;` exactly as the browser does
+const endOfNestedBlock = (source: string, openIndex: number): number => {
+	const closingCodes: Array<number> = [];
+	let index = openIndex;
+	while (index < source.length) {
+		const skippedEnd = endOfEscapeStringOrComment(source, index);
+		if (skippedEnd !== index) {
+			index = skippedEnd;
+			continue;
+		}
+		const code = source.charCodeAt(index);
+		const closingCode = closingCodeOf(code);
+		if (closingCode !== null) closingCodes.push(closingCode);
+		else if (code === closingCodes[closingCodes.length - 1]) closingCodes.pop();
+		index++;
+		if (closingCodes.length === 0) return index;
+	}
+	throw NOT_ADDRESSABLE;
+};
+
+//a declaration or a rule's prelude, up to its top-level ";", "{" or "}"; strings, comments,
+//escapes and nested blocks are stepped over whole
 const readItem = (reader: StyleSheetReader): number => {
 	const { source } = reader;
 	reader.itemColonIndex = NO_COLON;
 	reader.itemTopLevelBangCount = 0;
-	const openBlockClosingCodes: Array<number> = [];
 	let index = reader.index;
 	while (index < source.length) {
+		const skippedEnd = endOfEscapeStringOrComment(source, index);
+		if (skippedEnd !== index) {
+			index = skippedEnd;
+			continue;
+		}
 		const code = source.charCodeAt(index);
-		if (code === CHARACTER_CODE.BACKSLASH) {
-			const escapesNothing =
-				index + 1 === source.length || source.charCodeAt(index + 1) === HOLE_CODE;
-			if (escapesNothing) throw NOT_ADDRESSABLE;
-			index += 2;
+		if (code === CHARACTER_CODE.OPEN_PAREN || code === CHARACTER_CODE.OPEN_BRACKET) {
+			index = endOfNestedBlock(source, index);
 			continue;
 		}
-		if (isQuoteCode(code)) {
-			index = endOfString(source, index);
-			continue;
-		}
-		if (source.startsWith(COMMENT_OPEN, index)) {
-			index = endOfComment(source, index);
-			continue;
-		}
-		const isInsideBlock = openBlockClosingCodes.length > 0;
-		const closingCode = closingCodeOf(code);
-		const opensNestedBlock =
-			closingCode !== null && (isInsideBlock || code !== CHARACTER_CODE.OPEN_BRACE);
-		if (opensNestedBlock) openBlockClosingCodes.push(closingCode);
-		else if (isInsideBlock) {
-			if (code === openBlockClosingCodes[openBlockClosingCodes.length - 1]) {
-				openBlockClosingCodes.pop();
-			}
-		} else if (
+		const endsItem =
 			code === CHARACTER_CODE.SEMICOLON ||
 			code === CHARACTER_CODE.OPEN_BRACE ||
-			code === CHARACTER_CODE.CLOSE_BRACE
-		) {
-			return index;
-		} else if (code === CHARACTER_CODE.COLON) {
-			if (reader.itemColonIndex === NO_COLON) reader.itemColonIndex = index;
-		} else if (code === CHARACTER_CODE.BANG && reader.itemColonIndex !== NO_COLON) {
+			code === CHARACTER_CODE.CLOSE_BRACE;
+		if (endsItem) return index;
+		if (code === CHARACTER_CODE.COLON && reader.itemColonIndex === NO_COLON) {
+			reader.itemColonIndex = index;
+		}
+		if (code === CHARACTER_CODE.BANG && reader.itemColonIndex !== NO_COLON) {
 			reader.itemTopLevelBangCount++;
 		}
 		index++;
 	}
-	if (openBlockClosingCodes.length > 0) throw NOT_ADDRESSABLE;
 	return index;
-};
-
-//the end of a block whose contents are never addressed, past its closing brace
-const endOfSkippedBlock = (source: string, openBraceIndex: number): number => {
-	let depth = 1;
-	let index = openBraceIndex + 1;
-	while (index < source.length) {
-		const code = source.charCodeAt(index);
-		if (isQuoteCode(code)) {
-			index = endOfString(source, index);
-			continue;
-		}
-		if (source.startsWith(COMMENT_OPEN, index)) {
-			index = endOfComment(source, index);
-			continue;
-		}
-		if (code === HOLE_CODE) throw NOT_ADDRESSABLE;
-		if (code === CHARACTER_CODE.OPEN_BRACE) depth++;
-		if (code === CHARACTER_CODE.CLOSE_BRACE && --depth === 0) return index + 1;
-		index++;
-	}
-	throw NOT_ADDRESSABLE;
 };
 
 const propertyNameOf = (
@@ -475,7 +470,8 @@ const readAtRule = (reader: StyleSheetReader, parent: RuleFrame): void => {
 	const kind = atRuleKindOf(name);
 	if (kind === RULE_KIND.DESCRIPTOR) {
 		recordChildRule(parent);
-		reader.index = endOfSkippedBlock(source, preludeEnd);
+		reader.index = endOfNestedBlock(source, preludeEnd);
+		failUnlessHoleFree(source, preludeEnd, reader.index);
 		return;
 	}
 	readNestedRule(reader, parent, kind, preludeEnd);

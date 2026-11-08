@@ -164,7 +164,7 @@ describe("SSR: server stops at the first paint", () => {
 		const Component = component(function* () {
 			const data = yield Promise.resolve("from-server");
 			yield function* () {
-				yield html`<p>${data as string}</p>`;
+				yield html`<p>${data}</p>`;
 			};
 			postYieldRan = true;
 		});

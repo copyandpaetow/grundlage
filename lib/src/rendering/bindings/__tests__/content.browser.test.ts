@@ -690,7 +690,7 @@ describe("content updates", () => {
 		await sleep();
 
 		const inputsBefore = element.shadowRoot!.querySelectorAll("input");
-		const betaInput = inputsBefore[1] as HTMLInputElement;
+		const betaInput = inputsBefore[1];
 		betaInput.value = "user typed";
 
 		items = ["gamma", "beta", "alpha"];
@@ -699,7 +699,7 @@ describe("content updates", () => {
 
 		const inputsAfter = element.shadowRoot!.querySelectorAll("input");
 		expect(inputsAfter[1]).toBe(betaInput);
-		expect((inputsAfter[1] as HTMLInputElement).value).toBe("user typed");
+		expect(inputsAfter[1].value).toBe("user typed");
 
 		cleanup(element);
 	});
@@ -1008,7 +1008,7 @@ describe("content updates", () => {
 		const bInnerItemsAfter = Array.from(
 			outerLisAfterInnerSwap[0].querySelector("ul")!.children,
 		) as Array<HTMLElement>;
-		expect(bInnerItemsAfter.map((node) => node.textContent!.trim())).toEqual(["b2", "b1"]);
+		expect(bInnerItemsAfter.map((node) => node.textContent.trim())).toEqual(["b2", "b1"]);
 
 		const aInnerItemsAfter = Array.from(
 			aGroupNode.querySelector("ul")!.children,
@@ -1477,7 +1477,7 @@ describe("content updates", () => {
 		await sleep();
 
 		//bare primitive items paint as adjacent text nodes with no separator
-		const text = () => element.shadowRoot!.textContent!.replace(/\s+/g, "").trim();
+		const text = () => element.shadowRoot!.textContent.replace(/\s+/g, "").trim();
 		expect(text()).toBe("abc");
 		//the engine must not have replaced the caller's primitives with wrappers
 		expect(items).toEqual(["a", "b", "c"]);

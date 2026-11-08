@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { component, ComponentErrorEvent, html, prop } from "../index";
 import { DEFER_HYDRATION_ATTRIBUTE } from "../rendering/constants";
-import type { BaseComponent, Schema, StandardSchemaV1 } from "../types";
+import type { BaseComponent, StandardSchemaV1 } from "../types";
 
 const sleep = () => new Promise((resolve) => setTimeout(resolve, 0));
 const nextFrame = () =>
@@ -151,9 +151,7 @@ describe("a required prop", () => {
 		const { tag } = defineHabitCard();
 		const element = document.createElement(tag);
 		const errors: Array<unknown> = [];
-		element.addEventListener(ComponentErrorEvent.eventName, (event) =>
-			errors.push((event as ComponentErrorEvent).error),
-		);
+		element.addEventListener(ComponentErrorEvent.eventName, (event) => errors.push(event.error));
 		mount(element);
 		await sleep();
 		expect(String(errors[0])).toMatch(
@@ -474,7 +472,7 @@ describe("definition-time checks", () => {
 				component(function* () {}, {
 					props: {
 						label: prop.property<string | undefined>(undefined),
-					} as Schema,
+					},
 				}),
 			/is undefined, which is no fallback/,
 		],

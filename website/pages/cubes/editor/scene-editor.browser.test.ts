@@ -3,21 +3,21 @@ import "./scene-editor";
 import "../shapes/scene-cube";
 import "../wrappers/scene-group";
 
-// scene-cube and scene-group are defined, because wrapping measures rendered bounds. The
-// other shapes and wrappers stay inert: selection, serialization and the mode toggle read
-// only tag names and attributes.
+//scene-cube and scene-group are defined, because wrapping measures rendered bounds. The
+//other shapes and wrappers stay inert: selection, serialization and the mode toggle read
+//only tag names and attributes.
 
 let editor: HTMLElement;
 let sceneCamera: HTMLElement;
 let world: HTMLElement;
 
-// The palette re-renders a microtask after the editor sets its inspector prop
+//The palette re-renders a microtask after the editor sets its inspector prop
 const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
 
 let dispose: () => void;
 
 beforeEach(() => {
-	// Connected in one shot, so the editor sees its world and camera at connect
+	//Connected in one shot, so the editor sees its world and camera at connect
 	editor = document.createElement("scene-editor");
 	sceneCamera = document.createElement("scene-camera");
 	world = document.createElement("scene-world");
@@ -28,8 +28,8 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-	// disconnectedCallback fires teardown a microtask later (it waits to rule out a
-	// move), so let that settle before tearing down the world.
+	//disconnectedCallback fires teardown a microtask later (it waits to rule out a
+	//move), so let that settle before tearing down the world.
 	dispose();
 	await flush();
 	world.remove();
@@ -44,7 +44,7 @@ const addBlock = (tag: string, attributes: Record<string, string> = {}): HTMLEle
 	return block;
 };
 
-// The handler reads only MouseEvent fields and composedPath
+//The handler reads only MouseEvent fields and composedPath
 const pointerDown = (target: EventTarget, meta = false): void => {
 	target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, metaKey: meta }));
 };
@@ -134,7 +134,7 @@ describe("multi-selection", () => {
 
 		expect(world.querySelectorAll("scene-select")).toHaveLength(1);
 		expect(new Set(selectedBlocks())).toEqual(new Set([first, second]));
-		// The inspector only makes sense for one block, so it hides for many.
+		//The inspector only makes sense for one block, so it hides for many.
 		expect(inspector()?.style.display).toBe("none");
 	});
 
@@ -146,7 +146,7 @@ describe("multi-selection", () => {
 		pointerDown(b);
 		pointerDown(a, true);
 		pointerDown(c, true);
-		pointerDown(world); // deselect everything
+		pointerDown(world); //deselect everything
 
 		const order = [...world.children].filter(
 			(child) => child.tagName.toLowerCase() === "scene-cube",
@@ -157,7 +157,7 @@ describe("multi-selection", () => {
 	test("meta-clicking the last selected block clears the selection", () => {
 		const block = addBlock("scene-cube");
 		pointerDown(block);
-		pointerDown(block, true); // fold the only block back out
+		pointerDown(block, true); //fold the only block back out
 
 		expect(gizmo()).toBeNull();
 		expect(block.parentElement).toBe(world);
@@ -190,8 +190,8 @@ describe("grouping", () => {
 		expect(group).not.toBeNull();
 		expect(group?.getAttribute("position")).toBe("3 0 0");
 
-		// Children are reparented under the group, rebased into group-local space,
-		// and their per-axis overrides cleared.
+		//Children are reparented under the group, rebased into group-local space,
+		//and their per-axis overrides cleared.
 		expect(a.parentElement).toBe(group);
 		expect(b.parentElement).toBe(group);
 		expect(a.getAttribute("position")).toBe("-1 0 0");
@@ -265,14 +265,14 @@ describe("ungrouping", () => {
 		pointerDown(group);
 		pressKey("u");
 
-		// The group's frame turns [2,0,0] through rotateY(90°) → [0, 0, -2]; the child's
-		// rotation composes with the group's by matrix, here just the group's yaw.
+		//The group's frame turns [2,0,0] through rotateY(90°) → [0, 0, -2]; the child's
+		//rotation composes with the group's by matrix, here just the group's yaw.
 		expect(child.getAttribute("position")).toBe("0 0 -2");
 		expect(child.getAttribute("rotation")).toBe("0 90 0");
 	});
 
 	test("'u' honours a group rotated about X, not only yaw", () => {
-		// A group tilted 90° about X turns +z into +y: [0,0,2] lands at world [0,2,0]
+		//A group tilted 90° about X turns +z into +y: [0,0,2] lands at world [0,2,0]
 		const group = addBlock("scene-group", {
 			position: "0 0 0",
 			rotation: "90 0 0",
@@ -290,7 +290,7 @@ describe("ungrouping", () => {
 });
 
 describe("nesting", () => {
-	// A group turned 90° about Y, holding two cubes in its own frame.
+	//A group turned 90° about Y, holding two cubes in its own frame.
 	const addTurnedGroup = (): {
 		group: HTMLElement;
 		first: HTMLElement;
@@ -369,8 +369,8 @@ describe("nesting", () => {
 		expect(selectedBlocks()).toEqual([inner]);
 		pressKey("u");
 
-		// Lifted through the inner group's 90° alone: [2,0,0] → [0,0,-2], still inside
-		// the outer group, which keeps adding its own frame on screen.
+		//Lifted through the inner group's 90° alone: [2,0,0] → [0,0,-2], still inside
+		//the outer group, which keeps adding its own frame on screen.
 		expect(child.parentElement).toBe(group);
 		expect(child.getAttribute("position")).toBe("0 0 -2");
 		expect(child.getAttribute("rotation")).toBe("0 90 0");
@@ -382,8 +382,8 @@ describe("placement", () => {
 		clickPaletteButton('[data-add="scene-cube"]');
 		expect(world.querySelector("scene-ghost")).not.toBeNull();
 
-		moveOverFloor(2, 3); // cross the grid so the drop has a point to land on
-		pointerDown(world); // drop at the current ghost position
+		moveOverFloor(2, 3); //cross the grid so the drop has a point to land on
+		pointerDown(world); //drop at the current ghost position
 
 		expect(world.querySelector("scene-ghost")).toBeNull();
 		const placed = world.querySelector("scene-cube");
@@ -394,9 +394,9 @@ describe("placement", () => {
 
 	test("dropping before the pointer crosses the grid strands no block", () => {
 		clickPaletteButton('[data-add="scene-cube"]');
-		pointerDown(world); // click without ever moving over the floor
+		pointerDown(world); //click without ever moving over the floor
 
-		// The only cube left is the ghost's preview child, so nothing landed at the origin
+		//The only cube left is the ghost's preview child, so nothing landed at the origin
 		expect(world.querySelector("scene-ghost")).not.toBeNull();
 		expect(world.querySelector(":scope > scene-cube")).toBeNull();
 		expect(selectedBlocks()).toEqual([]);
@@ -447,7 +447,7 @@ describe("inspector", () => {
 
 		expect(fieldInput("size", 0)?.disabled).toBe(true);
 
-		// Editing it is also a no-op: no size attribute is written.
+		//Editing it is also a no-op: no size attribute is written.
 		const input = fieldInput("size", 0)!;
 		input.value = "3";
 		input.dispatchEvent(new Event("change", { bubbles: true }));

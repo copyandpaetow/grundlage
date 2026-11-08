@@ -36,7 +36,7 @@ const mountTemplateValue = (value: TemplateValue, treeStateValue: TreeState) => 
 //the host must be connected: a detached <style> has no sheet, so the CSSOM lane never engages
 const mountIntoShadow = (value: TemplateValue) => {
 	const host = createHost();
-	document.body.appendChild(host as unknown as Element);
+	document.body.appendChild(host);
 	const shadowRoot = host.attachShadow({ mode: "open" });
 	const { instance, fragment } = mountTemplateValue(value, treeState());
 	shadowRoot.appendChild(fragment);
@@ -192,7 +192,7 @@ describe("raw content with a css plan", () => {
 		const styles = fragment.querySelectorAll("style");
 
 		expect(styles).toHaveLength(1);
-		expect(normalizeWhitespace(styles[0].textContent!)).toBe("p { color: red; }");
+		expect(normalizeWhitespace(styles[0].textContent)).toBe("p { color: red; }");
 	});
 
 	test("a connected patch updates the declaration through the sheet, never the text", () => {
@@ -228,7 +228,7 @@ describe("raw content with a css plan", () => {
 
 		patchInstance(instance, sheet("blue").values);
 
-		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: blue; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: blue; }");
 	});
 
 	test("hydrate seeds without touching the sheet; a later patch goes through CSSOM", () => {
@@ -246,7 +246,7 @@ describe("raw content with a css plan", () => {
 
 	test("duplicate instances own private sheets and never interfere", () => {
 		const host = createHost();
-		document.body.appendChild(host as unknown as Element);
+		document.body.appendChild(host);
 		const shadowRoot = host.attachShadow({ mode: "open" });
 		const state = treeState();
 		const first = mountTemplateValue(sheet("red"), state);
@@ -257,7 +257,7 @@ describe("raw content with a css plan", () => {
 
 		patchInstance(second.instance, sheet("green").values);
 
-		expect(normalizeWhitespace(styles[0].textContent!)).toBe("p { color: red; }");
+		expect(normalizeWhitespace(styles[0].textContent)).toBe("p { color: red; }");
 		expect(declarationOf(styles[0]).getPropertyValue("color")).toBe("red");
 		expect(declarationOf(styles[1]).getPropertyValue("color")).toBe("green");
 	});
@@ -298,7 +298,7 @@ describe("raw content with a css plan", () => {
 
 		//the demote is real: the next patch recomposes the whole sheet on the text lane
 		patchInstance(instance, sheet("green").values);
-		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: green; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: green; }");
 	});
 
 	test("switching a branch away removes the style element with the branch", () => {
@@ -464,7 +464,7 @@ describe("hydrateInstance: rejects a server range that contradicts the value", (
 			${labels.map((label) => html`<li>${label}</li>`)}
 		</ul>`;
 	const rowLabels = (shadowRoot: ShadowRoot): Array<string> =>
-		Array.from(shadowRoot.querySelectorAll("li"), (item) => item.textContent!);
+		Array.from(shadowRoot.querySelectorAll("li"), (item) => item.textContent);
 
 	beforeEach(() => {
 		vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -577,7 +577,7 @@ describe("an iterator in a content hole paints as a list", () => {
 		</ul>`;
 	const row = (label: string) => html`<li>${label}</li>`;
 	const rowLabels = (root: ParentNode): Array<string> =>
-		Array.from(root.querySelectorAll("li"), (item) => item.textContent!);
+		Array.from(root.querySelectorAll("li"), (item) => item.textContent);
 
 	afterEach(() => {
 		vi.restoreAllMocks();

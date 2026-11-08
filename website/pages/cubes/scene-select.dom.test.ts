@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import "./wrappers/scene-select";
 
-// Assertions read the live sheet, not the <style> text: the text is the first paint, and
-// the measured box lands as a CSSOM patch in the second.
+//Assertions read the live sheet, not the <style> text: the text is the first paint, and
+//the measured box lands as a CSSOM patch in the second.
 
 const HALF_UNIT = 60;
 const CAGE_MARGIN = 6;
@@ -11,7 +11,7 @@ let cage: HTMLElement & { update: () => Promise<void> };
 
 const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
 
-// Left un-upgraded, so nothing depends on the shapes' own rendering
+//Left un-upgraded, so nothing depends on the shapes' own rendering
 const makeLeaf = (offsetX: number): HTMLElement => {
 	const leaf = document.createElement("scene-cube");
 	leaf.style.transform = `translate3d(${offsetX}px, 0px, 0px)`;
@@ -21,8 +21,8 @@ const makeLeaf = (offsetX: number): HTMLElement => {
 	return leaf;
 };
 
-// The cage paints the shared placement sheets first, so the box lives in whichever
-// :host rule declares the variable.
+//The cage paints the shared placement sheets first, so the box lives in whichever
+//:host rule declares the variable.
 const boxVariable = (name: string): string => {
 	for (const style of Array.from(cage.shadowRoot?.querySelectorAll("style") ?? [])) {
 		for (const rule of Array.from(style.sheet?.cssRules ?? [])) {
@@ -55,7 +55,7 @@ describe("measuring what it just painted", () => {
 		document.body.appendChild(cage);
 		await flush();
 
-		// The two leaves span -60..300 on x, so the box centres at 120 and reaches 180.
+		//The two leaves span -60..300 on x, so the box centres at 120 and reaches 180.
 		expect(boxVariable("--box-display")).toBe("block");
 		expect(boxVariable("--center-x")).toBe("120px");
 		expect(boxVariable("--half-x")).toBe(`${180 + CAGE_MARGIN}px`);

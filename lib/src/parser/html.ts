@@ -162,18 +162,20 @@ const parsesContentAsRaw = (tagName: string) => {
 	);
 };
 
-const rootTemplateAfterNonRootTag = (rootTemplate: RootTemplateKind): RootTemplateKind => {
-	switch (rootTemplate) {
-		case ROOT_TEMPLATE.UNDECIDED:
-			return ROOT_TEMPLATE.RULED_OUT;
+const rootTemplateAfterOpenTag = (reader: TemplateReader, tagName: string): RootTemplateKind => {
+	switch (reader.rootTemplate) {
+		case ROOT_TEMPLATE.UNDECIDED: {
+			const isRootTemplate = tagName === TEMPLATE_TAG && !reader.hasSeenTopLevelSibling;
+			return isRootTemplate ? ROOT_TEMPLATE.IS_THE_CURRENT_TAG : ROOT_TEMPLATE.RULED_OUT;
+		}
 		case ROOT_TEMPLATE.IS_THE_CURRENT_TAG:
 			return ROOT_TEMPLATE.CONTENT_OPEN;
 		case ROOT_TEMPLATE.RULED_OUT:
 		case ROOT_TEMPLATE.CONTENT_OPEN:
 		case ROOT_TEMPLATE.CLOSED:
-			return rootTemplate;
+			return reader.rootTemplate;
 		default:
-			return rootTemplate satisfies never;
+			return reader.rootTemplate satisfies never;
 	}
 };
 
@@ -303,7 +305,11 @@ const startsSelfClosingEnd = (source: string, index: number) =>
 
 const endsTagName = (source: string, index: number) => {
 	const code = source.charCodeAt(index);
-	return code === CHARACTER_CODE.GREATER_THAN || isWhitespaceCode(code);
+	return (
+		code === CHARACTER_CODE.GREATER_THAN ||
+		isWhitespaceCode(code) ||
+		startsSelfClosingEnd(source, index)
+	);
 };
 
 const endsAttributeName = (source: string, index: number) => {
@@ -324,6 +330,16 @@ const endsUnquotedValue = (source: string, index: number) => {
 		isWhitespaceCode(code) ||
 		startsSelfClosingEnd(source, index)
 	);
+};
+
+const findEnd = (
+	source: string,
+	start: number,
+	isEnd: (source: string, index: number) => boolean,
+): number => {
+	let end = start;
+	while (end < source.length && !isEnd(source, end)) end++;
+	return end;
 };
 
 //<select> has no value attribute, and its options are not there yet when its own bindings commit
@@ -362,26 +378,58 @@ const attributeBindingOf = (
 	};
 };
 
-const isShadowRootModeName = (nameParts: ReadonlyArray<Part>): boolean => {
+const ensureNoShadowRootMode = (nameParts: ReadonlyArray<Part>) => {
 	const [name] = nameParts;
-	return (
+	const isShadowRootMode =
 		nameParts.length === 1 &&
 		typeof name === "string" &&
-		name.toLowerCase() === SHADOW_ROOT_MODE_ATTRIBUTE
+		name.toLowerCase() === SHADOW_ROOT_MODE_ATTRIBUTE;
+	if (!isShadowRootMode) return;
+	throw new Error(
+		libraryMessage(
+			"a nested <template> expects no shadowrootmode: a paint keeps it a plain <template>, while the browser turns it into a shadow root in server markup, so the two disagree. Let the element attach its own shadow root.",
+		),
 	);
+};
+
+const readAttributeValue = (reader: TemplateReader): Array<Part> => {
+	const { source } = reader;
+	if (source.charCodeAt(reader.index) !== CHARACTER_CODE.EQUALS) return [];
+	const valueStart = reader.index + 1;
+	const quoteCode = source.charCodeAt(valueStart);
+	if (!isQuoteCode(quoteCode)) {
+		const valueEnd = findEnd(source, valueStart, endsUnquotedValue);
+		const valueParts = partsOfRange(reader, valueStart, valueEnd);
+		reader.index = valueEnd;
+		return valueParts;
+	}
+	//nothing between the quotes can end the value, holes included, so the scan is a search
+	const closingQuote = source.indexOf(String.fromCharCode(quoteCode), valueStart + 1);
+	if (closingQuote === -1) throw unclosedError("an attribute value");
+	const valueParts = partsOfRange(reader, valueStart + 1, closingQuote);
+	reader.index = closingQuote + 1;
+	if (source.charCodeAt(reader.index) === HOLE_CODE) {
+		throw new Error(
+			libraryMessage(
+				'a ${…} right after a quoted attribute value belongs to no attribute. Put a space before it: a="1" ${…}',
+			),
+		);
+	}
+	return valueParts;
 };
 
 //reads up to just past the `>` or `/>`; static attributes come back as markup, bound ones as markers
 const readAttributes = (
 	reader: TemplateReader,
 	tagName: string,
-	isOnRootTemplate: boolean,
 ): {
 	attributeMarkup: string;
 	markerMarkup: string;
 	isSelfClosing: boolean;
 } => {
 	const { source } = reader;
+	const isOnRootTemplate = reader.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
+	const isNestedTemplate = tagName === TEMPLATE_TAG && !isOnRootTemplate;
 	let attributeMarkup = "";
 	let markerMarkup = "";
 
@@ -399,61 +447,21 @@ const readAttributes = (
 		if (reader.index >= source.length) break;
 
 		const nameStart = reader.index;
-		let nameEnd = nameStart + 1;
-		while (nameEnd < source.length && !endsAttributeName(source, nameEnd)) nameEnd++;
+		const nameEnd = findEnd(source, nameStart + 1, endsAttributeName);
 		const nameParts = partsOfRange(reader, nameStart, nameEnd);
 		reader.index = nameEnd;
-		const isNestedShadowRoot =
-			tagName === TEMPLATE_TAG && !isOnRootTemplate && isShadowRootModeName(nameParts);
-		if (isNestedShadowRoot) {
-			throw new Error(
-				libraryMessage(
-					"a nested <template> expects no shadowrootmode: a paint keeps it a plain <template>, while the browser turns it into a shadow root in server markup, so the two disagree. Let the element attach its own shadow root.",
-				),
-			);
-		}
+		if (isNestedTemplate) ensureNoShadowRootMode(nameParts);
+		const valueParts = readAttributeValue(reader);
 
-		let valueParts: Array<Part> = [];
-		if (source.charCodeAt(nameEnd) === CHARACTER_CODE.EQUALS) {
-			const valueStart = nameEnd + 1;
-			const quoteCode = source.charCodeAt(valueStart);
-			if (isQuoteCode(quoteCode)) {
-				//nothing between the quotes can end the value, holes included, so the scan is a search
-				const closingQuote = source.indexOf(String.fromCharCode(quoteCode), valueStart + 1);
-				if (closingQuote === -1) throw unclosedError("an attribute value");
-				valueParts = partsOfRange(reader, valueStart + 1, closingQuote);
-				reader.index = closingQuote + 1;
-				if (source.charCodeAt(reader.index) === HOLE_CODE) {
-					throw new Error(
-						libraryMessage(
-							'a ${…} right after a quoted attribute value belongs to no attribute. Put a space before it: a="1" ${…}',
-						),
-					);
-				}
-			} else {
-				let valueEnd = valueStart;
-				while (valueEnd < source.length && !endsUnquotedValue(source, valueEnd)) valueEnd++;
-				valueParts = partsOfRange(reader, valueStart, valueEnd);
-				reader.index = valueEnd;
-			}
-		}
-
-		const isBound = hasHole(nameParts) || hasHole(valueParts);
-		if (isBound) {
+		//the root template's tag is not written, so its static attributes become host bindings
+		const isBinding = isOnRootTemplate || hasHole(nameParts) || hasHole(valueParts);
+		if (isBinding) {
 			const bindingIndex = reader.startedBindingCount++;
 			const binding = attributeBindingOf(tagName, nameParts, valueParts);
 			warnOnSelectValueBinding(tagName, binding);
 			reader.bindings.push(binding);
 			if (isOnRootTemplate) reader.hostBindingCount++;
 			else markerMarkup += openMarkerComment(OPEN_CONSTRUCT.ATTRIBUTE, bindingIndex);
-			continue;
-		}
-		//a static host attribute emits no markup but still owns a binding index, and every marker
-		//after it is numbered from this count
-		if (isOnRootTemplate) {
-			reader.startedBindingCount++;
-			reader.bindings.push(attributeBindingOf(tagName, nameParts, valueParts));
-			reader.hostBindingCount++;
 			continue;
 		}
 		attributeMarkup += MARKUP.ATTRIBUTE_SEPARATOR + nameParts.join("");
@@ -524,69 +532,41 @@ const ensureStaticContent = (reader: TemplateReader, tagName: string) => {
 
 //every marker of an element goes in front of it: tag, then attributes, then raw content
 const readElement = (reader: TemplateReader) => {
-	const { source } = reader;
 	const nameStart = reader.index + MARKUP.TAG_OPEN.length;
-	let nameEnd = nameStart;
-	while (nameEnd < source.length && !endsTagName(source, nameEnd)) nameEnd++;
-	if (nameEnd >= source.length) throw unclosedError("an open tag");
-	const endsWithSlash =
-		source.charCodeAt(nameEnd) === CHARACTER_CODE.GREATER_THAN &&
-		source.charCodeAt(nameEnd - 1) === CHARACTER_CODE.SLASH;
-	const nameParts = partsOfRange(reader, nameStart, endsWithSlash ? nameEnd - 1 : nameEnd);
+	const nameEnd = findEnd(reader.source, nameStart, endsTagName);
+	const nameParts = partsOfRange(reader, nameStart, nameEnd);
 	reader.index = nameEnd;
+
+	const isDynamicTag = hasHole(nameParts);
+	const tagName = isDynamicTag ? DYNAMIC_TAG_PLACEHOLDER : nameParts.join("");
+	if (isDynamicTag) {
+		reader.resultMarkup += openMarkerComment(OPEN_CONSTRUCT.TAG, reader.startedBindingCount++);
+		reader.bindings.push({ type: BINDING.TAG, parts: nameParts });
+	}
 
 	//in the second pass the root template is already ruled out, and nothing there reads a sibling
 	const isFirstTag = reader.rootTemplate === ROOT_TEMPLATE.UNDECIDED;
 	if (!isFirstTag && isTopLevel(reader)) reader.hasSeenTopLevelSibling = true;
+	reader.rootTemplate = rootTemplateAfterOpenTag(reader, tagName);
+	const isOnRootTemplate = reader.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
 
-	const isDynamicTag = hasHole(nameParts);
-	let tagName: string;
-	let tagMarkerMarkup = "";
-	let isOnRootTemplate = false;
-	if (isDynamicTag) {
-		tagName = DYNAMIC_TAG_PLACEHOLDER;
-		tagMarkerMarkup = openMarkerComment(OPEN_CONSTRUCT.TAG, reader.startedBindingCount++);
-		reader.bindings.push({ type: BINDING.TAG, parts: nameParts });
-		reader.rootTemplate = rootTemplateAfterNonRootTag(reader.rootTemplate);
-	} else {
-		const [staticTagName] = nameParts;
-		assertDuringDevelopment(
-			typeof staticTagName === "string",
-			"a tag name without a hole is captured as one text part",
-		);
-		tagName = staticTagName;
-		isOnRootTemplate = isFirstTag && !reader.hasSeenTopLevelSibling && tagName === TEMPLATE_TAG;
-		reader.rootTemplate = isOnRootTemplate
-			? ROOT_TEMPLATE.IS_THE_CURRENT_TAG
-			: rootTemplateAfterNonRootTag(reader.rootTemplate);
-	}
-	reader.openTagIsDynamic.push(isDynamicTag);
-
-	let attributes = {
-		attributeMarkup: "",
-		markerMarkup: "",
-		isSelfClosing: endsWithSlash,
-	};
-	if (source.charCodeAt(nameEnd) === CHARACTER_CODE.GREATER_THAN) reader.index++;
-	else attributes = readAttributes(reader, tagName, isOnRootTemplate);
-
+	const attributes = readAttributes(reader, tagName);
+	reader.resultMarkup += attributes.markerMarkup;
 	const openTagMarkup = isOnRootTemplate
 		? ""
 		: MARKUP.TAG_OPEN + tagName + attributes.attributeMarkup + MARKUP.TAG_CLOSE;
-	reader.resultMarkup += tagMarkerMarkup + attributes.markerMarkup;
 
 	if (VOID_TAGS.has(tagName.toLowerCase())) {
-		reader.openTagIsDynamic.pop();
 		reader.resultMarkup += openTagMarkup;
 		return;
 	}
 	if (attributes.isSelfClosing) {
-		reader.openTagIsDynamic.pop();
 		if (!isOnRootTemplate) {
 			reader.resultMarkup += openTagMarkup + MARKUP.END_TAG_OPEN + tagName + MARKUP.TAG_CLOSE;
 		}
 		return;
 	}
+	reader.openTagIsDynamic.push(isDynamicTag);
 	if (tagName === TEMPLATE_TAG && !isOnRootTemplate) {
 		//oxlint-disable-next-line no-use-before-define -- mutual recursion
 		const templateContent = readTemplateContent(reader);

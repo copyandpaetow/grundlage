@@ -8,12 +8,12 @@ import {
 } from "../scene-shared";
 import { blocksBoundsPx, type Bounds, isBlock } from "../scene-geometry";
 
-// Apart from the gizmo, so one and many selected blocks are alike: each is one more child.
-// Each render paints twice, because the blocks assign only once the slot exists; the second
-// paint is a patch with the measured box. The editor owns every content change, so it
-// re-renders the cage instead of the cage observing its subtree.
+//Apart from the gizmo, so one and many selected blocks are alike: each is one more child.
+//Each render paints twice, because the blocks assign only once the slot exists; the second
+//paint is a patch with the measured box. The editor owns every content change, so it
+//re-renders the cage instead of the cage observing its subtree.
 
-// Screen px the cage stands proud of the box: flush, it z-fights the faces and vanishes.
+//Screen px the cage stands proud of the box: flush, it z-fights the faces and vanishes.
 const SELECT_MARGIN = 6;
 
 const slottedBlocks = (element: HTMLElement): Element[] => {
@@ -28,8 +28,8 @@ customElements.define(
 			yield function* view(props) {
 				const placement = placementVariables(blockTransformFromProps(props));
 
-				// Null while the slot is still going up, and on a cage holding nothing; both
-				// hide the box rather than draw a zero one.
+				//Null while the slot is still going up, and on a cage holding nothing; both
+				//hide the box rather than draw a zero one.
 				const cage = (bounds: Bounds | null) => {
 					const centerX = bounds ? bounds.center[0] : 0;
 					const centerY = bounds ? bounds.center[1] : 0;

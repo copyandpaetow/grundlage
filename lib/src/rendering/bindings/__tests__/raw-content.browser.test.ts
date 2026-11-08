@@ -125,7 +125,7 @@ describe("raw content updates", () => {
 		//the text keeps the mount values — the update lands on the sheet object
 		expect(style.firstChild).toBe(sheetTextNode);
 		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
-		expect(ruleDeclarationOf(style as HTMLStyleElement).getPropertyValue("color")).toBe("blue");
+		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 		expect(element.getAttribute("style")).toBeNull();
 
 		cleanup(element);
@@ -232,7 +232,7 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style")!;
-		const declaration = ruleDeclarationOf(style as HTMLStyleElement);
+		const declaration = ruleDeclarationOf(style);
 		expect(declaration.getPropertyValue("color")).toBe("red");
 		expect(declaration.getPropertyValue("font-size")).toBe("16px");
 
@@ -317,7 +317,7 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style")!;
-		const declaration = ruleDeclarationOf(style as HTMLStyleElement);
+		const declaration = ruleDeclarationOf(style);
 		expect(declaration.getPropertyValue("font-size")).toBe("16px");
 
 		size = 24;
@@ -387,8 +387,8 @@ describe("raw content updates", () => {
 		//duplicates carry independent values by construction
 		const styles = element.shadowRoot!.querySelectorAll("style");
 		expect(styles).toHaveLength(2);
-		expect(ruleDeclarationOf(styles[0] as HTMLStyleElement).getPropertyValue("color")).toBe("red");
-		expect(ruleDeclarationOf(styles[1] as HTMLStyleElement).getPropertyValue("color")).toBe("blue");
+		expect(ruleDeclarationOf(styles[0]).getPropertyValue("color")).toBe("red");
+		expect(ruleDeclarationOf(styles[1]).getPropertyValue("color")).toBe("blue");
 		expect(element.getAttribute("style")).toBeNull();
 
 		cleanup(element);
@@ -428,7 +428,7 @@ describe("raw content updates", () => {
 		await sleep();
 
 		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
-		expect(ruleDeclarationOf(style as HTMLStyleElement).getPropertyValue("color")).toBe("blue");
+		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 		expect(element.getAttribute("style")).toBe("outline: none");
 
 		cleanup(element);
@@ -562,7 +562,7 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style") as HTMLStyleElement;
-		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: red; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 
 		showStyled = false;
 		await element.update();
@@ -611,7 +611,7 @@ describe("raw content updates", () => {
 		container.appendChild(element);
 		await sleep();
 
-		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: red; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 
 		container.remove();
@@ -652,7 +652,7 @@ describe("raw content updates", () => {
 
 		const styleOf = (id: string) =>
 			Array.from(element.shadowRoot!.querySelectorAll("li"))
-				.find((li) => li.querySelector("p")!.textContent!.trim() === id)!
+				.find((li) => li.querySelector("p")!.textContent.trim() === id)!
 				.querySelector("style") as HTMLStyleElement;
 
 		//update colors via the live sheet (setProperty), not the text
