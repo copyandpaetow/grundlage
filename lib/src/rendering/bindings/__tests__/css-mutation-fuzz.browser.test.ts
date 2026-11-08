@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, inject, test } from "vitest";
 import { STYLE_SHEET_NOT_COMPILED } from "../../../parser/constants";
 import { compileStyleSheet } from "../../../parser/css";
 import { createRandom, generateSheet } from "../../../parser/__tests__/css-sheet-generator";
@@ -15,6 +15,13 @@ import {
 //well-formed sheets with random edits in their static text: wherever the compiler still addresses
 //declarations, CSSOM updates must leave the sheet the browser builds from the updated text
 const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+
+//npm run fuzz raises the count and moves the first seed; npm test keeps the defaults
+const seedsFrom = (defaultFirstSeed: number, defaultCount: number): Array<number> => {
+	const firstSeed = inject("fuzzFirstSeed") ?? defaultFirstSeed;
+	const count = defaultCount * inject("fuzzScale");
+	return Array.from({ length: count }, (_, index) => firstSeed + index);
+};
 
 const EDIT_TOKENS = [
 	"{",
@@ -74,7 +81,7 @@ const mountedStyle = (cssText: string) => {
 	return { host, style };
 };
 
-test.runIf(isRealBrowser).each([11, 12, 13])(
+test.runIf(isRealBrowser).each(seedsFrom(11, 3))(
 	"CSSOM updates leave the sheet the updated text builds, for mutated sheets (seed %i)",
 	(seed) => {
 		const random = createRandom(seed);

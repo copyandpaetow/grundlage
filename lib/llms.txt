@@ -540,6 +540,10 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 - Components paint into SHADOW DOM by default. Light-DOM selectors won't reach inside.
 - Only an `html` call makes a TEMPLATE. An object shaped like one that came from JSON or
   `structuredClone` is plain data, so it throws in a content hole instead of painting markup.
+- A `<script>` WRITTEN in a template does not run when it is painted: the library paints from
+  parsed markup, and the browser marks a parsed script as already started. SAFARI is the
+  exception: it runs a `<script>` written inside `<svg>`. Load code through `import`, and use a
+  `<script>` in a template for data only (`type="application/json"`).
 - A value that would END ITS ELEMENT EARLY in server markup throws at the paint, in the browser
   too, so both sides agree: `</style` in a `<style>` hole; `</script` or `<!--` in a `<script>`
   hole; `-->`, `--!>`, or a leading `>` or `->` in a dynamic comment. The HTML serializer writes

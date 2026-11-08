@@ -17,6 +17,8 @@
 		"test:cubes": "vitest --project cubes --project cubes-browser",
 		"test:browser": "vitest --project browser --project bundle-browser",
 		"test:ci": "npm run typecheck -w grundlage && vitest run",
+		"test:engines": "BROWSERS=chromium,firefox,webkit vitest run",
+		"fuzz": "FUZZ_SCALE=10 FUZZ_FIRST_SEED=$(date +%s) BROWSERS=chromium,firefox,webkit vitest run --project dom --project browser fuzz",
 		"test:coverage": "vitest run --coverage",
 		"format:check": "oxfmt --check",
 		"format:fix": "oxfmt",
@@ -27,8 +29,8 @@
 		"version:plugin:patch": "npm version patch -w vite-plugin-grundlage",
 		"version:plugin:minor": "npm version minor -w vite-plugin-grundlage",
 		"version:plugin:major": "npm version major -w vite-plugin-grundlage",
-		"release": "npm run test:ci && npm publish -w grundlage",
-		"release:plugin": "npm run build -w vite-plugin-grundlage && npm test -- --run && npm publish -w vite-plugin-grundlage"
+		"release": "bash scripts/release.sh grundlage",
+		"release:plugin": "bash scripts/release.sh vite-plugin-grundlage"
 	},
 	"devDependencies": {
 		"@oxlint/plugins": "1.92.0",

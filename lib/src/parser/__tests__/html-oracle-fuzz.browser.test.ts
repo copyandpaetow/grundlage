@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, inject, test } from "vitest";
 import { component, html } from "../../index";
 import { BaseComponent } from "../../types";
 import {
@@ -13,6 +13,13 @@ import {
 const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 const CASE_COUNT = 400;
+
+//npm run fuzz raises the count and moves the first seed; npm test keeps the defaults
+const seedsFrom = (defaultFirstSeed: number, defaultCount: number): Array<number> => {
+	const firstSeed = inject("fuzzFirstSeed") ?? defaultFirstSeed;
+	const count = defaultCount * inject("fuzzScale");
+	return Array.from({ length: count }, (_, index) => firstSeed + index);
+};
 
 const serializedSheetOf = (sheet: CSSStyleSheet | null) =>
 	sheet === null ? "no sheet" : Array.from(sheet.cssRules, (rule) => rule.cssText).join("\n");
@@ -98,7 +105,7 @@ customElements.define(
 	}),
 );
 
-test.runIf(isRealBrowser).each([1, 2, 3])(
+test.runIf(isRealBrowser).each(seedsFrom(1, 3))(
 	"every painted template matches the hand-written markup, at mount and after a patch (seed %i)",
 	async (seed) => {
 		const random = createRandom(seed);

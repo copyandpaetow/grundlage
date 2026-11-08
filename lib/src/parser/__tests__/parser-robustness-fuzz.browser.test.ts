@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, inject, test } from "vitest";
 import { component, html } from "../../index";
 import { ensureFragmentKeptEveryBinding } from "../../rendering/markers";
 import { buildFragment } from "../../rendering/dom";
@@ -38,7 +38,8 @@ const HTML_TOKENS: ReadonlyArray<Token> = [
 	"</style>",
 	"<textarea>",
 	"</textarea>",
-	"<script>",
+	//text/plain keeps a <script> inside <svg> inert in Safari, which runs it when painted
+	`<script type="text/plain">`,
 	"</script>",
 	"<!--",
 	"-->",
@@ -161,10 +162,17 @@ const holeIndexesOf = (parsed: ParsedTemplate): Array<number> => {
 	return indexes;
 };
 
+//npm run fuzz raises the count and moves the first seed; npm test keeps the defaults
+const seedsFrom = (defaultFirstSeed: number, defaultCount: number): Array<number> => {
+	const firstSeed = inject("fuzzFirstSeed") ?? defaultFirstSeed;
+	const count = defaultCount * inject("fuzzScale");
+	return Array.from({ length: count }, (_, index) => firstSeed + index);
+};
+
 const describeError = (error: unknown) =>
 	error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error);
 
-test.each([1, 2, 3])(
+test.each(seedsFrom(1, 3))(
 	"the html parser answers every token soup with a result or a library error (seed %i)",
 	(seed) => {
 		const random = createRandom(seed);
@@ -225,7 +233,7 @@ const settledWithin = (update: Promise<void>) =>
 
 const SOUP_VALUES = ["x", "", "section", 3, null, false, true, { a: "b" }, ["c"]];
 
-test.runIf(isRealBrowser).each([4, 5])(
+test.runIf(isRealBrowser).each(seedsFrom(4, 2))(
 	"a painted token soup ends in a paint or a library error, never an invariant or a hang (seed %i)",
 	async (seed) => {
 		const random = createRandom(seed);
@@ -282,7 +290,7 @@ test.runIf(isRealBrowser).each([4, 5])(
 	120_000,
 );
 
-test.each([1, 2, 3])(
+test.each(seedsFrom(1, 3))(
 	"the css compiler answers every token soup with a result or a fallback, never a throw (seed %i)",
 	(seed) => {
 		const random = createRandom(seed);

@@ -19,6 +19,7 @@ export type HoleContext =
 	| "single-quoted"
 	| "unquoted"
 	| "raw-text"
+	| "script-text"
 	| "css-number"
 	| "tag-name"
 	| "inline-tag-name";
@@ -149,9 +150,11 @@ const writeNode = (builder: Builder) => {
 		return;
 	}
 	if (roll < 0.52) {
-		write(builder, "<textarea>");
-		if (random() < 0.7) writeHole(builder, "raw-text");
-		write(builder, "</textarea>");
+		//a <textarea> decodes its text and a <script> does not
+		const isScript = random() < 0.4;
+		write(builder, isScript ? "<script>" : "<textarea>");
+		if (random() < 0.7) writeHole(builder, isScript ? "script-text" : "raw-text");
+		write(builder, isScript ? "</script>" : "</textarea>");
 		return;
 	}
 	if (roll < 0.57) {
@@ -309,6 +312,7 @@ export const handWrittenMarkupOf = (
 			case "unquoted":
 				markup += `"${text.replaceAll("&", "&amp;").replaceAll(`"`, "&quot;")}"`;
 				break;
+			case "script-text":
 			case "css-number":
 			case "tag-name":
 			case "inline-tag-name":

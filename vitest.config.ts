@@ -50,6 +50,31 @@ const testBundleAliasOf = (projectName: string) => [
 	},
 ];
 
+const ENGINES = ["chromium", "firefox", "webkit"] as const;
+type Engine = (typeof ENGINES)[number];
+const isEngine = (name: string): name is Engine => ENGINES.some((engine) => engine === name);
+
+//npm run test:engines sets BROWSERS to all three; Chromium alone otherwise. A list per project,
+//since vitest writes each instance's name into it
+const libraryBrowserInstances = () =>
+	(process.env.BROWSERS ?? "chromium").split(",").map((name) => {
+		if (!isEngine(name)) {
+			throw new Error(`BROWSERS expects chromium, firefox or webkit, not "${name}".`);
+		}
+		return { browser: name };
+	});
+
+//npm run fuzz sets these; without them every fuzzer runs its own fixed seeds
+const fuzzSettings = {
+	fuzzScale: Number(process.env.FUZZ_SCALE ?? 1),
+	fuzzFirstSeed:
+		process.env.FUZZ_FIRST_SEED === undefined ? null : Number(process.env.FUZZ_FIRST_SEED),
+};
+
+//one happy-dom per worker instead of one per file takes a third off the happy-dom projects. The files
+//in a worker share modules and the custom element registry, so no test may rely on fresh ones
+const isolateHappyDomFiles = false;
+
 export default defineConfig({
 	test: {
 		projects: [
@@ -69,16 +94,20 @@ export default defineConfig({
 				root: "./lib",
 				test: {
 					name: "dom",
+					provide: fuzzSettings,
 					include: ["src/**/*.dom.test.ts", "tests/**/*.dom.test.ts"],
 					environment: "happy-dom",
+					isolate: isolateHappyDomFiles,
 				},
 			},
 			{
 				root: "./lib",
 				test: {
 					name: "browser-as-dom",
+					provide: fuzzSettings,
 					include: ["src/**/*.browser.test.ts", "tests/**/*.browser.test.ts"],
 					environment: "happy-dom",
+					isolate: isolateHappyDomFiles,
 					benchmark: {
 						include: [],
 					},
@@ -88,11 +117,12 @@ export default defineConfig({
 				root: "./lib",
 				test: {
 					name: "browser",
+					provide: fuzzSettings,
 					include: ["src/**/*.browser.test.ts", "tests/**/*.browser.test.ts"],
 					browser: {
 						enabled: true,
 						provider: playwright(),
-						instances: [{ browser: "chromium" }],
+						instances: libraryBrowserInstances(),
 					},
 					benchmark: {
 						include: [],
@@ -104,8 +134,10 @@ export default defineConfig({
 				resolve: { alias: testBundleAliasOf("bundle-dom") },
 				test: {
 					name: "bundle-dom",
+					provide: fuzzSettings,
 					include: publicEntryTests("{src,tests}/**/*.dom.test.ts"),
 					environment: "happy-dom",
+					isolate: isolateHappyDomFiles,
 					globalSetup: "tests/build-test-bundle.ts",
 				},
 			},
@@ -114,11 +146,12 @@ export default defineConfig({
 				resolve: { alias: testBundleAliasOf("bundle-browser") },
 				test: {
 					name: "bundle-browser",
+					provide: fuzzSettings,
 					include: publicEntryTests("{src,tests}/**/*.browser.test.ts"),
 					browser: {
 						enabled: true,
 						provider: playwright(),
-						instances: [{ browser: "chromium" }],
+						instances: libraryBrowserInstances(),
 					},
 					globalSetup: "tests/build-test-bundle.ts",
 					benchmark: {

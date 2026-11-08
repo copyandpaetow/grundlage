@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, inject, test } from "vitest";
 import { hashValue } from "../../rendering/value-hashing";
 import { html, isTemplate } from "../../template";
 
@@ -188,23 +188,31 @@ const serialize = (value: unknown, containersOnPath: Array<object>): string => {
 	return serialization;
 };
 
-test("a value and its twin one change away hash alike exactly when they serialize alike", () => {
-	const PAIR_COUNT = 100_000;
-	const missedChanges: Array<string> = [];
-	const falseChanges: Array<string> = [];
-	for (let seed = 1; seed <= PAIR_COUNT; seed++) {
-		const value = generate(createRandom(seed), 0, []);
-		const twin = generate(createTwinRandom(seed, seed % 7), 0, []);
-		const isSerializationEqual = serialize(value, []) === serialize(twin, []);
-		const isHashEqual = hashValue(value) === hashValue(twin);
-		if (isHashEqual && !isSerializationEqual) {
-			missedChanges.push(`${serialize(value, [])} vs ${serialize(twin, [])}`);
+//npm run fuzz raises the count and moves the first seed; npm test keeps the defaults
+const FUZZ_SCALE = inject("fuzzScale");
+const FIRST_SEED = inject("fuzzFirstSeed") ?? 1;
+
+test(
+	"a value and its twin one change away hash alike exactly when they serialize alike",
+	() => {
+		const PAIR_COUNT = 100_000 * FUZZ_SCALE;
+		const missedChanges: Array<string> = [];
+		const falseChanges: Array<string> = [];
+		for (let seed = FIRST_SEED; seed < FIRST_SEED + PAIR_COUNT; seed++) {
+			const value = generate(createRandom(seed), 0, []);
+			const twin = generate(createTwinRandom(seed, seed % 7), 0, []);
+			const isSerializationEqual = serialize(value, []) === serialize(twin, []);
+			const isHashEqual = hashValue(value) === hashValue(twin);
+			if (isHashEqual && !isSerializationEqual) {
+				missedChanges.push(`${serialize(value, [])} vs ${serialize(twin, [])}`);
+			}
+			if (!isHashEqual && isSerializationEqual) falseChanges.push(serialize(value, []));
 		}
-		if (!isHashEqual && isSerializationEqual) falseChanges.push(serialize(value, []));
-	}
-	expect(missedChanges.slice(0, 3)).toEqual([]);
-	expect(falseChanges.slice(0, 3)).toEqual([]);
-});
+		expect(missedChanges.slice(0, 3)).toEqual([]);
+		expect(falseChanges.slice(0, 3)).toEqual([]);
+	},
+	5_000 * FUZZ_SCALE,
+);
 
 //small values repeat their shapes often, so every pair among them is compared, including pairs that
 //differ in several places at once, which a twin never does
@@ -249,7 +257,7 @@ test("among many small values, equal hashes mean equal serializations", () => {
 	const hashBySerialization = new Map<string, number>();
 	const missedChanges: Array<string> = [];
 	const falseChanges: Array<string> = [];
-	const random = createRandom(7);
+	const random = createRandom(inject("fuzzFirstSeed") ?? 7);
 	for (let index = 0; index < VALUE_COUNT; index++) {
 		const value = generateSmall(random, 0);
 		const serialization = serialize(value, []);

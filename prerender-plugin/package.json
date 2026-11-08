@@ -44,10 +44,10 @@
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
-		"happy-dom": "^21.0.3/b"
+		"happy-dom": "^21.0.3"
 	},
 	"peerDependencies": {
-		"grundlage": ">=0.7.0",
+		"grundlage": "^0.9.0",
 		"vite": "^8.0.1"
 	},
 	"devDependencies": {

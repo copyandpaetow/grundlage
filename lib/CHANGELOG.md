@@ -21,7 +21,7 @@
 
 - `YieldableValue` is `Template | Promise<unknown> | UpdateGenerator` or a `load()` request; `UpdateGenerator` is exported.
 - `yield* load(…)` evaluates to the fetcher's awaited type.
-- A bare `yield promise` evaluates to `unknown`; `yield* awaited(promise)` types it: `const user: User = yield …` → `const user = yield* awaited(…)`.
+- A bare `yield promise` evaluates to `unknown`: `const user: User = yield …` → `const user = yield* awaited(…)`.
 - A hoisted schema needs no `satisfies Schema`, and a fallback is type-checked against its parser.
 - `PropsOf<typeof props>` and `PassedPropsOf<typeof props>` replace `DeclaredProps`.
 
@@ -48,10 +48,11 @@
 - The browser reuses a server `load` result only while hydrating, and runs the fetcher everywhere else.
 - A `load` the server failed runs again in the browser, and the loads after it keep their order.
 - Unused server `load` results are removed at hydration, and only unkeyed ones warn.
-- The production build is 43.9 KB minified and 16.8 KB gzip (0.8.0: 54.7 KB, 18.0 KB): enums are inlined and internal property names shortened.
-- A template with an unclosed comment, tag, attribute value or `<style>`/`<script>`/`<textarea>` throws naming what to close, instead of dropping the rest; U+E000 in a template throws and asks for `&#xE000;`.
+- A template with an unclosed comment, tag, attribute value or `<style>`/`<script>`/`<textarea>` throws and names what to close, instead of dropping the rest.
+- U+E000 in a template throws and asks for `&#xE000;`.
 - A dynamic `<style>` whose nested selectors contain `:` (`&:hover`, `a:hover`) updates through CSSOM instead of rewriting the sheet text.
-- Holes inside a nested `<template>` bind like any other hole and rebuild its content when a value changes; a listener, a property or a prop there throws, since copies of the content keep none.
+- Holes inside a nested `<template>` bind like any other hole, and a changed value rebuilds its content.
+- A listener, a property or a prop inside a nested `<template>` throws, since copies of the content keep none of them.
 - `shadowrootmode` on a nested `<template>` throws: let the element attach its own shadow root.
 
 ### Fixed
@@ -59,125 +60,76 @@
 - On the server, a body that catches an update generator's error runs its `finally`, also when that generator called `update()`.
 - An `update()` queued for an update generator the body drops settles with the drop instead of re-running the next one.
 - A child moved straight after its parent's paint runs its update generator once.
-- When a component's own prop write throws in the prop's function, also from a cleanup, a `finally` block, a parameter default, a child's setter or a host binding on its own `<template>`, the component ends once that step or paint is over instead of painting over the error.
+- A component whose own prop write throws in the prop's parser ends once that step or paint is over, instead of painting over the error.
 - A component whose host binding ended it during an update or a hydration paints again once it is re-inserted.
-- A generator whose own prop write ends its component still runs its returned cleanup and its `finally` block, an update generator's before the body's.
-- An error thrown after a component's own prop write has ended it is reported instead of ending the component twice or going missing.
+- A generator whose own prop write ends its component still runs its cleanup and its `finally` block, an update generator's before the body's.
+- An error thrown after a component's own prop write has ended it is reported, instead of ending the component twice or going missing.
 - A component body's `this` is `undefined`, as an update generator's is, instead of an internal object.
 - A component body whose parameter default throws ends the component through the error event instead of escaping the library.
-- An object or array bound to another library's custom element no longer calls its `update()`, which for a Lit element threw before it was connected and skipped `updated()` after.
-- A `<![CDATA[…]]>` section keeps the markup after it instead of dropping the rest of the template; a hole inside it throws with a remedy.
-- In Safari, a `:host` value hole in a dynamic `<style>` updates the host and its shadow tree after the first change, instead of keeping the old value.
+- An object or array bound to another library's custom element, such as a Lit element, no longer calls its `update()`.
+- A `<![CDATA[…]]>` section keeps the markup after it instead of dropping the rest of the template.
+- In Safari, a `:host` value hole in a dynamic `<style>` updates the host after the first change, instead of keeping the old value.
 - A hole in an `!important` declaration inside `@keyframes`, which the browser drops, no longer gets a CSSOM update.
-- `<br />` paints one line break instead of two, and a void element written without a slash inside `<${tag}>` no longer throws "asymmetric tag".
-- A `<` that opens no tag (`${a} < ${b}`) is text instead of an internal error; a `<!` that opens no comment throws with a remedy.
-- A bound element the HTML parser moves (a `<div>` in a `<p>`, a `<p>` or `<textarea>` in a `<table>`) throws "Fix the nesting" instead of breaking the component; a bound bare `<tr>` no longer binds the implied `<tbody>`.
+- `<br />` paints one line break instead of two.
+- A void element written without a slash inside `<${tag}>` no longer throws "asymmetric tag".
+- A `<` that opens no tag (`${a} < ${b}`) is text instead of an internal error.
+- A `<!` that opens no comment throws and names the fix.
+- A bound element the HTML parser moves (a `<div>` in a `<p>`, a `<p>` or `<textarea>` in a `<table>`) throws "Fix the nesting" instead of breaking the component.
+- A bound bare `<tr>` no longer binds the `<tbody>` the HTML parser adds around it.
 - A bound formatting element the HTML parser copies (`<p><b class=${x}><div>`) throws "Fix the nesting" instead of leaving the copies without the value.
 - A tag or attribute name composed from a value the browser refuses (`<${"my box"}>`) throws a library error naming the binding instead of a bare `DOMException`.
 - A dynamic `<style>` with a `{` or `[` inside parentheses, an escaped property name or a trailing `\` falls back to a full text rewrite instead of updating the wrong declaration or hanging.
 - Change detection no longer reads a changed value as unchanged because two hashes collided.
-- Data with a reference back to an enclosing object (a `parent` link) no longer freezes a paint; a very large value, or one shared the way a graph is, throws instead.
+- Data with a reference back to an enclosing object (a `parent` link) no longer freezes a paint.
+- A value too large to walk on every paint, or one shared the way a graph is, throws and names the fix.
 - A symbol inside a bound object or array no longer ends the component with a `TypeError`.
 - A value that would end its `<style>`, `<script>` or comment early in server markup (`</style`, `</script`, `-->`) throws instead of injecting markup.
-- A hole inside `<noscript>`, `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>` or `<plaintext>` throws when the template is parsed, since serializers write their text unescaped and a value could inject markup.
+- A hole inside `<noscript>`, `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>` or after `<plaintext>` throws when the template is parsed, instead of letting a value inject markup.
 - A hole inside `<title>` paints as text, like one in `<textarea>`, instead of throwing in the browser and writing markers into server markup.
 - An object shaped like a template, from JSON or `structuredClone`, no longer paints as markup.
-- A value inside a nested `<template>` no longer becomes markup, and such a template paints under Trusted Types.
+- A value inside a nested `<template>` no longer becomes markup.
 
 ## 0.8.0
 
 ### Breaking
 
-- **Generator signature.** `function* (host)` → `function* ({ host, …props })`. Render functions and
-  inner generators receive the same object.
-- **The schema** needs to be declared from the options `component(gen, { props })`.
-  `component(someGenerator)` no longer inherits props from that generator.
-  - The standalone function `props(element, schema)` can still be used for elements in general
-- **`load()` option `skipSsr` → `skipSSR`.** Acronyms keep their capitals inside a name. TypeScript
-  flags the old spelling; in plain JavaScript it is ignored and the load replays again.
+- The component body takes one props object: `function* (host)` → `function* ({ host, …props })`; render functions and inner generators get the same object.
+- The schema is declared in the options, `component(gen, { props })`, and a generator passed to `component` no longer brings its own.
+- `load()`'s option `skipSsr` → `skipSSR`.
 
 ### Types
 
-- **A yielded render function types its parameter.** `yield ({ label }) => …` was an implicit `any`
-  under `strict`, because `ComponentGenerator` returned a bare `Generator`. Its yield type is now
-  `YieldableValue<DeclaredSchema>`, a union carrying exactly one call signature, so TypeScript has a
-  contextual signature to hand the arrow. Nested generators yielded from the body get it too.
-  - A `yield*` helper that annotates its own return type spells it `Generator<YieldableValue>`, not
-    bare `Generator`. Inferred return types need no change.
-  - `YieldableValue` is exported.
-- **The return position is typed and named.** It was `any` under the bare `Generator`, so a wrong
-  return neither autocompleted nor errored. It is now `Cleanup | void`, with `Cleanup` exported and
-  named rather than spelled `VoidFunction`: the hover is the one place the teardown announces itself.
+- A yielded render function types its parameter: `yield ({ label }) => …` is no longer an implicit `any`.
+- A `yield*` helper that annotates its return type spells it `Generator<YieldableValue>`, not bare `Generator`.
+- `YieldableValue` is exported.
+- The component body's return position is `Cleanup | void`, and `Cleanup` is exported.
 
 ### Added
 
-- **`grundlage-error` event.** A fatal error empties the component and dispatches a cancelable
-  `ComponentErrorEvent` carrying `error` and `tagName`. `preventDefault()` skips the console line
-  and the error text, so an app can render its own fallback.
-- **Development build.** Warnings ship only in `dist/development/`, selected by the `development`
-  export condition. The default build strips them (1,061 bytes minified).
-- **A block element inside `<p>` warns.** The DOM accepts a `<div>` or `<h2>` inside a `<p>`, the
-  HTML parser closes the `<p>` before it, so server-rendered markup hydrated into a different tree
-  than the client rendered. A dynamic tag or a nested template that puts one there now warns in the
-  development build, unless a `<button>`, `<table>` or similar ends the paragraph's scope first.
+- A fatal error dispatches a cancelable `grundlage-error` event; `preventDefault()` skips the console line and the error text.
+- Warnings ship only in the development build, picked by the `development` export condition.
+- A dynamic tag or a nested template that puts a block element inside a `<p>` warns in the development build.
 
 ### Changed
 
-- **Live state follows the binding after the first render.** `value` (input, textarea),
-  `checked`, `indeterminate` and `selected` were always written as attributes, which only set the
-  default once the user had interacted, so a state change stopped showing. The first commit still
-  writes the attribute (for a textarea, its text); every later one writes the property. Absence
-  empties the shown value and keeps the default. `<select value=${…}>` warns and selects nothing:
-  bind `selected` on the option.
-
-- **A fatal error logs `console.error` naming the tag,** not `console.warn`.
-- **A throwing cleanup or a rejected async `return()` goes to `reportError`,** so `window.onerror`
-  trackers see it. Without `reportError` (Node) it falls back to `console.error`.
-
-- **A host binding writing the component's own declared prop re-renders.** It was output only and
-  scheduled nothing, so a value both bound on the host `<template>` and painted from the prop
-  showed one render behind, and a binding derived from the prop itself (`count=${count + 1}`)
-  silently counted renders. A changed value now re-renders once and settles; a self-derived one
-  ends in the runaway-render error. The server converges the same way before it ends the run, so
-  a re-render asked for during the server paint is no longer dropped.
-
-- **A return that is neither a function nor `undefined` warns.** The runtime drops it — the return
-  position is the cleanup function — and the drop used to be silent for anyone not running the types.
-
-- **`/>` after an unquoted attribute value ends the tag.** HTML reads the slash into the value, so
-  `<rect width=${w}/>` set `width="2/"`. The slash now closes the element, the way SVG markup
-  means it. A slash followed by anything else stays in the value: `href=${base}/intro` is
-  unchanged, `href=${base}/>` no longer appends the `/`.
+- `value`, `checked`, `indeterminate` and `selected` are written as the attribute on a binding's first commit and as the property after it, so a state change shows after the user interacted.
+- `<select value=${…}>` warns and selects nothing: bind `selected` on each `<option>`.
+- A fatal error logs with `console.error` and names the tag, instead of `console.warn`.
+- A throwing cleanup or a rejected async `return()` goes to `reportError`.
+- A host binding that writes the component's own declared prop updates the component, on the server too.
+- A host binding derived from the prop it writes (`count=${count + 1}`) ends in the update-loop error.
+- A component body's return that is neither a function nor `undefined` warns.
+- `/>` after an unquoted attribute value ends the tag: `<rect width=${w}/>` no longer sets `width="2/"`.
 
 ### Fixed
 
-- **A custom property updated to a CSS-wide keyword takes its effect.** A style hole's update
-  passed the whitespace after the colon into `setProperty`, and a custom property keeps it:
-  `--x: ${"initial"}` stored the literal token `" initial"` instead of the keyword, so a `var()`
-  fallback never applied. The first render was unaffected, since it writes sheet text.
-- **A dynamic tag inside `<p>` no longer breaks the component.** Its placeholder was a `<div>`,
-  which closes an open `<p>`, so even `<p>…<${"span"}>…</${"span"}></p>` failed with an invariant
-  error and an empty shadow root. The placeholder is now an unknown hyphenated element, which the
-  parser leaves inside the paragraph.
-- **A dynamic tag the HTML parser relocates ends the component with a remedy.** `<${"tr"}>` inside
-  `<tbody>` was moved in front of the table, which rendered an empty element there and a row the
-  browser invented. Any dynamic tag that no longer sits where it was written is now a fatal error
-  naming the fix: write that tag statically.
-- **Templates inside `<svg>` and `<math>` mount in their namespace.** A nested template or list row
-  was parsed as HTML, so ``<svg>${rows.map((row) => html`<circle …>`)}</svg>`` mounted invisible
-  HTML `<circle>` elements. A template is now parsed in the namespace of the position it mounts into,
-  and `<foreignObject>` or `<mi>` switch back to HTML as the parser does.
-- **A dynamic tag inside `<svg>` or `<math>` keeps its namespace and case.** `<${"linearGradient"}>`
-  created an HTML `<lineargradient>`. A dynamic tag that would become `<svg>` or `<math>` inside
-  HTML throws instead, since its children were already parsed as HTML: write that tag statically.
-- **A hole inside `<![CDATA[…]]>` ends the component with a remedy.** The parser reads CDATA in SVG
-  as text, which swallowed the hole's markers and failed with an invariant error.
-- **Hashing an object no longer keeps its property names forever.** A module-level cache retained
-  every distinct key ever hashed, so an object keyed by ids grew memory once per row for the life
-  of the page.
-- **A hole inside an event name is no longer dropped.** `on${eventName}=${handler}` and
-  `on-${suffix}=${handler}` bound an attribute literally named `on` and discarded the hole. Both
-  now compose the name and bind the event it spells, native and custom alike.
-- **A composed event name binds a listener, not an IDL property.** `<button ${"onclick"}=${fn}>`
-  assigned `element.onclick` while the literal spelling used `addEventListener`. Every attribute
-  lane now resolves the name the same way.
+- A custom property updated to a CSS-wide keyword (`--x: ${"initial"}`) takes its effect.
+- A dynamic tag inside `<p>` no longer breaks the component.
+- A dynamic tag the HTML parser relocates (`<${"tr"}>` in a `<tbody>`) ends the component and names the fix.
+- Templates inside `<svg>` and `<math>` mount in their namespace, and `<foreignObject>` or `<mi>` switch back to HTML.
+- A dynamic tag inside `<svg>` or `<math>` keeps its namespace and case.
+- A dynamic tag that would become `<svg>` or `<math>` inside HTML throws: write that tag statically.
+- A hole inside `<![CDATA[…]]>` ends the component and names the fix.
+- Hashing an object no longer keeps its property names in memory for the life of the page.
+- A hole inside an event name (`on${eventName}=${handler}`) binds the event it spells instead of an attribute named `on`.
+- A composed event name (`<button ${"onclick"}=${fn}>`) binds a listener, not a property.
