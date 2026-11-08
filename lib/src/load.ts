@@ -1,11 +1,6 @@
 import type { ComponentRunner } from "./runtime/driver";
 import { isTemplate } from "./template";
-import {
-	assertDuringDevelopment,
-	isDevelopmentBuild,
-	libraryMessage,
-	warnDuringDevelopment,
-} from "./utils/diagnostics";
+import { isDevelopmentBuild, libraryMessage, warnDuringDevelopment } from "./utils/diagnostics";
 
 const SSR_ATTRIBUTE = "data-ssr";
 const KEY_ATTRIBUTE = "data-key";
@@ -106,73 +101,66 @@ export const releaseUnclaimedPayloads = (shadowRoot: ShadowRoot): void => {
 	);
 };
 
+const DESCRIPTION_BY_TYPE: Partial<Record<string, string>> = {
+	bigint: "a bigint: return a string and convert it after the load",
+	symbol: "a symbol: return a string instead",
+	function: "a function: return data, not code",
+};
+
+const DESCRIPTION_BY_CLASS_NAME: Partial<Record<string, string>> = {
+	Response: "a Response: return response.json() instead",
+	Promise: "a promise: await it inside the fetcher",
+	Date: "a Date: return the string and turn it into a Date after the load",
+};
+
+//null for a value JSON carries as it is, and for plain data the walk looks into
+const describeNonPlainValue = (value: unknown): string | null => {
+	if (typeof value === "number") {
+		return Number.isFinite(value) ? null : `${value}: return null or a string instead`;
+	}
+	const typeDescription = DESCRIPTION_BY_TYPE[typeof value];
+	if (typeDescription !== undefined) return typeDescription;
+	if (typeof value !== "object" || value === null) return null;
+	if (isTemplate(value)) {
+		return "a template: yield the template itself to paint it, or yield function* view() { … } to paint on every update";
+	}
+	if (Object.prototype.toString.call(value) === "[object Module]") {
+		return "a module: yield the import() promise itself, so the browser loads the module too";
+	}
+	const prototype = Object.getPrototypeOf(value);
+	if (Array.isArray(value) || prototype === Object.prototype || prototype === null) return null;
+	const className = value.constructor?.name ?? "a class";
+	return (
+		DESCRIPTION_BY_CLASS_NAME[className] ??
+		`an instance of ${className}: return a plain object or array`
+	);
+};
+
 const describeUnreplayableValue = (
 	value: unknown,
 	path: string,
 	ancestors: Array<object>,
 ): string | null => {
-	switch (typeof value) {
-		case "undefined":
-		case "string":
-		case "boolean":
-			return null;
-		case "number":
-			return Number.isFinite(value) ? null : `${path} is ${value}: return null or a string instead`;
-		case "bigint":
-			return `${path} is a bigint: return a string and convert it after the load`;
-		case "symbol":
-			return `${path} is a symbol: return a string instead`;
-		case "function":
-			return `${path} is a function: return data, not code`;
-		case "object":
-			break;
-	}
-	assertDuringDevelopment(
-		typeof value === "object",
-		"the switch returns for every kind but object",
-	);
-	if (value === null) return null;
-	if (isTemplate(value)) {
-		return `${path} is a template: yield the template itself to paint it, or yield function* view() { … } to paint on every update`;
-	}
+	const description = describeNonPlainValue(value);
+	if (description !== null) return `${path} is ${description}`;
+	if (typeof value !== "object" || value === null) return null;
 	if (ancestors.includes(value)) {
 		return `${path} points back at an object that holds it, a cycle JSON cannot carry: leave that reference out`;
 	}
 	if (ancestors.length === PLAIN_DATA_DEPTH_LIMIT) {
 		return `${path} is nested deeper than ${PLAIN_DATA_DEPTH_LIMIT} levels: return flatter data`;
 	}
-	if (Object.prototype.toString.call(value) === "[object Module]") {
-		return `${path} is a module: yield the import() promise itself, so the browser loads the module too`;
-	}
-	if (value instanceof Response) return `${path} is a Response: return response.json() instead`;
-	if (value instanceof Promise) return `${path} is a promise: await it inside the fetcher`;
-	if (value instanceof Date) {
-		return `${path} is a Date: return the string and turn it into a Date after the load`;
-	}
-	const prototype = Object.getPrototypeOf(value);
-	const isPlainData = Array.isArray(value) || prototype === Object.prototype || prototype === null;
-	if (!isPlainData) {
-		return `${path} is an instance of ${value.constructor?.name ?? "a class"}: return a plain object or array`;
-	}
+	//a problem ends the whole walk, so only a finished walk needs the pop
 	ancestors.push(value);
-	try {
-		if (Array.isArray(value)) {
-			for (let index = 0; index < value.length; index++) {
-				const problem = describeUnreplayableValue(value[index], `${path}[${index}]`, ancestors);
-				if (problem !== null) return problem;
-			}
-			return null;
-		}
-		const entries = Object.entries(value);
-		for (let index = 0; index < entries.length; index++) {
-			const [name, entry] = entries[index];
-			const problem = describeUnreplayableValue(entry, `${path}.${name}`, ancestors);
-			if (problem !== null) return problem;
-		}
-		return null;
-	} finally {
-		ancestors.pop();
+	const entries = Object.entries(value);
+	for (let index = 0; index < entries.length; index++) {
+		const [name, entry] = entries[index];
+		const entryPath = Array.isArray(value) ? `${path}[${name}]` : `${path}.${name}`;
+		const problem = describeUnreplayableValue(entry, entryPath, ancestors);
+		if (problem !== null) return problem;
 	}
+	ancestors.pop();
+	return null;
 };
 
 //JSON is how a prerendered page hands the result to the browser

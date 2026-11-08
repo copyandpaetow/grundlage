@@ -74,6 +74,8 @@ export const html = htmlValue as unknown as (
 	...dynamicValues: Array<unknown>
 ) => Template;
 
+//the element class closes over the schema, options and generator, so it lives in here
+//oxlint-disable-next-line max-lines-per-function -- long, not complex: one class body
 export const component = <DeclaredSchema extends Schema = {}>(
 	componentGenerator: ComponentGenerator<DeclaredSchema>,
 	options: ComponentOptions<DeclaredSchema> = defaultOptions,

@@ -503,7 +503,8 @@ const driveRunOnceSettled = async (run: Run, settling: Promise<unknown>): Promis
 
 //a turn does what the last step asked for, steps the run, then reads what it asks for next. Every
 //call into user code is followed by the check that no fatal error is waiting
-const driveRunUntilItStops = (run: Run, turn: TurnKind, payload: unknown): void => {
+//oxlint-disable-next-line complexity, max-lines-per-function -- one state machine, read as one
+const driveRunUntilItStops =(run: Run, turn: TurnKind, payload: unknown): void => {
 	for (let step = 0; step < STEPS_PER_DRIVER_LOOP_LIMIT; step++) {
 		switch (turn) {
 			case TURN.SEND:
