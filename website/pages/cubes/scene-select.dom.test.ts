@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import "./wrappers/scene-select";
 
-//Assertions read the live sheet, not the <style> text: the text is the first paint, and
-//the measured box lands as a CSSOM patch in the second.
+//The measured box lands in the second paint. Assertions read the live sheet, which the browser
+//parses from the <style> text.
 
 const HALF_UNIT = 60;
 const CAGE_MARGIN = 6;
@@ -62,13 +62,14 @@ describe("measuring what it just painted", () => {
 		expect(boxVariable("--half-y")).toBe(`${HALF_UNIT + CAGE_MARGIN}px`);
 	});
 
-	test("the first paint is the one that goes up as sheet text", async () => {
+	test("the measured box replaces the first paint's sheet text", async () => {
 		cage.append(makeLeaf(0));
 		document.body.appendChild(cage);
 		await flush();
 
 		const text = boxStyleText();
-		expect(text).toContain("--box-display: none");
+		expect(text).toContain("--box-display: block");
+		expect(text).not.toContain("--box-display: none");
 		expect(boxVariable("--box-display")).toBe("block");
 	});
 

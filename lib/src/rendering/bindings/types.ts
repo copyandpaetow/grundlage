@@ -2,7 +2,6 @@ import * as BINDING from "../../parser/binding";
 import {
 	AttributeStaticBinding,
 	CommentStaticBinding,
-	CompiledStyleSheet,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
 	ParsedTemplate,
@@ -10,7 +9,6 @@ import {
 	TagStaticBinding,
 	TemplateContentStaticBinding,
 } from "../../parser/types";
-import * as STYLE_SHEET_LANE from "../style-sheet-lane";
 import * as CONTENT_KIND from "../content-kind";
 
 export interface Instance {
@@ -22,7 +20,6 @@ export interface Instance {
 
 /** Shared by every instance of one mounted tree: the root template's, each nested value's and each row's. */
 export interface TreeState {
-	needsStyleSheetRefreshOnMove: boolean;
 	readonly isTemplateContent: boolean;
 }
 
@@ -96,31 +93,10 @@ export interface ListContentState {
 	spareRows: Array<ListItem | undefined>;
 }
 
-export interface BoundStyleSheet {
-	sheet: CSSStyleSheet;
-	ruleDeclarations: Array<CSSStyleDeclaration>;
-}
-
-export interface TextStyleSheetLane {
-	kind: typeof STYLE_SHEET_LANE.TEXT;
-}
-
-export interface CSSOMStyleSheetLane {
-	kind: typeof STYLE_SHEET_LANE.CSSOM;
-	compiledStyleSheet: CompiledStyleSheet;
-	styleElement: HTMLStyleElement;
-	declarationValueHashes: Array<number>;
-	//null until a commit finds the element's sheet parsed
-	boundSheet: BoundStyleSheet | null;
-}
-
-export type StyleSheetLane = TextStyleSheetLane | CSSOMStyleSheetLane;
-
 export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;
 	openMarker: Comment;
 	lastValueHash: number;
-	styleSheetLane: StyleSheetLane;
 }
 
 export interface CommentLiveBinding {
@@ -155,13 +131,6 @@ export const isDynamicAttributeBinding = (
 	liveBinding: LiveBinding,
 ): liveBinding is DynamicAttributeLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
-
-export const isContentBinding = (liveBinding: LiveBinding): liveBinding is ContentLiveBinding =>
-	liveBinding.staticBinding.type === BINDING.CONTENT;
-
-export const isRawContentBinding = (
-	liveBinding: LiveBinding,
-): liveBinding is RawContentLiveBinding => liveBinding.staticBinding.type === BINDING.RAW_CONTENT;
 
 export const isTemplateContentBinding = (
 	liveBinding: LiveBinding,

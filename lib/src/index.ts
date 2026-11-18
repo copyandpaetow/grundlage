@@ -10,7 +10,6 @@ import {
 import * as RUNNER_REQUEST from "./runtime/runner-request";
 import { forgetAncestorRunner } from "./runtime/update-order";
 import { html as htmlValue } from "./template";
-import { refreshStyleSheetsAfterMove } from "./rendering/instance";
 import {
 	DECLARED_PROP_NAMES,
 	DEFER_HYDRATION_ATTRIBUTE,
@@ -197,8 +196,6 @@ export const component = <DeclaredSchema extends Schema = {}>(
 		}
 
 		connectedCallback() {
-			const instance = this.#root.instance;
-			if (instance !== null) refreshStyleSheetsAfterMove(instance);
 			//an insertion is the only notice of a move, and a move can put a different component above
 			//this one
 			forgetAncestorRunner(this.#runner);

@@ -16,6 +16,8 @@
 - `props(element, schema)` → `prop.read(element, schema)`.
 - A binding a later paint drops passes `undefined`, not `null`, so a `prop.property` can hold `null`.
 - A template nested inside an object fallback is copied per element and no longer paints: make the template the whole fallback.
+- A `<style>` with `${…}` in both its attributes and its content throws, and so does `@namespace` in a `<style>` with `${…}`.
+- A value the browser rejects in a dynamic `<style>` drops its declaration instead of keeping the previous value.
 
 ### Types
 
@@ -50,7 +52,8 @@
 - Unused server `load` results are removed at hydration, and only unkeyed ones warn.
 - A template with an unclosed comment, tag, attribute value or `<style>`/`<script>`/`<textarea>` throws and names what to close, instead of dropping the rest.
 - U+E000 in a template throws and asks for `&#xE000;`.
-- A dynamic `<style>` whose nested selectors contain `:` (`&:hover`, `a:hover`) updates through CSSOM instead of rewriting the sheet text.
+- A dynamic `<style>` is split at its top-level rules: a change rewrites only the `<style>` of its own rule, and the static rules stay shared text.
+- `getHTML()` serializes a dynamic `<style>` with its current values.
 - Holes inside a nested `<template>` bind like any other hole, and a changed value rebuilds its content.
 - A listener, a property or a prop inside a nested `<template>` throws, since copies of the content keep none of them.
 - `shadowrootmode` on a nested `<template>` throws: let the element attach its own shadow root.
@@ -69,8 +72,8 @@
 - An object or array bound to another library's custom element, such as a Lit element, no longer calls its `update()`.
 - A `<![CDATA[…]]>` section keeps the markup after it instead of dropping the rest of the template.
 - In Safari, a `:host` value hole in a dynamic `<style>` updates the host after the first change, instead of keeping the old value.
-- A hole in an `!important` declaration inside `@keyframes`, which the browser drops, no longer gets a CSSOM update.
 - `<br />` paints one line break instead of two.
+- A tag name in another case (`<STYLE>`, `<TEXTAREA>`, `<TEMPLATE>`, `</Style>`) parses like its lowercase form, as the browser reads it, instead of breaking its bindings.
 - A void element written without a slash inside `<${tag}>` no longer throws "asymmetric tag".
 - A `<` that opens no tag (`${a} < ${b}`) is text instead of an internal error.
 - A `<!` that opens no comment throws and names the fix.

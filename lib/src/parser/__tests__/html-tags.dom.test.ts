@@ -226,3 +226,38 @@ describe("html parser — tag bindings", () => {
 		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.TAG, BINDING.TAG]);
 	});
 });
+
+describe("html parser — tag names are case-insensitive, as the HTML parser reads them", () => {
+	test("an uppercase <STYLE> reads its content as one raw-text binding", () => {
+		const parsed = parse`<STYLE>p { color: ${"red"}; }</STYLE>`;
+
+		expect(parsed.bindings).toEqual([
+			{ type: BINDING.RAW_CONTENT, elementName: "style", parts: ["p { color: ", 0, "; }"] },
+		]);
+	});
+
+	test("an uppercase <TEXTAREA> reads its content as one raw-text binding", () => {
+		const parsed = parse`<TEXTAREA>${"x"}</TEXTAREA>`;
+
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([BINDING.RAW_CONTENT]);
+	});
+
+	test("a raw-text element closes on its end tag written in another case", () => {
+		const parsed = parse`<style>p { color: ${"red"}; }</STYLE>`;
+
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([BINDING.RAW_CONTENT]);
+	});
+
+	test("an uppercase nested <TEMPLATE> binds its content as one hole", () => {
+		const parsed = parse`<div><TEMPLATE><p>${"x"}</p></TEMPLATE></div>`;
+
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([BINDING.TEMPLATE_CONTENT]);
+	});
+
+	test("an uppercase root <TEMPLATE> binds its attributes to the host", () => {
+		const parsed = parse`<TEMPLATE class=${"x"}><p>a</p></TEMPLATE>`;
+
+		expect(parsed.hostBindingCount).toBe(1);
+		expect(parsed.htmlWithMarkers).toBe("<p>a</p>");
+	});
+});

@@ -19,8 +19,7 @@ describe("raw content updates", () => {
 		element.remove();
 	};
 
-	//a value-hole style takes the css-plan path: mount bakes literal values into the
-	//text, later updates go through the element's own CSSStyleSheet — never the text
+	//the browser reparses the sheet from each new text, so read it after every update
 	const ruleDeclarationOf = (style: HTMLStyleElement): CSSStyleDeclaration =>
 		(style.sheet!.cssRules[0] as CSSStyleRule).style;
 
@@ -115,16 +114,13 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style")!;
-		const sheetTextNode = style.firstChild!;
 		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 
 		color = "blue";
 		await element.update();
 		await sleep();
 
-		//the text keeps the mount values — the update lands on the sheet object
-		expect(style.firstChild).toBe(sheetTextNode);
-		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: blue; }");
 		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 		expect(element.getAttribute("style")).toBeNull();
 
@@ -232,17 +228,16 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style")!;
-		const declaration = ruleDeclarationOf(style);
-		expect(declaration.getPropertyValue("color")).toBe("red");
-		expect(declaration.getPropertyValue("font-size")).toBe("16px");
+		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("red");
+		expect(ruleDeclarationOf(style).getPropertyValue("font-size")).toBe("16px");
 
 		color = "green";
 		size = "20px";
 		await element.update();
 		await sleep();
 
-		expect(declaration.getPropertyValue("color")).toBe("green");
-		expect(declaration.getPropertyValue("font-size")).toBe("20px");
+		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("green");
+		expect(ruleDeclarationOf(style).getPropertyValue("font-size")).toBe("20px");
 
 		cleanup(element);
 	});
@@ -317,14 +312,13 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style")!;
-		const declaration = ruleDeclarationOf(style);
-		expect(declaration.getPropertyValue("font-size")).toBe("16px");
+		expect(ruleDeclarationOf(style).getPropertyValue("font-size")).toBe("16px");
 
 		size = 24;
 		await element.update();
 		await sleep();
 
-		expect(declaration.getPropertyValue("font-size")).toBe("24px");
+		expect(ruleDeclarationOf(style).getPropertyValue("font-size")).toBe("24px");
 
 		cleanup(element);
 	});
@@ -350,7 +344,7 @@ describe("raw content updates", () => {
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
-		//the css path never writes the host, so nothing may re-fire the attribute
+		//a style update never writes the host, so nothing may re-fire the attribute
 		//observer and grow the run count without bound
 		await sleep(50);
 
@@ -394,7 +388,7 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("a root host style binding leaves the css fast path enabled", async () => {
+	test("a root host style binding and a dynamic <style> leave each other alone", async () => {
 		const tag = uniqueTag();
 		let color = "red";
 
@@ -417,8 +411,6 @@ describe("raw content updates", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		//values live on the instance's own sheet, so a host style attribute has
-		//nothing to wipe — it coexists with the fast path
 		const style = element.shadowRoot!.querySelector("style")!;
 		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 		expect(element.getAttribute("style")).toBe("outline: none");
@@ -427,8 +419,7 @@ describe("raw content updates", () => {
 		await element.update();
 		await sleep();
 
-		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
-		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: blue; }");
 		expect(element.getAttribute("style")).toBe("outline: none");
 
 		cleanup(element);
@@ -489,7 +480,7 @@ describe("raw content updates", () => {
 			const paragraph = element.shadowRoot!.querySelector("p")!;
 			expect(getComputedStyle(paragraph).width).toBe("45px");
 
-			//the update goes through setProperty, which would read " initial" as a literal token
+			//the keyword lands in the text, where it takes its normal effect on the custom property
 			for (const keyword of ["initial", "inherit", "unset"]) {
 				width = "45px";
 				await element.update();
@@ -538,7 +529,7 @@ describe("raw content updates", () => {
 	});
 
 	test("swapping away from a styled template leaves nothing behind", async () => {
-		//values live on the instance's own sheet, which leaves with the instance's
+		//values live in the instance's own <style>, which leaves with the instance's
 		//nodes — a structural swap must strand nothing on the host
 		const tag = uniqueTag();
 		let showStyled = true;
@@ -574,11 +565,9 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("a styled host keeps its live sheet value across a move", async () => {
-		//moving the host disconnects+reconnects it, re-firing connectedCallback; the
-		//<style> reparses from stale mount text, so the move refresh must restore the
-		//value written to the sheet since mount — the color update is in a prior pass
-		//so nothing re-sets it after the move
+	test("a styled host keeps its current value across a move", async () => {
+		//moving the host reparses its <style> from the text, which holds the value of the
+		//last update; nothing re-sets it after the move
 		const tag = uniqueTag();
 		let color = "red";
 
@@ -605,22 +594,20 @@ describe("raw content updates", () => {
 		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 
 		//a synchronous remove + append into a new parent re-fires connectedCallback
-		//without a teardown; the sheet the browser mints is fresh from stale text
+		//without a teardown
 		const container = document.createElement("div");
 		document.body.appendChild(container);
 		container.appendChild(element);
 		await sleep();
 
-		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 
 		container.remove();
 	});
 
-	test("a styled list row keeps its live sheet value across a reorder", async () => {
-		//a row move reinserts its <style>, minting a fresh sheet from stale text; the
-		//reorder pass leaves the color unchanged, so no setProperty runs after the
-		//move — only refreshStyleSheetsAfterMove can carry the live value across
+	test("a styled list row keeps its current value across a reorder", async () => {
+		//a row move reinserts its <style>, which reparses from the text; the reorder pass
+		//leaves the color unchanged, so nothing rewrites it after the move
 		const tag = uniqueTag();
 		type Row = { id: string; color: string };
 		let items: Array<Row> = [
@@ -655,7 +642,6 @@ describe("raw content updates", () => {
 				.find((li) => li.querySelector("p")!.textContent.trim() === id)!
 				.querySelector("style") as HTMLStyleElement;
 
-		//update colors via the live sheet (setProperty), not the text
 		items = [
 			{ id: "a", color: "blue" },
 			{ id: "b", color: "orange" },
@@ -664,8 +650,7 @@ describe("raw content updates", () => {
 		await sleep();
 		expect(ruleDeclarationOf(styleOf("a")).getPropertyValue("color")).toBe("blue");
 
-		//reorder only — colors unchanged, so the hash gate skips setProperty and the
-		//moved row's fresh sheet is healed purely by the move refresh
+		//reorder only: colors unchanged, so the hash gate skips every write
 		items = [
 			{ id: "b", color: "orange" },
 			{ id: "a", color: "blue" },

@@ -40,7 +40,7 @@ export const createComponentRoot = (
 ): ComponentRoot => ({
 	host,
 	shadowRoot,
-	treeState: { needsStyleSheetRefreshOnMove: false, isTemplateContent: false },
+	treeState: { isTemplateContent: false },
 	isHydrationPending,
 	instance: null,
 });

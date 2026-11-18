@@ -12,9 +12,7 @@ import {
 	hydrateLiveBinding,
 } from "./bindings/live-binding";
 import { commitContent, hydrateContent } from "./bindings/content";
-import { rebindStyleSheet } from "./bindings/style-sheet";
-import { TreeState, Instance, isContentBinding, isRawContentBinding } from "./bindings/types";
-import * as CONTENT_KIND from "./content-kind";
+import { TreeState, Instance } from "./bindings/types";
 import { buildFragment } from "./dom";
 import { ensureFragmentKeptEveryBinding, nextOpenMarker, scanToClose } from "./markers";
 import { parseContextOfChildren, warnWhenParsingWouldSplitParagraph } from "./parse-context";
@@ -33,32 +31,6 @@ export const commitHostBindings = (instance: Instance, values: Array<unknown>): 
 	const { liveBindings, parsed } = instance;
 	for (let index = 0; index < parsed.hostBindingCount; index++) {
 		commitLiveBinding(instance, liveBindings[index], values);
-	}
-};
-
-//a DOM move reparses every <style> in the moved subtree from its stale text; nested components
-//refresh their own shadow trees in connectedCallback, so this walk stays within one instance tree
-export const refreshStyleSheetsAfterMove = (instance: Instance): void => {
-	if (!instance.treeState.needsStyleSheetRefreshOnMove) return;
-	const { liveBindings } = instance;
-	for (let index = 0; index < liveBindings.length; index++) {
-		const liveBinding = liveBindings[index];
-		if (isRawContentBinding(liveBinding)) {
-			rebindStyleSheet(liveBinding);
-			continue;
-		}
-		if (!isContentBinding(liveBinding)) continue;
-		const { content } = liveBinding;
-		if (content.kind === CONTENT_KIND.BRANCH) {
-			const branch = content.instance;
-			if (branch) refreshStyleSheetsAfterMove(branch);
-			continue;
-		}
-		if (content.kind !== CONTENT_KIND.LIST) continue;
-		const { items } = content;
-		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-			refreshStyleSheetsAfterMove(items[itemIndex].instance);
-		}
 	}
 };
 
@@ -152,9 +124,6 @@ export const mountInstance = (
 	parsed: ParsedTemplate,
 	treeState: TreeState,
 ): Instance => {
-	//never reset: counting style bindings down would add a write to every teardown to spare a walk on a
-	//move, which is rare
-	treeState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
 	const instance = createInstance(parsed, treeState);
 
 	bindFreshClone(document.createTreeWalker(fragment, NodeFilter.SHOW_COMMENT), instance, values);
@@ -170,7 +139,6 @@ export const hydrateInstance = (
 	rangeEnd: Comment | null,
 	treeState: TreeState,
 ): Instance | typeof HYDRATION_MISMATCH => {
-	treeState.needsStyleSheetRefreshOnMove ||= parsed.hasStyleSheetBinding;
 	const instance = createInstance(parsed, treeState);
 	const { bindings, hostBindingCount } = parsed;
 	const { liveBindings } = instance;

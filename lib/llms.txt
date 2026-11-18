@@ -593,21 +593,27 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 - A `<style>` with no holes is written at mount and never touched again, inline or hoisted:
   ``const styles = html`<style>…</style>` `` at module scope, embedded as `${styles}`, is an
   unchanged nested template on every later paint.
-- A dynamic `<style>` is fast when every `${…}` sits in a declaration VALUE: the mounted (and
-  server-rendered) sheet text carries the real literal values, and every later update is a
-  `setProperty` on this element's OWN CSSOM sheet, never a write to the host. A changed rule
-  that can match the host (`:host`, `:scope`) is then re-inserted from its own text, because
-  Safari keeps the host's old style otherwise; that costs about a third more than a plain
-  `setProperty`, so a value only children need belongs on a child rule. Each instance owns a
-  private sheet, so duplicates never collide. Structural holes
-  (selector, property name, at-rule prelude), the same holed property declared twice in one
-  block, an ambiguous `!important`, and a sheet the browser parses differently than the
-  library expects (e.g. it drops a rule it can't parse) fall back to a full text rewrite that is
-  always correct, just slower. Consequences: a runtime value the browser rejects (including
-  one that smuggles `;` or `!important`) is dropped and the PREVIOUS value stays, a static
-  `!important` is preserved as CSSOM priority, a CSS-wide keyword
-  (`inherit`/`initial`/`unset`/`revert`) takes its normal effect, and serialized output
-  (`getHTML`) reflects the last full-text write, not later CSSOM updates.
+- A dynamic `<style>` is SPLIT at its TOP-LEVEL RULES. Each top-level rule that holds a `${…}`
+  (a style rule, or an at-rule with its whole block) gets a `<style>` element of its own; the
+  rules without holes stay static `<style>` elements with the same text in every instance, so the
+  browser parses them once. A changed value rewrites the text of its own rule's `<style>` and
+  nothing else; an unchanged value writes nothing. A hole may sit anywhere: a value, a selector, a
+  property name, an at-rule prelude, or a whole block of rules (a hole between rules joins the rule
+  after it). Keep a holed rule SMALL and at the TOP LEVEL: a hole inside a big `@media` or
+  `:host { … }` block rewrites the whole block on every change. Each instance owns its own
+  `<style>` elements, so duplicates never collide, and a moved element keeps its current values
+  because the text holds them. The pieces keep source order in the same tree, so the cascade,
+  `@layer` order, `@keyframes` names and a prelude-less `@scope` (scoped to the `<style>`'s parent)
+  behave as in one sheet. Every piece carries the original `<style>`'s attributes.
+  A hole is CSS TEXT, not an escaped value: `;`, `!important` or `}` in a value change the rule
+  around it, so pass validated values (numbers, known keywords), never raw user input. A value
+  that breaks the syntax (an unbalanced `}`, an open `/*` or string) breaks only its own rule's
+  `<style>`. A value the browser rejects drops its declaration; nothing keeps the previous value.
+  A CSS-wide keyword (`inherit`/`initial`/`unset`/`revert`) takes its normal effect, and
+  serialized output (`getHTML`) shows the current values.
+  THROWS: `${…}` in both the attributes and the content of one `<style>` (an attribute hole would
+  reach one piece only), and `@namespace` in a `<style>` with holes (a namespace applies to its
+  own sheet only).
 - Declare inputs in `component(gen, { props })` and read them off the object the component body
   and its update generators receive. Don't read attributes directly: they're strings, they skip
   the parsing, fallbacks and refusal the schema gives, and an undeclared attribute does not

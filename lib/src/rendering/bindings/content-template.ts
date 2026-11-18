@@ -16,7 +16,6 @@ export const commitTemplateContent = (
 	if (hash === liveBinding.lastValueHash) return;
 	const fragment = cloneTemplateFragment(content, null);
 	mountInstance(fragment, values, content, {
-		needsStyleSheetRefreshOnMove: false,
 		isTemplateContent: true,
 	});
 	removeMarkers(fragment);

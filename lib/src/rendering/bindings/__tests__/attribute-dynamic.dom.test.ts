@@ -4,10 +4,7 @@ import { UNSET_HASH } from "../../constants";
 import { commitDynamic } from "../attribute-dynamic";
 import { DynamicAttributeLiveBinding, TreeState } from "../types";
 
-const treeState: TreeState = {
-	needsStyleSheetRefreshOnMove: false,
-	isTemplateContent: false,
-};
+const treeState: TreeState = { isTemplateContent: false };
 
 const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
 	staticBinding: {

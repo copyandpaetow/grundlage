@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { BaseComponent } from "../../types";
 import { html, TemplateValue } from "../../template";
 import { hashValue } from "../value-hashing";
 import { getParsedTemplate } from "../../parser/html";
@@ -11,20 +10,10 @@ import {
 	mountInstance,
 	patchInstance,
 	isPatchableInPlace,
-	refreshStyleSheetsAfterMove,
 } from "../instance";
 import { ContentLiveBinding, Instance, TreeState } from "../bindings/types";
 
-//a div stands in for the component element; only a demoted stylesheet calls back into it
-const createHost = () =>
-	Object.assign(document.createElement("div"), {
-		update: vi.fn(),
-	}) as unknown as BaseComponent;
-
-const treeState = (): TreeState => ({
-	needsStyleSheetRefreshOnMove: false,
-	isTemplateContent: false,
-});
+const treeState = (): TreeState => ({ isTemplateContent: false });
 
 const mountTemplateValue = (value: TemplateValue, treeStateValue: TreeState) => {
 	const parsed = getParsedTemplate(value.__templateStrings);
@@ -33,9 +22,8 @@ const mountTemplateValue = (value: TemplateValue, treeStateValue: TreeState) => 
 	return { instance, fragment };
 };
 
-//the host must be connected: a detached <style> has no sheet, so the CSSOM lane never engages
 const mountIntoShadow = (value: TemplateValue) => {
-	const host = createHost();
+	const host = document.createElement("div");
 	document.body.appendChild(host);
 	const shadowRoot = host.attachShadow({ mode: "open" });
 	const { instance, fragment } = mountTemplateValue(value, treeState());
@@ -176,76 +164,57 @@ describe("patchInstance: change detection", () => {
 	});
 });
 
-describe("raw content with a css plan", () => {
+describe("a dynamic style sheet", () => {
 	const sheet = (color: string) =>
 		html`<style>
-			p {
-				color: ${color};
-			}
+			.static { color: black; }
+			p { color: ${color}; }
 		</style>`;
 	const normalizeWhitespace = (string: string) => string.replace(/\s+/g, " ").trim();
-	const declarationOf = (style: HTMLStyleElement): CSSStyleDeclaration =>
-		(style.sheet!.cssRules[0] as CSSStyleRule).style;
+	const textsOf = (root: ParentNode) =>
+		Array.from(root.querySelectorAll("style"), (style) => normalizeWhitespace(style.textContent));
 
-	test("mount composes the literal sheet into the detached fragment", () => {
+	test("mount writes the holed rule into its own <style> after the static one", () => {
 		const { fragment } = mountTemplateValue(sheet("red"), treeState());
-		const styles = fragment.querySelectorAll("style");
 
-		expect(styles).toHaveLength(1);
-		expect(normalizeWhitespace(styles[0].textContent)).toBe("p { color: red; }");
+		expect(textsOf(fragment)).toEqual([".static { color: black; }", "p { color: red; }"]);
 	});
 
-	test("a connected patch updates the declaration through the sheet, never the text", () => {
-		const { host, shadowRoot, instance } = mountIntoShadow(sheet("red"));
-		const style = shadowRoot.querySelector("style")!;
-		const sheetTextNode = style.firstChild as Text;
-		const sheetText = sheetTextNode.data;
+	test("a patch rewrites the holed rule's <style> and leaves the static one alone", () => {
+		const { shadowRoot, instance } = mountIntoShadow(sheet("red"));
+		const [staticStyle] = shadowRoot.querySelectorAll("style");
+		const staticText = staticStyle.firstChild;
 
 		patchInstance(instance, sheet("blue").values);
 
-		expect(style.firstChild).toBe(sheetTextNode);
-		expect(sheetTextNode.data).toBe(sheetText);
-		expect(declarationOf(style).getPropertyValue("color")).toBe("blue");
-		expect(host.getAttribute("style")).toBeNull();
+		expect(staticStyle.firstChild).toBe(staticText);
+		expect(textsOf(shadowRoot)).toEqual([".static { color: black; }", "p { color: blue; }"]);
 	});
 
 	test("an unchanged patch writes nothing", () => {
 		const { shadowRoot, instance } = mountIntoShadow(sheet("red"));
-		const style = shadowRoot.querySelector("style")!;
-		//first patch resolves the sheet; same values, so the hash gate must skip.
-		//the marker must be a valid value — setProperty drops invalid ones
-		patchInstance(instance, sheet("red").values);
-		declarationOf(style).setProperty("color", "teal");
+		const [, holedStyle] = shadowRoot.querySelectorAll("style");
+		holedStyle.textContent = "p { color: teal; }";
 
 		patchInstance(instance, sheet("red").values);
 
-		expect(declarationOf(style).getPropertyValue("color")).toBe("teal");
+		expect(holedStyle.textContent).toBe("p { color: teal; }");
 	});
 
-	test("a patch while detached rewrites the composed text", () => {
-		const { instance, fragment } = mountTemplateValue(sheet("red"), treeState());
-		const style = fragment.querySelector("style")!;
-
-		patchInstance(instance, sheet("blue").values);
-
-		expect(normalizeWhitespace(style.textContent)).toBe("p { color: blue; }");
-	});
-
-	test("hydrate seeds without touching the sheet; a later patch goes through CSSOM", () => {
+	test("hydration adopts the server text without a write, and a later patch rewrites it", () => {
 		const { shadowRoot } = mountIntoShadow(sheet("red"));
-		const style = shadowRoot.querySelector("style")!;
-		const sheetTextNode = style.firstChild as Text;
+		const [, holedStyle] = shadowRoot.querySelectorAll("style");
+		const serverText = holedStyle.firstChild;
 
 		const instance = hydrateShadowRoot(sheet("red"), shadowRoot, null, treeState());
-		expect(style.firstChild).toBe(sheetTextNode);
+		expect(holedStyle.firstChild).toBe(serverText);
 
 		patchInstance(instanceOrThrow(instance), sheet("blue").values);
-		expect(style.firstChild).toBe(sheetTextNode);
-		expect(declarationOf(style).getPropertyValue("color")).toBe("blue");
+		expect(normalizeWhitespace(holedStyle.textContent)).toBe("p { color: blue; }");
 	});
 
-	test("duplicate instances own private sheets and never interfere", () => {
-		const host = createHost();
+	test("duplicate instances own their own <style> elements and never interfere", () => {
+		const host = document.createElement("div");
 		document.body.appendChild(host);
 		const shadowRoot = host.attachShadow({ mode: "open" });
 		const state = treeState();
@@ -253,55 +222,31 @@ describe("raw content with a css plan", () => {
 		shadowRoot.appendChild(first.fragment);
 		const second = mountTemplateValue(sheet("blue"), state);
 		shadowRoot.appendChild(second.fragment);
-		const styles = shadowRoot.querySelectorAll("style");
 
 		patchInstance(second.instance, sheet("green").values);
 
-		expect(normalizeWhitespace(styles[0].textContent)).toBe("p { color: red; }");
-		expect(declarationOf(styles[0]).getPropertyValue("color")).toBe("red");
-		expect(declarationOf(styles[1]).getPropertyValue("color")).toBe("green");
+		expect(textsOf(shadowRoot)).toEqual([
+			".static { color: black; }",
+			"p { color: red; }",
+			".static { color: black; }",
+			"p { color: green; }",
+		]);
 	});
 
-	test("a moved style is refreshed from its orphaned sheet", () => {
+	test("a moved style keeps its current value, since its text holds it", () => {
 		const { shadowRoot, instance } = mountIntoShadow(sheet("red"));
 		patchInstance(instance, sheet("blue").values);
-		const style = shadowRoot.querySelector("style")!;
+		const [, holedStyle] = shadowRoot.querySelectorAll("style");
 
-		//a plain re-append reparses the sheet from the stale mount-time text
-		const wrapper = document.createElement("div");
-		shadowRoot.appendChild(wrapper);
-		wrapper.append(...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper));
-		expect(declarationOf(style).getPropertyValue("color")).toBe("red");
-
-		refreshStyleSheetsAfterMove(instance);
-		expect(declarationOf(style).getPropertyValue("color")).toBe("blue");
-
-		patchInstance(instance, sheet("green").values);
-		expect(declarationOf(style).getPropertyValue("color")).toBe("green");
-	});
-
-	test("a moved style whose reparse breaks the plan structure demotes to a full text rewrite", () => {
-		const { host, shadowRoot, instance } = mountIntoShadow(sheet("red"));
-		patchInstance(instance, sheet("blue").values); //resolve the CSSOM sheet
-		const style = shadowRoot.querySelector("style")!;
-
-		//a reparse yielding a different rule count than the compiled plan recorded makes the
-		//after-move rebind bail; it reaches the host through the style element's root node
-		style.textContent = "p { color: red; } a { color: blue; }";
 		const wrapper = document.createElement("div");
 		shadowRoot.appendChild(wrapper);
 		wrapper.append(...Array.from(shadowRoot.childNodes).filter((node) => node !== wrapper));
 
-		expect(host.update).not.toHaveBeenCalled();
-		refreshStyleSheetsAfterMove(instance);
-		expect(host.update).toHaveBeenCalledOnce();
-
-		//the demote is real: the next patch recomposes the whole sheet on the text lane
-		patchInstance(instance, sheet("green").values);
-		expect(normalizeWhitespace(style.textContent)).toBe("p { color: green; }");
+		const rule = holedStyle.sheet!.cssRules[0] as CSSStyleRule;
+		expect(rule.style.getPropertyValue("color")).toBe("blue");
 	});
 
-	test("switching a branch away removes the style element with the branch", () => {
+	test("switching a branch away removes the style elements with the branch", () => {
 		const wrap = (inner: unknown) => html`<div>${inner}</div>`;
 		const { instance, fragment } = mountTemplateValue(wrap(sheet("red")), treeState());
 		expect(fragment.querySelector("style")).not.toBeNull();
@@ -311,7 +256,7 @@ describe("raw content with a css plan", () => {
 		expect(fragment.querySelector("style")).toBeNull();
 	});
 
-	test("removing a list row removes its style element", () => {
+	test("removing a list row removes its style elements", () => {
 		const wrap = (items: Array<unknown>) => html`<div>${items}</div>`;
 		const { instance, fragment } = mountTemplateValue(wrap([sheet("red")]), treeState());
 		expect(fragment.querySelector("style")).not.toBeNull();

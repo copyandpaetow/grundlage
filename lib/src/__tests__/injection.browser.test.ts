@@ -58,7 +58,7 @@ describe("a value that would end its element in server markup throws", () => {
 		expect(String(errors[0])).toMatch(/grundlage: <style> .*"<\/style"/);
 	});
 
-	//a quoted string is a value the CSSOM accepts, so the update lane cannot drop it on its own
+	//a quoted string is a valid value, so the browser would keep it
 	test("an update to a value with </style throws and leaves the sheet as it was", async () => {
 		const paint = (text: string) =>
 			html`<style>

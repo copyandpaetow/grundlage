@@ -1,12 +1,12 @@
 import { stringListHash } from "../utils/hashing";
-import { DYNAMIC_TAG_PLACEHOLDER, NO_KEY, STYLE_SHEET_NOT_COMPILED } from "./constants";
+import { DYNAMIC_TAG_PLACEHOLDER, NO_KEY } from "./constants";
 import * as BINDING from "./binding";
 import * as OPEN_CONSTRUCT from "./open-construct";
 import { ParsedTemplate, Part, StaticBinding } from "./types";
 import { isLetterCode, isQuoteCode, isWhitespaceCode } from "./characters";
 import * as MARKUP from "./markup";
 import * as CHARACTER_CODE from "./character-code";
-import { compileStyleSheet } from "./css";
+import { topLevelRuleEndsOf } from "./css-rules";
 import { decodeRCDATAParts, dropLeadingLineFeed } from "./rcdata";
 import { ValueOf } from "../utils/types";
 import {
@@ -73,7 +73,6 @@ interface TemplateReader {
 	startedBindingCount: number;
 	hostBindingCount: number;
 	keyValueParts: Array<Part> | typeof NO_KEY;
-	hasStyleSheetBinding: boolean;
 	rootTemplate: RootTemplateKind;
 	hasSeenTopLevelSibling: boolean;
 	//one entry per open element, innermost last: whether its tag name holds a hole
@@ -111,7 +110,6 @@ const createTemplateReader = (
 		startedBindingCount: 0,
 		hostBindingCount: 0,
 		keyValueParts: NO_KEY,
-		hasStyleSheetBinding: false,
 		rootTemplate:
 			mode === PARSE_MODE.NO_ROOT_TEMPLATE ? ROOT_TEMPLATE.RULED_OUT : ROOT_TEMPLATE.UNDECIDED,
 		hasSeenTopLevelSibling: false,
@@ -153,19 +151,22 @@ const openMarkerComment = (openConstructKind: OpenConstructKind, bindingIndex: n
 
 const isTopLevel = (reader: TemplateReader) => reader.openTagIsDynamic.length === 0;
 
-const parsesContentAsRaw = (tagName: string) => {
+const parsesContentAsRaw = (lowercaseName: string) => {
 	return (
-		tagName === MARKUP.STYLE_TAG ||
-		tagName === TEXTAREA_TAG ||
-		tagName === TITLE_TAG ||
-		tagName === MARKUP.SCRIPT_TAG
+		lowercaseName === MARKUP.STYLE_TAG ||
+		lowercaseName === TEXTAREA_TAG ||
+		lowercaseName === TITLE_TAG ||
+		lowercaseName === MARKUP.SCRIPT_TAG
 	);
 };
 
-const rootTemplateAfterOpenTag = (reader: TemplateReader, tagName: string): RootTemplateKind => {
+const rootTemplateAfterOpenTag = (
+	reader: TemplateReader,
+	lowercaseName: string,
+): RootTemplateKind => {
 	switch (reader.rootTemplate) {
 		case ROOT_TEMPLATE.UNDECIDED: {
-			const isRootTemplate = tagName === TEMPLATE_TAG && !reader.hasSeenTopLevelSibling;
+			const isRootTemplate = lowercaseName === TEMPLATE_TAG && !reader.hasSeenTopLevelSibling;
 			return isRootTemplate ? ROOT_TEMPLATE.IS_THE_CURRENT_TAG : ROOT_TEMPLATE.RULED_OUT;
 		}
 		case ROOT_TEMPLATE.IS_THE_CURRENT_TAG:
@@ -343,8 +344,8 @@ const findEnd = (
 };
 
 //<select> has no value attribute, and its options are not there yet when its own bindings commit
-const warnOnSelectValueBinding = (tagName: string, binding: StaticBinding): void => {
-	if (tagName !== SELECT_TAG) return;
+const warnOnSelectValueBinding = (lowercaseName: string, binding: StaticBinding): void => {
+	if (lowercaseName !== SELECT_TAG) return;
 	if (binding.type !== BINDING.ATTRIBUTE) return;
 	const [name] = binding.nameParts;
 	const isValueName =
@@ -421,7 +422,7 @@ const readAttributeValue = (reader: TemplateReader): Array<Part> => {
 //reads up to just past the `>` or `/>`; static attributes come back as markup, bound ones as markers
 const readAttributes = (
 	reader: TemplateReader,
-	tagName: string,
+	lowercaseName: string,
 ): {
 	attributeMarkup: string;
 	markerMarkup: string;
@@ -429,7 +430,7 @@ const readAttributes = (
 } => {
 	const { source } = reader;
 	const isOnRootTemplate = reader.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
-	const isNestedTemplate = tagName === TEMPLATE_TAG && !isOnRootTemplate;
+	const isNestedTemplate = lowercaseName === TEMPLATE_TAG && !isOnRootTemplate;
 	let attributeMarkup = "";
 	let markerMarkup = "";
 
@@ -457,8 +458,8 @@ const readAttributes = (
 		const isBinding = isOnRootTemplate || hasHole(nameParts) || hasHole(valueParts);
 		if (isBinding) {
 			const bindingIndex = reader.startedBindingCount++;
-			const binding = attributeBindingOf(tagName, nameParts, valueParts);
-			warnOnSelectValueBinding(tagName, binding);
+			const binding = attributeBindingOf(lowercaseName, nameParts, valueParts);
+			warnOnSelectValueBinding(lowercaseName, binding);
 			reader.bindings.push(binding);
 			if (isOnRootTemplate) reader.hostBindingCount++;
 			else markerMarkup += openMarkerComment(OPEN_CONSTRUCT.ATTRIBUTE, bindingIndex);
@@ -476,48 +477,70 @@ const readAttributes = (
 	throw unclosedError("an open tag");
 };
 
-//raw content ends at the first `</` followed by its own tag name
-const readRawContent = (
-	reader: TemplateReader,
-	tagName: string,
-): { contentMarkup: string; markerMarkup: string } => {
-	let closeTagStart = reader.source.indexOf(MARKUP.END_TAG_OPEN, reader.index);
-	while (
-		closeTagStart !== -1 &&
-		!reader.source.startsWith(tagName, closeTagStart + MARKUP.END_TAG_OPEN.length)
-	) {
-		closeTagStart = reader.source.indexOf(MARKUP.END_TAG_OPEN, closeTagStart + 1);
-	}
-	if (closeTagStart === -1) throw unclosedError(`<${tagName}>`);
-	const parts = partsOfRange(reader, reader.index, closeTagStart);
-	reader.index = closeTagStart;
-
-	if (!hasHole(parts)) return { contentMarkup: parts.join(""), markerMarkup: "" };
-	if (tagName === TEXTAREA_TAG || tagName === TITLE_TAG) decodeRCDATAParts(parts, tagName);
-	if (tagName === TEXTAREA_TAG) dropLeadingLineFeed(parts);
-	//the sheet text is composed with literal values at first commit, while the clone is
-	//still detached — the cached markup deliberately carries an empty <style>
-	const compiledStyleSheet =
-		tagName === MARKUP.STYLE_TAG ? compileStyleSheet(parts) : STYLE_SHEET_NOT_COMPILED;
-	if (compiledStyleSheet !== STYLE_SHEET_NOT_COMPILED) reader.hasStyleSheetBinding = true;
-	const bindingIndex = reader.startedBindingCount++;
-	reader.bindings.push({
-		type: BINDING.RAW_CONTENT,
-		elementName: tagName,
-		parts,
-		compiledStyleSheet,
-	});
-	return {
-		contentMarkup: "",
-		markerMarkup: openMarkerComment(OPEN_CONSTRUCT.RAW_CONTENT, bindingIndex),
-	};
-};
-
 const textEndOf = (source: string, start: number, lowercaseName: string) => {
 	if (lowercaseName === PLAINTEXT_TAG) return source.length;
 	const endTag = new RegExp(`</${lowercaseName}[\\t\\n\\f\\r />]`, "gi");
 	endTag.lastIndex = start;
 	return endTag.exec(source)?.index ?? source.length;
+};
+
+const bindRawContent = (reader: TemplateReader, elementName: string, parts: Array<Part>) => {
+	const bindingIndex = reader.startedBindingCount++;
+	reader.bindings.push({ type: BINDING.RAW_CONTENT, elementName, parts });
+	return openMarkerComment(OPEN_CONSTRUCT.RAW_CONTENT, bindingIndex);
+};
+
+//each top-level rule with a ${…} gets a <style> of its own, so a change reparses that rule alone,
+//and the static rules around it stay one text that every instance shares
+const readStyleSheets = (reader: TemplateReader, end: number, openTagMarkup: string) => {
+	//each without its end tag: one joins them, and readEndTag writes the last
+	const elementMarkups: Array<string> = [];
+	let staticText = "";
+	let ruleStart = reader.index;
+	for (const ruleEnd of topLevelRuleEndsOf(reader.source, reader.index, end)) {
+		const parts = partsOfRange(reader, ruleStart, ruleEnd);
+		ruleStart = ruleEnd;
+		if (!hasHole(parts)) {
+			staticText += parts.join("");
+			continue;
+		}
+		if (staticText !== "") elementMarkups.push(openTagMarkup + staticText);
+		staticText = "";
+		elementMarkups.push(bindRawContent(reader, MARKUP.STYLE_TAG, parts) + openTagMarkup);
+	}
+	if (staticText !== "") elementMarkups.push(openTagMarkup + staticText);
+	reader.index = end;
+	return elementMarkups.join(MARKUP.END_TAG_OPEN + MARKUP.STYLE_TAG + MARKUP.TAG_CLOSE);
+};
+
+//raw content ends at its own end tag, written in any case; the markup stops before it
+const readRawContent = (reader: TemplateReader, tagName: string, openTagMarkup: string) => {
+	const lowercaseName = tagName.toLowerCase();
+	const closeTagStart = textEndOf(reader.source, reader.index, lowercaseName);
+	if (closeTagStart === reader.source.length) throw unclosedError(`<${tagName}>`);
+	const hasHoleInContent = reader.nextHoleIndex < closeTagStart;
+	if (lowercaseName === MARKUP.STYLE_TAG && hasHoleInContent) {
+		return readStyleSheets(reader, closeTagStart, openTagMarkup);
+	}
+	const parts = partsOfRange(reader, reader.index, closeTagStart);
+	reader.index = closeTagStart;
+
+	if (!hasHoleInContent) return openTagMarkup + parts.join("");
+	const isEscapedText = lowercaseName === TEXTAREA_TAG || lowercaseName === TITLE_TAG;
+	if (isEscapedText) decodeRCDATAParts(parts, lowercaseName);
+	if (lowercaseName === TEXTAREA_TAG) dropLeadingLineFeed(parts);
+	return bindRawContent(reader, lowercaseName, parts) + openTagMarkup;
+};
+
+//an attribute binding reaches one element, and the content of a <style> with ${…} becomes several
+const ensureStaticStyleContent = (reader: TemplateReader) => {
+	const end = textEndOf(reader.source, reader.index, MARKUP.STYLE_TAG);
+	if (reader.nextHoleIndex >= end) return;
+	throw new Error(
+		libraryMessage(
+			"<style> expects ${…} in its attributes or in its content, not both: the content is split into one <style> per rule with a ${…}, and an attribute ${…} would reach only one of them. Move the condition into the sheet, as an @media rule or a selector.",
+		),
+	);
 };
 
 const ensureStaticContent = (reader: TemplateReader, tagName: string) => {
@@ -539,6 +562,9 @@ const readElement = (reader: TemplateReader) => {
 
 	const isDynamicTag = hasHole(nameParts);
 	const tagName = isDynamicTag ? DYNAMIC_TAG_PLACEHOLDER : nameParts.join("");
+	//the HTML parser reads a tag name in any case, so checks on the kind of element compare it lowercase;
+	//messages name the tag as written
+	const lowercaseName = tagName.toLowerCase();
 	if (isDynamicTag) {
 		reader.resultMarkup += openMarkerComment(OPEN_CONSTRUCT.TAG, reader.startedBindingCount++);
 		reader.bindings.push({ type: BINDING.TAG, parts: nameParts });
@@ -547,16 +573,16 @@ const readElement = (reader: TemplateReader) => {
 	//in the second pass the root template is already ruled out, and nothing there reads a sibling
 	const isFirstTag = reader.rootTemplate === ROOT_TEMPLATE.UNDECIDED;
 	if (!isFirstTag && isTopLevel(reader)) reader.hasSeenTopLevelSibling = true;
-	reader.rootTemplate = rootTemplateAfterOpenTag(reader, tagName);
+	reader.rootTemplate = rootTemplateAfterOpenTag(reader, lowercaseName);
 	const isOnRootTemplate = reader.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
 
-	const attributes = readAttributes(reader, tagName);
+	const attributes = readAttributes(reader, lowercaseName);
 	reader.resultMarkup += attributes.markerMarkup;
 	const openTagMarkup = isOnRootTemplate
 		? ""
 		: MARKUP.TAG_OPEN + tagName + attributes.attributeMarkup + MARKUP.TAG_CLOSE;
 
-	if (VOID_TAGS.has(tagName.toLowerCase())) {
+	if (VOID_TAGS.has(lowercaseName)) {
 		reader.resultMarkup += openTagMarkup;
 		return;
 	}
@@ -567,7 +593,7 @@ const readElement = (reader: TemplateReader) => {
 		return;
 	}
 	reader.openTagIsDynamic.push(isDynamicTag);
-	if (tagName === TEMPLATE_TAG && !isOnRootTemplate) {
+	if (lowercaseName === TEMPLATE_TAG && !isOnRootTemplate) {
 		//oxlint-disable-next-line no-use-before-define -- mutual recursion
 		const templateContent = readTemplateContent(reader);
 		reader.resultMarkup +=
@@ -575,13 +601,15 @@ const readElement = (reader: TemplateReader) => {
 		readEndTag(reader);
 		return;
 	}
-	if (UNESCAPED_TEXT_TAGS.has(tagName.toLowerCase())) ensureStaticContent(reader, tagName);
-	if (!parsesContentAsRaw(tagName)) {
+	if (UNESCAPED_TEXT_TAGS.has(lowercaseName)) ensureStaticContent(reader, tagName);
+	if (!parsesContentAsRaw(lowercaseName)) {
 		reader.resultMarkup += openTagMarkup;
 		return;
 	}
-	const rawContent = readRawContent(reader, tagName);
-	reader.resultMarkup += rawContent.markerMarkup + openTagMarkup + rawContent.contentMarkup;
+	if (lowercaseName === MARKUP.STYLE_TAG && attributes.markerMarkup !== "") {
+		ensureStaticStyleContent(reader);
+	}
+	reader.resultMarkup += readRawContent(reader, tagName, openTagMarkup);
 	readEndTag(reader);
 };
 
@@ -609,7 +637,7 @@ const markupStartFrom = (source: string, index: number) => {
 const TEMPLATE_END_TAG = MARKUP.END_TAG_OPEN + TEMPLATE_TAG;
 
 const startsTemplateEndTag = (source: string, index: number) =>
-	source.startsWith(TEMPLATE_END_TAG, index) &&
+	source.slice(index, index + TEMPLATE_END_TAG.length).toLowerCase() === TEMPLATE_END_TAG &&
 	endsTagName(source, index + TEMPLATE_END_TAG.length);
 
 const readMarkup = (reader: TemplateReader): void => {
@@ -643,7 +671,6 @@ const readTemplateContent = (
 		bindings: [],
 		startedBindingCount: 0,
 		hostBindingCount: 0,
-		hasStyleSheetBinding: false,
 		rootTemplate: ROOT_TEMPLATE.RULED_OUT,
 		hasSeenTopLevelSibling: false,
 		openTagIsDynamic: [],
@@ -668,7 +695,6 @@ const readTemplateContent = (
 			bindings: contentReader.bindings,
 			templateHash: stringListHash([contentReader.resultMarkup]),
 			hostBindingCount: 0,
-			hasStyleSheetBinding: contentReader.hasStyleSheetBinding,
 			keyValueParts: NO_KEY,
 		},
 		valueIndices,
@@ -700,7 +726,6 @@ const parse = (
 		templateHash: stringListHash(strings),
 		hostBindingCount: reader.hostBindingCount,
 		keyValueParts: reader.keyValueParts,
-		hasStyleSheetBinding: reader.hasStyleSheetBinding,
 	};
 };
 

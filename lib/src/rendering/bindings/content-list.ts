@@ -14,7 +14,6 @@ import {
 	cloneTemplateFragment,
 	mountInstance,
 	patchInstance,
-	refreshStyleSheetsAfterMove,
 } from "../instance";
 import { clearRange, NO_LIST_TAIL, nextListTail } from "../markers";
 import { TreeState, ContentLiveBinding, ListContentState, ListItem } from "./types";
@@ -270,7 +269,6 @@ const placeRows = (
 				nextUnmovedPreviousIndex = nextInSubsequence[nextUnmovedPreviousIndex];
 			} else {
 				moveRowAfter(cursor, row);
-				refreshStyleSheetsAfterMove(row.instance);
 			}
 		}
 		row.placedAtIndex = index;

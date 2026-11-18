@@ -2,13 +2,13 @@ import { expect, inject, test } from "vitest";
 import { component, html } from "../../index";
 import { ensureFragmentKeptEveryBinding } from "../../rendering/markers";
 import { buildFragment } from "../../rendering/dom";
+import { composeParts } from "../../rendering/compose";
 import { BaseComponent } from "../../types";
 import { InvariantError } from "../../utils/diagnostics";
 import * as BINDING from "../binding";
-import { NO_KEY, STYLE_SHEET_NOT_COMPILED } from "../constants";
-import { compileStyleSheet } from "../css";
+import { NO_KEY } from "../constants";
 import { getParsedTemplate } from "../html";
-import { ParsedTemplate, Part } from "../types";
+import { ParsedTemplate, Part, RawContentStaticBinding } from "../types";
 import { createRandom } from "./html-template-generator";
 
 //token soup: whatever the parsers make of it, they answer with a result or a library error, never a
@@ -290,20 +290,33 @@ test.runIf(isRealBrowser).each(seedsFrom(4, 2))(
 	120_000,
 );
 
+//each <style> with the text a paint gives it: its own, or its binding's parts composed
+const paintedStyleTextOf = (parsed: ParsedTemplate, values: Array<unknown>) =>
+	Array.from(buildFragment(parsed.htmlWithMarkers).querySelectorAll("style"), (style) => {
+		const marker = style.previousSibling;
+		if (!(marker instanceof Comment)) return style.textContent;
+		const bindingIndex = Number(marker.data.slice(marker.data.indexOf("-") + 1));
+		return composeParts((parsed.bindings[bindingIndex] as RawContentStaticBinding).parts, values);
+	}).join("");
+
 test.each(seedsFrom(1, 3))(
-	"the css compiler answers every token soup with a result or a fallback, never a throw (seed %i)",
+	"the style splitter cuts every css token soup into pieces that add up to the whole (seed %i)",
 	(seed) => {
 		const random = createRandom(seed);
-		const tally = { compiled: 0, notCompiled: 0 };
+		const tally = { split: 0 };
 		const wrong: Array<string> = [];
-		for (let caseIndex = 0; caseIndex < 20000 && wrong.length < 8; caseIndex++) {
+		for (let caseIndex = 0; caseIndex < 5000 && wrong.length < 8; caseIndex++) {
 			const strings = stringsOf(random, CSS_TOKENS);
 			const parts: Array<Part> = [strings[0]];
 			for (let index = 1; index < strings.length; index++) parts.push(index - 1, strings[index]);
+			const values = strings.slice(1).map((_, index) => `v${index}`);
+			const wrapped = [`<style>${strings[0]}`, ...strings.slice(1)];
+			wrapped[wrapped.length - 1] += "</style>";
 			try {
-				const compiled = compileStyleSheet(parts);
-				if (compiled === STYLE_SHEET_NOT_COMPILED) tally.notCompiled++;
-				else tally.compiled++;
+				const painted = paintedStyleTextOf(getParsedTemplate(asTemplateStrings(wrapped)), values);
+				const whole = composeParts(parts, values);
+				if (painted === whole) tally.split++;
+				else wrong.push(`${JSON.stringify(painted)} vs ${JSON.stringify(whole)}`);
 			} catch (error) {
 				wrong.push(`${describeError(error)} in ${strings.join("${}")}`);
 			}

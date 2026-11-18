@@ -30,7 +30,7 @@ const scratchSheetOf = (cssText: string) => {
 	return sheet;
 };
 
-//live state the markup does not show (CSSOM updates, a textarea's value) is written into the copy
+//live state the markup does not show (a parsed sheet, a textarea's value) is written into the copy
 const comparableMarkupOf = (
 	root: ParentNode,
 	liveStyleTextOf: (style: HTMLStyleElement) => string,

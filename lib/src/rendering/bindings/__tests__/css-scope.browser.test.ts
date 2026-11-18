@@ -1,14 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../../index";
 
-const normalizeWhitespace = (string: string) => string.replace(/\s+/g, " ").trim();
-
 const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
-//two platform claims a light-DOM mode would rest on, and nothing in the library exercises yet:
-//a prelude-less @scope is inert inside a shadow root, and it still parses to an addressable
-//grouping rule, so a value hole inside it keeps the CSSOM update path. Both can be settled in
-//shadow mode before light mode exists
+//a platform claim a light-DOM mode rests on: a prelude-less @scope is inert inside a shadow root,
+//and scopes to the parent element of its <style>
 describe("prelude-less @scope", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-scope-${tagId++}-${Date.now()}`;
@@ -22,20 +18,6 @@ describe("prelude-less @scope", () => {
 	const cleanup = (element: HTMLElement) => {
 		element.remove();
 	};
-
-	//two separate capabilities, and happy-dom has exactly one of them: it parses @scope into an
-	//addressable grouping rule, so the CSSOM assertions run there, but its getComputedStyle
-	//returns "" for a scoped rule, so the chromium project carries everything visual
-	const detectScopeParsing = () => {
-		const probe = document.createElement("style");
-		probe.textContent = "@scope { p { color: red; } }";
-		document.body.appendChild(probe);
-		const firstRule = probe.sheet?.cssRules[0];
-		const parsed = firstRule !== undefined && "cssRules" in firstRule;
-		probe.remove();
-		return parsed;
-	};
-	const parsesScope = detectScopeParsing();
 
 	//probes the exact shape the tests use — a scoped sheet inside a shadow root — because
 	//happy-dom resolves a scoped sheet in the light DOM but returns "" for the same sheet in a
@@ -51,11 +33,6 @@ describe("prelude-less @scope", () => {
 		return resolved;
 	};
 	const resolvesScopedStyles = detectScopedStyleResolution();
-
-	const innerRuleDeclarationOf = (style: HTMLStyleElement): CSSStyleDeclaration => {
-		const scopeRule = style.sheet!.cssRules[0] as CSSGroupingRule;
-		return (scopeRule.cssRules[0] as CSSStyleRule).style;
-	};
 
 	test.skipIf(!resolvesScopedStyles)(
 		"does not suppress its inner rules inside a shadow root",
@@ -142,44 +119,6 @@ describe("prelude-less @scope", () => {
 			cleanup(element);
 		},
 	);
-
-	test.skipIf(!parsesScope)("keeps a value hole on the CSSOM update path", async () => {
-		const tag = uniqueTag();
-		let color = "red";
-
-		const MyElement = component(function* () {
-			yield function* () {
-				yield html`<style>
-							@scope {
-								p {
-									color: ${color};
-								}
-							}
-						</style>
-						<p>text</p>`;
-			};
-		});
-
-		customElements.define(tag, MyElement);
-		const element = mount(tag) as InstanceType<typeof MyElement>;
-		await sleep();
-
-		const style = element.shadowRoot!.querySelector("style")!;
-		const sheetTextNode = style.firstChild!;
-		expect(normalizeWhitespace(style.textContent)).toBe("@scope { p { color: red; } }");
-
-		color = "blue";
-		await element.update();
-		await sleep();
-
-		//the text keeps the mount values — a full-text rewrite would replace it, and that
-		//is the whole difference between the fast path and the fallback
-		expect(style.firstChild).toBe(sheetTextNode);
-		expect(normalizeWhitespace(style.textContent)).toBe("@scope { p { color: red; } }");
-		expect(innerRuleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
-
-		cleanup(element);
-	});
 
 	test.skipIf(!resolvesScopedStyles)(
 		"a scoped value hole reaches the rendered pixels",

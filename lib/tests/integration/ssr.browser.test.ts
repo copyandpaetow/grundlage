@@ -1115,7 +1115,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			cleanup(element);
 		});
 
-		test("a dynamic style sheet hydrates without touching the CSSOM, then updates through it", async () => {
+		test("a split style sheet hydrates without a write, then rewrites only its holed rule", async () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
@@ -1128,6 +1128,9 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 					};
 					yield function* () {
 						yield html`<style>
+								:host {
+									display: block;
+								}
 								p {
 									color: ${color};
 								}
@@ -1143,19 +1146,20 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const element = hydrateFromHTML(clientHTML) as HTMLElement & {
 				recolor: () => void;
 			};
+			const [staticStyle, holedStyle] = Array.from(element.shadowRoot!.querySelectorAll("style"));
+			const staticText = staticStyle.firstChild;
+			const serverText = holedStyle.firstChild;
 
-			const setProperty = vi.spyOn(CSSStyleDeclaration.prototype, "setProperty");
 			customElements.define(clientTag, makeComponent());
 			await sleep();
 
-			expect(setProperty).not.toHaveBeenCalled();
+			expect(holedStyle.firstChild).toBe(serverText);
 
 			element.recolor();
 			await sleep();
 
-			//the lane still works: seeding the hashes must not read as a demotion to the text lane
-			expect(setProperty).toHaveBeenCalledTimes(1);
-			setProperty.mockRestore();
+			expect(staticStyle.firstChild).toBe(staticText);
+			expect(holedStyle.textContent).toContain("color: blue");
 			expect(getComputedStyle(element.shadowRoot!.querySelector("p")!).color).toBe(
 				"rgb(0, 0, 255)",
 			);

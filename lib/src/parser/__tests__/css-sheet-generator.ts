@@ -23,6 +23,7 @@ const TOP_SELECTORS = [
 	".x .y",
 	"li:nth-child(2n + 1)",
 	":host .inner",
+	".escaped\\{",
 ];
 const NESTED_SELECTORS = ["&:hover", "& .b", ".c", "&.d", "> .e", "a:hover", ":host &"];
 const GROUPING_PRELUDES = [
@@ -51,6 +52,8 @@ const STATIC_DECLARATIONS = [
 	"padding: 1px 2px",
 	"background: url(a;b.png)",
 	'content: "a;b}"',
+	'content: "a\\"}"',
+	"background: url(a}.png)",
 	"--static: {a}",
 	"border: 1px solid rgba(0, 0, 0, 0.5)",
 ];

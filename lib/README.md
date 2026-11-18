@@ -637,12 +637,12 @@ customElements.define(
 ### styles
 
 A `<style>` inside the template is scoped to the component by the shadow DOM. A style without holes is written once
-and never touched again. Holes in a style take one of two paths:
+and never touched again.
 
-- **fast:** every `${…}` sits in a declaration **value** (`width: ${progress}%`). An update is one `setProperty` on
-  this element's own style sheet, without parsing CSS again
-- **text:** a hole anywhere else (a selector, a property name, an at-rule, the whole sheet) rewrites the sheet's text,
-  and the browser parses it again. Correct, but slower
+A style with holes is split at its top-level rules. Each rule that holds a `${…}` gets a `<style>` of its own, and the
+rules without holes stay static, so every instance shares their text. An update rewrites only the `<style>` of the rule
+whose value changed, and the browser parses that rule alone. A hole can sit anywhere: in a value, a selector, an
+at-rule, or as a whole block of rules.
 
 ```typescript
 import { component, html, prop } from "grundlage";
@@ -687,7 +687,7 @@ customElements.define(
 	component(
 		function* () {
 			yield function* view({ theme }) {
-				// themeSheet returns the CSS text: the whole sheet is one hole, so the text path
+				// themeSheet returns CSS text: the whole sheet is one hole, so a theme change rewrites all of it
 				yield html`<style>
 					${themeSheet(theme)}
 				</style>`;
@@ -698,10 +698,15 @@ customElements.define(
 );
 ```
 
-- a value the browser rejects is dropped and the **previous** value stays. `!important` and `;` cannot sneak in
-  through a hole
-- each element owns a private sheet, so two instances never overwrite each other
-- `getHTML()` serializes the last text write, not later `setProperty` updates
+- a hole inside a large block (`@media`, `:host { … }`) rewrites the whole block, so keep holed rules small and at the
+  top level
+- a hole is CSS text: `;` or `}` in a value changes the rule around it. Pass validated values, such as numbers or known
+  keywords, not raw user input
+- a value the browser rejects drops its declaration
+- each split `<style>` carries the original's attributes. `${…}` in both the attributes and the content throws, and so
+  does `@namespace`, which reaches only its own `<style>`
+- each element owns its `<style>` elements, so two instances never overwrite each other
+- `getHTML()` serializes the current values
 - a style without holes can be hoisted: ``const styles = html`<style>…</style>` `` at module scope, embedded as
   `${styles}`, costs nothing after the first paint
 
