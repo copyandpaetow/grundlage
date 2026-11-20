@@ -26,7 +26,7 @@ export const TAGS = {
 	rejectsBeforePaint: "ssr-rejects-before-paint",
 	throwerParent: "ssr-thrower-parent",
 	paintsNestedChild: "ssr-paints-nested-child",
-	rootWithoutFocusOrCloning: "ssr-root-without-focus-or-cloning",
+	rootWithFocusWithoutCloning: "ssr-root-with-focus-without-cloning",
 	waitingChild: "ssr-waiting-child",
 	waitsForChild: "ssr-waits-for-child",
 	optsChildrenOut: "ssr-opts-children-out",

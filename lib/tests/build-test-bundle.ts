@@ -4,8 +4,10 @@ import type { TestProject } from "vitest/node";
 import { productionOptions } from "../tsdown.config";
 
 //the shipped minifier and property names, with the development flag on so the warnings the tests
-//expect are there. Each bundle project builds its own, since projects set up side by side
+//expect are there; bundle-production turns it off. Each bundle project builds its own, since
+//projects set up side by side
 export const setup = async (project: TestProject): Promise<void> => {
+	const isDevelopmentBuild = project.name !== "bundle-production";
 	await build({
 		...productionOptions,
 		config: false,
@@ -16,6 +18,6 @@ export const setup = async (project: TestProject): Promise<void> => {
 		sourcemap: false,
 		clean: true,
 		logLevel: "warn",
-		define: { GRUNDLAGE_IS_DEVELOPMENT_BUILD: "true" },
+		define: { GRUNDLAGE_IS_DEVELOPMENT_BUILD: String(isDevelopmentBuild) },
 	});
 };

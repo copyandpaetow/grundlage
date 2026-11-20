@@ -63,7 +63,6 @@ export { ComponentErrorEvent } from "./runtime/component-error-event";
 
 const defaultOptions = {
 	clonable: true,
-	delegatesFocus: true,
 	mode: "open",
 	serializable: true,
 } as const satisfies ComponentOptions;

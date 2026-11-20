@@ -250,12 +250,12 @@ customElements.define(
 );
 
 customElements.define(
-	TAGS.rootWithoutFocusOrCloning,
+	TAGS.rootWithFocusWithoutCloning,
 	component(
 		function* () {
-			yield html`<p>without-focus-or-cloning-rendered</p>`;
+			yield html`<p>with-focus-without-cloning-rendered</p>`;
 		},
-		{ delegatesFocus: false, clonable: false },
+		{ delegatesFocus: true, clonable: false },
 	),
 );
 

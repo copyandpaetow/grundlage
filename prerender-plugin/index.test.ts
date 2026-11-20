@@ -458,7 +458,7 @@ describe("prerender plugin: what a component paints", () => {
 		);
 
 		expect(output).toContain(
-			`<${TAGS.nestedChild}><template shadowrootmode="open" shadowrootdelegatesfocus="" shadowrootserializable="" shadowrootclonable=""><em>nested-rendered</em></template>`,
+			`<${TAGS.nestedChild}><template shadowrootmode="open" shadowrootserializable="" shadowrootclonable=""><em>nested-rendered</em></template>`,
 		);
 	});
 
@@ -466,15 +466,15 @@ describe("prerender plugin: what a component paints", () => {
 		const output = await runTransform(
 			buildPlugins(),
 			pageWith(
-				`<${TAGS.slotted}><${TAGS.rootWithoutFocusOrCloning}></${TAGS.rootWithoutFocusOrCloning}></${TAGS.slotted}>`,
+				`<${TAGS.slotted}><${TAGS.rootWithFocusWithoutCloning}></${TAGS.rootWithFocusWithoutCloning}></${TAGS.slotted}>`,
 			),
 		);
 
 		expect(output).toContain(
-			`<${TAGS.slotted}><template shadowrootmode="open" shadowrootdelegatesfocus="" shadowrootserializable="" shadowrootclonable="">`,
+			`<${TAGS.slotted}><template shadowrootmode="open" shadowrootserializable="" shadowrootclonable="">`,
 		);
 		expect(output).toContain(
-			`<${TAGS.rootWithoutFocusOrCloning}><template shadowrootmode="open" shadowrootserializable="">`,
+			`<${TAGS.rootWithFocusWithoutCloning}><template shadowrootmode="open" shadowrootdelegatesfocus="" shadowrootserializable="">`,
 		);
 	});
 });
@@ -597,16 +597,16 @@ describe("prerender plugin: a component that throws on the server", () => {
 		const output = await runTransform(
 			buildPlugins(),
 			pageWith(
-				`<${TAGS.throwsBeforePaint}><${TAGS.rootWithoutFocusOrCloning}></${TAGS.rootWithoutFocusOrCloning}></${TAGS.throwsBeforePaint}>`,
+				`<${TAGS.throwsBeforePaint}><${TAGS.rootWithFocusWithoutCloning}></${TAGS.rootWithFocusWithoutCloning}></${TAGS.throwsBeforePaint}>`,
 			),
 		);
 
-		//the thrower's root asks for delegatesFocus and clonable and the child's for neither, so the
-		//child's template cannot pass with the thrower's attributes
+		//the thrower's root asks for clonable and the child's for delegatesFocus, so the child's
+		//template cannot pass with the thrower's attributes
 		expect(output).toContain(
-			`<${TAGS.throwsBeforePaint}><${TAGS.rootWithoutFocusOrCloning}><template shadowrootmode="open" shadowrootserializable="">`,
+			`<${TAGS.throwsBeforePaint}><${TAGS.rootWithFocusWithoutCloning}><template shadowrootmode="open" shadowrootdelegatesfocus="" shadowrootserializable="">`,
 		);
-		expect(output).toContain("without-focus-or-cloning-rendered");
+		expect(output).toContain("with-focus-without-cloning-rendered");
 		warn.mockRestore();
 	});
 

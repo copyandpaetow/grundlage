@@ -969,8 +969,8 @@ customElements.define(
 
 - an uncaught error ends the component: its shadow root is emptied and the element dispatches a `grundlage-error` event
   (a `ComponentErrorEvent` with `error` and `tagName`; it bubbles and crosses shadow boundaries). Unless a listener
-  calls `preventDefault()`, the console logs the error and the shadow root shows its message. The rest of the page is
-  unaffected
+  calls `preventDefault()`, the console logs the error. The development build also shows its message in the shadow
+  root; the production build leaves it empty, so end users never read internals. The rest of the page is unaffected
 - a paint error (a wrong value in a hole) is thrown at the `yield html` that painted it. Holes before the failing one
   are already written, so paint a fallback in the `catch`
 - an error in an update generator's first run, waits included, is thrown at the body's `yield` of it, where a
@@ -1129,7 +1129,7 @@ customElements.define("tag-field", TagField);
 | `mode`           | `"open"` | `"open"`         | `open` exposes the root on `host.shadowRoot`; `closed` hides it there             |
 | `serializable`   | `true`   | `false`          | the shadow root serializes with `getHTML`, required for server rendering          |
 | `clonable`       | `true`   | `false`          | the shadow tree is copied on `cloneNode`, so a cloned element keeps its content   |
-| `delegatesFocus` | `true`   | `false`          | focusing the element (click or `.focus()`) moves focus to the first focusable one |
+| `delegatesFocus` | `false`  | `false`          | focusing the element (click or `.focus()`) moves focus to the first focusable one |
 
 ```typescript
 import { component, html, prop } from "grundlage";

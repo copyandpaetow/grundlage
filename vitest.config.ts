@@ -83,7 +83,12 @@ export default defineConfig({
 				test: {
 					name: "unit",
 					include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
-					exclude: [...configDefaults.exclude, "**/*.browser.test.ts", "**/*.dom.test.ts"],
+					exclude: [
+						...configDefaults.exclude,
+						"**/*.browser.test.ts",
+						"**/*.dom.test.ts",
+						"**/*.production.test.ts",
+					],
 					environment: "node",
 					benchmark: {
 						include: [],
@@ -138,6 +143,16 @@ export default defineConfig({
 					include: publicEntryTests("{src,tests}/**/*.dom.test.ts"),
 					environment: "happy-dom",
 					isolate: isolateHappyDomFiles,
+					globalSetup: "tests/build-test-bundle.ts",
+				},
+			},
+			{
+				root: "./lib",
+				resolve: { alias: testBundleAliasOf("bundle-production") },
+				test: {
+					name: "bundle-production",
+					include: ["{src,tests}/**/*.production.test.ts"],
+					environment: "happy-dom",
 					globalSetup: "tests/build-test-bundle.ts",
 				},
 			},

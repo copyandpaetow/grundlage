@@ -82,8 +82,10 @@ yield function* profile({ userId }) {
   Register the return value with `customElements.define`. The first argument MUST be a
   generator function (`function*`). A plain, arrow or `async` function throws a
   `TypeError` at definition time, not at mount. `options` extends `ShadowRootInit`; the
-  defaults are `{ mode: "open", clonable: true, delegatesFocus: true, serializable: true }`
-  and any option passed overrides its default. `options.props` is the SCHEMA (see below):
+  defaults are `{ mode: "open", clonable: true, serializable: true }` and any option passed
+  overrides its default. `delegatesFocus` stays off, as on the platform: with it, a click
+  anywhere inside moves focus to the first focusable element, so pass it only for a component
+  that wraps one control. `options.props` is the SCHEMA (see below):
   it fixes the observed attributes and installs one accessor per prop on the element class.
   `formAssociated: true` swaps the base class for the form-associated one. `{ mode: "closed" }`
   still hydrates and reuses `load` results: the closed root is reached through
@@ -451,8 +453,8 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   inside it too. Don't add a prop or an option for it.
 - An uncaught error empties the shadow tree and dispatches `grundlage-error`
   (`ComponentErrorEvent`: `error`, `tagName`; bubbles, composed, cancelable). Unless a listener
-  calls `preventDefault()`, the console logs an error naming the tag and the shadow tree shows the
-  error text. A `try/catch` catches what plain JavaScript lets it catch, nothing more:
+  calls `preventDefault()`, the console logs an error naming the tag; the DEVELOPMENT build also
+  shows the error text in the shadow tree, the production build leaves it empty. A `try/catch` catches what plain JavaScript lets it catch, nothing more:
   - A paint error (a wrong value in a hole) is thrown at the `yield html` that painted it, in
     the body or in an update generator. Holes before the failing one are already written, so a
     `catch` that paints nothing leaves a half-updated template; paint a fallback.

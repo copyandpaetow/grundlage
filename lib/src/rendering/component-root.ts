@@ -21,7 +21,7 @@ import {
 import { releaseDeferredChildren } from "./defer-hydration";
 import { warnOnRejectedServerRange } from "./markers";
 import { BaseComponent } from "../types";
-import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
+import { assertDuringDevelopment, isDevelopmentBuild, libraryMessage } from "../utils/diagnostics";
 
 export interface ComponentRoot {
 	host: BaseComponent;
@@ -131,6 +131,8 @@ export const displayFatalErrorInRoot = (root: ComponentRoot, error: unknown): vo
 	const isHandledByApp = !host.dispatchEvent(new ComponentErrorEvent(error, host.localName));
 	if (isHandledByApp) return;
 	console.error(libraryMessage(`<${host.localName}> stopped running.`), error);
+	//an error's text can carry internals or data, so end users never see it
+	if (!isDevelopmentBuild) return;
 	//oxlint-disable-next-line typescript/restrict-template-expressions -- shown as the platform spells it
 	root.shadowRoot.textContent = `${error}`;
 };

@@ -18,6 +18,7 @@
 - A template nested inside an object fallback is copied per element and no longer paints: make the template the whole fallback.
 - A `<style>` with `${…}` in both its attributes and its content throws, and so does `@namespace` in a `<style>` with `${…}`.
 - A value the browser rejects in a dynamic `<style>` drops its declaration instead of keeping the previous value.
+- A component no longer delegates focus by default: pass `{ delegatesFocus: true }` to one that wraps a control.
 
 ### Types
 
@@ -57,6 +58,7 @@
 - Holes inside a nested `<template>` bind like any other hole, and a changed value rebuilds its content.
 - A listener, a property or a prop inside a nested `<template>` throws, since copies of the content keep none of them.
 - `shadowrootmode` on a nested `<template>` throws: let the element attach its own shadow root.
+- The production build leaves a failed component's shadow root empty; only the development build shows the error text.
 
 ### Fixed
 

@@ -367,6 +367,34 @@ describe("component lifecycle", () => {
 
 		cleanup(element);
 	});
+
+	//happy-dom never moves focus into a shadow root
+	test.skipIf("happyDOM" in globalThis)(
+		"focusing the element moves focus inside only when the component asks for it",
+		async () => {
+			const defaultTag = uniqueTag();
+			const delegatingTag = uniqueTag();
+			const componentGenerator = function* () {
+				yield function* () {
+					yield html`<button>inside</button>`;
+				};
+			};
+			customElements.define(defaultTag, component(componentGenerator));
+			customElements.define(delegatingTag, component(componentGenerator, { delegatesFocus: true }));
+			const defaultElement = mount(defaultTag);
+			const delegatingElement = mount(delegatingTag);
+			await sleep();
+
+			defaultElement.focus();
+			expect(defaultElement.shadowRoot?.activeElement).toBeNull();
+
+			delegatingElement.focus();
+			expect(delegatingElement.shadowRoot?.activeElement?.textContent).toBe("inside");
+
+			cleanup(defaultElement);
+			cleanup(delegatingElement);
+		},
+	);
 });
 
 describe.skipIf("happyDOM" in globalThis)("deferred custom-element upgrade", () => {

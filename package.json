@@ -13,7 +13,7 @@
 		"preview": "npm run preview -w website",
 		"test": "vitest",
 		"test:unit": "vitest --project unit",
-		"test:dom": "vitest --project unit --project dom --project browser-as-dom --project bundle-dom --project prerender-plugin",
+		"test:dom": "vitest --project unit --project dom --project browser-as-dom --project bundle-dom --project bundle-production --project prerender-plugin",
 		"test:cubes": "vitest --project cubes --project cubes-browser",
 		"test:browser": "vitest --project browser --project bundle-browser",
 		"test:ci": "npm run typecheck -w grundlage && vitest run",
