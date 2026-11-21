@@ -1,0 +1,22 @@
+{
+	//the files no package checks: the test runner's config and the lint plugin
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"lib": ["ESNext"],
+		"types": ["node"],
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+		"erasableSyntaxOnly": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedSideEffectImports": true
+	},
+	"include": ["vitest.config.ts", "lint"]
+}
