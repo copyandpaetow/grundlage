@@ -30,6 +30,7 @@ fi
 
 npm run typecheck -w grundlage
 npm run typecheck -w vite-plugin-grundlage
+npm run typecheck -w website
 npm run lint
 npm run format:check
 npm run test:engines

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#runs the release script's static checks on what the commit holds, and a failure cancels the commit.
+#Turn it on once per clone: git config core.hooksPath scripts/hooks
+set -euo pipefail
+
+#a Git app started outside a terminal may not get the shell's PATH, and then no check could run
+if ! command -v npm >/dev/null; then
+	echo "pre-commit expects npm on the PATH, and this Git app's PATH has none. Commit from a terminal, or skip the checks once with git commit --no-verify." >&2
+	exit 1
+fi
+
+root=$(git rev-parse --show-toplevel)
+snapshot=$(mktemp -d)
+trap 'rm -rf "$snapshot"' EXIT
+
+#we check the staged files, not the working tree, because a commit often takes only some of the changes
+git checkout-index --all --prefix="$snapshot/"
+shopt -s nullglob
+for modules in "$root"/node_modules "$root"/*/node_modules; do
+	ln -s "$modules" "$snapshot/${modules#"$root/"}"
+done
+
+cd "$snapshot"
+failures=()
+check() {
+	npm run --silent "$@" || failures+=("npm run $*")
+}
+check format:check
+check lint
+check typecheck -w grundlage
+check typecheck -w vite-plugin-grundlage
+check typecheck -w website
+
+if ((${#failures[@]} > 0)); then
+	echo "pre-commit expects the staged files to pass every check. These failed:" >&2
+	printf '  %s\n' "${failures[@]}" >&2
+	echo "Fix them, stage the result and commit again, or skip the checks once with git commit --no-verify." >&2
+	exit 1
+fi
