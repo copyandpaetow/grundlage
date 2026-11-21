@@ -1,4 +1,4 @@
-import { component, html, prop } from "../../../../lib/src";
+import { component, html } from "../../../../lib/src";
 import { benchLayoutFromLocation, chunkEdgeFromLocation, type BenchLayout } from "./bench-grid";
 import {
 	type Baseline,
@@ -291,16 +291,11 @@ const runOnceTable = (
 	`;
 };
 
-//The cubes-vanilla page sets its scene's variant; a variant in the URL wins over either
-const props = {
-	variant: prop.attribute(prop.oneOf(...BENCH_VARIANTS), "grundlage"),
-};
-
 customElements.define(
 	"scene-bench",
 	component(
 		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
-		function* ({ host, variant: variantAttribute }) {
+		function* ({ host }) {
 			let isRunning = false;
 			let status = "Idle. The page's scene is swapped for a generated grid while a run lasts.";
 			let steps: string[] = [];
@@ -313,7 +308,7 @@ customElements.define(
 				RUN_ONCE_BASELINE_STORAGE_KEY,
 			);
 			let onceCubeCount = 1000;
-			let variant: BenchVariant = benchVariantFromLocation(variantAttribute);
+			let variant: BenchVariant = benchVariantFromLocation();
 
 			const report = (message: string) => {
 				status = message;
@@ -590,6 +585,5 @@ customElements.define(
 				`;
 			};
 		},
-		{ props },
 	),
 );

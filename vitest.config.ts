@@ -34,7 +34,7 @@ const publicEntryTests = (pattern: string): Array<string> =>
 			readFileSync(join(libraryDirectory, file), "utf8").matchAll(
 				/import\s+([^;]*?)\s+from\s+"(\.[^"]*)"/g,
 			),
-			([, clause, specifier]): RelativeImport => ({ clause, specifier }),
+			([, clause = "", specifier = ""]): RelativeImport => ({ clause, specifier }),
 		);
 		return (
 			imports.some(isPublicEntry) &&

@@ -23,6 +23,7 @@
 		"format:check": "oxfmt --check",
 		"format:fix": "oxfmt",
 		"lint": "oxlint --type-aware --deny-warnings",
+		"typecheck:tooling": "tsc -p tsconfig.json",
 		"version:patch": "npm version patch -w grundlage",
 		"version:minor": "npm version minor -w grundlage",
 		"version:major": "npm version major -w grundlage",
@@ -41,6 +42,7 @@
 		"oxfmt": "^0.77.0",
 		"oxlint": "1.92.0",
 		"oxlint-tsgolint": "7.0.2006",
+		"playwright": "1.65.1",
 		"typescript": "^7.0.2",
 		"vite": "^8.0.1",
 		"vitest": "^5.0.2"

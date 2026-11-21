@@ -11,12 +11,12 @@ type FunctionNode = ESTree.Function | ESTree.ArrowFunctionExpression;
 const nameOf = (node: FunctionNode): string => {
 	if (node.id) return node.id.name;
 	const { parent } = node;
-	const isNamedVariable = parent.type === "VariableDeclarator" && parent.id.type === "Identifier";
-	if (isNamedVariable) return parent.id.name;
-	const isNamedMember =
-		(parent.type === "MethodDefinition" || parent.type === "Property") &&
-		parent.key.type === "Identifier";
-	return isNamedMember ? parent.key.name : "";
+	if (parent.type === "VariableDeclarator") {
+		return parent.id.type === "Identifier" ? parent.id.name : "";
+	}
+	const isMember = parent.type === "MethodDefinition" || parent.type === "Property";
+	if (isMember && parent.key.type === "Identifier") return parent.key.name;
+	return "";
 };
 
 const isAnnotatedBoolean = (pattern: ESTree.ParamPattern | ESTree.BindingPattern): boolean =>

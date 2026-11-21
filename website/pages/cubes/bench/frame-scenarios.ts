@@ -18,8 +18,9 @@ export type FrameStatistics = {
 export const BENCH_VARIANTS = ["grundlage", "vanilla"] as const;
 export type BenchVariant = (typeof BENCH_VARIANTS)[number];
 
-export const benchVariantFromLocation = (fallback: BenchVariant = "grundlage"): BenchVariant =>
-	BENCH_VARIANTS.find((variant) => new URLSearchParams(location.search).has(variant)) ?? fallback;
+export const benchVariantFromLocation = (): BenchVariant =>
+	BENCH_VARIANTS.find((variant) => new URLSearchParams(location.search).has(variant)) ??
+	"grundlage";
 
 //A frame is late when it takes longer than one and a half display refreshes, so a
 //120 Hz display is held to 120 Hz, not 60.
@@ -116,10 +117,8 @@ export const mountBenchScene = async (
 	variant: BenchVariant = benchVariantFromLocation(),
 ): Promise<number> => {
 	unmountBenchScene();
-	const pageScene = document.querySelector<HTMLElement>("scene-editor, .vanilla-scene");
-	if (pageScene === null) {
-		throw new Error("The page has no <scene-editor> or vanilla scene to bench in place of.");
-	}
+	const pageScene = document.querySelector<HTMLElement>("scene-editor");
+	if (pageScene === null) throw new Error("The page has no <scene-editor> to bench in place of.");
 
 	const cubePositions = gridCubePositions(cubeCount);
 	const { sceneRoot, world, driver } =

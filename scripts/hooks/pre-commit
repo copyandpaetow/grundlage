@@ -27,6 +27,7 @@ check() {
 }
 check format:check
 check lint
+check typecheck:tooling
 check typecheck -w grundlage
 check typecheck -w vite-plugin-grundlage
 check typecheck -w website

@@ -13,10 +13,15 @@ case $package in
 esac
 
 version=$(node -p "require('./$directory/package.json').version")
+tag="$package@$version"
 
 #npm prints nothing for a version it does not have
 if [[ -n $(npm view "$package@$version" version 2>/dev/null || true) ]]; then
 	echo "$package $version is already on npm. Bump it first: npm version minor -w $package" >&2
+	exit 1
+fi
+if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null; then
+	echo "$tag is already a git tag. Bump the version first: npm version minor -w $package" >&2
 	exit 1
 fi
 if ! grep -q "^## $version\$" "$directory/CHANGELOG.md"; then
@@ -28,6 +33,7 @@ if ! git diff --quiet HEAD; then
 	exit 1
 fi
 
+npm run typecheck:tooling
 npm run typecheck -w grundlage
 npm run typecheck -w vite-plugin-grundlage
 npm run typecheck -w website
@@ -37,3 +43,5 @@ npm run test:engines
 npm run fuzz
 
 npm publish -w "$package"
+git tag --annotate "$tag" --message "$package $version"
+echo "Published $package $version and tagged the commit $tag. Push the tag: git push origin $tag"

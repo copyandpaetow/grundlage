@@ -23,6 +23,7 @@
 		"scan.ts",
 		"page-scripts.ts",
 		"index.test.ts",
+		"package.test.ts",
 		"tsdown.config.ts",
 		"__fixtures__/**/*.ts"
 	]
