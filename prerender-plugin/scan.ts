@@ -6,7 +6,7 @@ export interface CustomElementRecord {
 	rawAttributes: string;
 	//the element carries `ssr` itself, rather than inheriting it from the page or a parent
 	hasOwnPrerenderAttribute: boolean;
-	isPrerendered: boolean;
+	prerenderChoice: ResolvedPrerenderChoiceKind;
 	//index of the nearest enclosing custom element in the same array
 	parentIndex: number;
 	startIndex: number;
@@ -23,15 +23,24 @@ export const PRERENDER_ATTRIBUTE = "ssr";
 
 export const PRERENDER_CHOICE = { INHERIT: 0, ON: 1, OFF: 2 } as const;
 type PrerenderChoiceKind = (typeof PRERENDER_CHOICE)[keyof typeof PRERENDER_CHOICE];
+//INHERIT has taken the choice of the page or of the nearest custom element above
+export type ResolvedPrerenderChoiceKind = Exclude<
+	PrerenderChoiceKind,
+	typeof PRERENDER_CHOICE.INHERIT
+>;
 
 const customElementName = "[a-z][a-z0-9._]*-[a-z0-9._-]*";
 const attributeText = `((?:"[^"]*"|'[^']*'|[^>])*)`;
 
-//alternatives are tried left to right, so comments and raw-text regions swallow any tag-looking
+//the browser's parser reads their content as text. <noscript> is missing on purpose: without
+//JavaScript the reader sees its content as markup, so a component there is worth prerendering
+const textOnlyElements = "script|style|textarea|title|xmp|iframe|noembed|noframes";
+
+//alternatives are tried left to right, so comments and text-only elements swallow any tag-looking
 //text inside them first. A <template> is inert in the browser, so what it holds is not on the
-//page; the lookahead keeps a custom element named `template-…` or `style-…` out of that branch
+//page; the lookahead keeps a custom element named `template-...` or `style-...` out of that branch
 const elementScanPattern = new RegExp(
-	`<!--[\\s\\S]*?-->|<(script|style|textarea|template)(?=[\\s/>])[\\s\\S]*?</\\1\\s*>|<(html|body)(?=[\\s/>])${attributeText}>|<(${customElementName})${attributeText}>|</(${customElementName})\\s*>`,
+	`<!--[\\s\\S]*?-->|<(${textOnlyElements}|template)(?=[\\s/>])[\\s\\S]*?</\\1\\s*>|<(html|body)(?=[\\s/>])${attributeText}>|<(${customElementName})${attributeText}>|</(${customElementName})\\s*>`,
 	"g",
 );
 
@@ -69,21 +78,20 @@ const prerenderChoiceOf = (tagName: string, rawAttributes: string): PrerenderCho
 
 const resolvePrerenderChoice = (
 	choice: PrerenderChoiceKind,
-	isInheritedPrerendered: boolean,
-): boolean =>
-	choice === PRERENDER_CHOICE.INHERIT ? isInheritedPrerendered : choice === PRERENDER_CHOICE.ON;
+	inheritedChoice: ResolvedPrerenderChoiceKind,
+): ResolvedPrerenderChoiceKind => (choice === PRERENDER_CHOICE.INHERIT ? inheritedChoice : choice);
 
 //a cheap first look for pages no setting includes: a match only means the full scan runs
 export const mayCarryPrerenderAttribute = (html: string): boolean => /\sssr(?=[\s=/>])/i.test(html);
 
 export const findCustomElements = (
 	html: string,
-	isPageIncluded: boolean,
+	pageSettingsChoice: ResolvedPrerenderChoiceKind,
 ): Array<CustomElementRecord> => {
 	const elements: Array<CustomElementRecord> = [];
 	//indexes into `elements` of the custom elements whose close tag is still to come
 	const openElementIndexes: Array<number> = [];
-	let isPagePrerendered = isPageIncluded;
+	let pageChoice = pageSettingsChoice;
 
 	for (const match of html.matchAll(elementScanPattern)) {
 		const [
@@ -97,9 +105,9 @@ export const findCustomElements = (
 		] = match;
 
 		if (pageTagName !== undefined) {
-			isPagePrerendered = resolvePrerenderChoice(
+			pageChoice = resolvePrerenderChoice(
 				prerenderChoiceOf(pageTagName, pageTagAttributes),
-				isPagePrerendered,
+				pageChoice,
 			);
 			continue;
 		}
@@ -111,9 +119,9 @@ export const findCustomElements = (
 				tagName: openTagName,
 				rawAttributes: openTagAttributes,
 				hasOwnPrerenderAttribute: choice !== PRERENDER_CHOICE.INHERIT,
-				isPrerendered: resolvePrerenderChoice(
+				prerenderChoice: resolvePrerenderChoice(
 					choice,
-					parentIndex === NO_PARENT ? isPagePrerendered : elements[parentIndex].isPrerendered,
+					parentIndex === NO_PARENT ? pageChoice : elements[parentIndex].prerenderChoice,
 				),
 				parentIndex,
 				startIndex: match.index,
@@ -147,7 +155,8 @@ export const choosePrerenderRoots = (
 	const chosenIndexes = new Set<number>();
 	for (let index = 0; index < elements.length; index++) {
 		const element = elements[index];
-		if (!element.isPrerendered || element.endIndex === NOT_CLOSED) continue;
+		const isPrerendered = element.prerenderChoice === PRERENDER_CHOICE.ON;
+		if (!isPrerendered || element.endIndex === NOT_CLOSED) continue;
 		let ancestorIndex = element.parentIndex;
 		while (ancestorIndex !== NO_PARENT && !chosenIndexes.has(ancestorIndex)) {
 			ancestorIndex = elements[ancestorIndex].parentIndex;

@@ -17,7 +17,7 @@ customElements.define(
 	TAGS.loadShared,
 	component(function* ({ host }) {
 		const id = host.getAttribute("data-id") ?? "?";
-		//per-host serialization — each instance gets its own data-ssr script in its shadow root
+		//per-host serialization: each instance gets its own data-ssr script in its shadow root
 		const value = yield* load(() => Promise.resolve(`payload-${id}`));
 		yield function* view() {
 			yield html`<p>${id}:${value}</p>`;
@@ -37,7 +37,7 @@ customElements.define(
 	}),
 );
 
-//touches web APIs outside the old hand-picked global list — a ReferenceError here means registration regressed
+//touches web APIs outside the old hand-picked global list; a ReferenceError here means registration regressed
 customElements.define(
 	TAGS.wideWebApi,
 	component(function* ({ host }) {
@@ -100,7 +100,7 @@ customElements.define(
 customElements.define(
 	TAGS.neverYields,
 	component(function* () {
-		//parks before the first paint — the prerender must time out, not hang
+		//parks before the first paint, so the prerender must time out, not hang
 		yield new Promise(() => {});
 		yield function* view() {
 			yield html`<p>unreachable</p>`;
@@ -128,7 +128,7 @@ customElements.define(
 	}),
 );
 
-//reads its light DOM at mount — proves children are attached before the generator runs
+//reads its light DOM at mount, which proves children are attached before the generator runs
 customElements.define(
 	TAGS.slotCounting,
 	component(function* ({ host }) {
@@ -181,7 +181,7 @@ customElements.define(
 	),
 );
 
-//an open root the serializer must still leave out — the same shape every foreign web component
+//an open root the serializer must still leave out, the same shape every foreign web component
 //has, since nothing but grundlage opts into `serializable`
 customElements.define(
 	TAGS.nonSerializableRoot,
@@ -333,4 +333,46 @@ customElements.define(
 			});
 		}
 	},
+);
+
+//another library's element that announces a pending-task and paints a few microtasks after the task
+//settles, mounting a child that announces a task of its own
+customElements.define(
+	TAGS.foreignDelayedPainter,
+	class extends HTMLElement {
+		#shadowRoot = this.attachShadow({ mode: "open", serializable: true });
+		connectedCallback() {
+			const task = Promise.withResolvers<void>();
+			this.dispatchEvent(
+				Object.assign(new Event("pending-task", { bubbles: true, composed: true }), {
+					complete: task.promise,
+				}),
+			);
+			setTimeout(async () => {
+				task.resolve();
+				for (let index = 0; index < 10; index++) await Promise.resolve();
+				this.#shadowRoot.innerHTML = `<ssr-waiting-child data-depth="2"></ssr-waiting-child>`;
+			});
+		}
+	},
+);
+
+//an error after the render, from a timer the component started before its first paint
+customElements.define(
+	TAGS.throwsAfterRender,
+	component(function* () {
+		setTimeout(() => {
+			throw new Error("thrown after the render");
+		}, 20);
+		yield html`<p>painted-before-the-throw</p>`;
+	}),
+);
+
+//long enough to tell renders that run side by side from renders that run one after another
+customElements.define(
+	TAGS.slowPainter,
+	component(function* () {
+		yield new Promise((resolve) => setTimeout(resolve, 300));
+		yield html`<p>slow-painter-done</p>`;
+	}),
 );

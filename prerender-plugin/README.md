@@ -7,11 +7,11 @@ parsed, and in the browser grundlage hydrates that markup instead of painting it
 Own package, own version, and a lot younger than the library, so the API can still move between minor versions.
 Nothing here is needed to use grundlage itself.
 
-## introduction
+## Introduction
 
-### getting started
+### Getting started
 
-#### installation
+#### Installation
 
 ```bash
 npm install --save-dev vite-plugin-grundlage
@@ -21,15 +21,15 @@ npm install --save-dev vite-plugin-grundlage
 - Node 22.12 or newer
 - happy-dom comes along as a dependency, it is the DOM the components render into on the server
 
-#### example
+#### Example
 
 ```typescript
 // vite.config.ts
 import { defineConfig } from "vite";
-import { prerenderWebcomponents } from "vite-plugin-grundlage";
+import { prerenderWebComponents } from "vite-plugin-grundlage";
 
 export default defineConfig({
-	plugins: [prerenderWebcomponents()],
+	plugins: [prerenderWebComponents()],
 });
 ```
 
@@ -40,15 +40,15 @@ export default defineConfig({
 <!-- left as written, painted in the browser -->
 ```
 
-### concepts
+### Concepts
 
-#### pages set the default, elements override it
+#### Pages set the default, elements override it
 
 Every page prerenders unless `include` and `exclude` say otherwise. Both take page globs relative to the Vite
 root, and `include: []` prerenders no page, so only the elements that ask for it with `ssr` do:
 
 ```typescript
-prerenderWebcomponents({
+prerenderWebComponents({
 	include: ["index.html", "blog/**/*.html"],
 	exclude: ["blog/drafts/**"],
 });
@@ -72,14 +72,14 @@ A grundlage component under `ssr="false"` doesn't run on the server at all: grun
 `grundlage-render` event before a component's first run on the server, and the plugin cancels it there. The
 attribute stays in the output.
 
-#### components come from the page's scripts
+#### Components come from the page's scripts
 
 The modules a page's `<script type="module">` imports, inline or through `src`, run on the server, and the tags
 they define are the ones that prerender. The script's own body never runs there, since it wires up the page. A
 component defined in the page script itself stays in the browser, with a warning: define it in a module the page
 imports. Classic scripts and external URLs are not loaded.
 
-#### the module loader
+#### The module loader
 
 In dev, component modules load through the dev server, and an edit shows up on the next request. A build loads
 them through Vite's own SSR pipeline as well, so TypeScript, extensionless and directory imports, aliases and the
@@ -96,7 +96,11 @@ Faster, but project plugins don't transform component modules. It is also the au
 config file on disk. Either way, a module that throws while loading is reported and skipped rather than failing
 the build.
 
-#### light-DOM children
+Components run in a worker thread, with happy-dom's DOM as their globals. Vite and the other plugins keep
+Node's own `fetch`, `URL` and `Event`. An error a component throws after its render, from a timer for
+example, ends that worker with a warning, and the next page starts a new one.
+
+#### Light-DOM children
 
 Children are kept as they were written, next to the inlined shadow root, so the browser projects them into their
 `<slot>`s while parsing and slotted content is styled at first paint too.
@@ -111,16 +115,18 @@ Children are kept as they were written, next to the inlined shadow root, so the 
   (`host.children`, `slot.assignedNodes()`) sees the real thing during the render
 - a component in that light DOM is rendered along with its parent, unless `ssr="false"` says otherwise
 
-#### waiting
+#### Waiting
 
 The render waits for every `pending-task` event a component announces, the
 [webcomponents-cg protocol](https://github.com/webcomponents-cg/community-protocols/blob/main/proposals/pending-task.md).
 grundlage dispatches one whenever a component waits on a promise before its first paint, nested components
-included. A component still waiting after `firstYieldTimeoutMs` is left for the browser, and the rest of the page
-ships. `yield* load(…)` results ship inside the declarative shadow root as
+included. A component still waiting after `pendingTaskTimeoutMs` is left for the browser, and the rest of the page
+ships. `yield* load(...)` results ship inside the declarative shadow root as
 `<script type="application/json" data-ssr>`, and hydration consumes them.
 
-#### elements of other libraries
+The elements of a page wait side by side, and so do pages. A slow component holds up only its own page.
+
+#### Elements of other libraries
 
 Any web component can prerender, not only grundlage's. One does when:
 
@@ -137,16 +143,16 @@ There is no `grundlage-render` event for another library's element: under `ssr="
 server. Its shadow root is left out, but what it writes into its light DOM ships, and a throw from it leaves its
 parent for the browser.
 
-## options
+## Options
 
-| option                | default            | effect                                                                                   |
-| --------------------- | ------------------ | ---------------------------------------------------------------------------------------- |
-| `include`             | every page         | page globs, relative to the Vite root, that prerender; `[]` for none                     |
-| `exclude`             | —                  | page globs that don't                                                                    |
-| `componentLoader`     | `"project-config"` | build only: `"isolated"` loads component modules without re-running the project's config |
-| `firstYieldTimeoutMs` | `5000`             | how long the render waits for announced `pending-task`s, nested ones included            |
+| option                 | default            | effect                                                                                   |
+| ---------------------- | ------------------ | ---------------------------------------------------------------------------------------- |
+| `include`              | every page         | page globs, relative to the Vite root, that prerender; `[]` for none                     |
+| `exclude`              | none               | page globs that don't                                                                    |
+| `componentLoader`      | `"project-config"` | build only: `"isolated"` loads component modules without re-running the project's config |
+| `pendingTaskTimeoutMs` | `5000`             | how long the render waits for announced `pending-task`s, nested ones included            |
 
-## fallbacks
+## Fallbacks
 
 Whatever the plugin can't prerender stays as written and paints in the browser. Each case logs a `[prerender]`
 warning, and the page still works:
@@ -156,6 +162,6 @@ warning, and the page still works:
   which warns only when the element carries `ssr` itself
 - a component that throws on the server; browser-only work belongs after its first paint, which the server never
   reaches
-- a component still waiting after `firstYieldTimeoutMs`, or one that painted nothing and announced no
+- a component still waiting after `pendingTaskTimeoutMs`, or one that painted nothing and announced no
   `pending-task`
 - any other throw during the render

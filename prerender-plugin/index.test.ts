@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createServer, normalizePath, type Plugin } from "vite";
 import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { TAGS } from "./__fixtures__/tags";
-import { prerenderWebcomponents, type PrerenderOptions } from "./index";
+import { prerenderWebComponents, type PrerenderOptions } from "./index";
 import { closeModuleLoaderServers, closeServerRealm, markServerRealmStale } from "./ssr-render";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,7 +23,7 @@ const buildPlugins = (
 	options: PrerenderOptions = {},
 	project: { root?: string; configFile?: string } = {},
 ): Array<Plugin> => {
-	const plugins = prerenderWebcomponents(options);
+	const plugins = prerenderWebComponents(options);
 	for (const plugin of plugins) {
 		const configResolved = plugin.configResolved as ((config: unknown) => void) | undefined;
 		configResolved?.call(undefined, {
@@ -484,7 +484,7 @@ describe("prerender plugin: what is left for the client", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		//large timeout: the test only stays fast if the closed root is seen before any waiting
 		const input = pageWith(`<${TAGS.closedRoot}></${TAGS.closedRoot}>`);
-		const output = await runTransform(buildPlugins({ firstYieldTimeoutMs: 4000 }), input);
+		const output = await runTransform(buildPlugins({ pendingTaskTimeoutMs: 4000 }), input);
 
 		expect(output).toBe(input);
 		expect(warn).toHaveBeenCalledWith(expect.stringContaining("closed shadow root"));
@@ -513,7 +513,7 @@ describe("prerender plugin: what is left for the client", () => {
 
 	test("a custom element without a shadow root is left alone without connecting it", async () => {
 		const input = pageWith(`<${TAGS.withoutShadowRoot}></${TAGS.withoutShadowRoot}>`);
-		const output = await runTransform(buildPlugins({ firstYieldTimeoutMs: 4000 }), input);
+		const output = await runTransform(buildPlugins({ pendingTaskTimeoutMs: 4000 }), input);
 
 		expect(output).toBe(input);
 		expect(
@@ -531,7 +531,7 @@ describe("prerender plugin: what is left for the client", () => {
 	test("a component that never reaches its first paint is left for the client, with a warning", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const input = pageWith(`<${TAGS.neverYields}></${TAGS.neverYields}>`);
-		const output = await runTransform(buildPlugins({ firstYieldTimeoutMs: 60 }), input);
+		const output = await runTransform(buildPlugins({ pendingTaskTimeoutMs: 60 }), input);
 
 		expect(output).toBe(input);
 		expect(warn).toHaveBeenCalledWith(
@@ -614,7 +614,7 @@ describe("prerender plugin: a component that throws on the server", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		//large timeout: the test only stays fast if the throw ends the wait
 		const output = await runTransform(
-			buildPlugins({ firstYieldTimeoutMs: 4000 }),
+			buildPlugins({ pendingTaskTimeoutMs: 4000 }),
 			pageWith(`<${TAGS.rejectsBeforePaint}></${TAGS.rejectsBeforePaint}>`),
 		);
 
@@ -698,7 +698,7 @@ describe("prerender plugin: light-DOM children", () => {
 
 		expect(output).toContain(">outer<");
 		expect(output).toContain(">inner<");
-		//the outer close tag ends the match — trailing markup is neither swallowed nor duplicated
+		//the outer close tag ends the match: trailing markup is neither swallowed nor duplicated
 		expect(countOf(output, /<p>after<\/p>/g)).toBe(1);
 	});
 
@@ -709,7 +709,7 @@ describe("prerender plugin: light-DOM children", () => {
 		expect(output).toBe(input);
 	});
 
-	test("a component inside a <template> is not prerendered, a component named template-… is", async () => {
+	test("a component inside a <template> is not prerendered, a component named template-... is", async () => {
 		const output = await runTransform(
 			buildPlugins(),
 			pageWith(
@@ -719,6 +719,27 @@ describe("prerender plugin: light-DOM children", () => {
 
 		expect(output).toContain(`<template><${TAGS.simple}></${TAGS.simple}></template>`);
 		expect(output).toContain("template-prefixed-rendered");
+	});
+
+	test.each(["title", "xmp", "iframe", "noembed", "noframes"])(
+		"a component inside a <%s> is not prerendered, since the browser reads its content as text",
+		async (textOnlyElement) => {
+			const input = pageWith(
+				`<${textOnlyElement}><${TAGS.simple}></${TAGS.simple}></${textOnlyElement}>`,
+			);
+			const output = await runTransform(buildPlugins(), input);
+
+			expect(output).toBe(input);
+		},
+	);
+
+	test("a component inside a <noscript> is prerendered for readers without JavaScript", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<noscript><${TAGS.simple}></${TAGS.simple}></noscript>`),
+		);
+
+		expect(output).toContain("shadowrootmode");
 	});
 
 	test("a close tag inside a script does not end the element early", async () => {
@@ -782,6 +803,15 @@ describe("prerender plugin: components a paint creates", () => {
 		expect(output).toContain(">waiting-child-2<");
 	});
 
+	test("a child another library mounts a few microtasks after its task settles is waited for too", async () => {
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.foreignDelayedPainter}></${TAGS.foreignDelayedPainter}>`),
+		);
+
+		expect(output).toContain(">waiting-child-2<");
+	});
+
 	test(`ssr="false" leaves the root of another library's element out too, which the server still runs`, async () => {
 		const output = await runTransform(
 			buildPlugins(),
@@ -797,7 +827,7 @@ describe("prerender plugin: components a paint creates", () => {
 	test("a nested child still waiting at the timeout is left for the client, with a warning, and the rest ships", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const output = await runTransform(
-			buildPlugins({ firstYieldTimeoutMs: 60 }),
+			buildPlugins({ pendingTaskTimeoutMs: 60 }),
 			pageWith(`<${TAGS.holdsNeverYieldingChild}></${TAGS.holdsNeverYieldingChild}>`),
 		);
 
@@ -822,7 +852,7 @@ describe("prerender plugin: load payload injection", () => {
 		expect(output).toContain("Ada");
 	});
 
-	test("two hosts get independent per-host payloads — no cross-host dedupe", async () => {
+	test("two hosts get independent per-host payloads, with no cross-host dedupe", async () => {
 		const output = await runTransform(
 			buildPlugins(),
 			pageWith(`
@@ -843,6 +873,85 @@ describe("prerender plugin: load payload injection", () => {
 		);
 
 		expect(output).not.toContain("data-ssr");
+	});
+});
+
+describe("prerender plugin: slow components", () => {
+	const simple = `<${TAGS.simple}></${TAGS.simple}>`;
+	const slowPainter = `<${TAGS.slowPainter}></${TAGS.slowPainter}>`;
+	const waitMs = (durationMs: number) => new Promise((resolve) => setTimeout(resolve, durationMs));
+
+	test("the roots of a page wait side by side, so three slow ones take about as long as one", async () => {
+		const plugins = buildPlugins();
+		await runTransform(plugins, pageWith(simple));
+		const start = performance.now();
+		const output = await runTransform(plugins, pageWith(slowPainter.repeat(3)));
+		const elapsedMs = performance.now() - start;
+
+		expect(countOf(output, /slow-painter-done/g)).toBe(3);
+		//one after another, they take 900 ms
+		expect(elapsedMs).toBeLessThan(600);
+	});
+
+	test("a page does not wait for a slow page that started before it", async () => {
+		const plugins = buildPlugins();
+		await runTransform(plugins, pageWith(simple));
+		const finishOrder: Array<string> = [];
+		const slowPage = runTransform(plugins, pageWith(slowPainter)).then(() =>
+			finishOrder.push("slow"),
+		);
+		await waitMs(50);
+		await runTransform(plugins, pageWith(simple));
+		finishOrder.push("fast");
+		await slowPage;
+
+		expect(finishOrder).toEqual(["fast", "slow"]);
+	});
+
+	test("an edit while a page renders lets that page finish before the realm is replaced", async () => {
+		const plugins = buildPlugins();
+		await runTransform(plugins, pageWith(simple));
+		const slowPage = runTransform(plugins, pageWith(slowPainter));
+		await waitMs(50);
+		markServerRealmStale();
+		const nextPage = runTransform(plugins, pageWith(simple));
+
+		expect(await slowPage).toContain("slow-painter-done");
+		expect(await nextPage).toContain("simple-first");
+	});
+});
+
+describe("prerender plugin: the server realm", () => {
+	test("rendering a page leaves the globals of the vite process as they were", async () => {
+		const names = ["fetch", "URL", "Event", "EventTarget", "Buffer", "TextEncoder"] as const;
+		const before = names.map((name) => globalThis[name]);
+		const output = await runTransform(
+			buildPlugins(),
+			pageWith(`<${TAGS.simple}></${TAGS.simple}>`),
+		);
+
+		expect(output).toContain("simple-first");
+		expect(names.map((name) => globalThis[name])).toEqual(before);
+		expect("document" in globalThis).toBe(false);
+	});
+
+	test("an error a component throws after its render stops only the realm, and the next page gets a new one", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const plugins = buildPlugins();
+		const firstOutput = await runTransform(
+			plugins,
+			pageWith(`<${TAGS.throwsAfterRender}></${TAGS.throwsAfterRender}>`),
+		);
+		await vi.waitFor(() =>
+			expect(warn).toHaveBeenCalledWith(
+				expect.stringContaining("the server realm stopped"),
+				expect.objectContaining({ message: "thrown after the render" }),
+			),
+		);
+		const secondOutput = await runTransform(plugins, pageWith(`<${TAGS.simple}></${TAGS.simple}>`));
+
+		expect(firstOutput).toContain("painted-before-the-throw");
+		expect(secondOutput).toContain("simple-first");
 	});
 });
 
@@ -867,7 +976,7 @@ describe("prerender plugin: dev server", () => {
 			logLevel: "silent",
 			appType: "custom",
 			server: { middlewareMode: true },
-			plugins: [prerenderWebcomponents()],
+			plugins: [prerenderWebComponents()],
 		});
 		try {
 			expect(await server.transformIndexHtml("/index.html", html)).toContain("before-edit");

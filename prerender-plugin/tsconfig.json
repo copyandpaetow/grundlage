@@ -6,6 +6,8 @@
 		"lib": ["ESNext", "DOM", "DOM.Iterable"],
 		"strict": true,
 		"noEmit": true,
+		//the worker imports with extensions, since the tests run it straight in node
+		"allowImportingTsExtensions": true,
 		"skipLibCheck": true,
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
@@ -16,6 +18,8 @@
 	"include": [
 		"index.ts",
 		"ssr-render.ts",
+		"ssr-render.channel.ts",
+		"ssr-render.worker.ts",
 		"scan.ts",
 		"page-scripts.ts",
 		"index.test.ts",

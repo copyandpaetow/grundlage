@@ -34,5 +34,8 @@ export const TAGS = {
 	stopsPendingTasks: "ssr-stops-pending-tasks",
 	foreignPainter: "ssr-foreign-painter",
 	foreignLatePainter: "ssr-foreign-late-painter",
+	foreignDelayedPainter: "ssr-foreign-delayed-painter",
+	throwsAfterRender: "ssr-throws-after-render",
+	slowPainter: "ssr-slow-painter",
 	undefinedTag: "ssr-never-defined",
 } as const;
