@@ -384,7 +384,7 @@ describe("nested components", () => {
 
 describe("shared template generator functions", () => {
 	//a template generator function returns an Template so it can be embedded
-	//as a child expression in any other template — reuse without recompiling
+	//as a child expression in any other template, reused without a second parse
 
 	const card = (title: string, body: string): Template =>
 		html`<article class="card">
@@ -672,7 +672,7 @@ describe("shared generator functions", () => {
 	});
 
 	test("yield* delegates to a shared sub-generator", async () => {
-		//a sub-generator acts like a reusable behavior block — its yields flow
+		//a sub-generator acts like a reusable behavior block: its yields flow
 		//up through the parent generator into the framework's #step.
 		//no ComponentGenerator annotation: that type admits an async generator, and `yield*` inside a
 		//sync generator can only delegate to a sync one
@@ -737,7 +737,7 @@ describe("shared generator functions", () => {
 	});
 
 	test("sub-generator invoked and iterated manually inside the main generator", async () => {
-		//shows that a plain generator can be consumed imperatively — its yields
+		//shows that a plain generator can be consumed imperatively: its yields
 		//are observed by the outer generator rather than delegated up
 		const loadSteps = function* () {
 			yield "step-1";
@@ -945,7 +945,7 @@ describe("framework-parity patterns", () => {
 		const ComponentClass = component(function* ({ host: element }) {
 			//assigned through a local: `captured`'s annotation would contextually type the call and
 			//widen [String, "fallback"] to an array, which the schema rejects. Inferring first and
-			//assigning after is also the stronger check — ValidatedProps gates what was inferred
+			//assigning after is also the stronger check: ValidatedProps gates what was inferred
 			const resolved = prop.read(element, {
 				label: prop.optional(prop.attribute(String)),
 				count: prop.optional(prop.attribute(Number)),
@@ -1114,7 +1114,7 @@ describe("framework-parity patterns", () => {
 		await sleep();
 
 		const slot = element.shadowRoot?.querySelector("slot") as HTMLSlotElement;
-		//no light children → fallback is the slot's effective content
+		//with no light children, the fallback is the slot's effective content
 		expect(slot.assignedNodes().length).toBe(0);
 		const fallback = slot.querySelector("em");
 		expect(fallback?.textContent).toBe("nothing-here");
@@ -1312,7 +1312,7 @@ describe("framework-parity patterns", () => {
 		await sleep();
 		expect(element.shadowRoot?.querySelector("h1")?.textContent).toBe("beta");
 
-		//child is permanently broken — the fatal error stopped its runner, so update()
+		//child is permanently broken: the fatal error stopped its runner, so update()
 		//short-circuits. Even if the underlying throw condition is cleared,
 		//the child does not self-recover
 		shouldChildThrow = false;

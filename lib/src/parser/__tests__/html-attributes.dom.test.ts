@@ -7,7 +7,7 @@ import { AttributeStaticBinding } from "../types";
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
 
-describe("html parser — attribute bindings", () => {
+describe("html parser: attribute bindings", () => {
 	test("single dynamic value lowers to a single-value attribute", () => {
 		const cls = "active";
 		const parsed = parse` <div class="${cls}"></div>`;
@@ -93,8 +93,8 @@ describe("html parser — attribute bindings", () => {
 	});
 });
 
-describe("html parser — expandable attributes", () => {
-	test("array expandable is a dynamic attribute at the expression index", () => {
+describe("html parser: spreads", () => {
+	test("an array spread is a dynamic-attribute binding at its hole's index", () => {
 		const attrs = ["disabled", "hidden"];
 		const parsed = parse` <button ${attrs}>click</button>`;
 
@@ -103,7 +103,7 @@ describe("html parser — expandable attributes", () => {
 		expect((parsed.bindings[0] as { valueIndex: number }).valueIndex).toBe(0);
 	});
 
-	test("object expandable is a dynamic attribute at the expression index", () => {
+	test("an object spread is a dynamic-attribute binding at its hole's index", () => {
 		const attrs = { class: "red", id: "main" };
 		const parsed = parse` <div ${attrs}>content</div>`;
 
@@ -112,7 +112,7 @@ describe("html parser — expandable attributes", () => {
 		expect((parsed.bindings[0] as { valueIndex: number }).valueIndex).toBe(0);
 	});
 
-	test("expandable after static attribute", () => {
+	test("a spread after a static attribute is one dynamic-attribute binding", () => {
 		const extra = { title: "hello" };
 		const parsed = parse` <div class="base" ${extra}></div>`;
 
@@ -120,7 +120,7 @@ describe("html parser — expandable attributes", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
 	});
 
-	test("expandable before static attribute", () => {
+	test("a spread before a static attribute is one dynamic-attribute binding", () => {
 		const extra = { title: "hello" };
 		const parsed = parse` <div ${extra} class="base"></div>`;
 
@@ -128,7 +128,7 @@ describe("html parser — expandable attributes", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.DYNAMIC_ATTRIBUTE);
 	});
 
-	test("expandable between static attributes", () => {
+	test("a spread between static attributes is one dynamic-attribute binding", () => {
 		const extra = ["hidden"];
 		const parsed = parse` <div id="a" ${extra} class="b"></div>`;
 
@@ -137,7 +137,7 @@ describe("html parser — expandable attributes", () => {
 	});
 });
 
-describe("html parser — attribute edge cases", () => {
+describe("html parser: attribute edge cases", () => {
 	test("single-quoted attribute value", () => {
 		const val = "test";
 		const parsed = parse` <div class="${val}"></div>`;
@@ -156,7 +156,7 @@ describe("html parser — attribute edge cases", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.ATTRIBUTE);
 	});
 
-	test("multiple boolean (spread) attributes", () => {
+	test("two spreads in a row are two dynamic-attribute bindings", () => {
 		const a = "disabled";
 		const b = "hidden";
 		const parsed = parse` <div ${a} ${b}></div>`;
@@ -167,7 +167,7 @@ describe("html parser — attribute edge cases", () => {
 		]);
 	});
 
-	test("dynamic attribute key with dynamic value", () => {
+	test("a hole as the name and a hole as the value make one attribute binding", () => {
 		const key = "data-x";
 		const val = "123";
 		const parsed = parse` <div ${key}="${val}"></div>`;
@@ -179,7 +179,7 @@ describe("html parser — attribute edge cases", () => {
 		expect(binding.valueParts).toEqual([1]);
 	});
 
-	test("attribute with empty string value", () => {
+	test("a quoted hole binds the attribute named before it", () => {
 		const val = "";
 		const parsed = parse` <div class="${val}"></div>`;
 
@@ -189,7 +189,7 @@ describe("html parser — attribute edge cases", () => {
 		expect(binding.nameParts).toEqual(["class"]);
 	});
 
-	test("attribute on self-closing element", () => {
+	test("an attribute hole on a self-closing element binds that attribute", () => {
 		const val = "text";
 		const parsed = parse`<input type="${val}" />`;
 
@@ -199,7 +199,7 @@ describe("html parser — attribute edge cases", () => {
 		expect(binding.nameParts).toEqual(["type"]);
 	});
 
-	test("boolean (spread) attribute on self-closing element", () => {
+	test("a spread on a self-closing element is a dynamic-attribute binding", () => {
 		const attr = "disabled";
 		const parsed = parse`<input ${attr} />`;
 
@@ -221,7 +221,7 @@ describe("html parser — attribute edge cases", () => {
 		expect(binding.nameParts).toEqual(["class"]);
 	});
 
-	test("attribute value with static prefix and suffix", () => {
+	test("static text around a hole stays in the value parts", () => {
 		const mid = "dynamic";
 		const parsed = parse` <div class="prefix-${mid}-suffix"></div>`;
 
@@ -243,7 +243,7 @@ describe("html parser — attribute edge cases", () => {
 
 	test("an on-prefixed non-handler keeps its whole name (no eventType slice)", () => {
 		const value = () => {};
-		//the whole name survives to commit-time resolution; the old bug sliced "once" → event "ce"
+		//the whole name survives to commit-time resolution; the old bug sliced "once" into the event "ce"
 		const once = parse` <button once=${value}></button>`.bindings[0] as AttributeStaticBinding;
 		expect(once.type).toBe(BINDING.ATTRIBUTE);
 		expect(once.nameParts).toEqual(["once"]);
@@ -266,12 +266,12 @@ describe("html parser — attribute edge cases", () => {
 
 	test("a hole right after a quoted value throws, since it belongs to no attribute", () => {
 		expect(() => parse` <div a="1"${"b"}></div>`).toThrow(
-			/grundlage: a \$\{…\} right after a quoted attribute value belongs to no attribute/,
+			/grundlage: a \$\{...\} right after a quoted attribute value belongs to no attribute/,
 		);
 	});
 });
 
-describe("html parser — custom element and namespaced attribute names", () => {
+describe("html parser: custom element and namespaced attribute names", () => {
 	test("hyphenated custom element tag with static attribute", () => {
 		const parsed = parse`<my-component id="x"></my-component>`;
 		expect(parsed.bindings).toHaveLength(0);

@@ -7,7 +7,7 @@ import { AttributeStaticBinding } from "../types";
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
 
-describe("html parser — fragment output: static attributes beside dynamic", () => {
+describe("html parser fragment output: static attributes beside dynamic", () => {
 	test("static attribute before dynamic attribute is preserved in fragment", () => {
 		const value = "red";
 		const parsed = parse`<div id="fixed" class="${value}"></div>`;
@@ -38,7 +38,7 @@ describe("html parser — fragment output: static attributes beside dynamic", ()
 	});
 });
 
-describe("html parser — fragment output: attribute marker placement", () => {
+describe("html parser fragment output: attribute marker placement", () => {
 	test("attribute binding marker is a sibling before its element", () => {
 		const value = "red";
 		const parsed = parse`<div class="${value}">hello</div>`;
@@ -60,7 +60,7 @@ describe("html parser — fragment output: attribute marker placement", () => {
 	});
 });
 
-describe("html parser — fragment output: special characters in quoted attribute values", () => {
+describe("html parser fragment output: special characters in quoted attribute values", () => {
 	test("static quoted attribute value may contain '>'", () => {
 		const parsed = parse`<div title="a > b">content</div>`;
 		const div = buildFragment(parsed.htmlWithMarkers).querySelector("div")!;
@@ -86,7 +86,7 @@ describe("html parser — fragment output: special characters in quoted attribut
 		expect(div.getAttribute("title")).toBe('he said "hi"');
 	});
 
-	test("dynamic attribute value with static prefix containing '>'", () => {
+	test("a > in an attribute value before a hole stays in the value", () => {
 		const value = "x";
 		const parsed = parse`<div title="prefix>${value}">text</div>`;
 		expect(parsed.bindings).toHaveLength(1);
@@ -96,7 +96,7 @@ describe("html parser — fragment output: special characters in quoted attribut
 	});
 });
 
-describe("html parser — fragment output: complex structure", () => {
+describe("html parser fragment output: complex structure", () => {
 	test("nested elements with mixed static and dynamic attributes", () => {
 		const cls = "body";
 		const text = "hello";
@@ -109,7 +109,7 @@ describe("html parser — fragment output: complex structure", () => {
 		expect(p).not.toBeNull();
 	});
 
-	test("sibling elements each with their own dynamic attribute", () => {
+	test("sibling elements with an attribute hole each keep their own text", () => {
 		const a = "one";
 		const b = "two";
 		const parsed = parse`<p class="${a}">one</p>

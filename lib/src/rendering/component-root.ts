@@ -48,9 +48,8 @@ export const createComponentRoot = (
 const revertAllHostBindings = (root: ComponentRoot): void => {
 	const instance = root.instance;
 	if (instance === null) return;
-	const liveBindings = instance.liveBindings;
 	for (let index = 0; index < instance.parsed.hostBindingCount; index++) {
-		revertHostBinding(liveBindings[index] as AttributeLaneLiveBinding);
+		revertHostBinding(instance.liveBindings[index] as AttributeLaneLiveBinding);
 	}
 };
 
@@ -61,11 +60,10 @@ const mountHostBindings = (
 	values: Array<unknown>,
 ): void => {
 	revertAllHostBindings(root);
-	const { bindings, hostBindingCount } = instance.parsed;
-	for (let index = 0; index < hostBindingCount; index++) {
+	for (let index = 0; index < instance.parsed.hostBindingCount; index++) {
 		const live = createAttributeLaneLiveBinding(
 			//the parser places only attribute bindings before hostBindingCount
-			bindings[index] as AttributeStaticBinding | DynamicAttributeStaticBinding,
+			instance.parsed.bindings[index] as AttributeStaticBinding | DynamicAttributeStaticBinding,
 			root.host,
 		);
 		commitLiveBinding(instance, live, values);
@@ -127,10 +125,11 @@ export const displayFatalErrorInRoot = (root: ComponentRoot, error: unknown): vo
 	root.isHydrationPending = false;
 	root.instance = null;
 	root.shadowRoot.replaceChildren();
-	const { host } = root;
-	const isHandledByApp = !host.dispatchEvent(new ComponentErrorEvent(error, host.localName));
+	const isHandledByApp = !root.host.dispatchEvent(
+		new ComponentErrorEvent(error, root.host.localName),
+	);
 	if (isHandledByApp) return;
-	console.error(libraryMessage(`<${host.localName}> stopped running.`), error);
+	console.error(libraryMessage(`<${root.host.localName}> stopped running.`), error);
 	//an error's text can carry internals or data, so end users never see it
 	if (!isDevelopmentBuild) return;
 	//oxlint-disable-next-line typescript/restrict-template-expressions -- shown as the platform spells it

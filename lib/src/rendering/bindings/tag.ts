@@ -43,12 +43,11 @@ export const commitTag = (
 	values: Array<unknown>,
 	siblings: ReadonlyArray<LiveBinding | undefined>,
 ): void => {
-	const { parts } = liveBinding.staticBinding;
-	const hash = combinedPartsHash(parts, values);
+	const hash = combinedPartsHash(liveBinding.staticBinding.parts, values);
 	if (hash === liveBinding.lastValueHash) return;
 	liveBinding.lastValueHash = hash;
 	const element = elementAfterMarker(liveBinding.openMarker);
-	const newTag = composeParts(parts, values);
+	const newTag = composeParts(liveBinding.staticBinding.parts, values);
 	if (newTag.toLowerCase() === element.tagName.toLowerCase()) return;
 	const switchesIntoForeignContent =
 		FOREIGN_CONTENT_ROOT_TAGS.has(newTag.toLowerCase()) && element.namespaceURI === HTML_NAMESPACE;
@@ -71,7 +70,7 @@ export const commitTag = (
 	} catch (error) {
 		throw namedBindingErrorOf(
 			error,
-			`a dynamic tag <\${…}> composed "${newTag}", which is not a valid tag name. Bind a name such as "section" or "my-card".`,
+			`a dynamic tag <\${...}> composed "${newTag}", which is not a valid tag name. Bind a name such as "section" or "my-card".`,
 		);
 	}
 	warnWhenParsingWouldSplitParagraph(newTag, element.parentNode);

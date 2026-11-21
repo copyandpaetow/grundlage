@@ -13,7 +13,7 @@ import * as CONTENT_KIND from "../content-kind";
 
 export interface Instance {
 	parsed: ParsedTemplate;
-	//empty slots while the bind walk fills it; the one reader during the walk is the tag swap
+	//holes while the bind walk fills it; the one reader during the walk is the tag swap
 	liveBindings: Array<LiveBinding>;
 	treeState: TreeState;
 }
@@ -89,7 +89,7 @@ export interface ListContentState {
 	hashAtTableIndex: Float64Array;
 	chainHeadAtTableIndex: Int32Array;
 	tableIndexShift: number;
-	//alternates with items: placeRows returns the array it was given
+	//alternates with items: a patch builds the new rows here, and the old array becomes the spare
 	spareRows: Array<ListItem | undefined>;
 }
 

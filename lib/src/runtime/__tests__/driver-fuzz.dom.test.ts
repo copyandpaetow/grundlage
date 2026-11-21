@@ -389,11 +389,11 @@ test(
 				const kind = line
 					.trim()
 					.replace(/\d+/g, "#")
-					.replace(/"[^"]*"/g, '"…"');
+					.replace(/"[^"]*"/g, '"..."');
 				violationKinds.set(kind, (violationKinds.get(kind) ?? 0) + 1);
 			}
 		}
-		const summary = [...violationKinds].map(([kind, count]) => `${count}× ${kind}`);
+		const summary = [...violationKinds].map(([kind, count]) => `${kind}: ${count}`);
 		expect(
 			`${failures.length} of ${SEED_COUNT} seeds failed\n${summary.join("\n")}\n\n${failures
 				.filter((failure) => failure.includes(process.env.DRIVER_FUZZ_SHOW ?? ""))

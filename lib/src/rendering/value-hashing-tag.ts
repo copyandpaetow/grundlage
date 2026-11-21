@@ -1,4 +1,4 @@
-export const NULLISH = 1;
+export const NULL = 1;
 export const BOOLEAN = 2;
 export const SMALL_INTEGER = 3;
 export const INTEGER = 4;
@@ -14,3 +14,4 @@ export const TEMPLATE = 13;
 export const REFERENCE = 14;
 export const ANCESTOR = 15;
 export const TRUNCATED = 16;
+export const UNDEFINED = 17;

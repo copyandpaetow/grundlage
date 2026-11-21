@@ -11,11 +11,10 @@ export const commitTemplateContent = (
 	liveBinding: TemplateContentLiveBinding,
 	values: Array<unknown>,
 ): void => {
-	const { content, valueIndices } = liveBinding.staticBinding;
-	const hash = combinedPartsHash(valueIndices, values);
+	const hash = combinedPartsHash(liveBinding.staticBinding.valueIndices, values);
 	if (hash === liveBinding.lastValueHash) return;
-	const fragment = cloneTemplateFragment(content, null);
-	mountInstance(fragment, values, content, {
+	const fragment = cloneTemplateFragment(liveBinding.staticBinding.content, null);
+	mountInstance(fragment, values, liveBinding.staticBinding.content, {
 		isTemplateContent: true,
 	});
 	removeMarkers(fragment);

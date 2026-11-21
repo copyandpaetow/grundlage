@@ -31,7 +31,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			customElements.define(tag, ComponentClass);
 			const element = document.createElement(tag);
 			document.body.appendChild(element);
-			//poll rather than sleep — async-before-yield settle times are workload-dependent
+			//poll rather than sleep: async-before-yield settle times are workload-dependent
 			await waitForShadowContent(element);
 			//host attributes land on the element itself and getHTML returns shadow content only, so they
 			//are re-emitted around it
@@ -49,7 +49,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 	};
 
 	//the tag must still be undefined when this runs, so the element is parsed and connected before
-	//anything upgrades it — the order a real page loads in
+	//anything upgrades it, the order a real page loads in
 	const hydrateFromHTML = (serializedHTML: string): HTMLElement => {
 		const wrapper = document.createElement("div");
 		wrapper.setHTMLUnsafe(serializedHTML);
@@ -171,7 +171,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 	describe("hydration", () => {
 		describe("first paint: SSR stops, client resumes", () => {
 			test("server emits the first-yield content, not the generator's terminal state", async () => {
-				//a "loading → loaded" generator must serialize the loading frame
+				//a generator that goes from "loading" to "loaded" must serialize the loading frame
 				const serverTag = uniqueTag();
 				let yieldCount = 0;
 
@@ -199,7 +199,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("client resumes from first yield: hydrates loading state, then paints subsequent yields", async () => {
-				//roundtrip: SSR emits "loading" → client hydrates → user update() advances to "loaded"
+				//roundtrip: SSR emits "loading", the client hydrates, then update() advances to "loaded"
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				let phase: "loading" | "loaded" = "loading";
@@ -230,7 +230,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 				cleanup(element);
 			});
 
-			test("comment markers survive serialization → setHTMLUnsafe → hydrate", async () => {
+			test("comment markers survive serialization, setHTMLUnsafe and hydration", async () => {
 				//hydration walks the marker comments: serialization stripping them makes every later update
 				//misfire silently
 				//proof-by-effect: a post-hydrate update must change the DOM
@@ -264,7 +264,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 			test("a keyed list hydrates and then reorders by key", async () => {
 				//the key comment is stripped at parse time, so server markup carries no marker for
-				//it — hydration must still pair every remaining marker with the right binding
+				//it. Hydration must still pair every remaining marker with the right binding
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 				let items = [
@@ -540,7 +540,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			});
 
 			test("host attribute mismatch: server's first-yield value is overwritten by the client's first-yield value", async () => {
-				//hydrate re-applies attribute bindings — host attrs are the one category where the client value wins
+				//hydrate re-applies attribute bindings: host attributes are the one category where the client value wins
 				const serverTag = uniqueTag();
 				const clientTag = uniqueTag();
 
@@ -823,7 +823,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 
-			//declared, because only a declared attribute triggers an update — an undeclared write is ignored
+			//declared, because only a declared attribute triggers an update; an undeclared write is ignored
 			const makeComponent = () =>
 				component(
 					function* ({ host: element }) {
@@ -1014,7 +1014,7 @@ describe.skipIf("happyDOM" in globalThis)("server-side rendering", () => {
 
 		test("a spread property-mode value is assigned after hydration", async () => {
 			//non-stringable spread values are set as element properties, which can't survive
-			//serialization; hydration must assign them, not just record their hash
+			//serialization; hydration must assign them, not only record their hash
 			const serverTag = uniqueTag();
 			const clientTag = uniqueTag();
 			const payload = { a: 1 };

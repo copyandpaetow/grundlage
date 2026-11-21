@@ -5,7 +5,7 @@
 ### Breaking
 
 - A component yields a template, an update generator, a promise or a `load()`; anything else throws.
-- Render functions are removed: `` yield () => html`…` `` → ``yield function* view() { yield html`…`; }``.
+- Render functions are removed: `` yield () => html`...` `` → ``yield function* view() { yield html`...`; }``.
 - `async function*` and `await` are removed: `await promise` → `yield promise`.
 - A `yield` of an update generator waits for its run and evaluates to the run's return value.
 - The build targets ES2025: Chrome 122, Firefox 131, Safari 18.4.
@@ -16,15 +16,15 @@
 - `props(element, schema)` → `prop.read(element, schema)`.
 - A binding a later paint drops passes `undefined`, not `null`, so a `prop.property` can hold `null`.
 - A template nested inside an object fallback is copied per element and no longer paints: make the template the whole fallback.
-- A `<style>` with `${…}` in both its attributes and its content throws, and so does `@namespace` in a `<style>` with `${…}`.
+- A `<style>` with `${...}` in both its attributes and its content throws, and so does `@namespace` in a `<style>` with `${...}`.
 - A value the browser rejects in a dynamic `<style>` drops its declaration instead of keeping the previous value.
 - A component no longer delegates focus by default: pass `{ delegatesFocus: true }` to one that wraps a control.
 
 ### Types
 
 - `YieldableValue` is `Template | Promise<unknown> | UpdateGenerator` or a `load()` request; `UpdateGenerator` is exported.
-- `yield* load(…)` evaluates to the fetcher's awaited type.
-- A bare `yield promise` evaluates to `unknown`: `const user: User = yield …` → `const user = yield* awaited(…)`.
+- `yield* load(...)` evaluates to the fetcher's awaited type.
+- A bare `yield promise` evaluates to `unknown`: `const user: User = yield ...` → `const user = yield* awaited(...)`.
 - A hoisted schema needs no `satisfies Schema`, and a fallback is type-checked against its parser.
 - `PropsOf<typeof props>` and `PassedPropsOf<typeof props>` replace `DeclaredProps`.
 
@@ -33,15 +33,15 @@
 - `awaited(promise)`: `yield*` it to wait with the promise's type.
 - `prop.property(standardSchema, fallback?)` validates every write with a Standard Schema (Zod, Valibot, ArkType).
 - Pages that enforce Trusted Types paint: the library writes its template markup through a policy named `grundlage`.
-- `prop.unreflected(prop.attribute(…))` keeps the attribute as the markup default, like a native input's `value`.
+- `prop.unreflected(prop.attribute(...))` keeps the attribute as the markup default, like a native input's `value`.
 - `prop.oneOf("a", "b")` parses a union of strings.
 - On the server, a binding to a `prop.property` marks the child `defer-hydration`.
 - An iterator in a content hole paints as a list.
 - A `load` result JSON cannot carry (a `Date`, a class instance, a template) throws and names the fix.
 - A `load` key used twice in one element throws on the server.
-- A yielded generator object, such as `yield load(…)` without the star, throws and names the fix.
+- A yielded generator object, such as `yield load(...)` without the star, throws and names the fix.
 - On the server, a run waiting on a promise dispatches the webcomponents-cg `pending-task` event.
-- On the server, a cancelable `grundlage-render` event precedes a component's first run; cancelling it leaves the component unstarted.
+- On the server, a cancelable `grundlage-render` event precedes a component's first run; canceling it leaves the component unstarted.
 
 ### Changed
 
@@ -59,6 +59,8 @@
 - A listener, a property or a prop inside a nested `<template>` throws, since copies of the content keep none of them.
 - `shadowrootmode` on a nested `<template>` throws: let the element attach its own shadow root.
 - The production build leaves a failed component's shadow root empty; only the development build shows the error text.
+- An object without a prototype, such as an `Object.groupBy` result, is compared by content and can be spread, like a plain object.
+- Errors from `component()`, `load()`, `prop.*`, a hole and a dynamic tag say what they expect and what arrived.
 
 ### Fixed
 
@@ -72,7 +74,7 @@
 - A component body's `this` is `undefined`, as an update generator's is, instead of an internal object.
 - A component body whose parameter default throws ends the component through the error event instead of escaping the library.
 - An object or array bound to another library's custom element, such as a Lit element, no longer calls its `update()`.
-- A `<![CDATA[…]]>` section keeps the markup after it instead of dropping the rest of the template.
+- A `<![CDATA[...]]>` section keeps the markup after it instead of dropping the rest of the template.
 - In Safari, a `:host` value hole in a dynamic `<style>` updates the host after the first change, instead of keeping the old value.
 - `<br />` paints one line break instead of two.
 - A tag name in another case (`<STYLE>`, `<TEXTAREA>`, `<TEMPLATE>`, `</Style>`) parses like its lowercase form, as the browser reads it, instead of breaking its bindings.
@@ -93,18 +95,19 @@
 - A hole inside `<title>` paints as text, like one in `<textarea>`, instead of throwing in the browser and writing markers into server markup.
 - An object shaped like a template, from JSON or `structuredClone`, no longer paints as markup.
 - A value inside a nested `<template>` no longer becomes markup.
+- Plain data with its own `constructor` key is compared by content and can be spread, instead of reading as a class instance.
 
 ## 0.8.0
 
 ### Breaking
 
-- The component body takes one props object: `function* (host)` → `function* ({ host, …props })`; render functions and inner generators get the same object.
+- The component body takes one props object: `function* (host)` → `function* ({ host, ...props })`; render functions and inner generators get the same object.
 - The schema is declared in the options, `component(gen, { props })`, and a generator passed to `component` no longer brings its own.
 - `load()`'s option `skipSsr` → `skipSSR`.
 
 ### Types
 
-- A yielded render function types its parameter: `yield ({ label }) => …` is no longer an implicit `any`.
+- A yielded render function types its parameter: `yield ({ label }) => ...` is no longer an implicit `any`.
 - A `yield*` helper that annotates its return type spells it `Generator<YieldableValue>`, not bare `Generator`.
 - `YieldableValue` is exported.
 - The component body's return position is `Cleanup | void`, and `Cleanup` is exported.
@@ -118,7 +121,7 @@
 ### Changed
 
 - `value`, `checked`, `indeterminate` and `selected` are written as the attribute on a binding's first commit and as the property after it, so a state change shows after the user interacted.
-- `<select value=${…}>` warns and selects nothing: bind `selected` on each `<option>`.
+- `<select value=${...}>` warns and selects nothing: bind `selected` on each `<option>`.
 - A fatal error logs with `console.error` and names the tag, instead of `console.warn`.
 - A throwing cleanup or a rejected async `return()` goes to `reportError`.
 - A host binding that writes the component's own declared prop updates the component, on the server too.
@@ -134,7 +137,7 @@
 - Templates inside `<svg>` and `<math>` mount in their namespace, and `<foreignObject>` or `<mi>` switch back to HTML.
 - A dynamic tag inside `<svg>` or `<math>` keeps its namespace and case.
 - A dynamic tag that would become `<svg>` or `<math>` inside HTML throws: write that tag statically.
-- A hole inside `<![CDATA[…]]>` ends the component and names the fix.
+- A hole inside `<![CDATA[...]]>` ends the component and names the fix.
 - Hashing an object no longer keeps its property names in memory for the life of the page.
 - A hole inside an event name (`on${eventName}=${handler}`) binds the event it spells instead of an attribute named `on`.
 - A composed event name (`<button ${"onclick"}=${fn}>`) binds a listener, not a property.

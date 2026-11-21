@@ -147,7 +147,7 @@ describe("free-fly", () => {
 });
 
 describe("orbit", () => {
-	test("entering freezes the current distance as the radius and centres the camera", async () => {
+	test("entering freezes the current distance as the radius and centers the camera", async () => {
 		await setMode("orbit");
 		expect(readCamera("orbit-radius")).toBeCloseTo(START_DISTANCE, 5);
 		expect(readCamera("x")).toBe(0);

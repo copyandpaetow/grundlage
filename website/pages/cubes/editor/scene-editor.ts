@@ -56,6 +56,7 @@ const keepPointerOutOfScene = (event: Event): void => event.stopPropagation();
 
 customElements.define(
 	"scene-editor",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host }) {
 		yield editorShell(null);
 

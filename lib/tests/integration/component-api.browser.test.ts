@@ -65,7 +65,7 @@ describe("BaseComponent.setProp", () => {
 });
 
 describe("dynamic comment bindings", () => {
-	//multi-expression comments go through the commitComment path — a branch otherwise
+	//multi-expression comments go through the commitComment path, a branch otherwise
 	//only exercised via internal calls
 	let tagId = 0;
 	const uniqueTag = () => `test-comment-${tagId++}-${Date.now()}`;
@@ -94,7 +94,7 @@ describe("dynamic comment bindings", () => {
 			const walker = document.createTreeWalker(element.shadowRoot!, NodeFilter.SHOW_COMMENT);
 			let node: Node | null;
 			while ((node = walker.nextNode())) {
-				//markers start with the "^.^" identifier — ignore them
+				//markers start with the "^.^" identifier, so they are skipped
 				if (!(node as Comment).data.startsWith("^.^")) {
 					return node as Comment;
 				}

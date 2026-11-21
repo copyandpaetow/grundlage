@@ -7,7 +7,7 @@ import { AttributeStaticBinding } from "../types";
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
 
-describe("html parser — root template detection", () => {
+describe("html parser: root template detection", () => {
 	test("clean root template strips the wrapper and produces no host bindings", () => {
 		const parsed = parse`<template><p>hi</p></template>`;
 
@@ -30,7 +30,7 @@ describe("html parser — root template detection", () => {
 	});
 });
 
-describe("html parser — root template static attributes", () => {
+describe("html parser: root template static attributes", () => {
 	test("single static attribute is lowered into a binding and kept off the element", () => {
 		const parsed = parse`<template id="host"></template>`;
 
@@ -94,7 +94,7 @@ describe("html parser — root template static attributes", () => {
 	});
 });
 
-describe("html parser — root template dynamic attributes", () => {
+describe("html parser: root template dynamic attributes", () => {
 	test("single dynamic host attribute counts once and stays out of the DOM", () => {
 		const id = "x";
 		const parsed = parse`<template id="${id}"></template>`;
@@ -150,7 +150,7 @@ describe("html parser — root template dynamic attributes", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.ATTRIBUTE);
 	});
 
-	test("dynamic boolean host attribute", () => {
+	test("a spread on the host <template> is one host binding", () => {
 		const name = "hidden";
 		const parsed = parse`<template ${name}></template>`;
 
@@ -193,7 +193,7 @@ describe("html parser — root template dynamic attributes", () => {
 	});
 });
 
-describe("html parser — root template binding ordering", () => {
+describe("html parser: root template binding ordering", () => {
 	test("host bindings come first, inner bindings after", () => {
 		const id = "host";
 		const text = "body";
@@ -250,7 +250,7 @@ describe("html parser — root template binding ordering", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("multiple dynamic children inside root template", () => {
+	test("holes inside the host <template> are content bindings", () => {
 		const a = 1;
 		const b = 2;
 		const parsed = parse`<template
@@ -263,7 +263,7 @@ describe("html parser — root template binding ordering", () => {
 	});
 });
 
-describe("html parser — root template tolerated siblings", () => {
+describe("html parser: root template tolerated siblings", () => {
 	test("leading whitespace before root template is tolerated", () => {
 		const parsed = parse` <template id="x"></template> `;
 
@@ -333,7 +333,7 @@ describe("html parser — root template tolerated siblings", () => {
 	});
 });
 
-describe("html parser — root template misdetection and reparse", () => {
+describe("html parser: root template misdetection and reparse", () => {
 	test("text content before template prevents root detection", () => {
 		const parsed = parse`hello<template id="x"></template>`;
 
@@ -448,7 +448,7 @@ describe("html parser — root template misdetection and reparse", () => {
 	});
 });
 
-describe("html parser — root template nested cases", () => {
+describe("html parser: root template nested cases", () => {
 	test("nested template inside root template binds as a template", () => {
 		const slot = "<p>x</p>";
 		const parsed = parse`<template id="host"

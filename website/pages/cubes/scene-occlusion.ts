@@ -2,7 +2,7 @@ import { type View, type ViewPoint, writeViewPoint } from "./scene-view";
 
 //Occlusion culling: a cube is hidden when nearer cubes cover its whole screen rectangle.
 //The grid holds, per 8px screen cell, the depth beyond which everything is hidden. Faces
-//that each cover part of a cell add up through its 4×4 sample mask, so touching cubes
+//that each cover part of a cell add up through its 4 by 4 sample mask, so touching cubes
 //cover the seam between them together.
 
 //Corners of each face in scene-culling's FACE_NAMES order, walked around its edge
@@ -16,7 +16,7 @@ const FACE_CORNER_INDICES = [
 ] as const;
 
 const OCCLUSION_CELL_PIXELS = 8;
-//4×4 samples per cell, at pixel centres two pixels apart
+//4 by 4 samples per cell, at pixel centers two pixels apart
 const SAMPLES_PER_CELL_EDGE = 4;
 const SAMPLE_COUNT_PER_CELL = SAMPLES_PER_CELL_EDGE ** 2;
 const SAMPLE_OFFSETS_PIXELS = [1, 3, 5, 7];
@@ -44,6 +44,7 @@ export type OcclusionGrid = {
 	occlude: (cubes: readonly OccludableCube[]) => void;
 };
 
+//oxlint-disable-next-line max-lines-per-function -- long, not complex: buffers allocated once, and the small steps that reuse them
 export const createOcclusionGrid = (view: View): OcclusionGrid => {
 	let coveredDepths = new Float32Array(0);
 	let partialSampleMasks = new Uint16Array(0);
@@ -60,7 +61,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 	const faceXs = new Float64Array(4);
 	const faceYs = new Float64Array(4);
 	//Each face edge from corner a to b as E(p) = A·x + B·y + C = cross(b - a, p - a),
-	//flipped by the winding so E ≥ 0 inside
+	//flipped by the winding so E >= 0 inside
 	const edgeXFactors = new Float64Array(4);
 	const edgeYFactors = new Float64Array(4);
 	const edgeConstants = new Float64Array(4);
@@ -81,7 +82,7 @@ export const createOcclusionGrid = (view: View): OcclusionGrid => {
 		cellRange.lastRow = Math.min(coverageRows - 1, Math.floor(maximumY / OCCLUSION_CELL_PIXELS));
 	};
 
-	//Perspective divide: screen = viewport centre + view · perspective / depth.
+	//Perspective divide: screen = viewport center + view · perspective / depth.
 	//False when a corner lies at or behind the eye: that cube neither occludes nor is occluded.
 	const projectCorners = (occludableCube: OccludableCube, cubeIndex: number): boolean => {
 		const corners = occludableCube.worldCorners;

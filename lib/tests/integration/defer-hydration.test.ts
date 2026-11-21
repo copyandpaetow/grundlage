@@ -1,4 +1,4 @@
-//must come first — parser/html.ts runs `document.createElement` at module load
+//must come first: parser/html.ts runs `document.createElement` at module load
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -32,7 +32,7 @@ const childTagPaintingItsQuote = (): string => {
 				props: {
 					quote: prop.optional(
 						prop.attribute((incoming: unknown) =>
-							incoming instanceof Quote ? incoming : new Quote("…"),
+							incoming instanceof Quote ? incoming : new Quote("..."),
 						),
 					),
 				},
@@ -128,7 +128,7 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 					props: {
 						quote: prop.optional(
 							prop.attribute((incoming: unknown) =>
-								incoming instanceof Quote ? incoming : new Quote("…"),
+								incoming instanceof Quote ? incoming : new Quote("..."),
 							),
 						),
 					},

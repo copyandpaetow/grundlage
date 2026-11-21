@@ -99,6 +99,7 @@ const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline:v2";
 
 customElements.define(
 	"krausest-bench",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		let rows: Array<Row> = [];
 		let selectedIdentifier: number | null = null;
@@ -305,6 +306,7 @@ customElements.define(
 		const baselineFor = (label: string): OperationResult | undefined =>
 			baseline?.value.find((entry) => entry.label === label);
 
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 		yield function* view() {
 			yield html`
 				<style>
@@ -455,7 +457,7 @@ customElements.define(
 				</div>
 
 				<div class="status">
-					${isRunning ? html`running: ${activeOperation ?? "suite"}…` : html`idle`}
+					${isRunning ? html`running: ${activeOperation ?? "suite"}...` : html`idle`}
 				</div>
 
 				${
@@ -471,9 +473,9 @@ customElements.define(
 									<div class="head">vs baseline</div>
 									${Array.from(measurements.values()).map((measurement) => {
 										const previous = baselineFor(measurement.label);
-										//the delta rides on min applied ms — the one timing here that resolves
+										//the delta rides on min applied ms, the one timing here that resolves
 										//a change smaller than a frame. DOM writes are deterministic, so
-										//compare them exactly — any drift is a real false-write signal.
+										//compare them exactly: any drift is a real false-write signal.
 										const msClass = previous
 											? timeClassOf(measurement.minAppliedMs, previous.minAppliedMs)
 											: "";

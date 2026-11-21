@@ -4,7 +4,7 @@ import { html, component } from "../../../lib/src";
     Measures how expensive list reorders are with the current reconciliation
     algorithm. Focus is on shapes that hit the O(n) isAlreadyInPosition walk:
     reverse, shuffle, rotate. "mutate" keeps order stable so the monotonic
-    short-circuit fires — use it as the lower bound.
+    short-circuit fires. Use it as the lower bound.
 */
 
 type Measurement = {
@@ -68,6 +68,7 @@ const mutateValues = (rows: Array<Row>) => {
 
 customElements.define(
 	"reorder-stress",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		let itemCount = Number(element.getAttribute("items") ?? 1000);
 		let rows: Array<Row> = buildRows(itemCount);
@@ -101,6 +102,7 @@ customElements.define(
 
 		const formatMs = (value: number) => value.toFixed(2);
 
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 		yield function* view() {
 			yield html`
 				<style>
@@ -224,7 +226,7 @@ customElements.define(
 					${rows.map(
 						(row) =>
 							html`<li data-key=${row.identifier}>
-								#${row.identifier} → ${row.value}
+								#${row.identifier}: ${row.value}
 							</li>`,
 					)}
 				</ul>

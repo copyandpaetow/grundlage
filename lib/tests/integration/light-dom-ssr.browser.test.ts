@@ -3,9 +3,9 @@ import { html, component } from "../../src/index";
 import * as grundlage from "../../src/index";
 import { ComponentConstructor, ComponentOptions, PropDefinition } from "../../src/types";
 
-//The claim that reads the server's slot markers back (light-dom/PLAN.md §3.5, §4.5, §4.6, R20—R27).
+//The claim that reads the server's slot markers back (light-dom/PLAN.md section 3.5, section 4.5, section 4.6, R20 to R27).
 //Everything here is a real round trip: render with the server flag on, serialize, re-parse into an
-//element nothing has upgraded yet, then define — the order a real page loads in. Chromium only,
+//element nothing has upgraded yet, then define, the order a real page loads in. Chromium only,
 //because a nested component never paints under happy-dom.
 
 //neither export exists yet; typed as the schema entry each one will be, so these suites typecheck
@@ -21,7 +21,7 @@ const light = (props?: Record<string, unknown>): ComponentOptions<any> =>
 
 //read off the class, never an instance: constructing one today throws inside
 //`attachShadow({ mode: "light" })`, and a constructor's throw is reported to the page whether or
-//not the caller catches it — which would fail this file before a test ran
+//not the caller catches it, which would fail this file before a test ran
 const lightModeShips =
 	Object.getOwnPropertyDescriptor(component(function* () {}, light()).prototype, "renderRoot") !==
 	undefined;
@@ -142,7 +142,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 				const element = parseUnupgraded(renamed(serialized, [[serverTag, clientTag]]));
 				const serverHeading = element.querySelector("h2")!;
 
-				//childList/characterData only: §1.1 stamps `light-dom` in `#mount` unconditionally, so
+				//childList/characterData only: section 1.1 stamps `light-dom` in `#mount` unconditionally, so
 				//an attribute record is expected and says nothing about the tree
 				const records: Array<MutationRecord> = [];
 				const observer = new MutationObserver((entries) => records.push(...entries));
@@ -409,7 +409,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 		);
 	});
 
-	describe("across the boundary — a parent's content inside a child's paint", () => {
+	describe("across the boundary: a parent's content inside a child's paint", () => {
 		//literal child tags throughout: a template's strings array is the parse-cache key, and a
 		//closing tag cannot hold a hole at all. One definition serves both the server render and the
 		//hydration, which is also what a real page has
@@ -419,7 +419,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 			async () => {
 				let name = "Ada";
 				//the outer's template writes the node and the inner adopts it, so the outer's binding
-				//ends up inside the inner's claimed range — the arrangement §3.5's ordering rests on
+				//ends up inside the inner's claimed range, the arrangement section 3.5's ordering rests on
 				customElements.define(
 					"light-ordering-inner",
 					component(
@@ -462,7 +462,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 			},
 		);
 
-		test.skipIf(!ships)("R23 — the child updating leaves the parent's nodes alone", async () => {
+		test.skipIf(!ships)("R23: the child updating leaves the parent's nodes alone", async () => {
 			customElements.define(
 				"light-ownership-inner",
 				component(
@@ -501,7 +501,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 		});
 
 		test.skipIf(!ships)(
-			"R20 — a forwarded slot value keeps its owner, so a later parent update re-passes it",
+			"R20: a forwarded slot value keeps its owner, so a later parent update re-passes it",
 			async () => {
 				customElements.define(
 					"light-forward-inner",
@@ -550,7 +550,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 		);
 
 		test.skipIf(!ships)(
-			"R24 — a child that declares no slot for what it was passed costs the parent its server render",
+			"R24: a child that declares no slot for what it was passed costs the parent its server render",
 			async () => {
 				customElements.define(
 					"light-discard-inner",
@@ -596,7 +596,7 @@ describe.skipIf("happyDOM" in globalThis)("light-DOM hydration", () => {
 		);
 	});
 
-	describe("R27 — what a server fatal ships, read from the client side", () => {
+	describe("R27: what a server fatal ships, read from the client side", () => {
 		test.skipIf(!lightModeShips)(
 			"markup carrying component-error repaints rather than hydrating, and the flag is cleared",
 			async () => {

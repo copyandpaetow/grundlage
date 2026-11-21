@@ -132,7 +132,7 @@ describe("load() where nothing was prerendered", () => {
 		await sleep();
 		expect(errorsSeen).toEqual([
 			expect.stringContaining(
-				"a component yielded a generator object. To run a helper generator, add the star: `yield* helper(…)`",
+				"a component yielded a generator object. To run a helper generator, add the star: `yield* helper(...)`",
 			),
 		]);
 	});
@@ -150,7 +150,7 @@ describe("load() where nothing was prerendered", () => {
 		await sleep();
 		expect(errorsSeen).toEqual([
 			expect.stringContaining(
-				"To run a helper generator, add the star: `yield* helper(…)`. To declare an update generator, yield the function without calling it: `yield view`",
+				"To run a helper generator, add the star: `yield* helper(...)`. To declare an update generator, yield the function without calling it: `yield view`",
 			),
 		]);
 	});

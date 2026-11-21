@@ -5,9 +5,9 @@
     _findings/parsing-and-bindings.md lives. End-to-end frame cost belongs to
     pages/perf, the same split the parser bench draws.
 
-    What a pass does NOT include: style recalc and layout. A pass never yields,
+    What a pass does not include: style recalc and layout. A pass never yields,
     so the browser marks the tree dirty and recalculates after the pass has been
-    timed. That is deliberate — a commit-path change moves JS work, and mixing
+    timed. That is on purpose: a commit-path change moves JS work, and mixing
     recalc in would bury it under a cost the change cannot touch. It also means
     these numbers are not frame budget; they are the JS half of it.
 */
@@ -98,7 +98,6 @@ const mountShape = (generated: GeneratedShape, container: Element): MountedShape
 	const parsed = getParsedTemplate(templateStrings);
 	const fragment = cloneTemplateFragment(parsed, container);
 	const instance = mountInstance(fragment, valuesByParity[0], parsed, {
-		needsStyleSheetRefreshOnMove: false,
 		isTemplateContent: false,
 	});
 	container.replaceChildren(fragment);
@@ -187,12 +186,20 @@ const observableStateMovesOnSecondParity = (mounted: MountedShape): boolean => {
 	return readObservableState(mounted) !== before;
 };
 
-const findVoidReasons = (
-	shape: CommitShape,
-	stateMoved: boolean,
-	bestPassMs: number,
-	medianPassMs: number,
-): Array<VoidReason> => {
+//best and median are both milliseconds and easy to swap, so they go by name
+interface Readings {
+	shape: CommitShape;
+	stateMoved: boolean;
+	bestPassMs: number;
+	medianPassMs: number;
+}
+
+const findVoidReasons = ({
+	shape,
+	stateMoved,
+	bestPassMs,
+	medianPassMs,
+}: Readings): Array<VoidReason> => {
 	const reasons: Array<VoidReason> = [];
 	if (shape.churn === "changing" && !stateMoved) reasons.push("gate did not open");
 	if (shape.churn === "unchanged" && stateMoved) reasons.push("gate did not close");
@@ -207,7 +214,7 @@ const findVoidReasons = (
 
 /*
     The first shape of a fresh page runs in a cold tier and reads 50% high, and
-    the shapes after it read progressively less high — a gradient across the
+    the shapes after it read progressively less high, a gradient across the
     table that looks like a result. One cheap pass over every lane puts the
     whole commit path in the same tier before anything is timed.
 */
@@ -227,7 +234,7 @@ export const warmUpCommitShapes = (
     Heap growth over a pass, not retained size: none of what a commit allocates
     survives it. A minor collection landing inside the pass hides some of it, so
     this reads as a lower bound and a negative reading is no reading at all.
-    The comparison it exists for is staticName against composedName — equal
+    The comparison it exists for is staticName against composedName: equal
     growth there means composing a hole-free name allocates nothing.
 */
 const measureHeapGrowthBytesPerCommit = (mounted: MountedShape, updates: number): number | null => {
@@ -279,7 +286,7 @@ export const runCommitShape = async (
 		medianPassMs,
 		nanosecondsPerCommit: (bestPassMs * 1_000_000) / commitsPerPass,
 		heapGrowthBytesPerCommit,
-		voidReasons: findVoidReasons(shape, stateMoved, bestPassMs, medianPassMs),
+		voidReasons: findVoidReasons({ shape, stateMoved, bestPassMs, medianPassMs }),
 	};
 };
 

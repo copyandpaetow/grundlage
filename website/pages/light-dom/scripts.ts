@@ -4,7 +4,7 @@ import "../../src/components/navbar";
 
 type Outcome = "holds" | "broken" | "pending";
 
-//captured by the inline script in index.html, at parse position — the only moment the server's
+//captured by the inline script in index.html, at parse position, the only moment the server's
 //markup is still untouched, since a module script is deferred past it
 type BeforeUpgrade = {
 	hostMarkup: string;
@@ -143,27 +143,27 @@ const checks: Array<Check> = [
 		run: ({ root }) => root.querySelector("nav")?.childElementCount === 0,
 	},
 	{
-		rule: "§1.1",
+		rule: "section 1.1",
 		claim:
 			"the server ships <code>light-dom</code>, so page CSS applies before any script runs",
 		needs: ["a server render"],
 		run: ({ beforeUpgrade }) => beforeUpgrade.hostMarkup.includes("light-dom"),
 	},
 	{
-		rule: "§3.5",
+		rule: "section 3.5",
 		claim: "the server stamped a slot scope on the host",
 		needs: ["slots", "a server render"],
 		run: ({ beforeUpgrade }) => beforeUpgrade.hostMarkup.includes("slot-scope="),
 	},
 	{
-		rule: "§3.5",
+		rule: "section 3.5",
 		claim: "the server bracketed each adopted range with a marker pair",
 		needs: ["slots", "a server render"],
 		run: ({ beforeUpgrade }) =>
 			beforeUpgrade.renderMarkup.includes("<!--^.^ slot-"),
 	},
 	{
-		rule: "§3.5",
+		rule: "section 3.5",
 		claim: "the claim is a read: hydration wrote nothing into the tree",
 		needs: ["a server render"],
 		run: ({ beforeUpgrade }) => beforeUpgrade.mutations.length === 0,
@@ -215,7 +215,7 @@ const stateText = (): string => {
 	//the shadow card is the one that can be prerendered today, so it answers for the page
 	const hydrationNote = wasRenderedOnTheServer(window.beforeUpgrade["shadow-card"])
 		? ""
-		: " This page was not prerendered, so the hydration rows read ⏳ — the [prerender] warning in the terminal says why.";
+		: " This page was not prerendered, so the hydration rows read ⏳, and the [prerender] warning in the terminal says why.";
 	if (!lightModeShips)
 		{return `Light mode does not ship yet, so the light column reads ⏳. The shadow column is the problem it exists to solve: page CSS, label[for] and :target cannot cross the boundary, and no component can work around that.${hydrationNote}`;}
 	return `Light mode ships${slotsShip ? "" : ", slots do not"}. The light column is the specification, and every ✅ is a rule that holds.${hydrationNote}`;

@@ -45,13 +45,12 @@ const findNearestAncestorRunner = (host: Element): OrderedRunner | null => {
 	return null;
 };
 
-//the whole chain and not just the nearest runner above it: a component nothing dirtied sits
+//the whole chain and not only the nearest runner above it: a component nothing dirtied sits
 //between two that were
 export const hasQueuedAncestorRunner = (
 	runner: OrderedRunner,
 	queuedRunners: ReadonlySet<OrderedRunner>,
 ): boolean => {
-	const hostRegistrationCount = registry.hostRegistrationCount;
 	//ends at the outermost component: forgetAncestorRunner drops a moved host's edge, so no chain
 	//closes into a ring
 	for (
@@ -63,9 +62,9 @@ export const hasQueuedAncestorRunner = (
 		//memo key rather than a heuristic, and a settled app walks the tree zero times
 		const mustSearchAgain =
 			current.ancestorRunner === null &&
-			current.lastAncestorSearchAtHostRegistrationCount !== hostRegistrationCount;
+			current.lastAncestorSearchAtHostRegistrationCount !== registry.hostRegistrationCount;
 		if (mustSearchAgain) {
-			current.lastAncestorSearchAtHostRegistrationCount = hostRegistrationCount;
+			current.lastAncestorSearchAtHostRegistrationCount = registry.hostRegistrationCount;
 			current.ancestorRunner = findNearestAncestorRunner(current.root.host);
 		}
 		const ancestor = current.ancestorRunner;

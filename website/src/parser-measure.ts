@@ -7,7 +7,7 @@
     What this can resolve, from an A/A run of the equivalent playwright rig
     against identical code: best-of-N work to about 8%, retained heap to about
     23%. Cold and compile cost are not resolvable in a warm page at all and are
-    deliberately absent — they are read from the parser's gzip size instead.
+    absent on purpose: they are read from the parser's gzip size instead.
 */
 
 import { getParsedTemplate } from "../../lib/src/parser/html";
@@ -91,11 +91,18 @@ const verifyCacheStaysCold = (corpus: GeneratedCorpus): boolean => {
 	return getParsedTemplate(first) !== getParsedTemplate(second);
 };
 
-const findVoidReasons = (
-	cacheStayedCold: boolean,
-	bestPassMs: number,
-	medianPassMs: number,
-): Array<VoidReason> => {
+//best and median are both milliseconds and easy to swap, so they go by name
+interface Readings {
+	cacheStayedCold: boolean;
+	bestPassMs: number;
+	medianPassMs: number;
+}
+
+const findVoidReasons = ({
+	cacheStayedCold,
+	bestPassMs,
+	medianPassMs,
+}: Readings): Array<VoidReason> => {
 	const reasons: Array<VoidReason> = [];
 	if (!cacheStayedCold) reasons.push("cache hit");
 	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO) {
@@ -109,7 +116,7 @@ const findVoidReasons = (
     answered out of the same coarse bucket twice, which is what a run without
     --enable-precise-memory-info looks like; negative means a collection landed
     between the two readings. Either way there is no reading, and that is a lost
-    column rather than a lost row — the pass times are untouched by it.
+    column rather than a lost row: the pass times are untouched by it.
 */
 const rejectImpossibleReading = (retainedBytesPerTemplate: number | null): number | null =>
 	retainedBytesPerTemplate !== null && retainedBytesPerTemplate > 0
@@ -191,7 +198,7 @@ export const runShape = async (
 		nanosecondsPerHole: holesPerPass === 0 ? null : (bestPassMs * 1_000_000) / holesPerPass,
 		microsecondsPerTemplate: (bestPassMs * 1000) / templatesPerPass,
 		retainedBytesPerTemplate: rejectImpossibleReading(retainedBytesPerTemplate),
-		voidReasons: findVoidReasons(cacheStayedCold, bestPassMs, medianPassMs),
+		voidReasons: findVoidReasons({ cacheStayedCold, bestPassMs, medianPassMs }),
 	};
 };
 

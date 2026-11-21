@@ -45,7 +45,7 @@ const rampStyles = html`
 			background: #a8763f;
 		}
 
-		/* The cap passes through the block centre, so its corners land on the
+		/* The cap passes through the block center, so its corners land on the
 		   front-bottom and back-top edges with no push along its normal. */
 		.slope {
 			width: var(--unit);

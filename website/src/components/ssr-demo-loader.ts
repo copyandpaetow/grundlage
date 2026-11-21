@@ -15,7 +15,7 @@ customElements.define(
 		const user = yield* load(() => fetchUser(delayMilliseconds));
 		const elapsedMilliseconds = Math.round(performance.now() - startedAt);
 
-		//closure state — click runs through update(), which re-runs the view; smallest possible "hydration wired things up" signal
+		//closure state: a click runs through update(), which re-runs the view; smallest possible "hydration wired things up" signal
 		let clickCount = 0;
 
 		//single renderable yield: the SSR pass stops here with data resolved; on the client the view's first run leaves the server text in place

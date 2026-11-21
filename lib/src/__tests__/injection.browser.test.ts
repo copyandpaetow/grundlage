@@ -191,20 +191,20 @@ describe("a hole inside an element whose text is written unescaped throws", () =
 		["<plaintext>", () => html`<div><plaintext>${"text"}</plaintext></div>`],
 	])("a hole in %s throws", async (tag, paint) => {
 		const { errors } = await paintAll([paint]);
-		expect(String(errors[0])).toContain(`grundlage: ${tag} expects no \${…}`);
+		expect(String(errors[0])).toContain(`grundlage: ${tag} expects no \${...}`);
 	});
 
 	test("an attribute hole on an element inside <noscript> throws", async () => {
 		const { errors } = await paintAll([
 			() => html`<noscript><a href=${"/fallback"}>Open the fallback</a></noscript>`,
 		]);
-		expect(String(errors[0])).toContain("grundlage: <noscript> expects no ${…}");
+		expect(String(errors[0])).toContain("grundlage: <noscript> expects no ${...}");
 	});
 
 	test("a hole in an uppercase <NOSCRIPT> throws", async () => {
 		//prettier-ignore
 		const { errors } = await paintAll([() => html`<NOSCRIPT>${"</NOSCRIPT><img src=x onerror=alert(1)>"}</NOSCRIPT>`]);
-		expect(String(errors[0])).toContain("grundlage: <NOSCRIPT> expects no ${…}");
+		expect(String(errors[0])).toContain("grundlage: <NOSCRIPT> expects no ${...}");
 	});
 
 	test("a hole in a later <noscript> throws", async () => {
@@ -213,12 +213,12 @@ describe("a hole inside an element whose text is written unescaped throws", () =
 				html`<noscript>static</noscript>
 					<noscript>${"</noscript><img src=x onerror=alert(1)>"}</noscript>`,
 		]);
-		expect(String(errors[0])).toContain("grundlage: <noscript> expects no ${…}");
+		expect(String(errors[0])).toContain("grundlage: <noscript> expects no ${...}");
 	});
 
 	test("a hole after a tag that only starts like </noscript throws", async () => {
 		const { errors } = await paintAll([() => html`<noscript>a</noscripts>${"b"}</noscript>`]);
-		expect(String(errors[0])).toContain("grundlage: <noscript> expects no ${…}");
+		expect(String(errors[0])).toContain("grundlage: <noscript> expects no ${...}");
 	});
 
 	test("a hole after an uppercase </NOSCRIPT> paints", async () => {
@@ -235,7 +235,7 @@ describe("a hole inside an element whose text is written unescaped throws", () =
 					<p>${"after"}</p>
 				</div>`,
 		]);
-		expect(String(errors[0])).toContain("grundlage: <plaintext> expects no ${…}");
+		expect(String(errors[0])).toContain("grundlage: <plaintext> expects no ${...}");
 	});
 
 	test("static content in <noscript> and holes around it paint", async () => {
@@ -279,7 +279,7 @@ describe("data shaped like a template paints no markup", () => {
 	])("a template copied through %s throws", async (_, forge) => {
 		const { errors, shadowRoot } = await paintAll([() => html`<p>${forge()}</p>`]);
 		expect(String(errors[0])).toMatch(
-			/grundlage: expected a string, number, bigint or boolean, got object/,
+			/grundlage: a hole expects a string, number, bigint or boolean, not object/,
 		);
 		expect(shadowRoot.querySelector("img")).toBeNull();
 	});

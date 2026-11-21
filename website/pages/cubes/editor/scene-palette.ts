@@ -48,6 +48,7 @@ const isInspectorField = (value: string | undefined): value is InspectorField =>
 customElements.define(
 	"scene-palette",
 	component(
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 		function* (componentProps) {
 			const { host } = componentProps;
 
@@ -82,6 +83,7 @@ customElements.define(
 				sendCommand({ kind: "edit-field", field, axis: Number(axis), value });
 			};
 
+			//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 			yield function* view({ inspector, cameraMode }) {
 				const sized = inspector?.sized ?? false;
 				//Empty while nothing is selected: the panel is hidden then, so it is never seen.

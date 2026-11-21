@@ -15,8 +15,8 @@
 			<p>
 				Measures the wall time of <code>element.update()</code> for push, pop, shift, unshift, and
 				splice operations. Everything except <code>replace middle</code> should resolve entirely
-				through the head/tail peel plus the pure-insertion or pure-removal branch — bookkeeping-free
-				paths. <code>replace middle</code> keeps both ends stable but forces the bounded
+				through the head/tail peel plus the pure-insertion or pure-removal branch, both free of
+				bookkeeping paths. <code>replace middle</code> keeps both ends stable but forces the bounded
 				general-middle reconciler to run, so it's the comparison point for peel vs. full diff at a
 				fixed middle size.
 			</p>

@@ -1,4 +1,4 @@
-//must come first — parser/html.ts runs `document.createElement` at module load
+//must come first: parser/html.ts runs `document.createElement` at module load
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -6,7 +6,7 @@ import { html, component } from "../../src/index";
 import * as grundlage from "../../src/index";
 import { ComponentConstructor, ComponentOptions, Schema, PropDefinition } from "../../src/types";
 
-//What the server *emits* for a light-DOM render (light-dom/PLAN.md §1.1, §3.5, §4.6, §5.1).
+//What the server *emits* for a light-DOM render (light-dom/PLAN.md section 1.1, section 3.5, section 4.6, section 5.1).
 //The claim that reads this output back is the browser half, in light-dom-ssr.browser.test.ts.
 //Nested components never paint under happy-dom, so every case here is one host deep.
 
@@ -84,7 +84,7 @@ describe("the server signal is on in this process", () => {
 	});
 });
 
-describe("§1.1 — the light-dom stamp", () => {
+describe("section 1.1: the light-dom stamp", () => {
 	test.skipIf(!lightModeShips)(
 		"a light host paints into its own child list and attaches no shadow root",
 		async () => {
@@ -131,7 +131,7 @@ describe("§1.1 — the light-dom stamp", () => {
 	});
 });
 
-describe("§3.5 — the marker pair the server writes at adoption", () => {
+describe("section 3.5: the marker pair the server writes at adoption", () => {
 	test.skipIf(!ships)(
 		"a host that adopted something stamps a scope and brackets each adopted range",
 		async () => {
@@ -275,7 +275,7 @@ describe("§3.5 — the marker pair the server writes at adoption", () => {
 	);
 });
 
-describe("§4.6 / R24 — the discard warning, on the side that knows", () => {
+describe("section 4.6, R24: the discard warning, on the side that knows", () => {
 	const cardWithNoNoteSlot = () =>
 		component(
 			function* (props) {
@@ -354,7 +354,7 @@ describe("§4.6 / R24 — the discard warning, on the side that knows", () => {
 	);
 });
 
-describe("§5.1 / R27 — what a server fatal leaves behind", () => {
+describe("section 5.1, R27: what a server fatal leaves behind", () => {
 	test.skipIf(!lightModeShips)(
 		"a fatal before the first paint flags the element and writes nothing into it",
 		async () => {
@@ -391,7 +391,7 @@ describe("§5.1 / R27 — what a server fatal leaves behind", () => {
 			consoleError.mockRestore();
 
 			//the server stops at the first paint, so this fatal is unreachable on the
-			//server — the assertion is that the paint is what ships either way
+			//server: the assertion is that the paint is what ships either way
 			expect(element.querySelector("article")?.textContent).toBe("painted");
 		},
 	);

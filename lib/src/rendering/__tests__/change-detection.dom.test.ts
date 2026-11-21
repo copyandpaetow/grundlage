@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { component, html } from "../../index";
+import { component, html, prop } from "../../index";
 
 type UpdatableElement = HTMLElement & { update(): Promise<void> };
 
@@ -80,4 +80,117 @@ test("a hole holding a Symbol.for symbol paints and keeps painting", async () =>
 	await element.update();
 	expect(element.shadowRoot!.textContent).toBe("status");
 	element.remove();
+});
+
+//a prop.property takes null as a value and undefined as absence, so its binding's gate tells them apart
+test("a prop.property binding that moves from undefined to null hands the child null", async () => {
+	const childTag = `change-detection-${tagCount++}`;
+	customElements.define(
+		childTag,
+		component(
+			function* () {
+				yield function* view({ label }) {
+					yield html`<p>${String(label)}</p>`;
+				};
+			},
+			{ props: { label: prop.property<string | null>("fallback") } },
+		),
+	);
+	let label: string | null | undefined = undefined;
+	const parent = mountComponent(function* () {
+		yield function* view() {
+			yield html`<${childTag} label=${label}></${childTag}>`;
+		};
+	});
+	const childText = () => parent.shadowRoot!.querySelector(childTag)!.shadowRoot!.textContent;
+	await parent.update();
+	expect(childText()).toBe("fallback");
+	label = null;
+	await parent.update();
+	expect(childText()).toBe("null");
+	parent.remove();
+});
+
+test("a prop.property binding that moves from null to undefined hands the child its fallback", async () => {
+	const childTag = `change-detection-${tagCount++}`;
+	customElements.define(
+		childTag,
+		component(
+			function* () {
+				yield function* view({ label }) {
+					yield html`<p>${String(label)}</p>`;
+				};
+			},
+			{ props: { label: prop.property<string | null>("fallback") } },
+		),
+	);
+	let label: string | null | undefined = null;
+	const parent = mountComponent(function* () {
+		yield function* view() {
+			yield html`<${childTag} label=${label}></${childTag}>`;
+		};
+	});
+	const childText = () => parent.shadowRoot!.querySelector(childTag)!.shadowRoot!.textContent;
+	await parent.update();
+	expect(childText()).toBe("null");
+	label = undefined;
+	await parent.update();
+	expect(childText()).toBe("fallback");
+	parent.remove();
+});
+
+test("data with its own constructor key, changed in place, reaches the child", async () => {
+	const childTag = `change-detection-${tagCount++}`;
+	customElements.define(
+		childTag,
+		component(
+			function* () {
+				yield function* view({ data }) {
+					yield html`<p>${JSON.stringify(data)}</p>`;
+				};
+			},
+			{ props: { data: prop.property<unknown>() } },
+		),
+	);
+	const car = JSON.parse('{"constructor":"ferrari","points":1}') as { points: number };
+	const parent = mountComponent(function* () {
+		yield function* view() {
+			yield html`<${childTag} data=${car}></${childTag}>`;
+		};
+	});
+	const childText = () => parent.shadowRoot!.querySelector(childTag)!.shadowRoot!.textContent;
+	await parent.update();
+	expect(childText()).toBe('{"constructor":"ferrari","points":1}');
+	car.points = 2;
+	await parent.update();
+	expect(childText()).toBe('{"constructor":"ferrari","points":2}');
+	parent.remove();
+});
+
+test("an Object.groupBy result, changed in place, reaches the child", async () => {
+	const childTag = `change-detection-${tagCount++}`;
+	customElements.define(
+		childTag,
+		component(
+			function* () {
+				yield function* view({ data }) {
+					yield html`<p>${JSON.stringify(data)}</p>`;
+				};
+			},
+			{ props: { data: prop.property<unknown>() } },
+		),
+	);
+	const groups = Object.groupBy([{ team: "red", points: 1 }], (row) => row.team);
+	const parent = mountComponent(function* () {
+		yield function* view() {
+			yield html`<${childTag} data=${groups}></${childTag}>`;
+		};
+	});
+	const childText = () => parent.shadowRoot!.querySelector(childTag)!.shadowRoot!.textContent;
+	await parent.update();
+	expect(childText()).toBe('{"red":[{"team":"red","points":1}]}');
+	groups.red!.push({ team: "red", points: 2 });
+	await parent.update();
+	expect(childText()).toBe('{"red":[{"team":"red","points":1},{"team":"red","points":2}]}');
+	parent.remove();
 });

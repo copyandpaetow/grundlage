@@ -7,7 +7,7 @@
     otherwise read half price.
 
     Churn is the second axis, and it is the one the gate hash makes interesting.
-    combinedPartsHash runs BEFORE the gate compares it, so an unchanged binding still
+    combinedPartsHash runs before the gate compares it, so an unchanged binding still
     walks its nameParts and still pays for the walk. "unchanged" is that tax with
     nothing else in it; "changing" adds compose plus the write.
 */
@@ -81,7 +81,7 @@ interface LaneMarkup {
 	valuesFor: (parity: number) => Array<unknown>;
 }
 
-/** One element per binding: open, close, open, close, … with the holes between. */
+/** One element per binding: open, close, open, close, ... with the holes between. */
 const repeatOneElementPerBinding = (
 	openAt: (index: number) => string,
 	close: string,

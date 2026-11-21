@@ -91,7 +91,7 @@ const leaves: Array<unknown> = [
 	Object.create(null),
 	new Date(0),
 ];
-const propertyNames = ["a", "b", "ab", "", "0", "1", "length"];
+const propertyNames = ["a", "b", "ab", "", "0", "1", "length", "constructor"];
 const templates = [
 	(values: Array<unknown>) => html`<p>${values[0]}</p>`,
 	(values: Array<unknown>) => html`<p>${values[0]}</p>`,
@@ -105,7 +105,8 @@ const DEPTH_LIMIT = 5;
 
 const createContainer = (kind: number) => {
 	if (kind <= 2) return [];
-	if (kind <= 4) return {};
+	if (kind === 3) return {};
+	if (kind === 4) return Object.create(null) as object;
 	if (kind === 5) return new Map();
 	return new Set();
 };
@@ -143,10 +144,10 @@ const identityOf = (value: unknown) => {
 	return identities.get(value);
 };
 
-//the library's rules: null and undefined alike, -0 is 0, a template by its strings, plain containers
-//by content in iteration order, a back-reference by its distance, everything else by identity
+//the library's rules: -0 is 0, a template by its strings, plain containers by content in
+//iteration order, a back-reference by its distance, everything else by identity
 const serialize = (value: unknown, containersOnPath: Array<object>): string => {
-	if (value === null || value === undefined) return "nullish";
+	if (value === null) return "null";
 	switch (typeof value) {
 		case "number":
 			return Object.is(value, -0) ? "number 0" : `number ${value}`;
@@ -159,8 +160,9 @@ const serialize = (value: unknown, containersOnPath: Array<object>): string => {
 		case "function":
 		case "symbol":
 			return `reference ${identityOf(value)}`;
-		case "object":
 		case "undefined":
+			return "undefined";
+		case "object":
 			break;
 	}
 	const object = value;
@@ -168,7 +170,8 @@ const serialize = (value: unknown, containersOnPath: Array<object>): string => {
 	if (isTemplate(object)) {
 		return `template ${JSON.stringify([...object.__templateStrings])}(${object.values.map(serializeChild).join(",")})`;
 	}
-	const isWalked = [Array, Object, Map, Set].includes(object.constructor as never);
+	const walkedPrototypes = [Array.prototype, Object.prototype, null, Map.prototype, Set.prototype];
+	const isWalked = walkedPrototypes.includes(Object.getPrototypeOf(object));
 	if (!isWalked) return `reference ${identityOf(value)}`;
 	const ancestorIndex = containersOnPath.lastIndexOf(object);
 	if (ancestorIndex !== -1) return `ancestor ${containersOnPath.length - ancestorIndex}`;

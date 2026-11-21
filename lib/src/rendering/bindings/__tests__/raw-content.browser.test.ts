@@ -293,7 +293,7 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("handles numeric values in raw content", async () => {
+	test("a number in a <style> hole paints as its digits", async () => {
 		const tag = uniqueTag();
 		let size = 16;
 
@@ -510,7 +510,7 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const template = element.shadowRoot!.querySelector<HTMLTemplateElement>("template")!;
-		//markup must live in .content — the render/serialize surface — not in
+		//markup must live in .content, which renders and serializes, not in
 		//light children, which never render and never serialize
 		expect(template.childNodes.length).toBe(0);
 		expect(normalizeWhitespace(template.content.querySelector("p")!.textContent)).toBe("first");
@@ -530,7 +530,7 @@ describe("raw content updates", () => {
 
 	test("swapping away from a styled template leaves nothing behind", async () => {
 		//values live in the instance's own <style>, which leaves with the instance's
-		//nodes — a structural swap must strand nothing on the host
+		//nodes: a structural swap must strand nothing on the host
 		const tag = uniqueTag();
 		let showStyled = true;
 		const color = "red";

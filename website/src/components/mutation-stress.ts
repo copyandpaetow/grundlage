@@ -4,7 +4,7 @@ import { html, component } from "../../../lib/src";
     Measures list mutations that should hit the head/tail peel fast paths:
     push, pop, shift, unshift, and splice operations that keep both ends
     stable. "replace middle" is the one case that falls through to the
-    general-middle reconciler — useful as the upper bound next to the
+    general-middle reconciler, useful as the upper bound next to the
     peel-friendly operations below it.
 
     Pair with reorder-stress: that one measures the O(n) reorder walk,
@@ -31,6 +31,7 @@ const buildRows = (count: number): Array<Row> => {
 
 customElements.define(
 	"mutation-stress",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		let itemCount = Number(element.getAttribute("items") ?? 1000);
 		let rows: Array<Row> = buildRows(itemCount);
@@ -124,6 +125,7 @@ customElements.define(
 
 		const formatMs = (value: number) => value.toFixed(3);
 
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 		yield function* view() {
 			yield html`
 				<style>
@@ -220,36 +222,36 @@ customElements.define(
 
 				<menu>
 					<button
-						onclick="${() => runOperation("push ×50", (target) => pushMany(target, 50))}"
+						onclick="${() => runOperation("push 50", (target) => pushMany(target, 50))}"
 					>
-						push ×50
+						push 50
 					</button>
 					<button
-						onclick="${() => runOperation("pop ×50", (target) => popMany(target, 50))}"
+						onclick="${() => runOperation("pop 50", (target) => popMany(target, 50))}"
 					>
-						pop ×50
+						pop 50
 					</button>
 					<button
-						onclick="${() => runOperation("unshift ×50", (target) => unshiftMany(target, 50))}"
+						onclick="${() => runOperation("unshift 50", (target) => unshiftMany(target, 50))}"
 					>
-						unshift ×50
+						unshift 50
 					</button>
 					<button
-						onclick="${() => runOperation("shift ×50", (target) => shiftMany(target, 50))}"
+						onclick="${() => runOperation("shift 50", (target) => shiftMany(target, 50))}"
 					>
-						shift ×50
-					</button>
-					<button
-						onclick="${() =>
-							runOperation("replace middle ×10", (target) => replaceMiddleRange(target, 10))}"
-					>
-						replace middle ×10
+						shift 50
 					</button>
 					<button
 						onclick="${() =>
-							runOperation("replace middle ×100", (target) => replaceMiddleRange(target, 100))}"
+							runOperation("replace middle 10", (target) => replaceMiddleRange(target, 10))}"
 					>
-						replace middle ×100
+						replace middle 10
+					</button>
+					<button
+						onclick="${() =>
+							runOperation("replace middle 100", (target) => replaceMiddleRange(target, 100))}"
+					>
+						replace middle 100
 					</button>
 				</menu>
 
@@ -289,7 +291,7 @@ customElements.define(
 					${rows.map(
 						(row) =>
 							html`<li data-key=${row.identifier}>
-								#${row.identifier} → ${row.value}
+								#${row.identifier}: ${row.value}
 							</li>`,
 					)}
 				</ul>

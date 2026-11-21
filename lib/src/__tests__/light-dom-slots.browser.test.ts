@@ -4,9 +4,9 @@ import * as grundlage from "../index";
 import { DECLARED_PROP_NAMES } from "../rendering/constants";
 import { BaseComponent, ComponentOptions, ComponentProps, Schema, PropDefinition } from "../types";
 
-//The slot half of the light-DOM spec (light-dom/RULES.md R8—R22). Slots are a schema entry, so
+//The slot half of the light-DOM spec (light-dom/RULES.md R8 to R22). Slots are a schema entry, so
 //most of these rules hold in both modes; the mode only decides what happens to a child no entry
-//claims. Gated on the exports existing, so the suite turns itself on when §3 lands.
+//claims. Gated on the exports existing, so the suite turns itself on when section 3 lands.
 
 //neither export exists yet; typed as the schema entry each one will be, so these suites typecheck
 //against the target API instead of around it
@@ -59,7 +59,7 @@ const silenced = <T>(run: () => T): [T, Array<unknown>] => {
 	return [result, calls];
 };
 
-describe("R8—R9 — a slot is a prop", () => {
+describe("R8 to R9: a slot is a prop", () => {
 	test.skipIf(!slotsShip)(
 		"a slot key is absent from observedAttributes and present in the declared prop names",
 		() => {
@@ -125,7 +125,7 @@ describe("R8—R9 — a slot is a prop", () => {
 	});
 
 	test.skipIf(!slotsShip)(
-		"R9 — a slot name is matched verbatim, and a mismatch leaves the child in place",
+		"R9: a slot name is matched verbatim, and a mismatch leaves the child in place",
 		async () => {
 			const tag = define(
 				function* (props) {
@@ -168,9 +168,9 @@ describe("R8—R9 — a slot is a prop", () => {
 	});
 });
 
-describe("R13—R15 — adoption", () => {
+describe("R13 to R15: adoption", () => {
 	test.skipIf(!slotsShip)(
-		"R13 — declaring a slot drains the children before the body runs",
+		"R13: declaring a slot drains the children before the body runs",
 		async () => {
 			let childCountDuringBody = -1;
 			const tag = define(
@@ -190,7 +190,7 @@ describe("R13—R15 — adoption", () => {
 		},
 	);
 
-	test.skipIf(!slotsShip)("R15 — the node is the page's own, moved and not rewritten", async () => {
+	test.skipIf(!slotsShip)("R15: the node is the page's own, moved and not rewritten", async () => {
 		const tag = define(
 			function* (props) {
 				yield function* () {
@@ -210,7 +210,7 @@ describe("R13—R15 — adoption", () => {
 	});
 
 	test.skipIf(!slotsShip)(
-		"R14 — light mode destroys an unmatched child and warns; shadow mode leaves it",
+		"R14: light mode destroys an unmatched child and warns; shadow mode leaves it",
 		async () => {
 			const componentBody = function* (props: ComponentProps) {
 				yield function* () {
@@ -251,9 +251,9 @@ describe("R13—R15 — adoption", () => {
 	);
 });
 
-describe("R10—R12 — the value", () => {
+describe("R10 to R12: the value", () => {
 	test.skipIf(!slotsShip)(
-		"R10 — a bare node and a fragment both normalize to an array at assignment",
+		"R10: a bare node and a fragment both normalize to an array at assignment",
 		async () => {
 			const tag = define(
 				function* (props) {
@@ -280,7 +280,7 @@ describe("R10—R12 — the value", () => {
 	);
 
 	test.skipIf(!ships)(
-		"R11 — a Template is copied into both holes, a live node is moved into the first",
+		"R11: a Template is copied into both holes, a live node is moved into the first",
 		async () => {
 			const tag = define(
 				function* (props) {
@@ -309,7 +309,7 @@ describe("R10—R12 — the value", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R12 — the stored array is frozen, so a push throws instead of showing up one paint late",
+		"R12: the stored array is frozen, so a push throws instead of showing up one paint late",
 		async () => {
 			const tag = define(
 				function* (props) {
@@ -328,7 +328,7 @@ describe("R10—R12 — the value", () => {
 		},
 	);
 
-	test.skipIf(!slotsShip)("R12 — re-committing the same value is zero DOM writes", async () => {
+	test.skipIf(!slotsShip)("R12: re-committing the same value is zero DOM writes", async () => {
 		const tag = define(
 			function* (props) {
 				yield function* () {
@@ -351,9 +351,9 @@ describe("R10—R12 — the value", () => {
 	});
 });
 
-describe("R16—R20 — fallbacks and ownership", () => {
+describe("R16 to R20: fallbacks and ownership", () => {
 	test.skipIf(!slotsShip)(
-		"R16 — absence writes the fallback; an empty array is a value that paints nothing",
+		"R16: absence writes the fallback; an empty array is a value that paints nothing",
 		async () => {
 			const tag = define(
 				function* (props) {
@@ -377,7 +377,7 @@ describe("R16—R20 — fallbacks and ownership", () => {
 		},
 	);
 
-	test.skipIf(!slotsShip)("R16 — an array-of-nodes fallback is refused at define time", () => {
+	test.skipIf(!slotsShip)("R16: an array-of-nodes fallback is refused at define time", () => {
 		expect(() =>
 			define(
 				function* () {
@@ -390,7 +390,7 @@ describe("R16—R20 — fallbacks and ownership", () => {
 		).toThrow();
 	});
 
-	test.skipIf(!slotsShip)("R17 — a declared fallback means the store is never absent", async () => {
+	test.skipIf(!slotsShip)("R17: a declared fallback means the store is never absent", async () => {
 		const withFallback = define(
 			function* (props) {
 				yield function* () {
@@ -421,7 +421,7 @@ describe("R16—R20 — fallbacks and ownership", () => {
 	});
 
 	test.skipIf(!slotsShip)(
-		"R18 — a property assignment beats authored markup, and warns",
+		"R18: a property assignment beats authored markup, and warns",
 		async () => {
 			const tag = define(
 				function* (props) {
@@ -446,7 +446,7 @@ describe("R16—R20 — fallbacks and ownership", () => {
 	);
 
 	test.skipIf(!ships)(
-		"R19 — live nodes are painted into the first hole only, and the second warns rather than falling back",
+		"R19: live nodes are painted into the first hole only, and the second warns rather than falling back",
 		async () => {
 			const tag = define(
 				function* (props) {
@@ -470,7 +470,7 @@ describe("R16—R20 — fallbacks and ownership", () => {
 	);
 
 	test.skipIf(!ships)(
-		"R20 — a value passed down stays the outer component's across an update",
+		"R20: a value passed down stays the outer component's across an update",
 		async () => {
 			customElements.define(
 				"slot-r20-child",
@@ -507,9 +507,9 @@ describe("R16—R20 — fallbacks and ownership", () => {
 	);
 });
 
-describe("R21—R22 — <slot> and late children", () => {
+describe("R21 to R22: <slot> and late children", () => {
 	test.skipIf(!slotsShip)(
-		"R21 — any <slot> in a light template is fatal, and names the declaration to write",
+		"R21: any <slot> in a light template is fatal, and names the declaration to write",
 		async () => {
 			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 			const host = withChildren(
@@ -530,7 +530,7 @@ describe("R21—R22 — <slot> and late children", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R21 — a <slot> colliding with a declared name is fatal in shadow mode too",
+		"R21: a <slot> colliding with a declared name is fatal in shadow mode too",
 		async () => {
 			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 			const host = withChildren(
@@ -552,7 +552,7 @@ describe("R21—R22 — <slot> and late children", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R21 — a <slot> for an undeclared name is the platform's, and renders",
+		"R21: a <slot> for an undeclared name is the platform's, and renders",
 		async () => {
 			const host = withChildren(
 				define(
@@ -573,7 +573,7 @@ describe("R21—R22 — <slot> and late children", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R22 — a child appended after mount is routed by its slot attribute, a frame late, and warns",
+		"R22: a child appended after mount is routed by its slot attribute, a frame late, and warns",
 		async () => {
 			const tag = define(
 				function* (props) {
@@ -597,7 +597,7 @@ describe("R21—R22 — <slot> and late children", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R22 — insertBefore against an adopted reference node is broken by adoption",
+		"R22: insertBefore against an adopted reference node is broken by adoption",
 		async () => {
 			const tag = define(
 				function* (props) {

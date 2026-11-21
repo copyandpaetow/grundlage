@@ -1,4 +1,4 @@
-//must come first — parser/html.ts runs `document.createElement` at module load
+//must come first: parser/html.ts runs `document.createElement` at module load
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -157,7 +157,7 @@ describe("SSR: server stops at the first paint", () => {
 	});
 
 	test("async work before the first yield resolves, then the first yield paints", async () => {
-		//the first template depends on the await — SSR can't skip it
+		//the first template depends on the await, so SSR can't skip it
 		const tag = uniqueTag();
 		let postYieldRan = false;
 
@@ -193,7 +193,7 @@ describe("SSR: server stops at the first paint", () => {
 		element.setAttribute("data-label", "updated");
 		await flushMicrotasks();
 
-		//no observer on the server → setAttribute can't trigger update()
+		//no observer on the server, so setAttribute can't trigger update()
 		expect(runCount).toBe(1);
 		expect(element.shadowRoot!.textContent).toContain("none");
 	});
@@ -269,7 +269,7 @@ describe("SSR: server stops at the first paint", () => {
 
 		expect(element.getAttribute("data-value")).toBe("after");
 		expect(runCount).toBe(1);
-		//shadow still reflects the first-yield evaluation — update never re-ran
+		//shadow still reflects the first-yield evaluation: update never re-ran
 		expect(element.shadowRoot!.textContent).toContain("missing");
 	});
 
@@ -342,7 +342,7 @@ describe("SSR: server stops at the first paint", () => {
 		track(await mount(tag, Component));
 
 		expect(finallyRan).toBe(true);
-		//cancelGenerator discards the .return() result — intentional on the server
+		//cancelGenerator discards the .return() result, on purpose on the server
 		expect(cleanupReturnInvoked).toBe(false);
 	});
 
@@ -623,7 +623,7 @@ describe("SSR: a nested <template>", () => {
 describe("SSR: an attribute write after the server paint schedules nothing", () => {
 	test("attributeChangedCallback fires on the server and reaches no update", async () => {
 		//isServer() is `typeof window === "undefined"`, so there is a real DOM here and aCC does
-		//fire — what makes dropping the old `!wasMountedOnServer` observer guard safe is that
+		//fire. What makes dropping the old `!wasMountedOnServer` observer guard safe is that
 		//stopRunner() runs immediately after the server's first paint
 		const tag = uniqueTag();
 		let runCount = 0;

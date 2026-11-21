@@ -84,7 +84,7 @@ const characterReferenceDecoderFor =
 		}
 		throw new Error(
 			libraryMessage(
-				`"${reference}" in a <${tagName}> that has a \${…} is not decoded. Write the character itself, or "&amp;" for a literal "&".`,
+				`"${reference}" in a <${tagName}> that has a \${...} is not decoded. Write the character itself, or "&amp;" for a literal "&".`,
 			),
 		);
 	};

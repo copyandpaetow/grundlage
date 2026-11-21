@@ -36,6 +36,7 @@ const RESOLUTION_PERCENT = 8;
 
 customElements.define(
 	"parser-bench",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		const passes = Number(element.getAttribute("passes") ?? 40);
 		let isRunning = false;
@@ -70,7 +71,7 @@ customElements.define(
 				results.push(result);
 				console.log(
 					`shape ${index + 1}/${corpora.length} ${result.name} ${result.nanosecondsPerCharacter.toFixed(2)} ns/char${
-						result.voidReasons.length === 0 ? "" : ` — VOID: ${result.voidReasons.join(", ")}`
+						result.voidReasons.length === 0 ? "" : ` (void: ${result.voidReasons.join(", ")})`
 					}`,
 				);
 			}
@@ -131,11 +132,12 @@ customElements.define(
 		};
 
 		const statusOf = () => {
-			if (isRunning) return html`running: ${activeShape ?? "…"}`;
+			if (isRunning) return html`running: ${activeShape ?? "..."}`;
 			if (baseline) return html`baseline captured ${baseline.capturedAt}`;
 			return html`no baseline saved`;
 		};
 
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 		yield function* view() {
 			yield html`
 				<style>

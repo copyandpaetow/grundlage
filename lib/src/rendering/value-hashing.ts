@@ -10,6 +10,7 @@ import {
 	SECOND_LANE_SEED,
 } from "../utils/hashing";
 import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
+import { isPlainObject } from "../utils/guards";
 import * as TAG from "./value-hashing-tag";
 
 const HASH_DEPTH_LIMIT = 64;
@@ -132,7 +133,7 @@ const walkValue = (value: unknown, depth: number): void => {
 			mixWordIntoLanes(walkLanes, (TAG.BOOLEAN << TAG_SHIFT) | (value ? 1 : 0));
 			return;
 		case "undefined":
-			mixWordIntoLanes(walkLanes, TAG.NULLISH << TAG_SHIFT);
+			mixWordIntoLanes(walkLanes, TAG.UNDEFINED << TAG_SHIFT);
 			return;
 		case "bigint": {
 			const digits = String(value);
@@ -147,7 +148,7 @@ const walkValue = (value: unknown, depth: number): void => {
 			return;
 		case "object":
 			if (value === null) {
-				mixWordIntoLanes(walkLanes, TAG.NULLISH << TAG_SHIFT);
+				mixWordIntoLanes(walkLanes, TAG.NULL << TAG_SHIFT);
 				return;
 			}
 			//oxlint-disable-next-line no-use-before-define -- mutual recursion
@@ -167,10 +168,11 @@ const walkTemplate = (value: TemplateValue, depth: number): void => {
 	for (let index = 0; index < value.values.length; index++) walkValue(value.values[index], depth);
 };
 
-//exact constructors: subclasses and null-prototype objects are hashed by reference
-const isPlainObject = (value: {}): value is Record<string, unknown> => value.constructor === Object;
-const isExactlyMap = (value: {}): value is Map<unknown, unknown> => value.constructor === Map;
-const isExactlySet = (value: {}): value is Set<unknown> => value.constructor === Set;
+//exact prototypes, like isPlainObject: a subclass is hashed by reference
+const isExactlyMap = (value: {}): value is Map<unknown, unknown> =>
+	Object.getPrototypeOf(value) === Map.prototype;
+const isExactlySet = (value: {}): value is Set<unknown> =>
+	Object.getPrototypeOf(value) === Set.prototype;
 
 const walkContainerContents = (container: {}, childDepth: number): void => {
 	if (Array.isArray(container)) {
@@ -217,8 +219,8 @@ const walkObject = (value: object, depth: number): void => {
 	}
 	const isWalkedContainer =
 		Array.isArray(value) || isPlainObject(value) || isExactlyMap(value) || isExactlySet(value);
-	//walking class instances, Date, typed arrays and null-prototype objects costs every paint for
-	//values that are rarely mutated in place; an in-place change to one of them is not noticed
+	//class instances, Date and typed arrays keep state the walk cannot see (private fields, built-in
+	//state), and an element's getters lead into the whole document, so they compare by reference
 	if (!isWalkedContainer) {
 		mixReferenceIntoWalk(referenceId(value));
 		return;

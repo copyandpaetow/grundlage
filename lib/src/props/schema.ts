@@ -68,18 +68,17 @@ const ensureFallbackIsUsable = (
 	definition: PropDefinition<unknown, "fallback">,
 	resolveWithoutFallback: Resolve<unknown>,
 ): void => {
-	const fallback = definition.fallback;
-	if (fallback === undefined) {
+	if (definition.fallback === undefined) {
 		throw new TypeError(
 			libraryMessage(
 				`the fallback for prop "${propName}" is undefined, which is no fallback. Drop it to make the prop required, or wrap the prop in prop.optional().`,
 			),
 		);
 	}
-	let copy = fallback;
-	if (isCopiedPerElement(fallback)) {
+	let copy = definition.fallback;
+	if (isCopiedPerElement(definition.fallback)) {
 		try {
-			copy = structuredClone(fallback);
+			copy = structuredClone(definition.fallback);
 		} catch {
 			throw new TypeError(
 				libraryMessage(
@@ -87,7 +86,7 @@ const ensureFallbackIsUsable = (
 				),
 			);
 		}
-		if (Object.getPrototypeOf(copy) !== Object.getPrototypeOf(fallback)) {
+		if (Object.getPrototypeOf(copy) !== Object.getPrototypeOf(definition.fallback)) {
 			throw new TypeError(
 				libraryMessage(
 					`the fallback for prop "${propName}" cannot be copied for each element: structuredClone returns a plain object, so a class instance loses its prototype.`,
@@ -183,7 +182,7 @@ export const normalizeSchema = (schema: Schema): NormalizedSchema => {
 		if (typeof resolveWithoutFallback !== "function") {
 			throw new TypeError(
 				libraryMessage(
-					`prop "${propName}": prop.attribute() takes String, Number, BigInt, Boolean, or a function.`,
+					`prop.attribute() for prop "${propName}" expects a parser, not ${typeof resolveWithoutFallback}. Pass String, Number, BigInt, Boolean, prop.oneOf(...) or a function that parses what arrives.`,
 				),
 			);
 		}

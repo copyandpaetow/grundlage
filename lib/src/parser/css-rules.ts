@@ -42,7 +42,7 @@ const ensureNoNamespaceRule = (source: string, index: number) => {
 	if (name !== NAMESPACE_RULE) return;
 	throw new Error(
 		libraryMessage(
-			"a <style> with ${…} expects no @namespace: each rule with a ${…} gets a <style> of its own, and a namespace reaches only its own. Put the rules that use the namespace in a <style> without ${…}.",
+			"a <style> with ${...} expects no @namespace: each rule with a ${...} gets a <style> of its own, and a namespace reaches only its own. Put the rules that use the namespace in a <style> without ${...}.",
 		),
 	);
 };

@@ -73,11 +73,10 @@ const createContentState = (contentKind: ResolvedContentKind): ResolvedContentSt
 //an iterator is used up by reading it, so it is read once into the values; a hydration that falls
 //back to a commit reads the hole a second time
 const readContentValue = (liveBinding: ContentLiveBinding, values: Array<unknown>): unknown => {
-	const valueIndex = liveBinding.staticBinding.valueIndex;
-	const value = values[valueIndex];
+	const value = values[liveBinding.staticBinding.valueIndex];
 	if (!(value instanceof Iterator)) return value;
 	const items = Array.from(value);
-	values[valueIndex] = items;
+	values[liveBinding.staticBinding.valueIndex] = items;
 	return items;
 };
 

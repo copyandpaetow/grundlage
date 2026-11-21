@@ -3,8 +3,6 @@ import * as BINDING from "../parser/binding";
 import { getParsedTemplate } from "../parser/html";
 import { ParsedTemplate } from "../parser/types";
 import { TemplateValue } from "../template";
-//TODO: import cycle, content and content-list call back into this module. Candidate fix: they only
-//classify (branch) or match (list rows), and this module mounts and patches the nested instances
 import {
 	commitLiveBinding,
 	createContentLiveBinding,
@@ -21,16 +19,18 @@ import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 //liveBindings[0..hostBindingCount) are host bindings, owned by their element: only it knows a
 //write to its own declared prop is output, not a reason to update. A nested template has none
 export const patchInstance = (instance: Instance, values: Array<unknown>): void => {
-	const { liveBindings, parsed } = instance;
-	for (let index = parsed.hostBindingCount; index < liveBindings.length; index++) {
-		commitLiveBinding(instance, liveBindings[index], values);
+	for (
+		let index = instance.parsed.hostBindingCount;
+		index < instance.liveBindings.length;
+		index++
+	) {
+		commitLiveBinding(instance, instance.liveBindings[index], values);
 	}
 };
 
 export const commitHostBindings = (instance: Instance, values: Array<unknown>): void => {
-	const { liveBindings, parsed } = instance;
-	for (let index = 0; index < parsed.hostBindingCount; index++) {
-		commitLiveBinding(instance, liveBindings[index], values);
+	for (let index = 0; index < instance.parsed.hostBindingCount; index++) {
+		commitLiveBinding(instance, instance.liveBindings[index], values);
 	}
 };
 
@@ -58,21 +58,21 @@ const createInstance = (parsed: ParsedTemplate, treeState: TreeState): Instance 
 });
 
 const bindFreshClone = (walker: TreeWalker, instance: Instance, values: Array<unknown>): void => {
-	const { bindings, hostBindingCount } = instance.parsed;
-	const { liveBindings } = instance;
-
-	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length;) {
+	for (
+		let bindingIndex = instance.parsed.hostBindingCount;
+		bindingIndex < instance.parsed.bindings.length;
+	) {
 		const openMarker = nextOpenMarker(walker, null);
 		assertDuringDevelopment(
 			openMarker !== null,
 			"a fresh clone carries every marker the parse counted",
 		);
-		const staticBinding = bindings[bindingIndex];
+		const staticBinding = instance.parsed.bindings[bindingIndex];
 
 		if (staticBinding.type !== BINDING.CONTENT) {
 			const liveBinding = createMarkedLiveBinding(staticBinding, openMarker);
 			commitLiveBinding(instance, liveBinding, values);
-			liveBindings[bindingIndex++] = liveBinding;
+			instance.liveBindings[bindingIndex++] = liveBinding;
 			continue;
 		}
 
@@ -83,7 +83,7 @@ const bindFreshClone = (walker: TreeWalker, instance: Instance, values: Array<un
 		);
 		const liveBinding = createContentLiveBinding(staticBinding, openMarker, closeMarker);
 		commitContent(liveBinding, values, instance.treeState);
-		liveBindings[bindingIndex++] = liveBinding;
+		instance.liveBindings[bindingIndex++] = liveBinding;
 	}
 };
 
@@ -140,19 +140,15 @@ export const hydrateInstance = (
 	treeState: TreeState,
 ): Instance | typeof HYDRATION_MISMATCH => {
 	const instance = createInstance(parsed, treeState);
-	const { bindings, hostBindingCount } = parsed;
-	const { liveBindings } = instance;
-	const { values } = value;
-
-	for (let bindingIndex = hostBindingCount; bindingIndex < bindings.length;) {
+	for (let bindingIndex = parsed.hostBindingCount; bindingIndex < parsed.bindings.length;) {
 		const openMarker = nextOpenMarker(walker, rangeEnd);
 		if (openMarker === null) return HYDRATION_MISMATCH;
-		const staticBinding = bindings[bindingIndex];
+		const staticBinding = parsed.bindings[bindingIndex];
 
 		if (staticBinding.type !== BINDING.CONTENT) {
 			const liveBinding = createMarkedLiveBinding(staticBinding, openMarker);
-			hydrateLiveBinding(instance, liveBinding, values);
-			liveBindings[bindingIndex++] = liveBinding;
+			hydrateLiveBinding(instance, liveBinding, value.values);
+			instance.liveBindings[bindingIndex++] = liveBinding;
 			continue;
 		}
 
@@ -162,8 +158,8 @@ export const hydrateInstance = (
 		//the scan left the walker on the close marker, so a nested hydration would start past its
 		//own range; this puts it back inside, and the line after the call undoes the descent
 		walker.currentNode = openMarker;
-		hydrateContent(liveBinding, values, instance.treeState, walker);
-		liveBindings[bindingIndex++] = liveBinding;
+		hydrateContent(liveBinding, value.values, instance.treeState, walker);
+		instance.liveBindings[bindingIndex++] = liveBinding;
 		walker.currentNode = closeMarker;
 	}
 

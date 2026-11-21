@@ -13,9 +13,9 @@
 		<main>
 			<h1>parser bench</h1>
 			<p>
-				Calls <code>getParsedTemplate</code> directly — no mount, no render. A parse is a rounding
-				error inside a mount and would not be visible through the render path; end-to-end cost
-				belongs to <code>perf</code>.
+				Calls <code>getParsedTemplate</code> directly, with no mount and no render. A parse is a
+				rounding error inside a mount and would not be visible through the render path; end-to-end
+				cost belongs to <code>perf</code>.
 			</p>
 			<p>
 				This page measures <strong>per-character work only</strong>. Compile plus cold-tier
@@ -29,10 +29,10 @@
 				<em>hole density</em> fixes characters and varies holes, twice: once with the holes adjacent
 				inside one element, once with an element per hole. The first slope is the cost of a hole,
 				the second adds the cost of the element that carries it, and the intercept is the scanner
-				with no holes at all. <em>part length</em> fixes holes and varies characters — flat ns/char
-				means slicing is linear and cheap. <em>template count</em> splits the same 48k characters
-				across 1 to 256 templates, separating per-template fixed cost from per-character cost.
-				<em>hole kind</em> gives every binding lane equal holes and characters, including the
+				with no holes at all. <em>part length</em> fixes holes and varies characters, where a flat
+				ns/char means slicing is linear and cheap. <em>template count</em> splits the same 48k
+				characters across 1 to 256 templates, separating per-template fixed cost from per-character
+				cost. <em>hole kind</em> gives every binding lane equal holes and characters, including the
 				<code>&lt;style&gt;</code> path and the comment lane the site itself never exercises.
 				<em>control</em> is the 33 templates recorded off this site: a win on synthetic shapes that
 				loses here is tuning for a phantom.
@@ -40,7 +40,7 @@
 			<p>
 				Each pass parses fresh <code>TemplateStringsArray</code> wrappers so the parse cache always
 				misses. Repeats per pass are chosen so a pass clears the 100µs clock granularity, results
-				are best-of-N, and the numbers are normalized — absolute pass time is an artifact of the
+				are best-of-N, and the numbers are normalized: absolute pass time is an artifact of the
 				repeat count.
 			</p>
 			<p>
@@ -48,7 +48,7 @@
 				one means the timing is not evidence: <em>cache hit</em>, the parse never happened;
 				<em>unstable timing</em>, the median pass is more than twice the best, so one pass measured
 				something the others did not and best-of-N no longer holds. A void row is also dropped from
-				the ns/hole fits — a fit is where one bad row disappears into a headline number.
+				the ns/hole fits, since a fit is where one bad row disappears into a headline number.
 			</p>
 			<p>
 				A retained-heap reading of zero or less is impossible and is dropped to

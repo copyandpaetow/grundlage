@@ -45,8 +45,12 @@ const addBlock = (tag: string, attributes: Record<string, string> = {}): HTMLEle
 };
 
 //The handler reads only MouseEvent fields and composedPath
-const pointerDown = (target: EventTarget, meta = false): void => {
-	target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, metaKey: meta }));
+const pointerDown = (target: EventTarget): void => {
+	target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+};
+
+const pointerDownWithMeta = (target: EventTarget): void => {
+	target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, metaKey: true }));
 };
 
 const pressKey = (key: string): void => {
@@ -129,7 +133,7 @@ describe("multi-selection", () => {
 		const first = addBlock("scene-cube");
 		const second = addBlock("scene-cube");
 		pointerDown(first);
-		pointerDown(second, true);
+		pointerDownWithMeta(second);
 		await flush();
 
 		expect(world.querySelectorAll("scene-select")).toHaveLength(1);
@@ -144,8 +148,8 @@ describe("multi-selection", () => {
 		const c = addBlock("scene-cube");
 
 		pointerDown(b);
-		pointerDown(a, true);
-		pointerDown(c, true);
+		pointerDownWithMeta(a);
+		pointerDownWithMeta(c);
 		pointerDown(world); //deselect everything
 
 		const order = [...world.children].filter(
@@ -157,7 +161,7 @@ describe("multi-selection", () => {
 	test("meta-clicking the last selected block clears the selection", () => {
 		const block = addBlock("scene-cube");
 		pointerDown(block);
-		pointerDown(block, true); //fold the only block back out
+		pointerDownWithMeta(block); //fold the only block back out
 
 		expect(gizmo()).toBeNull();
 		expect(block.parentElement).toBe(world);
@@ -169,7 +173,7 @@ describe("delete", () => {
 		const a = addBlock("scene-cube");
 		const b = addBlock("scene-cube");
 		pointerDown(a);
-		pointerDown(b, true);
+		pointerDownWithMeta(b);
 		pressKey("Delete");
 
 		expect(gizmo()).toBeNull();
@@ -179,11 +183,11 @@ describe("delete", () => {
 });
 
 describe("grouping", () => {
-	test("'g' wraps ≥2 blocks in a group at their centroid with rebased children", () => {
+	test("'g' wraps two or more blocks in a group at their centroid with rebased children", () => {
 		const a = addBlock("scene-cube", { position: "2 0 0" });
 		const b = addBlock("scene-cube", { position: "4 0 0" });
 		pointerDown(a);
-		pointerDown(b, true);
+		pointerDownWithMeta(b);
 		pressKey("g");
 
 		const group = world.querySelector("scene-group");
@@ -205,7 +209,7 @@ describe("grouping", () => {
 		const a = addBlock("scene-cube", { position: "2 0 0" });
 		const b = addBlock("scene-cube", { position: "4 0 0" });
 		pointerDown(a);
-		pointerDown(b, true);
+		pointerDownWithMeta(b);
 		clickPaletteButton('[data-action="wrap-in-cube"]');
 
 		const wrapper = selectedBlocks()[0];
@@ -265,7 +269,7 @@ describe("ungrouping", () => {
 		pointerDown(group);
 		pressKey("u");
 
-		//The group's frame turns [2,0,0] through rotateY(90°) → [0, 0, -2]; the child's
+		//The group's frame turns [2,0,0] through rotateY(90°) into [0, 0, -2]; the child's
 		//rotation composes with the group's by matrix, here just the group's yaw.
 		expect(child.getAttribute("position")).toBe("0 0 -2");
 		expect(child.getAttribute("rotation")).toBe("0 90 0");
@@ -344,7 +348,7 @@ describe("nesting", () => {
 		const { group, first, second } = addTurnedGroup();
 		pointerDown(first);
 		pointerDown(first);
-		pointerDown(second, true);
+		pointerDownWithMeta(second);
 		pressKey("g");
 
 		const inner = selectedBlocks()[0];
@@ -369,7 +373,7 @@ describe("nesting", () => {
 		expect(selectedBlocks()).toEqual([inner]);
 		pressKey("u");
 
-		//Lifted through the inner group's 90° alone: [2,0,0] → [0,0,-2], still inside
+		//Lifted through the inner group's 90° alone: [2,0,0] becomes [0,0,-2], still inside
 		//the outer group, which keeps adding its own frame on screen.
 		expect(child.parentElement).toBe(group);
 		expect(child.getAttribute("position")).toBe("0 0 -2");

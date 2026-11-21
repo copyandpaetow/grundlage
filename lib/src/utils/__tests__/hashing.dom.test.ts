@@ -51,8 +51,8 @@ describe("stringHash", () => {
 });
 
 describe("hashValue - primitives", () => {
-	test("null and undefined share the nullish hash", () => {
-		expect(hashValue(null)).toBe(hashValue(undefined));
+	test("null and undefined hash apart", () => {
+		expect(hashValue(null)).not.toBe(hashValue(undefined));
 	});
 
 	test("true and false hash distinctly and stay out of the integers' value space", () => {
@@ -74,7 +74,7 @@ describe("hashValue - primitives", () => {
 	});
 
 	test("tightly-clustered floats produce distinct hashes", () => {
-		//the float hash has to separate neighbouring values an animation actually produces, widths like
+		//the float hash has to separate neighboring values an animation produces, widths like
 		//50.1, 50.100001, 50.2
 		const values = [50.1, 50.1000001, 50.10001, 50.2, 50.20000001];
 		const hashes = new Set(values.map(hashValue));
@@ -97,6 +97,7 @@ describe("hashValue - primitives", () => {
 	test("empty string is deterministic and distinct from nullish", () => {
 		expect(hashValue("")).toBe(hashValue(""));
 		expect(hashValue("")).not.toBe(hashValue(null));
+		expect(hashValue("")).not.toBe(hashValue(undefined));
 	});
 
 	test("bigints hash deterministically and distinctly", () => {
@@ -126,11 +127,11 @@ describe("hashValue - arrays", () => {
 		expect(hashValue([1, 2, 3])).not.toBe(hashValue([1, 2, 4]));
 	});
 
-	test("order matters", () => {
+	test("arrays with the same items in another order hash apart", () => {
 		expect(hashValue([1, 2, 3])).not.toBe(hashValue([3, 2, 1]));
 	});
 
-	test("empty array", () => {
+	test("two empty arrays hash alike", () => {
 		expect(hashValue([])).toBe(hashValue([]));
 	});
 
@@ -215,22 +216,28 @@ describe("hashValue - reference types", () => {
 	});
 });
 
+//`Object.groupBy` and some parsers make objects without a prototype, and they hold plain data
 describe("hashValue - prototype-less objects", () => {
-	//`Object.create(null)` has no `.constructor`, so the plain-object guard reads `undefined ===
-	//Object` and is false: these fall through to the reference branch. Pinned so a later switch to a
-	//tag check is a deliberate decision about prototype-less objects
-	test("hashes the same reference equally across calls", () => {
-		const plain = Object.create(null) as Record<string, unknown>;
-		plain.value = 1;
-		expect(hashValue(plain)).toBe(hashValue(plain));
+	test("two with the same entries hash alike", () => {
+		const first = Object.assign(Object.create(null) as object, { value: 1 });
+		const second = Object.assign(Object.create(null) as object, { value: 1 });
+		expect(hashValue(first)).toBe(hashValue(second));
 	});
 
-	test("two structurally identical prototype-less objects get distinct hashes", () => {
-		const first = Object.create(null) as Record<string, unknown>;
-		first.value = 1;
-		const second = Object.create(null) as Record<string, unknown>;
-		second.value = 1;
-		expect(hashValue(first)).not.toBe(hashValue(second));
+	test("one changed in place hashes differently", () => {
+		const plain = Object.assign(Object.create(null) as object, { value: 1 });
+		const before = hashValue(plain);
+		plain.value = 2;
+		expect(hashValue(plain)).not.toBe(before);
+	});
+});
+
+describe("hashValue - an own constructor key", () => {
+	test("data with one hashes by its entries", () => {
+		const first = JSON.parse('{"constructor":"ferrari","points":1}') as object;
+		const second = JSON.parse('{"constructor":"ferrari","points":1}') as object;
+		expect(hashValue(first)).toBe(hashValue(second));
+		expect(hashValue(first)).not.toBe(hashValue({ constructor: "ferrari", points: 2 }));
 	});
 });
 
@@ -320,7 +327,7 @@ describe("hashValue - shared and cyclic data", () => {
 		);
 	});
 
-	//under `F(accumulator) ^ value`, the same shape nested in itself added its part twice and cancelled
+	//under `F(accumulator) ^ value`, the same shape nested in itself added its part twice and canceled
 	test("a shape nested in itself still depends on what it holds", () => {
 		const chain = (name: string) => ({ name, next: { name, next: null } });
 		expect(hashValue(chain("a"))).not.toBe(hashValue(chain("b")));
@@ -369,7 +376,8 @@ describe("hashValue - shared and cyclic data", () => {
 describe("hashValue - where one value ends and the next begins", () => {
 	test("an integer never reads as the word that starts another kind of value", () => {
 		expect(hashValue((TAG.BOOLEAN << 24) | 1)).not.toBe(hashValue(true));
-		expect(hashValue(TAG.NULLISH << 24)).not.toBe(hashValue(null));
+		expect(hashValue(TAG.NULL << 24)).not.toBe(hashValue(null));
+		expect(hashValue(TAG.UNDEFINED << 24)).not.toBe(hashValue(undefined));
 	});
 
 	test("integers on both sides of the one-word range hash apart", () => {

@@ -73,7 +73,7 @@ describe("normalization", () => {
 		);
 	});
 
-	test('a name merely starting with "on" is fine — the binding checks props first', () => {
+	test('a name merely starting with "on" is fine, since the binding checks props first', () => {
 		expect(() =>
 			normalizeSchema({
 				once: prop.optional(prop.attribute(String)),
@@ -105,7 +105,7 @@ describe("normalization", () => {
 				//a JavaScript caller can pass anything
 				count: prop.attribute(5 as unknown as NumberConstructor),
 			}),
-		).toThrow(/takes String, Number, BigInt, Boolean, or a function/);
+		).toThrow(/expects a parser, not number/);
 	});
 
 	test.each([

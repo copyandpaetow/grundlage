@@ -392,7 +392,7 @@ describe("a Standard Schema", () => {
 			component(function* () {}, {
 				props: { habit: prop.property(asyncSchema, { id: "i" }) },
 			}),
-		).toThrow(/validated asynchronously/);
+		).toThrow(/validates synchronously/);
 	});
 });
 
@@ -454,17 +454,17 @@ describe("definition-time checks", () => {
 			"optional() of a prop with a fallback",
 			//a JavaScript caller gets past the types
 			() => prop.optional(prop.attribute(Number, 0) as never),
-			/takes a prop without a fallback/,
+			/expects a required prop/,
 		],
 		[
 			"unreflected() of a property prop",
 			() => prop.unreflected(prop.property<string>() as never),
-			/takes a prop.attribute/,
+			/expects a prop.attribute\(...\), not a prop.property/,
 		],
 		[
 			"unreflected() of an optional prop",
 			() => prop.unreflected(prop.optional(prop.attribute(Number)) as never),
-			/goes inside prop.optional/,
+			/not a prop.optional/,
 		],
 		[
 			"a fallback of undefined",

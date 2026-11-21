@@ -7,8 +7,8 @@ import { ParsedTemplate, Part, RawContentStaticBinding } from "../types";
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
 
-describe("html parser — raw content bindings", () => {
-	test("dynamic style content", () => {
+describe("html parser: raw content bindings", () => {
+	test("a hole in a <style> is one raw-content binding", () => {
 		const color = "red";
 		const parsed = parse` <style>
 			div {
@@ -20,7 +20,7 @@ describe("html parser — raw content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
-	test("dynamic content inside textarea", () => {
+	test("a hole in a <textarea> is one raw-content binding", () => {
 		const val = "user input";
 		const parsed = parse`<textarea>${val}</textarea>`;
 
@@ -28,7 +28,7 @@ describe("html parser — raw content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
-	test("dynamic content inside script", () => {
+	test("a hole in a <script> is one raw-content binding", () => {
 		const code = "console.log('hi')";
 		const parsed = parse` <script>
 			${code};
@@ -104,7 +104,7 @@ describe("html parser — raw content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.RAW_CONTENT);
 	});
 
-	test("style element with attributes and dynamic content", () => {
+	test("a <style> with static attributes and a hole is one raw-content binding", () => {
 		const css = "color: red";
 		const parsed = parse` <style type="text/css">
 			p {
@@ -162,7 +162,7 @@ const styleSheetsOf = (parsed: ParsedTemplate): Array<string | ReadonlyArray<Par
 		return (parsed.bindings[bindingIndex] as RawContentStaticBinding).parts;
 	});
 
-describe("html parser — a dynamic <style> is split at its top-level rules", () => {
+describe("html parser: a dynamic <style> is split at its top-level rules", () => {
 	test("a sheet of one rule stays one <style>", () => {
 		const parsed = parse`<style>.a { width: ${1}px; }</style>`;
 
@@ -262,7 +262,7 @@ describe("html parser — a dynamic <style> is split at its top-level rules", ()
 
 	test("an attribute hole on a dynamic <style> throws", () => {
 		expect(() => parse`<style media=${"print"}>.a { width: ${1}px; }</style>`).toThrow(
-			/<style> expects \$\{…\} in its attributes or in its content, not both/,
+			/<style> expects \$\{...\} in its attributes or in its content, not both/,
 		);
 	});
 

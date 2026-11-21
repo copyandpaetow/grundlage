@@ -6,34 +6,7 @@ const DIRECTIVE_PATTERN = /^\/|^\s*@/;
 //one space is a habit; two or more indent a line inside a comment block on purpose
 const HABIT_SPACE_PATTERN = /^ \S/;
 
-type CastNode = ESTree.TSAsExpression | ESTree.TSTypeAssertion | ESTree.TSNonNullExpression;
 type FunctionNode = ESTree.Function | ESTree.ArrowFunctionExpression;
-
-const isConstAssertion = (node: CastNode): boolean =>
-	node.type !== "TSNonNullExpression" &&
-	node.typeAnnotation.type === "TSTypeReference" &&
-	node.typeAnnotation.typeName.type === "Identifier" &&
-	node.typeAnnotation.typeName.name === "const";
-
-const castReason: Rule = {
-	create: (context) => {
-		const linesWithReason = new Set<number>();
-		for (const comment of context.sourceCode.getAllComments()) {
-			for (let line = comment.loc.start.line; line <= comment.loc.end.line + 1; line++) {
-				linesWithReason.add(line);
-			}
-		}
-		const check = (node: CastNode): void => {
-			if (isConstAssertion(node) || linesWithReason.has(node.loc.start.line)) return;
-			context.report({
-				node,
-				message:
-					"A cast needs its reason in a comment on its line or the line above. Try an asserts helper or a narrowing guard first.",
-			});
-		};
-		return { TSAsExpression: check, TSTypeAssertion: check, TSNonNullExpression: check };
-	},
-};
 
 const nameOf = (node: FunctionNode): string => {
 	if (node.id) return node.id.name;
@@ -60,7 +33,7 @@ const isBooleanParameter = (parameter: ESTree.ParamPattern): boolean => {
 const noBooleanParameter: Rule = {
 	create: (context) => {
 		const check = (node: FunctionNode): void => {
-			//a create… function fills a struct, where a boolean field is fine
+			//a create... function fills a struct, where a boolean field is fine
 			if (CREATE_PREFIX.test(nameOf(node))) return;
 			for (const parameter of node.params) {
 				if (!isBooleanParameter(parameter)) continue;
@@ -100,7 +73,6 @@ const commentFormat: Rule = {
 const plugin: Plugin = {
 	meta: { name: "guide" },
 	rules: {
-		"cast-reason": castReason,
 		"no-boolean-parameter": noBooleanParameter,
 		"comment-format": commentFormat,
 	},

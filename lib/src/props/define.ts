@@ -26,7 +26,7 @@ const resolverOfStandardSchema =
 		if (result instanceof Promise) {
 			throw new TypeError(
 				libraryMessage(
-					"a prop's schema validated asynchronously; a prop is written synchronously, so use a schema without async refinements.",
+					"a prop expects a schema that validates synchronously, not one that returned a promise. Use a schema without async refinements.",
 				),
 			);
 		}
@@ -91,7 +91,7 @@ export const optional = <Value, Kind extends PropKind>(
 	if (definition.presence !== PROP_PRESENCE.REQUIRED) {
 		throw new TypeError(
 			libraryMessage(
-				"prop.optional() takes a prop without a fallback, and only once: a fallback already makes the prop optional for the caller.",
+				"prop.optional() expects a required prop, not one with a fallback or one already optional. Drop the fallback or the second prop.optional().",
 			),
 		);
 	}
@@ -108,14 +108,14 @@ export const unreflected = <Value, PresenceKind extends "required" | "fallback">
 	if (definition.kind !== PROP_KIND.ATTRIBUTE) {
 		throw new TypeError(
 			libraryMessage(
-				"prop.unreflected() takes a prop.attribute(…): a prop.property() never reflects anyway.",
+				"prop.unreflected() expects a prop.attribute(...), not a prop.property(), which never reflects. Drop the prop.unreflected().",
 			),
 		);
 	}
 	if (definition.presence === PROP_PRESENCE.OPTIONAL) {
 		throw new TypeError(
 			libraryMessage(
-				"prop.unreflected() goes inside prop.optional(): write prop.optional(prop.unreflected(prop.attribute(…))).",
+				"prop.unreflected() expects a prop.attribute(...), not a prop.optional(...). Nest them the other way: prop.optional(prop.unreflected(prop.attribute(...))).",
 			),
 		);
 	}

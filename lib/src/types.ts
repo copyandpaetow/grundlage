@@ -153,7 +153,7 @@ export type ComponentOptions<DeclaredSchema extends Schema = Schema> = Partial<S
 };
 
 //a promise resumes the generator with its value, a template paints once, an update generator re-runs
-//on every update, and a load request is the one `yield* load(…)` makes
+//on every update, and a load request is the one `yield* load(...)` makes
 export type YieldableValue<DeclaredSchema extends Schema = Schema> =
 	| Template
 	| Promise<unknown>

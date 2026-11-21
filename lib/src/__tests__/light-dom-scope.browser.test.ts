@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 
-//the platform measurement PLAN §2 rests on, kept executable because R4's whole idiom follows from
+//the platform measurement PLAN section 2 rests on, kept executable because R4's whole idiom follows from
 //it: `:host` and `:scope` are disjoint, so the pair is a selector list rather than a rewrite.
-//happy-dom has no cascade to ask — it returns the authored string and ignores @scope entirely
+//happy-dom has no cascade to ask: it returns the authored string and ignores @scope entirely
 const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 
 const mount = (markup: string): HTMLElement => {
@@ -13,7 +13,7 @@ const mount = (markup: string): HTMLElement => {
 };
 
 //not inherited, so a descendant reading it means the selector matched that descendant and not
-//its ancestor — `color` cannot tell those apart
+//its ancestor; `color` cannot tell those apart
 const paintOf = (element: Element): string =>
 	getComputedStyle(element).getPropertyValue("background-color");
 

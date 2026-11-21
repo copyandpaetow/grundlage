@@ -463,13 +463,13 @@ describe("attribute updates", () => {
 		await sleep();
 
 		btn.click();
-		//should still be just one click since listener was removed
+		//still one click, since the listener was removed
 		expect(clicks).toEqual(["clicked"]);
 
 		cleanup(element);
 	});
 
-	test("handles multiple event listeners on same element", async () => {
+	test("two listener holes on one element each fire", async () => {
 		const tag = uniqueTag();
 		const events: string[] = [];
 
@@ -685,7 +685,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles empty string as attribute value", async () => {
+	test("an empty string sets the attribute to empty", async () => {
 		const tag = uniqueTag();
 		let value = "";
 
@@ -779,7 +779,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles expandable object with event listeners", async () => {
+	test("a spread object binds its listeners and attributes", async () => {
 		const tag = uniqueTag();
 		const clicks: string[] = [];
 		let attrs: Record<string, unknown> = {
@@ -819,7 +819,7 @@ describe("attribute updates", () => {
 
 	test("keeps an unchanged spread listener attached without re-binding it across paints", async () => {
 		//the spread diff skips entries whose value reference is unchanged, so a
-		//stable handler is neither detached nor reattached on update — only the
+		//stable handler is neither detached nor reattached on update; only the
 		//changed sibling attribute is touched
 		const tag = uniqueTag();
 		const handler = () => {};
@@ -850,7 +850,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles multiple dynamic attributes on same element", async () => {
+	test("two attribute holes on one element each write", async () => {
 		const tag = uniqueTag();
 		let cls = "red";
 		let title = "hello";
@@ -886,7 +886,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles partially dynamic attribute key", async () => {
+	test("a hole inside an attribute name composes the name", async () => {
 		const tag = uniqueTag();
 		let suffix = "color";
 
@@ -933,7 +933,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles partially dynamic key with dynamic value", async () => {
+	test("a hole in the name and a hole in the value both compose", async () => {
 		const tag = uniqueTag();
 		let suffix = "color";
 		let value = "red";
@@ -968,7 +968,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles fully dynamic key and fully dynamic value", async () => {
+	test("a hole as the whole name and the whole value writes that attribute", async () => {
 		const tag = uniqueTag();
 		let key = "title";
 		let value: string | null = "hello";
@@ -997,7 +997,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles multi-part dynamic key", async () => {
+	test("two holes in a name compose one attribute name", async () => {
 		const tag = uniqueTag();
 		let prefix = "data";
 		let suffix = "value";
@@ -1026,7 +1026,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles dynamic key with multi-part dynamic value", async () => {
+	test("a hole as the name with a composed value writes the composed text", async () => {
 		const tag = uniqueTag();
 		let key = "class";
 		let a = "foo";
@@ -1161,7 +1161,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles partially dynamic key with boolean removal", async () => {
+	test("a composed name whose single-hole value turns false removes the attribute", async () => {
 		const tag = uniqueTag();
 		let suffix = "hidden";
 		let value: string | false = "true";
@@ -1188,7 +1188,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("switches from array to object expandable attributes", async () => {
+	test("a spread that switches from an array to an object removes the array's names", async () => {
 		const tag = uniqueTag();
 		let attrs: string[] | Record<string, string> = ["disabled"];
 
@@ -1215,11 +1215,8 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("expandable expression resolves a primitive string to a boolean attribute", async () => {
-		//the expandable path has three shapes: array, plain object, and a single
-		//primitive string. The string case is the fallback in updateExpandable /
-		//removeExpandable. `<button ${name}>` where `name` is just `"disabled"` should
-		//land as a boolean attribute, and renaming should remove the old one
+	test("a spread of one string sets that boolean attribute, and a rename removes the old one", async () => {
+		//a spread takes an array, a plain object or one string; the string is the fallback shape
 		const tag = uniqueTag();
 		let attribute: string = "disabled";
 
@@ -1247,9 +1244,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("expandable switches from primitive string to array and back", async () => {
-		//the expandable dispatcher's string fallback hands off to the array branch and back without
-		//leaving the previous attributes behind
+	test("a spread switches from a string to an array and back without leaving names behind", async () => {
 		const tag = uniqueTag();
 		let attributes: string | Array<string> = "disabled";
 
@@ -1285,11 +1280,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("boolean attribute with multi-part dynamic key", async () => {
-		//updateAttribute's DYNAMIC_NAME_BOOLEAN shape (updateDynamicNameBoolean):
-		//the binding has multiple key fragments and no
-		//value half. `<div data-${suffix}>` with no `="..."`. The old key must
-		//be removed when the suffix flips
+	test("a composed name without a value moves to the new name", async () => {
 		const tag = uniqueTag();
 		let suffix = "ready";
 

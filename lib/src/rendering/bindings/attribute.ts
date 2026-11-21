@@ -37,9 +37,8 @@ export const commitAttribute = (
 	const hash = attributeGateHash(liveBinding.staticBinding, values);
 	if (hash === liveBinding.lastValueHash) return;
 	liveBinding.lastValueHash = hash;
-	const { nameParts, valueParts } = liveBinding.staticBinding;
 	const element = liveBinding.anchor;
-	const name = composeParts(nameParts, values);
+	const name = composeParts(liveBinding.staticBinding.nameParts, values);
 	const keepsSameName = name === liveBinding.lastComposedName;
 
 	const leavesStaleAttribute =
@@ -49,14 +48,14 @@ export const commitAttribute = (
 
 	//applyAttributeValue would read `onclick="alert(${x})"` as an event, find a string instead of a
 	//function, and write nothing
-	if (!isSingleHoleValue(valueParts)) {
-		const composedValue = composeParts(valueParts, values);
+	if (!isSingleHoleValue(liveBinding.staticBinding.valueParts)) {
+		const composedValue = composeParts(liveBinding.staticBinding.valueParts, values);
 		if (element.getAttribute(name) !== composedValue) {
 			applyAttributeText(element, name, composedValue);
 		}
 		return;
 	}
-	const value = values[valueParts[0]];
+	const value = values[liveBinding.staticBinding.valueParts[0]];
 	if (treeState.isTemplateContent) ensureKeptByCopies(element, name, value);
 	//the first write is markup and sets the default; every later one drives what is shown
 	const isLiveState = isLiveStatePropertyOf(element, name);

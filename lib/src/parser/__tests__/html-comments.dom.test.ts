@@ -10,7 +10,7 @@ const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 const literalParts = (binding: CommentStaticBinding) =>
 	binding.parts.filter((part): part is string => typeof part === "string");
 
-describe("html parser — comment bindings", () => {
+describe("html parser: comment bindings", () => {
 	test("the first dynamic comment is the list key, not a binding", () => {
 		const identifier = "row-1";
 		const parsed = parse`<!-- ${identifier} -->`;
@@ -19,7 +19,7 @@ describe("html parser — comment bindings", () => {
 		expect(parsed.keyValueParts).toEqual([" ", 0, " "]);
 	});
 
-	test("a key comment is stripped — it leaves no node in the markup", () => {
+	test("a key comment is stripped and leaves no node in the markup", () => {
 		const identifier = "row-1";
 		const parsed = parse`<!-- ${identifier} --><li>row</li>`;
 
@@ -52,7 +52,7 @@ describe("html parser — comment bindings", () => {
 		expect(parsed.bindings).toHaveLength(0);
 	});
 
-	test("comment between elements with bindings", () => {
+	test("a static comment between bound elements adds no binding", () => {
 		const a = "first";
 		const b = "second";
 		const parsed = parse`<p>${a}</p>
@@ -126,7 +126,7 @@ describe("html parser — comment bindings", () => {
 		expect(buildFragment(parsed.htmlWithMarkers).querySelector("fake-tag")).toBeNull();
 	});
 
-	test("a single-hole comment after the key stays a comment — whitespace does not flip its semantics", () => {
+	test("a single-hole comment after the key stays a comment, whitespace or not", () => {
 		const identifier = "row-1";
 		const msg = "x";
 		const tight = parse`<!--${identifier}--><!--${msg}-->`;

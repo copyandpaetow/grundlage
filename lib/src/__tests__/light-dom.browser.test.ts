@@ -6,7 +6,7 @@ import { BaseComponent, ComponentOptions, Schema } from "../types";
 //implemented yet, so every case is gated on a runtime detection rather than a skip flag: the
 //suite lights itself up, one stage at a time, and needs no edit to do it.
 
-//`mode: "light"` is not in ComponentOptions until §1 lands
+//`mode: "light"` is not in ComponentOptions until section 1 lands
 const light = <DeclaredSchema extends Schema>(
 	props?: DeclaredSchema,
 ): ComponentOptions<DeclaredSchema> =>
@@ -47,7 +47,7 @@ const detect = (probe: () => boolean): boolean => {
 
 //read off the class rather than an instance: constructing one today throws inside
 //`attachShadow({ mode: "light" })`, and a custom-element constructor's throw is reported to the
-//page whether or not the caller catches it — which would fail this file before a test ran
+//page whether or not the caller catches it, which would fail this file before a test ran
 const lightModeShips = detect(
 	() =>
 		Object.getOwnPropertyDescriptor(component(function* () {}, light()).prototype, "renderRoot") !==
@@ -72,7 +72,7 @@ const errorFlagShips = detect(() => {
 
 const ships = lightModeShips && isRealBrowser;
 
-describe("R1—R3 — the render root", () => {
+describe("R1 to R3: the render root", () => {
 	test.skipIf(!lightModeShips)(
 		"a light component paints into its own child list and attaches no shadow root",
 		() => {
@@ -89,7 +89,7 @@ describe("R1—R3 — the render root", () => {
 		},
 	);
 
-	test.skipIf(!lightModeShips)("R2 — the same component paints the same tree in both modes", () => {
+	test.skipIf(!lightModeShips)("R2: the same component paints the same tree in both modes", () => {
 		const componentBody = function* () {
 			yield function* () {
 				yield html`<article><b>x</b></article>`;
@@ -102,7 +102,7 @@ describe("R1—R3 — the render root", () => {
 	});
 
 	test.skipIf(!lightModeShips)(
-		"R3 — `light-dom` is valueless, written by the library, and survives an update",
+		"R3: `light-dom` is valueless, written by the library, and survives an update",
 		async () => {
 			let painted = 0;
 			const tag = define(function* () {
@@ -119,7 +119,7 @@ describe("R1—R3 — the render root", () => {
 		},
 	);
 
-	test.skipIf(!lightModeShips)("R3 — a shadow component is never stamped", () => {
+	test.skipIf(!lightModeShips)("R3: a shadow component is never stamped", () => {
 		const host = mount(
 			define(function* () {
 				yield function* () {
@@ -155,30 +155,27 @@ describe("R1—R3 — the render root", () => {
 	);
 });
 
-describe("R4—R7 — styles", () => {
-	test.skipIf(!ships)(
-		"R4 — one authored `:host, :scope` rule paints the host in both modes",
-		() => {
-			const componentBody = function* () {
-				yield function* () {
-					yield html`<style>
+describe("R4 to R7: styles", () => {
+	test.skipIf(!ships)("R4: one authored `:host, :scope` rule paints the host in both modes", () => {
+		const componentBody = function* () {
+			yield function* () {
+				yield html`<style>
 							:host,
 							:scope {
 								background: red;
 							}
 						</style>
 						<b>x</b>`;
-				};
 			};
-			const lightHost = mount(define(componentBody, light()));
-			const shadowHost = mount(define(componentBody));
+		};
+		const lightHost = mount(define(componentBody, light()));
+		const shadowHost = mount(define(componentBody));
 
-			expect(paintOf(lightHost)).toBe(RED);
-			expect(paintOf(shadowHost)).toBe(RED);
-		},
-	);
+		expect(paintOf(lightHost)).toBe(RED);
+		expect(paintOf(shadowHost)).toBe(RED);
+	});
 
-	test.skipIf(!ships)("R4 — the authored text is wrapped, never edited", () => {
+	test.skipIf(!ships)("R4: the authored text is wrapped, never edited", () => {
 		const host = mount(
 			define(function* () {
 				yield function* () {
@@ -197,7 +194,7 @@ describe("R4—R7 — styles", () => {
 		expect(sheetText).toContain("@scope");
 	});
 
-	test.skipIf(!ships)("R4 — descendant rules stay off the rest of the page", () => {
+	test.skipIf(!ships)("R4: descendant rules stay off the rest of the page", () => {
 		const outside = document.createElement("b");
 		document.body.append(outside);
 		mount(
@@ -218,7 +215,7 @@ describe("R4—R7 — styles", () => {
 	//a literal child tag, because a template's strings array is the parse-cache key: a tag
 	//interpolated per test would defeat it and a closing tag cannot hold a hole at all
 	test.skipIf(!ships)(
-		"R5 — a nested light child's host is styleable, its interior is not",
+		"R5: a nested light child's host is styleable, its interior is not",
 		async () => {
 			customElements.define(
 				"light-r5-child",
@@ -254,7 +251,7 @@ describe("R4—R7 — styles", () => {
 	);
 
 	test.skipIf(!lightModeShips)(
-		"R4 — a `:host` rule that cannot match warns once per component, not per instance",
+		"R4: a `:host` rule that cannot match warns once per component, not per instance",
 		() => {
 			const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
 			const tag = define(function* () {
@@ -277,7 +274,7 @@ describe("R4—R7 — styles", () => {
 		},
 	);
 
-	test.skipIf(!lightModeShips)("R4 — the warning reads selectors, not the sheet text", () => {
+	test.skipIf(!lightModeShips)("R4: the warning reads selectors, not the sheet text", () => {
 		const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		mount(
 			define(function* () {
@@ -298,7 +295,7 @@ describe("R4—R7 — styles", () => {
 	});
 
 	test.skipIf(!lightModeShips)(
-		"R4 — an unrelated `:scope` rule does not mask a dead `:host` rule",
+		"R4: an unrelated `:scope` rule does not mask a dead `:host` rule",
 		() => {
 			const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
 			mount(
@@ -324,7 +321,7 @@ describe("R4—R7 — styles", () => {
 	);
 
 	test.skipIf(!lightModeShips)(
-		"R4 — `::slotted()` warns, since adopted nodes are ordinary descendants",
+		"R4: `::slotted()` warns, since adopted nodes are ordinary descendants",
 		() => {
 			const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
 			mount(
@@ -347,7 +344,7 @@ describe("R4—R7 — styles", () => {
 	);
 
 	test.skipIf(!lightModeShips)(
-		"R7 — a `<style>` below the top level warns in light mode and not in shadow mode",
+		"R7: a `<style>` below the top level warns in light mode and not in shadow mode",
 		() => {
 			const componentBody = function* () {
 				yield function* () {
@@ -428,7 +425,7 @@ describe("the three things that fail today", () => {
 	});
 });
 
-describe("R25 — a render root is not a page surface", () => {
+describe("R25: a render root is not a page surface", () => {
 	test.skipIf(!lightModeShips)(
 		"a destroyed range repaints on the next update and warns once",
 		async () => {
@@ -480,7 +477,7 @@ describe("R25 — a render root is not a page surface", () => {
 	);
 });
 
-describe("R26 — a fatal reports the fact on the element", () => {
+describe("R26: a fatal reports the fact on the element", () => {
 	test.skipIf(!errorFlagShips)(
 		"the console holds the error object, the element holds a valueless flag",
 		() => {

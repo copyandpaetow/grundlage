@@ -25,8 +25,8 @@ import { COMMIT_SHAPES, defineProbeElements, PLAIN_CUSTOM_ELEMENT_NAME } from ".
     hole-free nameParts walk costs, and that is staticNameAttribute minus
     content on the unchanged rows: the gate hash is the only thing separating
     them. B4 asks what customElements.get costs, and no pair of lanes can answer
-    that — Blink runs its own slower attribute path once the anchor has a dash
-    in its name, and no cache here removes that — so the call is timed alone.
+    that: Blink runs its own slower attribute path once the anchor has a dash
+    in its name, and no cache here removes that, so the call is timed alone.
 
     A gap smaller than the noise of the rows it came from is not a small
     finding, it is no finding.
@@ -45,6 +45,7 @@ const REGISTRY_LOOKUPS = 2_000_000;
 
 customElements.define(
 	"render-bench",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		const passes = Number(element.getAttribute("passes") ?? 24);
 		let isRunning = false;
@@ -81,7 +82,7 @@ customElements.define(
 				results.push(result);
 				console.log(
 					`shape ${index + 1}/${COMMIT_SHAPES.length} ${result.name} ${result.nanosecondsPerCommit.toFixed(1)} ns/commit${
-						result.voidReasons.length === 0 ? "" : ` — VOID: ${result.voidReasons.join(", ")}`
+						result.voidReasons.length === 0 ? "" : ` (void: ${result.voidReasons.join(", ")})`
 					}`,
 				);
 			}
@@ -129,11 +130,12 @@ customElements.define(
 		};
 
 		const statusOf = () => {
-			if (isRunning) return html`running: ${activeShape ?? "…"}`;
+			if (isRunning) return html`running: ${activeShape ?? "..."}`;
 			if (baseline) return html`baseline captured ${baseline.capturedAt}`;
 			return html`no baseline saved`;
 		};
 
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 		yield function* view() {
 			yield html`
 				<style>
@@ -274,7 +276,7 @@ customElements.define(
 															ns/lookup
 														</div>
 														<div class="gap-label">
-															customElements.get — B4's ceiling, timed alone
+															customElements.get: B4's ceiling, timed alone
 														</div>
 													</div>
 												`
@@ -290,7 +292,7 @@ customElements.define(
 													ns/commit${gap.isBelowResolution ? " · under resolution" : ""}
 												</div>
 												<div class="gap-label">
-													${gap.name} — ${gap.question}
+													${gap.name}: ${gap.question}
 												</div>
 											</div>
 										`,

@@ -86,7 +86,7 @@ describe("engine terminal", () => {
 		expect(element.shadowRoot?.textContent).toContain("boom");
 
 		shouldThrow = false;
-		await element.update(); //must resolve (not hang) and must NOT run again
+		await element.update(); //must resolve (not hang) and must not run again
 		expect(element.shadowRoot?.textContent).toContain("boom");
 		element.remove();
 	});
@@ -892,7 +892,7 @@ describe("the refire enters the driver loop", () => {
 
 	test("a re-installed branch does not step the completed outer past its cleanup", async () => {
 		//an install steps the outer to hand its yield the host, but a refire installs from a
-		//position the outer has already left — stepping a returned generator there would replace
+		//position the outer has already left, and stepping a returned generator there would replace
 		//the cleanup it captured with the undefined of a second return
 		let cleanupCalls = 0;
 		let branchRuns = 0;
@@ -948,7 +948,7 @@ describe("the refire enters the driver loop", () => {
 
 	test("a refire past a suspended outer paints without stepping it", async () => {
 		//the other suspended shape: a record is set, so update() refires and the paint lands on a
-		//SUSPENDED outer — which must be left parked for its own promise to resume
+		//SUSPENDED outer, which must be left parked for its own promise to resume
 		let resolveGate: (value: string) => void = () => {};
 		const gate = new Promise<string>((resolve) => {
 			resolveGate = resolve;
@@ -1024,7 +1024,7 @@ describe("the refire enters the driver loop", () => {
 
 		await element.update();
 		expect(outerRuns).toBe(2);
-		expect(innerRuns).toBe(1); //the installed generator must NOT be restarted as well
+		expect(innerRuns).toBe(1); //the installed generator must not be restarted as well
 		expect(element.shadowRoot?.textContent).toContain("outer 2");
 		element.remove();
 	});

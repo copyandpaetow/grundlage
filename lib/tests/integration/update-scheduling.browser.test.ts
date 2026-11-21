@@ -3,7 +3,7 @@ import { html, component } from "../../src/index";
 
 //update() resolves once the DOM reflects this call, coalescing with any concurrent update, whether
 //the run waits on a promise or not. The two halves that matter: `await update()` waits for a
-//waiting run to actually paint, with no trailing `await sleep()` crutch, and an update that
+//waiting run to paint, with no trailing `await sleep()` crutch, and an update that
 //arrives while a run waits tears that run down and starts a fresh one.
 //
 //update() re-runs the update generator the body yielded last, never the body, which runs once
@@ -26,7 +26,7 @@ describe("update() scheduling contract", () => {
 		let count = 0;
 
 		//async work happens before the yield, so the DOM lands a macrotask later. the
-		//old machine resolved update() at the synchronous dispatch boundary — this would
+		//old machine resolved update() at the synchronous dispatch boundary, and this would
 		//then observe the stale count without a trailing sleep
 		const Counter = component(function* () {
 			yield function* () {
@@ -171,7 +171,7 @@ describe("update() scheduling contract", () => {
 	test("an update() during a run resolves after its waiting re-run painted, not before", async () => {
 		//the outer's COMPLETED resolves the pending promise, so it has to defer to a pass queued
 		//during this one. a synchronous reflush hides the difference (its microtask is already
-		//ahead of the resolve in the queue); an async one does not — resolving at COMPLETED would
+		//ahead of the resolve in the queue); an async one does not: resolving at COMPLETED would
 		//unblock the caller on the first run's DOM, 20ms before the second one paints
 		const tag = uniqueTag();
 		let runs = 0;

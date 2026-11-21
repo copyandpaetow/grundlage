@@ -30,7 +30,7 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 
 	test("removed list items become collectable after the list shrinks to empty", async () => {
 		//a long list, one WeakRef per item element, then the list shrinks to empty
-		//any item the reconciler retained — closure, expression slot, dirty bookkeeping — leaves its
+		//any item the reconciler retained (a closure, a binding, dirty bookkeeping) leaves its
 		//WeakRef resolving after gc()
 		const tag = uniqueTag();
 		let items = Array.from({ length: 50 }, (_, index) => `item-${index}`);
@@ -92,7 +92,7 @@ describe.runIf(typeof gc === "function")("memory leak smoke tests", () => {
 	});
 
 	test("repeated mount/unmount cycles do not retain prior instances", async () => {
-		//a global registry holding the host strongly — cache, observer registration, listener — leaks
+		//a global registry holding the host strongly (a cache, an observer, a listener) leaks
 		//one instance per cycle here
 		//the count stays small for speed; collecting only after the loop is what surfaces the leak
 		const tag = uniqueTag();

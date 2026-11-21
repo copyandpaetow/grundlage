@@ -38,20 +38,19 @@ const NO_DECLARED_PROP_NAMES: ReadonlySet<string> = new Set();
 const declaredPropNamesByLocalName = new Map<string, ReadonlySet<string>>();
 
 export const isDeclaredPropName = (element: Element, name: string): boolean => {
-	const localName = element.localName;
-	if (!localName.includes("-")) return false;
-	const cached = declaredPropNamesByLocalName.get(localName);
+	if (!element.localName.includes("-")) return false;
+	const cached = declaredPropNamesByLocalName.get(element.localName);
 	if (cached !== undefined) return cached.has(name);
 	//the registry types a definition as a bare constructor; a component class adds the static
 	//oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- the cast adds the static read below
-	const definition = customElements.get(localName) as
+	const definition = customElements.get(element.localName) as
 		| (CustomElementConstructor & {
 				[DECLARED_PROP_NAMES]?: ReadonlySet<string>;
 		  })
 		| undefined;
 	if (definition === undefined) return false;
 	const declaredPropNames = definition[DECLARED_PROP_NAMES] ?? NO_DECLARED_PROP_NAMES;
-	declaredPropNamesByLocalName.set(localName, declaredPropNames);
+	declaredPropNamesByLocalName.set(element.localName, declaredPropNames);
 	return declaredPropNames.has(name);
 };
 
@@ -75,7 +74,7 @@ const eventNameOf = (
 	if (lowercaseKey in element) return lowercaseKey.slice(MARKUP.EVENT_PREFIX.length);
 	if (typeof value === "function") {
 		warnDuringDevelopment(
-			`"${key}" looks like an event handler but "${lowercaseKey}" is not a property of <${element.localName}> — the function was assigned as a dead property and will never fire. Check the spelling, or use "on-${key.slice(MARKUP.EVENT_PREFIX.length).toLowerCase()}" to bind it as a custom event.`,
+			`"${key}" looks like an event handler, but <${element.localName}> has no "${lowercaseKey}" property, so the function was assigned as a property that never fires. Check the spelling, or use "on-${key.slice(MARKUP.EVENT_PREFIX.length).toLowerCase()}" to bind it as a custom event.`,
 		);
 	}
 	return NO_EVENT_NAME;
@@ -151,8 +150,8 @@ export const applyAttributeValue = (
 		case ATTRIBUTE_MODE.ABSENT:
 			clearPropertyValue(element, key);
 			element.removeAttribute(key);
-			//until the element is defined, a missing attribute reads as absence, which `[Boolean, true]`
-			//resolves to true; the own property carries the false across the upgrade
+			//until definition, a missing attribute reads as absence, which is true for
+			//`prop.attribute(Boolean, true)`; the own property carries the false across the upgrade
 			const mustCarryFalseAcrossUpgrade = value === false && isAwaitingDefinition(element);
 			if (mustCarryFalseAcrossUpgrade) (element as unknown as Record<string, unknown>)[key] = false;
 			break;

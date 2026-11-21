@@ -87,7 +87,9 @@ export const component = <DeclaredSchema extends Schema = {}>(
 	}
 	if (!isGeneratorFunction(componentGenerator)) {
 		throw new TypeError(
-			libraryMessage("component(fn) expects a generator function. Add the * after function."),
+			libraryMessage(
+				"component(fn) expects a generator function, not a plain or arrow one. Add the * after function.",
+			),
 		);
 	}
 	const mergedOptions = { ...defaultOptions, ...options };
@@ -248,7 +250,7 @@ export const component = <DeclaredSchema extends Schema = {}>(
 			if (this.#isReflecting) return;
 			if (oldValue === newValue) return;
 			if (attributeName === DEFER_HYDRATION_ATTRIBUTE) {
-				//upgrade replays a present attribute as null → "", which is the mark arriving; only its
+				//upgrade replays a present attribute as null, then "", which is the mark arriving; only its
 				//removal is the parent releasing this child
 				const parentHasSuppliedValues = newValue === null;
 				if (parentHasSuppliedValues) sendRunnerRequest(this.#runner, RUNNER_REQUEST.START);

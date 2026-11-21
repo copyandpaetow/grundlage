@@ -1,4 +1,4 @@
-//type-level fixture. It is never executed — `tsc --noEmit` is the assertion. A negative case is
+//type-level fixture. It is never executed: `tsc --noEmit` is the assertion. A negative case is
 //pinned with @ts-expect-error, which fails the build if the error goes away, unless it has to
 //survive an API that has not landed yet: those read assignability as a value instead
 import { awaited, component, html, prop } from "../index";
@@ -97,7 +97,7 @@ export const undeclaredKey = component(
 	{ props: { start: prop.attribute(Number, 0) } },
 );
 
-//options omitted: the object is just { host }
+//options omitted: the object is only { host }
 export const noOptions = component(function* (componentProps) {
 	const onlyHost: Exact<keyof typeof componentProps, "host"> = true;
 	void onlyHost;
@@ -132,7 +132,7 @@ export const notAFunction = component(
 	{ props: { variant: prop.optional(prop.attribute("solid")) } },
 );
 
-//a predicate is not a special shape — it is a function whose value happens to be a boolean
+//a predicate is not a special shape: it is a function whose value happens to be a boolean
 export const predicateEntry = component(
 	function* ({ variant }) {
 		const exact: Exact<typeof variant, boolean | undefined> = true;
@@ -165,7 +165,7 @@ export const fallbackIsTypeChecked = component(
 	},
 );
 
-//light mode's type-level half, R1. The union PLAN §1 specifies rejects `delegatesFocus` by
+//light mode's type-level half, R1. The union PLAN section 1 specifies rejects `delegatesFocus` by
 //excess-property checking, which fires on an object literal and is invisible to a conditional
 //type, so the shadow-only options are pinned as calls and only the mode itself is read as a value
 type LightModeShips = "light" extends ComponentOptions["mode"] ? true : false;
@@ -177,7 +177,7 @@ export const lightIsAMode: Exact<
 
 //satisfied today because `mode` is still `ShadowRootMode`, and after the split because the light
 //branch has no such key. An implementation that only widened `mode` leaves the directive unused,
-//which is itself an error — so the one shape this must never accept cannot slip through
+//which is itself an error, so the one shape this must never accept cannot slip through
 export const focusIsShadowOnly = component(
 	function* () {
 		yield function* () {

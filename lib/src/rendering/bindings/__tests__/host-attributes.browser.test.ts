@@ -172,7 +172,7 @@ describe("root-template host attributes", () => {
 		cleanup(element);
 	});
 
-	test("expandable object host binding fans out into individual attributes", async () => {
+	test("a spread object on the host sets one attribute per key", async () => {
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = { id: "first", role: "dialog" };
 		const MyElement = component(function* () {
@@ -439,7 +439,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		cleanup(element);
 	});
 
-	test("expandable object host binding from the previous template is cleared on swap", async () => {
+	test("a host spread object from the previous template is cleared on swap", async () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const firstAttrs: Record<string, string> = { id: "first", role: "dialog" };
@@ -495,7 +495,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		cleanup(element);
 	});
 
-	test("expandable array host binding (boolean attribute list) is cleared on swap", async () => {
+	test("a host spread array is cleared on swap", async () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const firstAttrs = ["hidden", "inert"];
@@ -526,7 +526,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		cleanup(element);
 	});
 
-	test("expandable string host binding is cleared on swap", async () => {
+	test("a host spread string is cleared on swap", async () => {
 		const tag = uniqueTag();
 		let showFirst = true;
 		const firstAttr = "hidden";
@@ -617,7 +617,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 		const dynamicId = "alpha";
 		const prefix = "data";
 		const suffix = "kind";
-		const expandable: Record<string, string> = {
+		const spread: Record<string, string> = {
 			role: "dialog",
 			tabindex: "0",
 		};
@@ -629,7 +629,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 							hidden
 							id="${dynamicId}"
 							${prefix}-${suffix}="x"
-							${expandable}
+							${spread}
 							><p>a</p></template
 						>`
 					: html`<template aria-label="other"><p>b</p></template>`;
@@ -662,7 +662,7 @@ describe("root-template host attribute cleanup across template swaps", () => {
 	});
 
 	test("three consecutive swaps each clean up the previous template's host attrs", async () => {
-		//a → B → C: each transition must clear the prior template's host attrs without leaking
+		//A, then B, then C: each transition must clear the prior template's host attrs without leaking
 		const tag = uniqueTag();
 		let stage = 0;
 		const MyElement = component(function* () {
@@ -776,7 +776,7 @@ describe("root-template host attribute updates within a single template (refacto
 		element.remove();
 	};
 
-	test("expandable object loses a key between paints and the dropped key is removed", async () => {
+	test("a spread object that loses a key removes that attribute", async () => {
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = { id: "first", role: "dialog" };
 		const MyElement = component(function* () {
@@ -801,7 +801,7 @@ describe("root-template host attribute updates within a single template (refacto
 		cleanup(element);
 	});
 
-	test("expandable array loses a name between paints and the dropped name is removed", async () => {
+	test("a spread array that loses a name removes that attribute", async () => {
 		const tag = uniqueTag();
 		let attrs: Array<string> = ["hidden", "inert"];
 		const MyElement = component(function* () {
@@ -876,7 +876,7 @@ describe("root-template host attribute updates within a single template (refacto
 		cleanup(element);
 	});
 
-	test("expandable object swapped to an empty object clears every previous key", async () => {
+	test("a spread object swapped for an empty one clears every previous key", async () => {
 		const tag = uniqueTag();
 		let attrs: Record<string, string> = {
 			id: "first",

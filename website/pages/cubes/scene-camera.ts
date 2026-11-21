@@ -43,6 +43,7 @@ const transparentShell = html`
 customElements.define(
 	"scene-camera",
 	component(
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 		function* ({ host: element }) {
 			const camera = {
 				x: 0,

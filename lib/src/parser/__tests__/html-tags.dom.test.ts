@@ -11,7 +11,7 @@ const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 const tagBindings = (bindings: ReadonlyArray<StaticBinding>) =>
 	bindings.filter((b) => b.type === BINDING.TAG);
 
-describe("html parser — tag bindings", () => {
+describe("html parser: tag bindings", () => {
 	test("dynamic tag name", () => {
 		const tag = "div";
 		const parsed = parse`
@@ -52,7 +52,7 @@ describe("html parser — tag bindings", () => {
 		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.TAG, BINDING.TAG, BINDING.CONTENT]);
 	});
 
-	test("dynamic self-closing tag", () => {
+	test("a self-closing dynamic tag is one tag binding", () => {
 		const tag = "br";
 		const parsed = parse` <${tag} />`;
 
@@ -60,7 +60,7 @@ describe("html parser — tag bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.TAG);
 	});
 
-	test("dynamic tag with dynamic attribute", () => {
+	test("a dynamic tag binds its attribute hole after the tag", () => {
 		const tag = "div";
 		const cls = "red";
 		const parsed = parse`
@@ -74,7 +74,7 @@ describe("html parser — tag bindings", () => {
 		expect(attrBinding.nameParts).toEqual(["class"]);
 	});
 
-	test("dynamic tag with multiple dynamic attributes", () => {
+	test("a dynamic tag binds each attribute hole after the tag", () => {
 		const tag = "div";
 		const cls = "red";
 		const id = "main";
@@ -87,7 +87,7 @@ describe("html parser — tag bindings", () => {
 		expect(parsed.bindings[2].type).toBe(BINDING.ATTRIBUTE);
 	});
 
-	test("dynamic tag with boolean (spread) attribute", () => {
+	test("a dynamic tag binds a spread after the tag", () => {
 		const tag = "button";
 		const attr = "disabled";
 		const parsed = parse`
@@ -109,7 +109,7 @@ describe("html parser — tag bindings", () => {
 		expect(tagBindings(parsed.bindings)).toHaveLength(2);
 	});
 
-	test("dynamic tag with no content", () => {
+	test("an empty dynamic tag is one tag binding", () => {
 		const tag = "div";
 		const parsed = parse`
 			<${tag}></${tag}>`;
@@ -129,17 +129,17 @@ describe("html parser — tag bindings", () => {
 
 	test("dynamic open paired with static close throws", () => {
 		const tag = "div";
-		expect(() => parse`<${tag}>content</div>`).toThrow(/asymmetric tag/);
+		expect(() => parse`<${tag}>content</div>`).toThrow(/expects a dynamic close/);
 	});
 
 	test("static open paired with dynamic close throws", () => {
 		const tag = "div";
-		expect(() => parse`<div>content</${tag}>`).toThrow(/asymmetric tag/);
+		expect(() => parse`<div>content</${tag}>`).toThrow(/to open it/);
 	});
 
 	test("dynamic close with no matching dynamic open throws", () => {
 		const tag = "div";
-		expect(() => parse`</${tag}>`).toThrow(/asymmetric tag/);
+		expect(() => parse`</${tag}>`).toThrow(/to open it/);
 	});
 
 	test("nested dynamic + static stays balanced", () => {
@@ -227,7 +227,7 @@ describe("html parser — tag bindings", () => {
 	});
 });
 
-describe("html parser — tag names are case-insensitive, as the HTML parser reads them", () => {
+describe("html parser: tag names are case-insensitive, as the HTML parser reads them", () => {
 	test("an uppercase <STYLE> reads its content as one raw-text binding", () => {
 		const parsed = parse`<STYLE>p { color: ${"red"}; }</STYLE>`;
 

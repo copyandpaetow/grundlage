@@ -29,7 +29,7 @@ const prerenderClosed = (tag: string, shadowInner: string): HTMLElement => {
 const closedRootOf = (host: HTMLElement): ShadowRoot =>
 	(host as unknown as { internals: ElementInternals }).internals.shadowRoot as ShadowRoot;
 
-describe("closed shadow root — hydration + load replay", () => {
+describe("closed shadow root: hydration and load replay", () => {
 	test.skipIf(!canRun)(
 		"cold closed component paints into a fresh closed root, absent from host.shadowRoot",
 		async () => {

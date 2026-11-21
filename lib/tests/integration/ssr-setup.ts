@@ -1,7 +1,7 @@
 import { Window } from "happy-dom";
 
 //side-effect-only: applies happy-dom globals to globalThis before any importer touches `document`
-//`window` is deliberately NOT assigned — `typeof window === "undefined"` is the lib's server signal and must stay true
+//`window` is not assigned: `typeof window === "undefined"` is the lib's server signal and must stay true
 
 const happyWindow = new Window();
 

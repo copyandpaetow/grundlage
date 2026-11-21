@@ -11,7 +11,7 @@ import {
 const BASELINE_STORAGE_KEY = "grundlage:perf-harness:baseline";
 
 //fps reads better when higher; frame time and writes/frame read better when
-//lower. Both use the same 2% band — window mode is wall-clock noisy, so frame
+//lower. Both use the same 2% band: window mode is wall-clock noisy, so frame
 //count (and the writes/frame ratio over it) drifts run to run.
 const classWhenHigherIsBetter = (current: number, previous: number): string => {
 	if (current > previous * 1.02) return "improve";
@@ -26,7 +26,7 @@ const classWhenLowerIsBetter = (current: number, previous: number): string => {
 };
 
 /*
-    Window-mode probe — the direct-binding baseline. Twenty bars are bound
+    Window-mode probe, the direct-binding baseline. Twenty bars are bound
     individually in the template (no array, no list diff), so measured against
     raf-animation-list it isolates the cost of list reconciliation from the cost
     of plain per-hole updates.
@@ -34,6 +34,7 @@ const classWhenLowerIsBetter = (current: number, previous: number): string => {
 
 customElements.define(
 	"perf-harness",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		const busyValues = Array.from({ length: 20 }, (_, index) => index * 0.123);
 
@@ -98,6 +99,7 @@ customElements.define(
 		`;
 
 		try {
+			//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 			yield function* view() {
 				yield html`
 					<style>
@@ -155,7 +157,7 @@ customElements.define(
 
 					<div class="controls">
 						<button onClick="${measure}" disabled="${isMeasuring}">
-							${isMeasuring ? "measuring…" : "measure"}
+							${isMeasuring ? "measuring..." : "measure"}
 						</button>
 						<label>
 							duration:

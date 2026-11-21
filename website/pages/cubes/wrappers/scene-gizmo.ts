@@ -73,7 +73,7 @@ const gizmoStyles = html`
 	<style>
 		:host {
 			position: absolute;
-			/* Zero size at the world centre, so the slotted child keeps its own
+			/* Zero size at the world center, so the slotted child keeps its own
 			   top/left:50% world origin. */
 			top: 50%;
 			left: 50%;
@@ -106,7 +106,7 @@ const gizmoStyles = html`
 				var(--drag-slide);
 		}
 
-		/* Follows the child's box centre and its slide but NOT its rotation, so the
+		/* Follows the child's box center and its slide but not its rotation, so the
 		   handles stay world-axis-aligned. */
 		.mirror {
 			position: absolute;
@@ -224,6 +224,7 @@ const gizmoStyles = html`
 
 customElements.define(
 	"scene-gizmo",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		let handleCenterPx: Vector3 = [0, 0, 0];
 		let handleLengthsPx: Vector3 = [HANDLE_LENGTH, HANDLE_LENGTH, HANDLE_LENGTH];
@@ -302,7 +303,7 @@ customElements.define(
 				new DOMMatrix(getComputedStyle(target).transform),
 			);
 			//Unsnapped: the editor snaps the leaf blocks on flatten, and snapping this
-			//carrier too would add a grid-sized jump, worst after an off-centre yaw.
+			//carrier too would add a grid-sized jump, worst after an off-center yaw.
 			const position = fromScreenPoint(new DOMPoint(matrix.m41, matrix.m42, matrix.m43));
 			const rotation = eulerFromMatrix(matrix);
 			target.setAttribute("position", position.map(formatNumber).join(" "));

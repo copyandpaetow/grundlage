@@ -345,7 +345,7 @@ describe("hydrateInstance: adopts the server DOM, repairing what diverged", () =
 	});
 
 	test("hydrates a list whose rows carry a non-content binding", () => {
-		//each row's attribute emits a single (unclosed) marker as a top-level sibling of the row —
+		//each row's attribute emits a single (unclosed) marker as a top-level sibling of the row, and
 		//the row-tail walk must not mistake it for an open content range
 		const rows = (labels: Array<string>) =>
 			html`<ul>
@@ -505,7 +505,7 @@ describe("hydrateInstance: rejects a server range that contradicts the value", (
 	test("text fills a server range that holds no text node at all", () => {
 		const { shadowRoot } = mountIntoShadow(contentHole(""));
 		const hole = shadowRoot.querySelector("div")!;
-		//an empty text hole writes no node, so its markers are adjacent — the shape SSR serializes
+		//an empty text hole writes no node, so its markers are adjacent, the shape SSR serializes
 		expect(hole.childNodes.length).toBe(2);
 
 		hydrateShadowRoot(contentHole("filled"), shadowRoot, null, treeState());
@@ -552,7 +552,7 @@ describe("an iterator in a content hole paints as a list", () => {
 		const { shadowRoot } = mountIntoShadow(contentHole(rowsByKey.values()));
 
 		expect(rowLabels(shadowRoot)).toEqual(["a"]);
-		expect(() => mountIntoShadow(contentHole(rowsByKey))).toThrow(/expected a string/);
+		expect(() => mountIntoShadow(contentHole(rowsByKey))).toThrow(/expects a string/);
 	});
 
 	test("hydration adopts the server's rows", () => {

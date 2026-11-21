@@ -223,7 +223,7 @@ describe("inner generator error contracts", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("recovered");
-		//recovery path is silent — no console.warn
+		//recovery path is silent, with no console.warn
 		expect(consoleError).not.toHaveBeenCalled();
 		consoleError.mockRestore();
 		element.remove();
@@ -261,7 +261,7 @@ describe("inner generator error contracts", () => {
 		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("before");
 		//cleanup is captured but not run while still mounted
 		expect(events).toEqual([]);
-		//recovery path is silent — no terminal warning
+		//recovery path is silent, with no terminal warning
 		expect(consoleError).not.toHaveBeenCalled();
 
 		element.remove();
@@ -465,8 +465,8 @@ describe("yield resumes the generator with the host element", () => {
 			yield function* () {
 				yield html`<span>${counter}</span>`;
 			};
-			//updating through the received host proves it really is the
-			//element instance and not just structurally similar
+			//updating through the received host proves it is the
+			//element instance and not only similar in shape
 			counter = 99;
 			yield host.update();
 		});
@@ -636,7 +636,7 @@ describe("identity and isolation", () => {
 
 describe("inner generator post-yield work and cancellation", () => {
 	//async generators paused at an internal `await` cannot be force-unblocked
-	//by .return() — the queued return only takes effect after the awaited
+	//by .return(): the queued return only takes effect after the awaited
 	//promise settles. Userland post-yield work that needs to react to a
 	//disconnect must therefore use try/finally; the registered return-cleanup
 	//only runs on a graceful completion
@@ -721,7 +721,7 @@ describe("inner generator post-yield work and cancellation", () => {
 						resolveSlow = resolve;
 					});
 					//if this ever paints, the framework failed to suppress
-					//stale resumption from the cancelled gen1
+					//stale resumption from the canceled gen1
 					yield html`<span>late-1</span>`;
 					events.push("completed-1");
 				}
@@ -767,7 +767,7 @@ describe("inner generator post-yield work and cancellation", () => {
 
 		await element.update();
 		await sleep();
-		//restart cancels the prior inner — its finally fires, then a fresh
+		//restart cancels the prior inner: its finally fires, then a fresh
 		//inner is parked at its own try/finally
 		expect(events).toEqual(["inner-finally", "inner-finally"]);
 
@@ -814,10 +814,10 @@ describe("rapid restart with in-flight inner async work", () => {
 					yield new Promise<void>((resolve) => {
 						releaseOld = resolve;
 					});
-					//cancelled before this lands
+					//canceled before this lands
 					yield html`<span>attempt-1-late</span>`;
 				} else {
-					//the live run does its own async work between its two yields — the window in
+					//the live run does its own async work between its two yields, the window in
 					//which the superseded run's late resolution could wrongly silence it
 					yield html`<span>attempt-2-first</span>`;
 					yield new Promise<void>((resolve) => {
@@ -834,7 +834,7 @@ describe("rapid restart with in-flight inner async work", () => {
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-1");
 
 		//supersede gen1 (now stopped, parked at its await) with gen2. update() resolves on the
-		//fresh run's completion, so hold the promise — gen2 is still mid-flight at its own await
+		//fresh run's completion, so hold the promise: gen2 is still mid-flight at its own await
 		const flush = element.update();
 		await sleep();
 		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("attempt-2-first");
@@ -872,7 +872,7 @@ describe("rapid restart with in-flight inner async work", () => {
 					yield new Promise<void>((resolve) => {
 						releaseOld = resolve;
 					});
-					//cancelled before this lands
+					//canceled before this lands
 					yield html`<span>mount-late</span>`;
 				} else {
 					//later runs read fresh state and complete promptly
@@ -911,7 +911,7 @@ describe("rapid restart with in-flight inner async work", () => {
 //component relying on it to release resources on disconnect does not. Pinned so a change here is a
 //deliberate one
 describe("cleanup contract for inner async generators on cancel", () => {
-	test("`return cleanupFn` does not run when the inner generator is cancelled mid-await", async () => {
+	test("`return cleanupFn` does not run when the inner generator is canceled mid-await", async () => {
 		const tag = uniqueTag("cleanup-on-cancel");
 		const cleanupSpy = vi.fn();
 		let resolveAwait: (() => void) | null = null;

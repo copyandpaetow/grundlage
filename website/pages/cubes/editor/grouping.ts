@@ -33,6 +33,7 @@ export type GroupingApi = {
 	flattenSelection: () => void;
 };
 
+//oxlint-disable-next-line max-lines-per-function -- long, not complex: a closure factory, one small function per command
 export const createGrouping = (state: EditorState, deps: GroupingDeps): GroupingApi => {
 	const wrapSelection = (wrapperTagName: WrapperTagName): void => {
 		const members = [...state.selection];

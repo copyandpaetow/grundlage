@@ -63,10 +63,10 @@ describe("grundlage-render on the server", () => {
 		expect(element.shadowRoot!.textContent).toContain("painted");
 	});
 
-	test("a cancelled render leaves the component unstarted: its body never runs and nothing paints", async () => {
+	test("a canceled render leaves the component unstarted: its body never runs and nothing paints", async () => {
 		serverFlagHolder.__grundlage_ssr__ = true;
 		let hasRun = false;
-		const tag = uniqueTag("cancelled");
+		const tag = uniqueTag("canceled");
 		customElements.define(
 			tag,
 			component(function* () {
@@ -82,7 +82,7 @@ describe("grundlage-render on the server", () => {
 		expect(element.shadowRoot!.childNodes).toHaveLength(0);
 	});
 
-	test("a nested child's render crosses its parent's shadow root, and cancelling it leaves only that child unstarted", async () => {
+	test("a nested child's render crosses its parent's shadow root, and canceling it leaves only that child unstarted", async () => {
 		serverFlagHolder.__grundlage_ssr__ = true;
 		let childHasRun = false;
 		const childTag = uniqueTag("child");

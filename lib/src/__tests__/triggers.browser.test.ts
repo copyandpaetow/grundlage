@@ -287,7 +287,7 @@ describe("a component writing its own host attributes", () => {
 	});
 });
 
-//under the flag there is a real DOM, so attributeChangedCallback fires on the server too — what
+//under the flag there is a real DOM, so attributeChangedCallback fires on the server too. What
 //makes that safe is the cancel that follows the single server paint
 describe("a server run", () => {
 	test("schedules nothing from an attribute write after its one paint", async () => {

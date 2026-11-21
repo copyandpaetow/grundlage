@@ -55,7 +55,7 @@ describe("measuring what it just painted", () => {
 		document.body.appendChild(cage);
 		await flush();
 
-		//The two leaves span -60..300 on x, so the box centres at 120 and reaches 180.
+		//The two leaves span -60..300 on x, so the box centers at 120 and reaches 180.
 		expect(boxVariable("--box-display")).toBe("block");
 		expect(boxVariable("--center-x")).toBe("120px");
 		expect(boxVariable("--half-x")).toBe(`${180 + CAGE_MARGIN}px`);

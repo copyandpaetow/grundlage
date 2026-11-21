@@ -91,8 +91,8 @@ describe("applyAttributeValue - event listeners", () => {
 
 describe("applyAttributeValue - exotic event names and CustomEvent payloads", () => {
 	//the `on*` fast path keys on `lowerKey in element`, so any event living on HTMLElement.prototype
-	//binds. These cover the less-common surfaces the library relies on — pointer, wheel, transition,
-	//animation, composition — and the CustomEvent detail reaching the listener untouched
+	//binds. These cover the less-common surfaces the library relies on (pointer, wheel, transition,
+	//animation, composition) and the CustomEvent detail reaching the listener untouched
 
 	test.each([
 		["onpointerdown", "pointerdown"],
@@ -214,7 +214,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 	});
 
 	test("removes the listener via null even when only oldValue is a function", () => {
-		//on the very first call, value is null but oldValue is a function, so
+		//on the first call, value is null but oldValue is a function, so
 		//the entry guard in applyAttributeValue still has to enter the on* branch
 		//so removeEventListener fires for the orphaned handler
 		const element = document.createElement("div");
@@ -228,7 +228,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		expect(received).toEqual([]);
 	});
 
-	test("function → non-function on an event key detaches the listener and writes nothing", () => {
+	test("replacing a function with a non-function on an event key detaches the listener and writes nothing", () => {
 		const element = document.createElement("button");
 		const events: Array<string> = [];
 		const handler = () => events.push("clicked");
@@ -242,7 +242,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		expect(events).toEqual([]);
 	});
 
-	test("non-function → function on an event key binds once, with no leftover attribute", () => {
+	test("replacing a non-function with a function on an event key binds once, with no leftover attribute", () => {
 		const element = document.createElement("button");
 		const events: Array<string> = [];
 		const handler = () => events.push("clicked");
@@ -467,7 +467,7 @@ describe("applyAttributeValue - non-stringable values", () => {
 		expect((element as unknown as { items: unknown }).items).toBe(items);
 	});
 
-	test("removing a property-mode entry deletes the JS property (not just the attribute)", () => {
+	test("removing a property-mode entry deletes the JS property (not only the attribute)", () => {
 		const element = document.createElement("div");
 		const items = [1, 2, 3];
 
@@ -537,7 +537,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 		expect(element.getAttribute("config")).toBe(null);
 	});
 
-	test("a full stringable → object → stringable cycle leaves exactly one mode populated", () => {
+	test("a stringable, then an object, then a stringable leaves exactly one mode populated", () => {
 		const element = document.createElement("div");
 
 		applyAttributeValue(element, "config", "first");
@@ -553,7 +553,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 		expect(Object.hasOwn(element, "config")).toBe(false);
 	});
 
-	test("the other mode is cleared without an oldValue — the two-argument setProp form", () => {
+	test("the other mode is cleared without an oldValue, as the two-argument setProp passes", () => {
 		//setProp(name, value) tracks nothing, so the element's own state has to be what decides
 		const element = document.createElement("div");
 

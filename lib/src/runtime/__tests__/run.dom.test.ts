@@ -241,7 +241,7 @@ describe("a yield that is not a template, an update generator, a promise or a lo
 		["an async arrow function", async () => html`<p>x</p>`],
 		["an async generator function", async function* () {}],
 		["a number", 42],
-		["a string", "Loading…"],
+		["a string", "Loading..."],
 		["an array of templates", [html`<i>a</i>`, html`<i>b</i>`]],
 		["undefined", undefined],
 		//oxlint-disable-next-line unicorn/no-thenable -- the case under test

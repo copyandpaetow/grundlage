@@ -188,7 +188,6 @@ const hasNonWhitespace = (text: string) => {
 };
 
 const readText = (reader: TemplateReader, end: number) => {
-	const { source } = reader;
 	for (const part of partsOfRange(reader, reader.index, end)) {
 		if (typeof part === "string") {
 			reader.resultMarkup += part;
@@ -209,7 +208,7 @@ const readText = (reader: TemplateReader, end: number) => {
 	}
 	reader.index = end;
 	assertDuringDevelopment(
-		source.charCodeAt(end) !== HOLE_CODE,
+		reader.source.charCodeAt(end) !== HOLE_CODE,
 		"text ends on a tag opener or the end of the template, never on a hole",
 	);
 };
@@ -219,7 +218,7 @@ const readComment = (reader: TemplateReader) => {
 	if (!reader.source.startsWith(MARKUP.COMMENT_OPEN, reader.index)) {
 		throw new Error(
 			libraryMessage(
-				"a `<!` opens neither a comment nor <![CDATA[. Write a comment as <!-- … -->, or a literal `<` as &lt;.",
+				"a `<!` opens neither a comment nor <![CDATA[. Write a comment as <!-- ... -->, or a literal `<` as &lt;.",
 			),
 		);
 	}
@@ -253,7 +252,7 @@ const readCharacterData = (reader: TemplateReader) => {
 	if (hasHole(parts)) {
 		throw new Error(
 			libraryMessage(
-				"a ${…} hole sits where the HTML parser reads markup as plain text, such as inside <![CDATA[…]]>. Move the hole outside of it.",
+				"a ${...} hole sits where the HTML parser reads markup as plain text, such as inside <![CDATA[...]]>. Move the hole outside of it.",
 			),
 		);
 	}
@@ -276,7 +275,7 @@ const readEndTag = (reader: TemplateReader) => {
 	if (isDynamicClose && !openerIsDynamic) {
 		throw new Error(
 			libraryMessage(
-				"asymmetric tag: a dynamic </${...}> close has no matching dynamic open tag. Pair `<${tag}>` with `</${tag}>`.",
+				"a dynamic </${...}> expects a dynamic <${...}> to open it, not a static tag or none. Pair `<${tag}>` with `</${tag}>`.",
 			),
 		);
 	}
@@ -292,7 +291,7 @@ const readEndTag = (reader: TemplateReader) => {
 	if (!isDynamicClose && openerIsDynamic) {
 		throw new Error(
 			libraryMessage(
-				"asymmetric tag: a static end tag cannot pair with a dynamic <${...}> open tag. Make the close dynamic too.",
+				"a dynamic <${...}> expects a dynamic close, not a static end tag. Close it with `</${tag}>`.",
 			),
 		);
 	}
@@ -352,7 +351,7 @@ const warnOnSelectValueBinding = (lowercaseName: string, binding: StaticBinding)
 		binding.nameParts.length === 1 && typeof name === "string" && name.toLowerCase() === "value";
 	if (isValueName) {
 		warnDuringDevelopment(
-			"`<select value=${…}>` selects nothing: <select> has no value attribute. Bind `selected` on the option instead: `<option selected=${…}>`.",
+			"`<select value=${...}>` selects nothing: <select> has no value attribute. Bind `selected` on the option instead: `<option selected=${...}>`.",
 		);
 	}
 };
@@ -362,9 +361,9 @@ const attributeBindingOf = (
 	nameParts: Array<Part>,
 	valueParts: Array<Part>,
 ): StaticBinding => {
-	const isExpandableSpread =
+	const isSpread =
 		valueParts.length === 0 && nameParts.length === 1 && typeof nameParts[0] === "number";
-	if (isExpandableSpread) {
+	if (isSpread) {
 		return {
 			type: BINDING.DYNAMIC_ATTRIBUTE,
 			elementName,
@@ -394,25 +393,24 @@ const ensureNoShadowRootMode = (nameParts: ReadonlyArray<Part>) => {
 };
 
 const readAttributeValue = (reader: TemplateReader): Array<Part> => {
-	const { source } = reader;
-	if (source.charCodeAt(reader.index) !== CHARACTER_CODE.EQUALS) return [];
+	if (reader.source.charCodeAt(reader.index) !== CHARACTER_CODE.EQUALS) return [];
 	const valueStart = reader.index + 1;
-	const quoteCode = source.charCodeAt(valueStart);
+	const quoteCode = reader.source.charCodeAt(valueStart);
 	if (!isQuoteCode(quoteCode)) {
-		const valueEnd = findEnd(source, valueStart, endsUnquotedValue);
+		const valueEnd = findEnd(reader.source, valueStart, endsUnquotedValue);
 		const valueParts = partsOfRange(reader, valueStart, valueEnd);
 		reader.index = valueEnd;
 		return valueParts;
 	}
 	//nothing between the quotes can end the value, holes included, so the scan is a search
-	const closingQuote = source.indexOf(String.fromCharCode(quoteCode), valueStart + 1);
+	const closingQuote = reader.source.indexOf(String.fromCharCode(quoteCode), valueStart + 1);
 	if (closingQuote === -1) throw unclosedError("an attribute value");
 	const valueParts = partsOfRange(reader, valueStart + 1, closingQuote);
 	reader.index = closingQuote + 1;
-	if (source.charCodeAt(reader.index) === HOLE_CODE) {
+	if (reader.source.charCodeAt(reader.index) === HOLE_CODE) {
 		throw new Error(
 			libraryMessage(
-				'a ${…} right after a quoted attribute value belongs to no attribute. Put a space before it: a="1" ${…}',
+				'a ${...} right after a quoted attribute value belongs to no attribute. Put a space before it: a="1" ${...}',
 			),
 		);
 	}
@@ -428,27 +426,26 @@ const readAttributes = (
 	markerMarkup: string;
 	isSelfClosing: boolean;
 } => {
-	const { source } = reader;
 	const isOnRootTemplate = reader.rootTemplate === ROOT_TEMPLATE.IS_THE_CURRENT_TAG;
 	const isNestedTemplate = lowercaseName === TEMPLATE_TAG && !isOnRootTemplate;
 	let attributeMarkup = "";
 	let markerMarkup = "";
 
-	while (reader.index < source.length) {
-		while (isWhitespaceCode(source.charCodeAt(reader.index))) reader.index++;
+	while (reader.index < reader.source.length) {
+		while (isWhitespaceCode(reader.source.charCodeAt(reader.index))) reader.index++;
 
-		if (source.charCodeAt(reader.index) === CHARACTER_CODE.GREATER_THAN) {
+		if (reader.source.charCodeAt(reader.index) === CHARACTER_CODE.GREATER_THAN) {
 			reader.index++;
 			return { attributeMarkup, markerMarkup, isSelfClosing: false };
 		}
-		if (startsSelfClosingEnd(source, reader.index)) {
+		if (startsSelfClosingEnd(reader.source, reader.index)) {
 			reader.index += 2;
 			return { attributeMarkup, markerMarkup, isSelfClosing: true };
 		}
-		if (reader.index >= source.length) break;
+		if (reader.index >= reader.source.length) break;
 
 		const nameStart = reader.index;
-		const nameEnd = findEnd(source, nameStart + 1, endsAttributeName);
+		const nameEnd = findEnd(reader.source, nameStart + 1, endsAttributeName);
 		const nameParts = partsOfRange(reader, nameStart, nameEnd);
 		reader.index = nameEnd;
 		if (isNestedTemplate) ensureNoShadowRootMode(nameParts);
@@ -490,7 +487,7 @@ const bindRawContent = (reader: TemplateReader, elementName: string, parts: Arra
 	return openMarkerComment(OPEN_CONSTRUCT.RAW_CONTENT, bindingIndex);
 };
 
-//each top-level rule with a ${…} gets a <style> of its own, so a change reparses that rule alone,
+//each top-level rule with a ${...} gets a <style> of its own, so a change reparses that rule alone,
 //and the static rules around it stay one text that every instance shares
 const readStyleSheets = (reader: TemplateReader, end: number, openTagMarkup: string) => {
 	//each without its end tag: one joins them, and readEndTag writes the last
@@ -532,13 +529,13 @@ const readRawContent = (reader: TemplateReader, tagName: string, openTagMarkup: 
 	return bindRawContent(reader, lowercaseName, parts) + openTagMarkup;
 };
 
-//an attribute binding reaches one element, and the content of a <style> with ${…} becomes several
+//an attribute binding reaches one element, and the content of a <style> with ${...} becomes several
 const ensureStaticStyleContent = (reader: TemplateReader) => {
 	const end = textEndOf(reader.source, reader.index, MARKUP.STYLE_TAG);
 	if (reader.nextHoleIndex >= end) return;
 	throw new Error(
 		libraryMessage(
-			"<style> expects ${…} in its attributes or in its content, not both: the content is split into one <style> per rule with a ${…}, and an attribute ${…} would reach only one of them. Move the condition into the sheet, as an @media rule or a selector.",
+			"<style> expects ${...} in its attributes or in its content, not both: the content is split into one <style> per rule with a ${...}, and an attribute ${...} would reach only one of them. Move the condition into the sheet, as an @media rule or a selector.",
 		),
 	);
 };
@@ -548,7 +545,7 @@ const ensureStaticContent = (reader: TemplateReader, tagName: string) => {
 	if (reader.nextHoleIndex >= end) return;
 	throw new Error(
 		libraryMessage(
-			`<${tagName}> expects no \${…} in its content, which a page's HTML parser reads as text and a serializer writes unescaped. Move the hole out of <${tagName}>.`,
+			`<${tagName}> expects no \${...} in its content, which a page's HTML parser reads as text and a serializer writes unescaped. Move the hole out of <${tagName}>.`,
 		),
 	);
 };
@@ -641,17 +638,18 @@ const startsTemplateEndTag = (source: string, index: number) =>
 	endsTagName(source, index + TEMPLATE_END_TAG.length);
 
 const readMarkup = (reader: TemplateReader): void => {
-	const { source } = reader;
-	while (reader.index < source.length) {
-		const tagStart = markupStartFrom(source, reader.index);
-		readText(reader, tagStart === -1 ? source.length : tagStart);
+	while (reader.index < reader.source.length) {
+		const tagStart = markupStartFrom(reader.source, reader.index);
+		readText(reader, tagStart === -1 ? reader.source.length : tagStart);
 		if (tagStart === -1) break;
 		const endsTemplateContent =
-			reader.isTemplateContent && isTopLevel(reader) && startsTemplateEndTag(source, tagStart);
+			reader.isTemplateContent &&
+			isTopLevel(reader) &&
+			startsTemplateEndTag(reader.source, tagStart);
 		if (endsTemplateContent) return;
 
-		const nextCode = source.charCodeAt(tagStart + 1);
-		if (source.startsWith(CHARACTER_DATA_OPEN, tagStart)) readCharacterData(reader);
+		const nextCode = reader.source.charCodeAt(tagStart + 1);
+		if (reader.source.startsWith(CHARACTER_DATA_OPEN, tagStart)) readCharacterData(reader);
 		else if (nextCode === CHARACTER_CODE.BANG) readComment(reader);
 		else if (nextCode === CHARACTER_CODE.SLASH) readEndTag(reader);
 		else readElement(reader);

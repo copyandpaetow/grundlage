@@ -19,7 +19,7 @@ describe("prelude-less @scope", () => {
 		element.remove();
 	};
 
-	//probes the exact shape the tests use — a scoped sheet inside a shadow root — because
+	//probes the exact shape the tests use (a scoped sheet inside a shadow root) because
 	//happy-dom resolves a scoped sheet in the light DOM but returns "" for the same sheet in a
 	//shadow tree, and a lighter probe would wave the visual tests through into a failure
 	const detectScopedStyleResolution = () => {

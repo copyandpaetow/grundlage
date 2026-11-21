@@ -20,7 +20,7 @@ describe("composeParts", () => {
 });
 
 describe("combinedPartsHash", () => {
-	test("only numeric parts contribute — static-only parts hash constant", () => {
+	test("only numeric parts contribute, so static-only parts hash the same", () => {
 		const a = combinedPartsHash(["x", "y"], ["ignored"]);
 		const b = combinedPartsHash(["x", "y"], ["different"]);
 		expect(a).toBe(b);

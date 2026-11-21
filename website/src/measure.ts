@@ -1,14 +1,14 @@
 //One shared way to measure, so a "win" is never an artifact. Every probe
 //reports the same four numbers per operation/frame:
-//   1. DOM mutation count   — a MutationObserver tally (the direct read of enemy #1)
-//   2. applied ms            — start -> the render's own promise settles, so the DOM writes are
+//   1. DOM mutation count:    a MutationObserver tally (the direct read of enemy #1)
+//   2. applied ms:             start -> the render's own promise settles, so the DOM writes are
 //                              done and nothing has waited on a frame yet. This is the only
 //                              number here that resolves a change smaller than a frame.
-//   3. painted frames        — start -> double-rAF, divided by the refresh interval. A rAF gate
-//                              lands on a frame boundary, so as milliseconds it is quantised and
+//   3. painted frames:         start -> double-rAF, divided by the refresh interval. A rAF gate
+//                              lands on a frame boundary, so as milliseconds it is quantized and
 //                              a percentage against it is noise; as a frame count it answers the
 //                              one question it can: did the work fit.
-//   4. memory / heap delta   — best-effort, the coarse read of enemy #2
+//   4. memory / heap delta:    best-effort, the coarse read of enemy #2
 //
 //Framework-agnostic on purpose: it knows nothing about html`` or update(). A
 //probe passes an `apply` that does the work whose cost is measured (including
@@ -16,7 +16,7 @@
 //
 //Measure unthrottled and scale the workload instead. DevTools CPU throttling slows main-thread
 //JS, style and layout but not raster, memory bandwidth or GC, so it quietly reweights the mix
-//away from enemy #1. Run it as a separate pass answering one question — does a frame still fit —
+//away from enemy #1. Run it as a separate pass answering whether a frame still fits,
 //never as the baseline a percentage is taken against. Heap numbers need Chrome started with
 //--enable-precise-memory-info to be byte-accurate; otherwise they round to zero.
 
@@ -77,14 +77,14 @@ const median = (samples: ReadonlyArray<number>): number => {
 	return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 };
 
-//--- operation mode (discrete ops: create, swap, select, …) --------------
+//--- operation mode (discrete ops: create, swap, select, ...) --------------
 
 export interface Operation {
 	label: string;
 	/** Bring state to the op's starting point. Not timed. */
 	prepare?: () => void | Promise<void>;
 	//an apply that triggers a render must return that render's promise: without it `applied ms`
-	//stops before the first DOM write and only the frame-quantised number carries any signal
+	//stops before the first DOM write and only the frame-quantized number carries any signal
 	apply: () => void | Promise<void>;
 }
 
@@ -178,7 +178,7 @@ export interface WindowResult {
 }
 
 /**
- * Watches a self-driving animation for a wall-clock window — counts frames and
+ * Watches a self-driving animation for a wall-clock window: counts frames and
  * mutations without owning the rAF loop, so it measures the component as-is.
  */
 export const measureWindow = async (root: Node, durationMs: number): Promise<WindowResult> => {

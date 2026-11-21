@@ -12,7 +12,7 @@ const FACE_NAMES = ["front", "back", "right", "left", "top", "bottom"] as const;
 
 type CulledCube = {
 	cube: HTMLElement;
-	//The world-to-cube matrix, column-major like DOMMatrix's m11…m44
+	//The world-to-cube matrix, column-major like DOMMatrix's m11 to m44
 	worldToCube: Float64Array;
 	extentX: number;
 	extentY: number;
@@ -127,7 +127,7 @@ const hiddenFacesAttributeOf = (mask: number): string =>
 
 //Each side plane passes through the eye. The right one has the normal
 //(perspective, -halfWidth) / √(perspective² + halfWidth²) in (x, depth), so a sphere lies
-//outside when (perspective·x - halfWidth·depth) / √(…) > radius.
+//outside when (perspective·x - halfWidth·depth) / √(...) > radius.
 const isSphereOutsideView = (view: View, center: ViewPoint, radius: number): boolean => {
 	if (center.depth <= -radius) return true;
 	const horizontalPlaneLength = Math.hypot(view.perspective, view.halfWidth);
@@ -145,6 +145,7 @@ const isSphereOutsideView = (view: View, center: ViewPoint, radius: number): boo
 const readCameraNumber = (world: HTMLElement, name: string): number =>
 	parseFloat(world.getAttribute(`camera-${name}`) ?? "") || 0;
 
+//oxlint-disable-next-line max-lines-per-function -- long, not complex: the observers and per-frame steps share the culling state
 export const startSceneCulling = (
 	world: HTMLElement,
 	cubeSelector: string,

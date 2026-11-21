@@ -1,6 +1,7 @@
 import type { ComponentRunner } from "./runtime/driver";
 import { isTemplate } from "./template";
 import { isDevelopmentBuild, libraryMessage, warnDuringDevelopment } from "./utils/diagnostics";
+import { isPlainObject } from "./utils/guards";
 
 const SSR_ATTRIBUTE = "data-ssr";
 const KEY_ATTRIBUTE = "data-key";
@@ -21,12 +22,8 @@ const NO_SERVER_VALUE: unique symbol = Symbol("no server value");
 //a load the server could not finish still takes its position, so the positions after it line up
 const LOAD_FAILED_ON_SERVER: unique symbol = Symbol("load failed on server");
 
-const LOAD_ARGUMENTS_MESSAGE = libraryMessage(
-	'load() takes a fetcher, or a string key and then a fetcher: load(() => fetchData()) or load("name", () => fetchData())',
-);
-
 const BROWSER_REACHED_MORE_LOADS_MESSAGE =
-	'the browser reached a load() the server did not reach before its first paint, so the two took different branches. Give the load() calls in that branch a key: load("name", () => …)';
+	'the browser reached a load() the server did not reach before its first paint, so the two took different branches. Give the load() calls in that branch a key: load("name", () => ...)';
 
 export interface RecordedLoad {
 	readonly key: string | undefined;
@@ -44,10 +41,9 @@ export const flushHostPayload = (
 	recordedLoads: Array<RecordedLoad>,
 	shadowRoot: ShadowRoot,
 ): void => {
-	const ownerDocument = shadowRoot.ownerDocument;
 	for (let index = 0; index < recordedLoads.length; index++) {
 		const recordedLoad = recordedLoads[index];
-		const script = ownerDocument.createElement("script");
+		const script = shadowRoot.ownerDocument.createElement("script");
 		script.setAttribute("type", "application/json");
 		script.setAttribute(SSR_ATTRIBUTE, "");
 		if (recordedLoad.key !== undefined) script.setAttribute(KEY_ATTRIBUTE, recordedLoad.key);
@@ -66,9 +62,8 @@ const findPayloadScript = (shadowRoot: ShadowRoot, key: string | undefined): Ele
 		key === undefined
 			? POSITIONAL_SELECTOR
 			: `script[${SSR_ATTRIBUTE}][${KEY_ATTRIBUTE}="${CSS.escape(key)}"]`;
-	const children = shadowRoot.children;
-	for (let index = 0; index < children.length; index++) {
-		if (children[index].matches(selector)) return children[index];
+	for (let index = 0; index < shadowRoot.children.length; index++) {
+		if (shadowRoot.children[index].matches(selector)) return shadowRoot.children[index];
 	}
 	return null;
 };
@@ -87,17 +82,16 @@ const claimServerValue = (shadowRoot: ShadowRoot, key: string | undefined): unkn
 
 //runs at the hydrating paint, after which nothing claims: a leftover could only ever be stale
 export const releaseUnclaimedPayloads = (shadowRoot: ShadowRoot): void => {
-	const children = shadowRoot.children;
 	let positionalLeftoverCount = 0;
-	for (let index = children.length - 1; index >= 0; index--) {
-		const child = children[index];
+	for (let index = shadowRoot.children.length - 1; index >= 0; index--) {
+		const child = shadowRoot.children[index];
 		if (!child.matches(ANY_PAYLOAD_SELECTOR)) continue;
 		if (!child.hasAttribute(KEY_ATTRIBUTE)) positionalLeftoverCount++;
 		child.remove();
 	}
 	if (positionalLeftoverCount === 0) return;
 	warnDuringDevelopment(
-		`${positionalLeftoverCount} load() result(s) from the server went unused while hydrating: the server reached a load() the browser did not, so the two took different branches. Give the load() calls in that branch a key: load("name", () => …)`,
+		`${positionalLeftoverCount} load() result(s) from the server went unused while hydrating: the server reached a load() the browser did not, so the two took different branches. Give the load() calls in that branch a key: load("name", () => ...)`,
 	);
 };
 
@@ -122,13 +116,12 @@ const describeNonPlainValue = (value: unknown): string | null => {
 	if (typeDescription !== undefined) return typeDescription;
 	if (typeof value !== "object" || value === null) return null;
 	if (isTemplate(value)) {
-		return "a template: yield the template itself to paint it, or yield function* view() { … } to paint on every update";
+		return "a template: yield the template itself to paint it, or yield function* view() { ... } to paint on every update";
 	}
 	if (Object.prototype.toString.call(value) === "[object Module]") {
 		return "a module: yield the import() promise itself, so the browser loads the module too";
 	}
-	const prototype = Object.getPrototypeOf(value);
-	if (Array.isArray(value) || prototype === Object.prototype || prototype === null) return null;
+	if (Array.isArray(value) || isPlainObject(value)) return null;
 	const className = value.constructor?.name ?? "a class";
 	return (
 		DESCRIPTION_BY_CLASS_NAME[className] ??
@@ -174,7 +167,7 @@ const ensurePlainData = (value: unknown): void => {
 	);
 };
 
-//a generator, so `yield* load(…)` takes the fetcher's type and a throw surfaces there; a run torn
+//a generator, so `yield* load(...)` takes the fetcher's type and a throw surfaces there; a run torn
 //down while it waits is never resumed, so its late result cannot take a position
 function* loadSteps(
 	key: string | undefined,
@@ -182,10 +175,9 @@ function* loadSteps(
 ): Generator<LoadRequest | Promise<unknown>, unknown, unknown> {
 	//the driver resumes the request with the runner of the component that yielded it
 	const runner = (yield LOAD_REQUEST) as ComponentRunner;
-	const root = runner.root;
 	if (!runner.wasMountedOnServer) {
-		const serverValue = root.isHydrationPending
-			? claimServerValue(root.shadowRoot, key)
+		const serverValue = runner.root.isHydrationPending
+			? claimServerValue(runner.root.shadowRoot, key)
 			: NO_SERVER_VALUE;
 		if (serverValue !== NO_SERVER_VALUE) return serverValue;
 		const loaded = fetcher();
@@ -194,11 +186,10 @@ function* loadSteps(
 		if (isDevelopmentBuild || isTemplate(value)) ensurePlainData(value);
 		return value;
 	}
-	const recordedLoads = runner.loadsRecordedOnServer;
-	if (key !== undefined && isKeyRecorded(recordedLoads, key)) {
+	if (key !== undefined && isKeyRecorded(runner.loadsRecordedOnServer, key)) {
 		throw new Error(
 			libraryMessage(
-				`two load() calls in <${root.host.localName}> use the key "${key}". Give each its own key, for example load(\`${key}-\${id}\`, …)`,
+				`two load() calls in <${runner.root.host.localName}> use the key "${key}". Give each its own key, for example load(\`${key}-\${id}\`, ...)`,
 			),
 		);
 	}
@@ -208,11 +199,11 @@ function* loadSteps(
 		value = loaded instanceof Promise ? yield loaded : loaded;
 		ensurePlainData(value);
 	} catch (error) {
-		recordedLoads.push({ key, serialized: LOAD_FAILED_ON_SERVER });
+		runner.loadsRecordedOnServer.push({ key, serialized: LOAD_FAILED_ON_SERVER });
 		throw error;
 	}
 	//JSON.stringify(undefined) returns undefined, not a string; the browser parses "null" back
-	recordedLoads.push({ key, serialized: JSON.stringify(value) ?? "null" });
+	runner.loadsRecordedOnServer.push({ key, serialized: JSON.stringify(value) ?? "null" });
 	return value;
 }
 
@@ -231,5 +222,9 @@ export function load(
 	if (isPositionalCall) return loadSteps(undefined, keyOrFetcher);
 	const isKeyedCall = typeof keyOrFetcher === "string" && typeof keyedFetcher === "function";
 	if (isKeyedCall) return loadSteps(keyOrFetcher, keyedFetcher);
-	throw new TypeError(LOAD_ARGUMENTS_MESSAGE);
+	throw new TypeError(
+		libraryMessage(
+			`load() expects a fetcher, or a string key and then a fetcher, not load(${typeof keyOrFetcher}, ${typeof keyedFetcher}). Write load(() => fetchData()) or load("name", () => fetchData()).`,
+		),
+	);
 }

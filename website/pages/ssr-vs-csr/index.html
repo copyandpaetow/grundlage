@@ -19,7 +19,7 @@
 				the first yield into the HTML.
 			</p>
 			<p>
-				The click counter is the reactivity probe — closure state, every click runs through
+				The click counter is the reactivity probe: closure state, and every click runs through
 				<code>host.update()</code>. The SSR card's data comes with the HTML, so hydration reuses it
 				instead of fetching again: the card is interactive as soon as its script runs.
 			</p>
@@ -33,7 +33,7 @@
 					<h3>CSR (no server pass)</h3>
 					<p>
 						Empty in the HTML. The browser parses, the generator runs, the fetch resolves, then the
-						first yield writes the card — empty dashed box for the duration of the fetch.
+						first yield writes the card, leaving an empty dashed box for the duration of the fetch.
 					</p>
 					<demo-loader data-label="CSR" data-delay-ms="1200"></demo-loader>
 				</section>
@@ -43,7 +43,7 @@
 					<p>
 						A vite plugin (see <code>vite.config.ts</code>) ran the lib in server mode, at build
 						time and on every dev request. The <code>&lt;template shadowrootmode&gt;</code> is
-						already in the response — instant paint, no flash — and so is the fetched data, as a
+						already in the response (instant paint, no flash), and so is the fetched data, as a
 						<code>&lt;script data-ssr&gt;</code>. Hydration reuses it and wires bindings without
 						overwriting the server text.
 					</p>

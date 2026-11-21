@@ -85,9 +85,9 @@ describe("flush supersession", () => {
 					//the current update generator
 					yield html`<p>${value}</p>`;
 				};
-				yield outerGate.promise; //outer suspends AFTER installing the inner
+				yield outerGate.promise; //outer suspends after installing the inner
 				return () => {
-					outerCleanupRan = true; //outer cleanup (D2) — must survive a mid-flight supersede
+					outerCleanupRan = true; //outer cleanup (D2) must survive a mid-flight supersede
 				};
 			}),
 		) as Updatable;

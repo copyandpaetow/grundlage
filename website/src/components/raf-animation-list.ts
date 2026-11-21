@@ -27,14 +27,14 @@ const classWhenLowerIsBetter = (current: number, previous: number): string => {
 /*
     Window-mode probe. A self-driving animated list where every bar changes
     every frame, so each frame the list reconciliation walks all bars with
-    fresh values — it exercises enemy #2 (per-frame allocation) and surfaces
+    fresh values: it exercises enemy #2 (per-frame allocation) and surfaces
     any false rebuilds.
 
     Two passes, because they answer different questions. measureWindow OBSERVES
     the component's own rAF loop for a wall-clock window: fps and frame time say
-    whether 60 held, and both are quantised to the refresh interval, so they are
-    reported plainly and never carry a delta. measureOperation then DRIVES the
-    same list with forced updates and reports min applied ms — small enough to
+    whether 60 held, and both are quantized to the refresh interval, so they are
+    reported plainly and never carry a delta. measureOperation then drives the
+    same list with forced updates and reports min applied ms, small enough to
     resolve a change to the list diff, and the number the baseline compares. Set
     `bars` to push bar count up and find where allocation / DOM-write volume
     starts dropping frames.
@@ -42,6 +42,7 @@ const classWhenLowerIsBetter = (current: number, previous: number): string => {
 
 customElements.define(
 	"raf-animation-list",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		const barCount = Number(element.getAttribute("bars") ?? 20);
 		const phases = Array.from({ length: barCount }, (_, index) => index * 0.3);
@@ -53,7 +54,7 @@ customElements.define(
 		let durationMs = Number(element.getAttribute("duration") ?? 3000);
 		let baseline = loadBaseline<Measurement>(BASELINE_STORAGE_KEY);
 
-		//The animation only runs while a measurement is in flight — clicking
+		//The animation only runs while a measurement is in flight: clicking
 		//measure starts it, the window ends it. Idle, the list sits on its last
 		//frame (no rAF, no DOM churn).
 		const tick = () => {
@@ -76,7 +77,7 @@ customElements.define(
 			requestAnimationFrame(tick);
 			const observed = await measureWindow(barsRoot(), durationMs);
 			animating = false;
-			//the observed numbers are wall-clock and frame-quantised, so they say whether 60 held and
+			//the observed numbers are wall-clock and frame-quantized, so they say whether 60 held and
 			//nothing finer; the driven pass is the one a delta can be taken against
 			const driven = await measureOperation(
 				barsRoot(),
@@ -131,6 +132,7 @@ customElements.define(
 			>
 		`;
 
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 		yield function* view() {
 			const bars = phases.map((phase, index) => computeBar(phase, index));
 
@@ -192,7 +194,7 @@ customElements.define(
 
 				<div class="controls">
 					<button onclick="${measure}" disabled="${isMeasuring}">
-						${isMeasuring ? "measuring…" : "measure"}
+						${isMeasuring ? "measuring..." : "measure"}
 					</button>
 					<label>
 						duration:

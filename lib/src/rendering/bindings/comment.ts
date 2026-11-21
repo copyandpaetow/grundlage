@@ -4,10 +4,9 @@ import { ensureCommentText } from "./verbatim-text";
 import { assertDuringDevelopment } from "../../utils/diagnostics";
 
 export const commitComment = (liveBinding: CommentLiveBinding, values: Array<unknown>): void => {
-	const { parts } = liveBinding.staticBinding;
-	const hash = combinedPartsHash(parts, values);
+	const hash = combinedPartsHash(liveBinding.staticBinding.parts, values);
 	if (hash === liveBinding.lastValueHash) return;
-	const composed = composeParts(parts, values);
+	const composed = composeParts(liveBinding.staticBinding.parts, values);
 	ensureCommentText(composed);
 	liveBinding.lastValueHash = hash;
 	const payload = liveBinding.openMarker.nextSibling;

@@ -12,7 +12,6 @@ dist
 dist-ssr
 coverage
 __screenshots__
-bench
 spikes
 
 .*

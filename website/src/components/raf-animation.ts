@@ -2,6 +2,7 @@ import { html, component } from "../../../lib/src";
 
 customElements.define(
 	"raf-animation",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		let time = 0;
 		let remainingFrames = 30_000;
@@ -27,6 +28,7 @@ customElements.define(
 			};
 		};
 
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 		yield function* view() {
 			const bar0 = bar(0.0);
 			const bar1 = bar(0.3);

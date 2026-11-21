@@ -431,7 +431,7 @@ describe.skipIf("happyDOM" in globalThis)("deferred custom-element upgrade", () 
 
 	test("attributes set before upgrade are visible to the generator on its first run", async () => {
 		//attributeChangedCallback replays every pre-existing attribute during upgrade, before
-		//connectedCallback — update()'s early return absorbs those, so the first run is the
+		//connectedCallback. update()'s early return absorbs those, so the first run is the
 		//one that reads them and there is exactly one of it
 		const tag = uniqueTag();
 		let runCount = 0;
@@ -471,7 +471,7 @@ describe.skipIf("happyDOM" in globalThis)("deferred custom-element upgrade", () 
 		};
 		document.body.appendChild(element);
 
-		//no .update() yet — the prototype has not been swapped in
+		//no .update() yet: the prototype has not been swapped in
 		expect(element.update).toBeUndefined();
 
 		const MyElement = component(function* () {

@@ -1018,7 +1018,7 @@ describe("content updates", () => {
 		cleanup(element);
 	});
 
-	test("handles lists with duplicate values across reorder and edit", async () => {
+	test("a list with duplicate values paints right through a reorder and an edit", async () => {
 		const tag = uniqueTag();
 		let items = ["a", "a", "b"];
 
@@ -1280,7 +1280,7 @@ describe("content updates", () => {
 		expect(afterMiddleSwap[2].textContent).toContain("n");
 		expect(afterMiddleSwap[3].textContent).toContain("o");
 		//the middle three have no content match but the same shape, so tier-2
-		//patches them in place — every node keeps identity, ends included
+		//patches them in place: every node keeps identity, ends included
 		expect(afterMiddleSwap[1]).toBe(xNode);
 		expect(afterMiddleSwap[2]).toBe(yNode);
 		expect(afterMiddleSwap[3]).toBe(zNode);

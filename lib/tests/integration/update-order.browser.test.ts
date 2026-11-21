@@ -765,7 +765,7 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 				function* (componentProps) {
 					yield function* () {
 						const userId = componentProps.userId;
-						yield html`<p>loading…</p>`;
+						yield html`<p>loading...</p>`;
 						const user = yield* load(() => fetchUser(userId));
 						yield html`<h2>${user.name}</h2>`;
 					};
@@ -791,7 +791,7 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 
 			selectedUserId = 8;
 			await page.update();
-			expect(profileText()).toBe("loading…");
+			expect(profileText()).toBe("loading...");
 
 			await sleep(60);
 			profile.userId = 9;
@@ -806,15 +806,13 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 		}
 		type Role = "name" | "avatar" | "badge" | "page";
 
-		const setServerFlag = (isServer: boolean) => {
-			(globalThis as { __grundlage_ssr__?: boolean }).__grundlage_ssr__ = isServer;
-		};
+		const globals = globalThis as { __grundlage_ssr__?: boolean };
 
 		const renderOnServer = async (
 			hostTag: string,
 			defineComponents: () => void,
 		): Promise<string> => {
-			setServerFlag(true);
+			globals.__grundlage_ssr__ = true;
 			try {
 				defineComponents();
 				const element = document.createElement(hostTag);
@@ -826,7 +824,7 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 				await sleep();
 				return `<${hostTag}>${serialized}</${hostTag}>`;
 			} finally {
-				setServerFlag(false);
+				globals.__grundlage_ssr__ = false;
 			}
 		};
 
@@ -1427,13 +1425,15 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 		visibleText(componentProps.host.shadowRoot!.querySelector(childTag)?.shadowRoot ?? null) ===
 		componentProps.label;
 
-	const defineLabelledChild = (childTag: string, childWaitsBeforePainting: boolean) =>
+	type ChildPaint = "at once" | "after a wait";
+
+	const defineLabelledChild = (childTag: string, childPaints: ChildPaint) =>
 		customElements.define(
 			childTag,
 			component(
 				function* (componentProps) {
 					yield function* () {
-						if (childWaitsBeforePainting) yield sleep();
+						if (childPaints === "after a wait") yield sleep();
 						yield html`<b>${componentProps.label}</b>`;
 					};
 				},
@@ -1505,11 +1505,11 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 	test.each(parentShapes)(
 		"post-paint code does not see the child it just wrote, from $shape",
 		async ({ readsAgainOnUpdate, defineParent }) => {
-			for (const childWaitsBeforePainting of [false, true]) {
+			for (const childPaints of ["at once", "after a wait"] as const) {
 				const childTag = uniqueTag("child");
 				const parentTag = uniqueTag("parent");
 				const readsAfterThePaint: Array<boolean> = [];
-				defineLabelledChild(childTag, childWaitsBeforePainting);
+				defineLabelledChild(childTag, childPaints);
 				defineParent(parentTag, childTag, readsAfterThePaint);
 
 				const parent = mount<HTMLElement & { label: string }>(parentTag);
@@ -1517,8 +1517,8 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 				parent.label = "second";
 				await sleep(50);
 
-				expect({ childWaitsBeforePainting, readsAfterThePaint }).toEqual({
-					childWaitsBeforePainting,
+				expect({ childPaints, readsAfterThePaint }).toEqual({
+					childPaints,
 					readsAfterThePaint: readsAgainOnUpdate ? [false, false] : [false],
 				});
 			}
@@ -1576,7 +1576,7 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 		const readAtATopLevelMount: Array<boolean> = [];
 		const topLevelChildTag = uniqueTag("child");
 		const topLevelParentTag = uniqueTag("parent");
-		defineLabelledChild(topLevelChildTag, false);
+		defineLabelledChild(topLevelChildTag, "at once");
 		defineParentMountingSomethingAfterThePaint(
 			topLevelParentTag,
 			topLevelChildTag,
@@ -1593,7 +1593,7 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 		const nestedChildTag = uniqueTag("child");
 		const nestedParentTag = uniqueTag("parent");
 		const wrapperTag = uniqueTag("wrapper");
-		defineLabelledChild(nestedChildTag, false);
+		defineLabelledChild(nestedChildTag, "at once");
 		defineParentMountingSomethingAfterThePaint(
 			nestedParentTag,
 			nestedChildTag,
@@ -1952,7 +1952,9 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 		});
 	});
 	describe("post-paint code reads the same DOM however the run started", () => {
-		const mountParentWritingAChild = (parksAfterThePaint: boolean) => {
+		type ReadMoment = "straight after the paint" | "one yield later";
+
+		const mountParentWritingAChild = (whenItReads: ReadMoment) => {
 			const childTag = uniqueTag("child");
 			const parentTag = uniqueTag("parent");
 			const sawTheLabelItJustWrote: Array<boolean> = [];
@@ -1974,7 +1976,7 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 					function* (componentProps) {
 						yield function* () {
 							yield html`<${childTag} label=${componentProps.label}></${childTag}>`;
-							if (parksAfterThePaint) yield Promise.resolve();
+							if (whenItReads === "one yield later") yield Promise.resolve();
 							const child = componentProps.host.shadowRoot!.querySelector(childTag)!;
 							sawTheLabelItJustWrote.push(visibleText(child.shadowRoot) === componentProps.label);
 						};
@@ -1988,8 +1990,8 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 			};
 		};
 
-		const readBothPaths = async (parksAfterThePaint: boolean) => {
-			const { parent, sawTheLabelItJustWrote } = mountParentWritingAChild(parksAfterThePaint);
+		const readBothPaths = async (whenItReads: ReadMoment) => {
+			const { parent, sawTheLabelItJustWrote } = mountParentWritingAChild(whenItReads);
 			await sleep(50);
 			const [onMount] = sawTheLabelItJustWrote;
 			parent.label = "second";
@@ -1999,14 +2001,14 @@ describe.skipIf("happyDOM" in globalThis)("update order across components", () =
 		};
 
 		test("straight after the paint the child has not painted yet, on a mount as on an update", async () => {
-			expect(await readBothPaths(false)).toEqual({
+			expect(await readBothPaths("straight after the paint")).toEqual({
 				onMount: false,
 				onUpdate: false,
 			});
 		});
 
 		test("one yield later the child is current, on a mount as on an update", async () => {
-			expect(await readBothPaths(true)).toEqual({
+			expect(await readBothPaths("one yield later")).toEqual({
 				onMount: true,
 				onUpdate: true,
 			});

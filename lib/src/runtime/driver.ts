@@ -123,14 +123,14 @@ const UPDATE_GENERATOR_INSIDE_UPDATE_GENERATOR_MESSAGE = libraryMessage(
 );
 
 const YIELDED_VALUE_MESSAGE = libraryMessage(
-	"a component yields a template, an update generator, a promise or a load(). Write `yield html`…``, `yield function* () { … }`, `yield promise` or `yield* load(() => …)`, and yield each promise instead of awaiting it",
+	"a component yields a template, an update generator, a promise or a load(). Write `yield html`...``, `yield function* () { ... }`, `yield promise` or `yield* load(() => ...)`, and yield each promise instead of awaiting it",
 );
 
 const DROPPED_BODY_RETURN_MESSAGE =
 	"the generator returned a value that is not a function, so it was dropped. The return position is the cleanup function.";
 
 const YIELDED_GENERATOR_OBJECT_MESSAGE = libraryMessage(
-	"a component yielded a generator object. To run a helper generator, add the star: `yield* helper(…)`. To declare an update generator, yield the function without calling it: `yield view`",
+	"a component yielded a generator object. To run a helper generator, add the star: `yield* helper(...)`. To declare an update generator, yield the function without calling it: `yield view`",
 );
 
 export const alreadySettled = Promise.resolve();
@@ -504,7 +504,7 @@ const driveRunOnceSettled = async (run: Run, settling: Promise<unknown>): Promis
 //a turn does what the last step asked for, steps the run, then reads what it asks for next. Every
 //call into user code is followed by the check that no fatal error is waiting
 //oxlint-disable-next-line complexity, max-lines-per-function -- one state machine, read as one
-const driveRunUntilItStops =(run: Run, turn: TurnKind, payload: unknown): void => {
+const driveRunUntilItStops = (run: Run, turn: TurnKind, payload: unknown): void => {
 	for (let step = 0; step < STEPS_PER_DRIVER_LOOP_LIMIT; step++) {
 		switch (turn) {
 			case TURN.SEND:

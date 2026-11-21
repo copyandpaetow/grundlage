@@ -2,7 +2,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 //the source, not the package entry: the site's dev loop must not need the plugin built first
-import { prerenderWebcomponents } from "../prerender-plugin/index.ts";
+import { prerenderWebComponents } from "../prerender-plugin/index.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,5 +35,5 @@ export default defineConfig({
 			},
 		},
 	},
-	plugins: [prerenderWebcomponents({ include: [] })],
+	plugins: [prerenderWebComponents({ include: [] })],
 });

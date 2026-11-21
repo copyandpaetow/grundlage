@@ -20,6 +20,7 @@ export type SelectionApi = {
 	pickBlock: (event: PointerEvent) => HTMLElement | null;
 };
 
+//oxlint-disable-next-line max-lines-per-function -- long, not complex: a closure factory, one small function per command
 export const createSelection = (state: EditorState, deps: SelectionDeps): SelectionApi => {
 	const { updateInspector } = deps;
 

@@ -46,12 +46,11 @@ const emptyRowHashTable = (list: ListContentState): void => {
 //an exhausted chain keeps its entry as END_OF_CHAIN: probing stops at the first unused entry, so
 //freeing one would hide every hash that probed past it
 const tableIndexOfHash = (list: ListContentState, hash: number): number => {
-	const { hashAtTableIndex, chainHeadAtTableIndex, tableIndexShift } = list;
-	const lastTableIndex = (1 << (32 - tableIndexShift)) - 1;
-	let tableIndex = Math.imul(hash, FIBONACCI_MULTIPLIER) >>> tableIndexShift;
+	const lastTableIndex = (1 << (32 - list.tableIndexShift)) - 1;
+	let tableIndex = Math.imul(hash, FIBONACCI_MULTIPLIER) >>> list.tableIndexShift;
 	while (
-		chainHeadAtTableIndex[tableIndex] !== UNUSED_TABLE_ENTRY &&
-		hashAtTableIndex[tableIndex] !== hash
+		list.chainHeadAtTableIndex[tableIndex] !== UNUSED_TABLE_ENTRY &&
+		list.hashAtTableIndex[tableIndex] !== hash
 	) {
 		tableIndex = (tableIndex + 1) & lastTableIndex;
 	}
@@ -115,7 +114,7 @@ const matchUnsettledRows = (
 	endOfIndexes: number,
 	endOfPreviousRows: number,
 ): void => {
-	const { itemHashes, spareRows: resolvedRows } = list;
+	const resolvedRows = list.spareRows;
 	const unsettledPreviousRowCount = endOfPreviousRows - start;
 
 	//at most half full, so a probe always reaches an unused entry
@@ -133,7 +132,7 @@ const matchUnsettledRows = (
 	chainRowsByContentHash(list, start, endOfPreviousRows);
 	let claimedRowCount = 0;
 	for (let index = start; index < endOfIndexes; index++) {
-		const row = claimLeftmostUnclaimedRow(list, itemHashes[index]);
+		const row = claimLeftmostUnclaimedRow(list, list.itemHashes[index]);
 		if (row === undefined) continue;
 		resolvedRows[index] = row;
 		claimedRowCount++;
@@ -174,23 +173,22 @@ const findLongestIncreasingSubsequence = (
 	list: ListContentState,
 	resolvedRows: Array<ListItem | undefined>,
 ): number => {
-	const { subsequenceStarts, nextInSubsequence } = list;
 	let longestLength = 0;
 	for (let index = resolvedRows.length - 1; index >= 0; index--) {
 		const row = resolvedRows[index];
 		if (row === undefined) continue;
 		const previousIndex = row.placedAtIndex;
 		const precededLength = longestSubsequenceItCanPrecede(
-			subsequenceStarts,
+			list.subsequenceStarts,
 			longestLength,
 			previousIndex,
 		);
-		nextInSubsequence[previousIndex] =
-			precededLength === 0 ? END_OF_SUBSEQUENCE : subsequenceStarts[precededLength - 1];
-		subsequenceStarts[precededLength] = previousIndex;
+		list.nextInSubsequence[previousIndex] =
+			precededLength === 0 ? END_OF_SUBSEQUENCE : list.subsequenceStarts[precededLength - 1];
+		list.subsequenceStarts[precededLength] = previousIndex;
 		if (precededLength === longestLength) longestLength++;
 	}
-	return longestLength === 0 ? END_OF_SUBSEQUENCE : subsequenceStarts[longestLength - 1];
+	return longestLength === 0 ? END_OF_SUBSEQUENCE : list.subsequenceStarts[longestLength - 1];
 };
 
 const mountRowAfter = (
@@ -243,18 +241,17 @@ const placeRows = (
 		list.nextInSubsequence = new Int32Array(previousRowCount);
 	}
 	let nextUnmovedPreviousIndex = findLongestIncreasingSubsequence(list, resolvedRows);
-	const { itemHashes, nextInSubsequence } = list;
 	let cursor: ChildNode = openMarker;
 	for (let index = 0; index < resolvedRows.length; index++) {
 		let row = resolvedRows[index];
 		if (row === undefined) {
-			row = mountRowAfter(cursor, index, itemValues[index], itemHashes[index], treeState);
+			row = mountRowAfter(cursor, index, itemValues[index], list.itemHashes[index], treeState);
 		} else {
 			//every other row the match found was already equal in content
-			if (row.itemHash !== itemHashes[index]) {
+			if (row.itemHash !== list.itemHashes[index]) {
 				const value = coerceToTemplate(itemValues[index]);
 				const parsed = parseNestedTemplate(value);
-				row.itemHash = itemHashes[index];
+				row.itemHash = list.itemHashes[index];
 				if (isPatchableInPlace(row.instance, parsed)) patchInstance(row.instance, value.values);
 				else {
 					const fragment = cloneTemplateFragment(parsed, row.tailMarker.parentNode);
@@ -266,7 +263,7 @@ const placeRows = (
 				}
 			}
 			if (row.placedAtIndex === nextUnmovedPreviousIndex) {
-				nextUnmovedPreviousIndex = nextInSubsequence[nextUnmovedPreviousIndex];
+				nextUnmovedPreviousIndex = list.nextInSubsequence[nextUnmovedPreviousIndex];
 			} else {
 				moveRowAfter(cursor, row);
 			}
@@ -285,11 +282,10 @@ export const commitList = (
 ): void => {
 	const count = itemValues.length;
 	if (list.itemHashes.length < count) list.itemHashes = new Array(count);
-	const itemHashes = list.itemHashes;
 	let aggregateHash = LIST_HASH_SEED;
 	for (let index = 0; index < count; index++) {
 		const itemHash = hashValue(itemValues[index]);
-		itemHashes[index] = itemHash;
+		list.itemHashes[index] = itemHash;
 		aggregateHash = combineOrderedHash(aggregateHash, itemHash);
 	}
 	if (aggregateHash === list.lastValueHash) return;
@@ -306,7 +302,7 @@ export const commitList = (
 	while (
 		firstUnsettledIndex < endOfUnsettledIndexes &&
 		firstUnsettledIndex < endOfUnsettledPreviousRows &&
-		previousRows[firstUnsettledIndex].itemHash === itemHashes[firstUnsettledIndex]
+		previousRows[firstUnsettledIndex].itemHash === list.itemHashes[firstUnsettledIndex]
 	) {
 		resolvedRows[firstUnsettledIndex] = previousRows[firstUnsettledIndex];
 		firstUnsettledIndex++;
@@ -314,7 +310,8 @@ export const commitList = (
 	while (
 		endOfUnsettledIndexes > firstUnsettledIndex &&
 		endOfUnsettledPreviousRows > firstUnsettledIndex &&
-		previousRows[endOfUnsettledPreviousRows - 1].itemHash === itemHashes[endOfUnsettledIndexes - 1]
+		previousRows[endOfUnsettledPreviousRows - 1].itemHash ===
+			list.itemHashes[endOfUnsettledIndexes - 1]
 	) {
 		endOfUnsettledIndexes--;
 		endOfUnsettledPreviousRows--;

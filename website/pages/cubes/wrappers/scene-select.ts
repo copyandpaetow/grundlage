@@ -24,12 +24,15 @@ const slottedBlocks = (element: HTMLElement): Element[] => {
 customElements.define(
 	"scene-select",
 	component(
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 		function* () {
+			//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 			yield function* view(props) {
 				const placement = placementVariables(blockTransformFromProps(props));
 
 				//Null while the slot is still going up, and on a cage holding nothing; both
 				//hide the box rather than draw a zero one.
+				//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
 				const cage = (bounds: Bounds | null) => {
 					const centerX = bounds ? bounds.center[0] : 0;
 					const centerY = bounds ? bounds.center[1] : 0;

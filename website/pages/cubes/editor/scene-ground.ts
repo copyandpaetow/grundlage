@@ -36,7 +36,7 @@ customElements.define(
 					transform: rotateX(90deg);
 				}
 
-				/* Coplanar with the host — no transform of its own — so offsetX/offsetY stay
+				/* Coplanar with the host, with no transform of its own, so offsetX/offsetY stay
 				   local-plane coordinates. */
 				.surface {
 					position: absolute;

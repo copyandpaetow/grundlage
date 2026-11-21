@@ -30,7 +30,7 @@ describe("spread binding - value shapes", () => {
 		expect(attributesAfterCommitting("disabled")).toEqual([["disabled", ""]]);
 	});
 
-	test("an empty string yields no attribute — the conditional-boolean idiom", () => {
+	test("an empty string yields no attribute, for the conditional boolean", () => {
 		//`${cond ? "" : "disabled"}` must produce no attribute in the empty branch,
 		//never setAttribute("", "") which throws InvalidCharacterError
 		expect(attributesAfterCommitting("")).toEqual([]);
@@ -55,6 +55,22 @@ describe("spread binding - value shapes", () => {
 			["id", "x"],
 			["tabindex", "0"],
 		]);
+	});
+
+	test("data with its own constructor key maps names to their values", () => {
+		expect(attributesAfterCommitting(JSON.parse('{"constructor":"x","id":"y"}'))).toEqual([
+			["constructor", "x"],
+			["id", "y"],
+		]);
+	});
+
+	test("an object without a prototype maps names to their values", () => {
+		const attributes = Object.assign(Object.create(null) as object, { id: "x" });
+		expect(attributesAfterCommitting(attributes)).toEqual([["id", "x"]]);
+	});
+
+	test("a class instance throws instead of spreading its fields", () => {
+		expect(() => attributesAfterCommitting(new Date(0))).toThrow(/expects a string/);
 	});
 });
 

@@ -86,7 +86,7 @@ describe("FormAssociatedBase - lifecycle callbacks re-broadcast as events", () =
 		field.formResetCallback();
 
 		expect(received).toBeInstanceOf(Event);
-		//the reset event deliberately skips CustomEvent to avoid the detail allocation
+		//the reset event skips CustomEvent on purpose to avoid the detail allocation
 		expect(received).not.toBeInstanceOf(CustomEvent);
 	});
 

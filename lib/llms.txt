@@ -11,9 +11,9 @@ kinds of value:
 
 - an `html` TEMPLATE paints once and stays until the next template or update generator
   replaces it;
-- an UPDATE GENERATOR, `yield function* view() { … }`, runs now and again on every update,
+- an UPDATE GENERATOR, `yield function* view() { ... }`, runs now and again on every update,
   and the previous run is torn down before the next one starts. `view` is only a name for the
-  reader, not a keyword: any name, or none (`yield function* () { … }`), behaves the same;
+  reader, not a keyword: any name, or none (`yield function* () { ... }`), behaves the same;
 - a PROMISE waits: the `yield` evaluates to its value, and a rejection throws at the `yield`.
   In TypeScript, `yield* awaited(promise)` is the same wait with a typed value (see Rules).
 
@@ -26,7 +26,7 @@ declared in `component(gen, { props })`, and an update generator receives the sa
 `yield` of a template evaluates back to the host element. A `yield` of an update generator WAITS
 until a run of it finishes and evaluates to what that run returned. A returned function is the
 cleanup. There are no signals and no hooks. An update happens on `host.update()`, on
-`host.setProp(…)`, on assigning a declared prop to a NEW value, and when a DECLARED attribute on
+`host.setProp(...)`, on assigning a declared prop to a NEW value, and when a DECLARED attribute on
 the host element changes. An undeclared attribute (`class`, `style`, `data-*`) does not trigger
 an update. A template BINDING the host's own declared prop to a new value triggers one too (see
 Host attributes). An update re-runs the update generator; the component body itself does not
@@ -70,7 +70,7 @@ starts over:
 
 ```javascript
 yield function* profile({ userId }) {
-	yield html`<p>Loading…</p>`;
+	yield html`<p>Loading...</p>`;
 	const user = yield fetchUser(userId);
 	yield html`<p>${user.name}</p>`;
 };
@@ -122,13 +122,13 @@ yield function* profile({ userId }) {
   - `prop.attribute(parser, fallback?)`: a value markup can set. It observes the LOWERCASED
     prop name (`userId` observes `userid`, and either spelling binds in markup), and a property
     write reflects back to it. `parser` is `String`, `Number`, `BigInt`, `Boolean`,
-    `prop.oneOf(…)` or a function taking whatever arrived and returning the value, or
+    `prop.oneOf(...)` or a function taking whatever arrived and returning the value, or
     `undefined` to REFUSE it. A string came from markup and needs parsing; anything else came
     from JavaScript and is already itself:
     `(incoming) => typeof incoming === "string" ? incoming.split(" ") : incoming`. `null` (the
     attribute's removal) and `undefined` are absence. `prop.attribute(Boolean)` is `false` while
     absent, so it never needs a fallback.
-  - `prop.unreflected(prop.attribute(…))`: a property write does not reflect. The attribute
+  - `prop.unreflected(prop.attribute(...))`: a property write does not reflect. The attribute
     stays what the markup wrote, the default, like a native input's `value`; a form reset reads
     it back with `prop.read(host, props).value`.
   - `prop.optional(definition)`: may stay `undefined`. Only for a definition without a
@@ -211,7 +211,7 @@ yield function* profile({ userId }) {
   ```
 
   ALWAYS with the star, and NO `host` argument: `load()` returns a generator, the star types
-  the result as the fetcher's, and `yield load(…)` throws. The fetcher returns a value or a
+  the result as the fetcher's, and `yield load(...)` throws. The fetcher returns a value or a
   promise. On the server it runs and the result is written into the shadow root as a
   `<script type="application/json" data-ssr>`. While the browser HYDRATES that markup, the
   same `load` returns the server's result and removes the script instead of fetching.
@@ -220,7 +220,7 @@ yield function* profile({ userId }) {
 
   Unkeyed loads take the server's results in ORDER, per element, so a `load` inside a branch
   the server and the browser can take differently needs a string KEY. A mixin builds its key
-  from its arguments, `` load(`user-${id}`, …) ``, because a key used twice in one element
+  from its arguments, `` load(`user-${id}`, ...) ``, because a key used twice in one element
   throws on the server. The result crosses as JSON: return plain objects, arrays, strings,
   finite numbers, booleans or `null`. A `Date`, a `Map`, a class instance, a `Response`, a
   bigint or a template throws and names the fix. A fetcher that fails on the server throws
@@ -246,7 +246,7 @@ yield function* profile({ userId }) {
   from outside. A DECLARED name is assigned through its own accessor, so it runs the prop's
   parser, reflects and schedules, and `undefined` is the absence that writes the fallback back
   (`null` too, for a `prop.attribute`). An undeclared name resolves the same way a dynamic attribute does:
-  stringable → attribute, non-stringable → property, `on*`/`on-*` plus a function → event
+  a stringable value becomes an attribute, any other value a property, and a function on `on*`/`on-*` an event
   listener. Pass `oldValue` so a previously bound listener is removed; the other mode is
   cleared either way.
 
@@ -265,10 +265,10 @@ attribute      <div class=${className}>
 mixed attr     <div class="static ${dynamic}">
 event          <button onClick=${handler}>          // on + EventName
 custom event   <color-swatch on-swatch-select=${handler}>
-spread         <div ${attributes}>                  // object → name/value, array → boolean attrs
+spread         <div ${attributes}>                  // object: name/value pairs, array: boolean attributes
 list           <ul>${items.map((i) => html`<li>${i}</li>`)}</ul>
-list key       <li><!--${item.id}-->…</li>          // first dynamic comment = row identity
-nested         <div>${show && html`<details>…</details>`}</div>
+list key       <li><!--${item.id}-->...</li>          // first dynamic comment = row identity
+nested         <div>${show && html`<details>...</details>`}</div>
 dynamic tag    <${tagName}>content</${tagName}>
 raw            <style>${css}</style>                // style/script/textarea/title
 template       <template><li>${label}</li></template>  // content rebuilt on change, see Rules
@@ -284,7 +284,7 @@ the inside.
 
 ```javascript
 yield function* view({ role }) {
-	yield html`<template class="card" role="${role}" on-form-reset=${reset}>…</template>`;
+	yield html`<template class="card" role="${role}" on-form-reset=${reset}>...</template>`;
 };
 ```
 
@@ -297,7 +297,7 @@ yield function* view({ role }) {
   hydration and on every patch alike. The next paint binds the same value, the change gate
   skips it, and the component settles, so `<template theme=${x}>` with `componentProps.theme`
   painted inside shows `x` in the same frame, at the cost of one extra update generator run. A
-  binding derived from the prop itself (`` html`<template count=${componentProps.count + 1}>…`
+  binding derived from the prop itself (`` html`<template count=${componentProps.count + 1}>...`
   ``) never settles: it is the update loop below and ends in a visible error. Derive the bound
   value from something the paint does not write (a local, another prop).
 - A `<template>` WITH attributes in a nested position (content hole, list row) throws. A
@@ -347,13 +347,13 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 - The component body runs ONCE per mount and runs to completion, no `while (true)`. State
   declared in the body persists across updates (the update generator closes over it), so
   mutable state belongs there rather than being re-derived.
-- Don't hang state or methods on `host` (`host.query = …`, `host.close = () => …`). The host
+- Don't hang state or methods on `host` (`host.query = ...`, `host.close = () => ...`). The host
   is not an instance bag. Keep state in generator-local variables, communicate outward by
   dispatching events and inward by reading attributes/props. Real methods come from extending
   the returned class (`class extends component(fn) {}`); a property assigned at runtime only
   exists once `connectedCallback` has run.
-- Updates are triggered by `host.update()`, by `host.setProp(…)`, by assigning a declared
-  prop a value it did not already hold (`el.items = […]`, `el.label = "x"`), and by a change
+- Updates are triggered by `host.update()`, by `host.setProp(...)`, by assigning a declared
+  prop a value it did not already hold (`el.items = [...]`, `el.label = "x"`), and by a change
   to a DECLARED attribute. A write the prop's parser refuses, and a re-write of the same
   primitive, schedule nothing. A component's own host binding writing one of its own props
   schedules like any other write (Host attributes). Undeclared attributes are not observed at
@@ -394,11 +394,11 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   into, only to whatever shadow tree holds them both. A loop (two components each writing a
   value that updates the other, or a paint writing its own prop a new value every time) is
   capped and ends in the same visible error an uncaught error gives.
-- A `yield` of a template evaluates to the host element: ``const host = yield html`…` ``. The
+- A `yield` of a template evaluates to the host element: ``const host = yield html`...` ``. The
   host is also on the props object, `function* ({ host })`. A yielded promise evaluates to its resolved value
   (`const data = yield fetch(...)`) and a rejected one throws at that `yield`. Any other value
   (a plain or arrow function, an `async` function, a string, an array, a thenable that is not a
-  `Promise`) throws and names what a component yields. So do `yield load(…)` without the star
+  `Promise`) throws and names what a component yields. So do `yield load(...)` without the star
   and a called generator, `yield helper()`: delegate with `yield* helper()`. Yield each promise
   instead of awaiting it.
 - A run of an update generator runs to completion like the component body: it may paint several
@@ -477,8 +477,8 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   exception a cleanup throws goes to `reportError`, not the console.
 - In a CONTENT hole `null`, `undefined`, `false` and `true` paint nothing, since a boolean is a
   condition result, not a value. Numbers, bigints and strings always paint, `0`, `0n`,
-  `NaN` and `""` included. So ``${isOpen && html`…`}`` is safe, but ``${items.length &&
-  html`…`}`` writes the text `"0"` on an empty list; use a ternary for any non-boolean guard.
+  `NaN` and `""` included. So ``${isOpen && html`...`}`` is safe, but ``${items.length &&
+  html`...`}`` writes the text `"0"` on an empty list; use a ternary for any non-boolean guard.
   An array or an ITERATOR paints as a list (see Lists and keys). An object, a function, a
   `Date`, a symbol, a `Map` or a `Set` in a content hole THROWS.
 - In an ATTRIBUTE hole on an UNDECLARED name, `false`, `null` and `undefined` REMOVE the
@@ -505,7 +505,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   and `false` contribute `""`, as in a content hole, so `class="card ${isOpen && "open"}"` drops
   the word when closed, and an object contributes `String(value)` rather than reaching the
   property mode. Either way, a name that composes to something new
-  clears the slot the old name held, listener and property mode included, before writing
+  clears what the old name wrote, listener and property mode included, before writing
   the new one.
 - LIVE STATE: `value` on `<input>`/`<textarea>`, `checked` and `indeterminate` on
   `<input>`, and `selected` on `<option>` are written as the ATTRIBUTE on a binding's first commit
@@ -519,7 +519,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   last paint already had writes nothing, so keep state in sync from `onInput` if a reset to that
   same value must land. Custom elements keep the ordinary attribute rules for these names. A
   composed value (`value="a ${b}"`) stays an attribute write. `<select>` has no value attribute:
-  bind `selected` on each `<option>` instead (`<select value=${…}>` warns and selects nothing).
+  bind `selected` on each `<option>` instead (`<select value=${...}>` warns and selects nothing).
 - A dynamic tag that composes to a DIFFERENT tag name swaps the element: a fresh element is
   created, attributes are copied, children are moved over, every binding anchored to it is
   re-pointed, and focus inside it is restored. Attributes survive the copy, so properties,
@@ -534,7 +534,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   while `on-*` is refused at define time because markup has already claimed it. Custom events
   need the `on-` prefix (`on-swatch-select=${handler}`) and keep their hyphenated name
   verbatim. The name may itself hold a hole (`on${eventName}=${handler}`), which is resolved
-  from what it composes to on every paint. A quoted string (`onclick="…"`) is never a binding.
+  from what it composes to on every paint. A quoted string (`onclick="..."`) is never a binding.
   An inline handler, `onClick=${() => select(week)}`, is a new function on every paint, so its
   listener is removed and added again on each paint: two calls, no style or layout work. In a
   list it also defeats matching rows by content, so key those rows (see Lists and keys)
@@ -563,7 +563,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   attributes (`<noscript class=${c}>`) are fine. Put a dynamic fallback outside the element.
 - A NESTED `<template>` (one inside other markup, not the host wrapper) fills its CONTENT like
   any other template: text stays text and attributes stay attributes, so a value never becomes
-  markup, and `<template>${html`…`}</template>` works the same way. The content is inert and
+  markup, and `<template>${html`...`}</template>` works the same way. The content is inert and
   only ever COPIED (`importNode(template.content, true)`), so it holds no library markers and
   is REBUILT whole, inside the same `<template>` element, whenever one of its values changes.
   Copies made before a change keep the old content. A copy keeps attributes and text only, so
@@ -577,14 +577,16 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 - TRUSTED TYPES: under `require-trusted-types-for 'script'` the library writes its own template
   markup through one policy named `grundlage`. A `trusted-types` directive lists it, plus
   `'allow-duplicates'` when two copies of the library share the page.
-- Don't write literal `<!--^.^ …-->` or `<!--*.*-->` comments in template HTML: those
+- Don't write literal `<!--^.^ ...-->` or `<!--*.*-->` comments in template HTML: those
   prefixes are the internal markers and a collision silently misaligns hydration.
-- Change detection is HASH-BASED for strings, numbers, bigints, booleans, plain objects,
+- Change detection is HASH-BASED for strings, numbers, bigints, booleans, PLAIN OBJECTS,
   arrays, `Map`, `Set` and nested templates: mutate-then-`update()` is detected (object
-  graphs are walked to a depth of 64). A reference back to an enclosing object (a `parent`
-  link) ends the walk there. A walk past 1,000,000 objects and arrays throws, whether the
-  value is that large or reaches the same objects again and again the way a graph does: pass
-  such data inside a class instance.
+  graphs are walked to a depth of 64). A plain object is one whose prototype is
+  `Object.prototype` or `null`: an object literal, `JSON.parse` output (a `constructor` key
+  included), an `Object.groupBy` result. A spread takes the same plain objects. A reference
+  back to an enclosing object (a `parent` link) ends the walk there. A walk past 1,000,000
+  objects and arrays throws, whether the value is that large or reaches the same objects
+  again and again the way a graph does: pass such data inside a class instance.
   Class instances, `Date`, typed arrays and functions
   are compared by REFERENCE identity, so mutating one in place reads as unchanged and is
   skipped. Pass plain data, or replace the reference to signal a change. A declared prop is
@@ -593,16 +595,16 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   reference is never called unchanged.
   It lands on the next paint from any cause, where these hashes pick the new contents up.
 - A `<style>` with no holes is written at mount and never touched again, inline or hoisted:
-  ``const styles = html`<style>…</style>` `` at module scope, embedded as `${styles}`, is an
+  ``const styles = html`<style>...</style>` `` at module scope, embedded as `${styles}`, is an
   unchanged nested template on every later paint.
-- A dynamic `<style>` is SPLIT at its TOP-LEVEL RULES. Each top-level rule that holds a `${…}`
+- A dynamic `<style>` is SPLIT at its TOP-LEVEL RULES. Each top-level rule that holds a `${...}`
   (a style rule, or an at-rule with its whole block) gets a `<style>` element of its own; the
   rules without holes stay static `<style>` elements with the same text in every instance, so the
   browser parses them once. A changed value rewrites the text of its own rule's `<style>` and
   nothing else; an unchanged value writes nothing. A hole may sit anywhere: a value, a selector, a
   property name, an at-rule prelude, or a whole block of rules (a hole between rules joins the rule
   after it). Keep a holed rule SMALL and at the TOP LEVEL: a hole inside a big `@media` or
-  `:host { … }` block rewrites the whole block on every change. Each instance owns its own
+  `:host { ... }` block rewrites the whole block on every change. Each instance owns its own
   `<style>` elements, so duplicates never collide, and a moved element keeps its current values
   because the text holds them. The pieces keep source order in the same tree, so the cascade,
   `@layer` order, `@keyframes` names and a prelude-less `@scope` (scoped to the `<style>`'s parent)
@@ -613,7 +615,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   `<style>`. A value the browser rejects drops its declaration; nothing keeps the previous value.
   A CSS-wide keyword (`inherit`/`initial`/`unset`/`revert`) takes its normal effect, and
   serialized output (`getHTML`) shows the current values.
-  THROWS: `${…}` in both the attributes and the content of one `<style>` (an attribute hole would
+  THROWS: `${...}` in both the attributes and the content of one `<style>` (an attribute hole would
   reach one piece only), and `@namespace` in a `<style>` with holes (a namespace applies to its
   own sheet only).
 - Declare inputs in `component(gen, { props })` and read them off the object the component body
@@ -623,9 +625,9 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 - The props object IS the store, so it is live rather than a snapshot: a value read after a
   yielded promise settles is current rather than the one the run started with. WHERE YOU
   DESTRUCTURE therefore decides what you get, and this is the most common mistake. The component
-  body runs ONCE, so `component(function* ({ label }) …)` freezes `label` at mount. That is
+  body runs ONCE, so `component(function* ({ label }) ...)` freezes `label` at mount. That is
   right for an initial value or a mount-time branch, WRONG for anything an update generator
-  paints. An update generator runs per update, so `yield function* view({ label }) …` is live,
+  paints. An update generator runs per update, so `yield function* view({ label }) ...` is live,
   and so is reading `componentProps.label` off the object. `{ ...componentProps }` is how you
   take a deliberate snapshot, by the language's own rule. The object is handed out READONLY:
   writing to it would move a value nothing parsed, reflected or scheduled on.
@@ -634,7 +636,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
 - `load` reuses the server's result only while hydrating and runs the fetcher everywhere else;
   don't add a fetch-once cache around it.
 - TypeScript only: one generator has one resume type for all of its yields, so a bare
-  `yield promise` evaluates to `unknown`, and annotating it (`const user: User = yield …`) is a
+  `yield promise` evaluates to `unknown`, and annotating it (`const user: User = yield ...`) is a
   compile error. Wait with the exported delegate instead, typed by the promise:
 
   ```typescript
@@ -646,7 +648,7 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   only with a type. `yield* load(() => fetchUser(id))` is typed the same way, by its fetcher.
   Don't cast a bare yield (`(yield p) as User`): the cast checks nothing.
 - TypeScript only: a parser function annotates its parameter as `unknown`,
-  `prop.attribute((incoming: unknown) => …)`, because markup and JavaScript both reach it. An
+  `prop.attribute((incoming: unknown) => ...)`, because markup and JavaScript both reach it. An
   update generator or `yield*` helper typed by hand annotates as
   `Generator<YieldableValue, Result, unknown>`, not bare `Generator`, and takes the SHAPE it
   reads (`{ host: BaseComponent; readonly userId: string }`),

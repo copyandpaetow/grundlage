@@ -12,21 +12,6 @@ const ruleOf = (name: string) => {
 	return rule;
 };
 
-tester.run("cast-reason", ruleOf("cast-reason"), {
-	valid: [
-		"const modes = ['a', 'b'] as const;",
-		"//the walker only stops on comments\nconst comment = walker.currentNode as Comment;",
-		"const comment = walker.currentNode as Comment; //the walker only stops on comments",
-		"//the map was filled above\nconst row = rows.get(key)!;",
-	],
-	invalid: [
-		{ code: "const comment = walker.currentNode as Comment;", errors: 1 },
-		{ code: "const row = rows.get(key)!;", errors: 1 },
-		{ code: "const value = input as unknown as number;", errors: 2 },
-		{ code: "//a reason two lines up\n\nconst row = rows.get(key)!;", errors: 1 },
-	],
-});
-
 tester.run("no-boolean-parameter", ruleOf("no-boolean-parameter"), {
 	valid: [
 		"const paint = (mode: 'replace' | 'append') => {};",
