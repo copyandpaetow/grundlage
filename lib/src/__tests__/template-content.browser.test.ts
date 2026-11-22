@@ -396,6 +396,42 @@ describe("a nested <template> with shadowrootmode", () => {
 	});
 });
 
+describe("a <template> inside <svg> or <math>", () => {
+	const noForeignHoles = /grundlage: a <template> inside <svg> or <math> expects no \$\{\.\.\.\}/;
+
+	test("a hole in its content throws, since the browser builds a plain element there", async () => {
+		const { host, errors } = await mountView(() => html`<svg><template>${"x"}</template></svg>`);
+		expect(errors).toHaveLength(1);
+		expect(String(errors[0])).toMatch(noForeignHoles);
+		host.remove();
+	});
+
+	//happy-dom builds an HTML <template> inside <math>, so there the content paints
+	const parsesMathAsForeign = (() => {
+		const parent = document.createElement("div");
+		parent.innerHTML = "<math><template></template></math>";
+		return !(parent.querySelector("template") instanceof HTMLTemplateElement);
+	})();
+
+	test.skipIf(!parsesMathAsForeign)("a hole in its content throws inside <math> too", async () => {
+		const { host, errors } = await mountView(
+			() => html`<math><template><mi>${"x"}</mi></template></math>`,
+		);
+		expect(errors).toHaveLength(1);
+		expect(String(errors[0])).toMatch(noForeignHoles);
+		host.remove();
+	});
+
+	test("a hole on its attributes binds", async () => {
+		const { host, errors } = await mountView(
+			() => html`<svg><template class=${"a"}></template></svg>`,
+		);
+		expect(errors).toEqual([]);
+		expect(host.shadowRoot!.querySelector("template")!.getAttribute("class")).toBe("a");
+		host.remove();
+	});
+});
+
 const canPrerender =
 	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe === "function";
 

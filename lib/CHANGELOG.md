@@ -58,6 +58,7 @@
 - Holes inside a nested `<template>` bind like any other hole, and a changed value rebuilds its content.
 - A listener, a property or a prop inside a nested `<template>` throws, since copies of the content keep none of them.
 - `shadowrootmode` on a nested `<template>` throws: let the element attach its own shadow root.
+- A hole inside a `<template>` within `<svg>` or `<math>` throws, since the browser builds a plain element there.
 - The production build leaves a failed component's shadow root empty; only the development build shows the error text.
 - An object without a prototype, such as an `Object.groupBy` result, is compared by content and can be spread, like a plain object.
 - Errors from `component()`, `load()`, `prop.*`, a hole and a dynamic tag say what they expect and what arrived.

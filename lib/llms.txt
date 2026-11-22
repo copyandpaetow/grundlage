@@ -573,7 +573,9 @@ paints recursively; anything else (plain object, `Date`, function, symbol) throw
   `<template>` element itself (`<template id=${id}>`) are ordinary attribute bindings.
   `shadowrootmode` on a nested `<template>` THROWS: a paint keeps it a plain `<template>`,
   while the browser turns server markup into a shadow root, so the two would disagree. Let the
-  element attach its own shadow root.
+  element attach its own shadow root. A `<template>` inside `<svg>` or `<math>` is a plain SVG
+  or MathML element with no content, so a hole INSIDE it THROWS at the paint; a hole on its
+  attributes binds.
 - TRUSTED TYPES: under `require-trusted-types-for 'script'` the library writes its own template
   markup through one policy named `grundlage`. A `trusted-types` directive lists it, plus
   `'allow-duplicates'` when two copies of the library share the page.
