@@ -356,6 +356,7 @@ describe("tearing down a generator", () => {
 
 	test("a new update generator run cuts the old run's teardown off and warns", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const teardownWait = Promise.withResolvers<void>();
 		let finishedTeardownCount = 0;
 		const element = mount(
 			component(function* () {
@@ -364,7 +365,7 @@ describe("tearing down a generator", () => {
 						yield html`<p>first run</p>`;
 						yield Promise.withResolvers().promise;
 					} finally {
-						yield sleep();
+						yield teardownWait.promise;
 						finishedTeardownCount++;
 					}
 				};
@@ -373,7 +374,9 @@ describe("tearing down a generator", () => {
 		await sleep();
 		//not awaited: the replacing run parks too, so it never settles
 		void (element as HTMLElement & { update(): Promise<void> }).update();
-		await sleep(5);
+		await sleep();
+		teardownWait.resolve();
+		await sleep();
 		expect(finishedTeardownCount).toBe(0);
 		expect(warn).toHaveBeenCalledOnce();
 		expect(warn.mock.calls[0][0]).toContain("a new run started");

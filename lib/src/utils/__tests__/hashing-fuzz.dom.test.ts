@@ -214,7 +214,8 @@ test(
 		expect(missedChanges.slice(0, 3)).toEqual([]);
 		expect(falseChanges.slice(0, 3)).toEqual([]);
 	},
-	5_000 * FUZZ_SCALE,
+	//about 1 s alone, but over 5 s beside the browser projects; the bound only has to catch a hang
+	30_000 * FUZZ_SCALE,
 );
 
 //small values repeat their shapes often, so every pair among them is compared, including pairs that
