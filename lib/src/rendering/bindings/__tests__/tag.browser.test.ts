@@ -99,6 +99,52 @@ describe("tag updates", () => {
 		cleanup(element);
 	});
 
+	test("a swap keeps the namespace of an attribute such as xlink:href", async () => {
+		const tag = uniqueTag();
+		const tagName = "use";
+
+		const MyElement = component(function* () {
+			yield html`<svg><${tagName} xlink:href="#icon"></${tagName}></svg>`;
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const use = element.shadowRoot!.querySelector("use")!;
+		expect(use.getAttributeNS("http://www.w3.org/1999/xlink", "href")).toBe("#icon");
+
+		cleanup(element);
+	});
+
+	//happy-dom's parser reads `=a` as `a`, so there the name never reaches the swap
+	const parsesEqualsSignName = (() => {
+		const parent = document.createElement("div");
+		parent.innerHTML = "<p =a></p>";
+		return parent.firstElementChild!.hasAttribute("=a");
+	})();
+
+	test.skipIf(!parsesEqualsSignName)(
+		"a swap keeps an attribute name the HTML parser accepts and setAttribute refuses",
+		async () => {
+			const tag = uniqueTag();
+			const tagName = "section";
+
+			const MyElement = component(function* () {
+				yield html`<${tagName} =a>text</${tagName}>`;
+			});
+
+			customElements.define(tag, MyElement);
+			const element = mount(tag) as InstanceType<typeof MyElement>;
+			await sleep();
+
+			const section = element.shadowRoot!.querySelector("section")!;
+			expect(section.getAttribute("=a")).toBe("");
+
+			cleanup(element);
+		},
+	);
+
 	test("preserves child nodes when switching tags", async () => {
 		const tag = uniqueTag();
 		let tagName = "div";

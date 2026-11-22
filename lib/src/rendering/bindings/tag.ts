@@ -74,9 +74,10 @@ export const commitTag = (
 		);
 	}
 	warnWhenParsingWouldSplitParagraph(newTag, element.parentNode);
+	//a copied node keeps the namespace (xlink:href) and any name the HTML parser accepted, which
+	//setAttribute would drop or refuse
 	for (let index = 0; index < element.attributes.length; index++) {
-		const attribute = element.attributes[index];
-		newElement.setAttribute(attribute.name, attribute.value);
+		newElement.setAttributeNode(element.attributes[index].cloneNode() as Attr);
 	}
 	while (element.firstChild) newElement.appendChild(element.firstChild);
 	repointAnchoredBindings(siblings, element, newElement);

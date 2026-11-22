@@ -65,6 +65,7 @@
 
 ### Fixed
 
+- A dynamic tag that swaps its element keeps every attribute as parsed, the namespace of `xlink:href` included.
 - On the server, a body that catches an update generator's error runs its `finally`, also when that generator called `update()`.
 - An `update()` queued for an update generator the body drops settles with the drop instead of re-running the next one.
 - A child moved straight after its parent's paint runs its update generator once.
