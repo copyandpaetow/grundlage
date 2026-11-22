@@ -1,8 +1,8 @@
-//must come first — parser/html.ts runs `document.createElement` at module load
+//must come first: parser/html.ts runs `document.createElement` at module load
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { html, component } from "../../src/index";
+import { html, component, prop } from "../../src/index";
 import { ComponentConstructor } from "../../src/types";
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -12,9 +12,7 @@ const uniqueTag = () => `ssr-node-${nextTagId++}-${Date.now()}`;
 
 const mount = async (tag: string, ComponentClass: ComponentConstructor) => {
 	customElements.define(tag, ComponentClass);
-	const element = document.createElement(tag) as InstanceType<
-		typeof ComponentClass
-	>;
+	const element = document.createElement(tag) as InstanceType<typeof ComponentClass>;
 	document.body.appendChild(element);
 	//let synchronous generators reach their first yield
 	await flushMicrotasks();
@@ -31,22 +29,28 @@ const track = <T extends HTMLElement>(element: T): T => {
 	return element;
 };
 
-describe("SSR: server stops at first renderable yield", () => {
+describe("SSR: server stops at the first paint", () => {
 	test("the server-environment check fires in this node test process", () => {
 		expect(typeof window).toBe("undefined");
 	});
 
-	test("synchronous generator with multiple yields renders only the first one", async () => {
+	test("synchronous generator with multiple yields paints only the first one", async () => {
 		const tag = uniqueTag();
 		let yieldCount = 0;
 
 		const Component = component(function* () {
 			yieldCount++;
-			yield () => html`<p>first</p>`;
+			yield function* () {
+				yield html`<p>first</p>`;
+			};
 			yieldCount++;
-			yield () => html`<p>second</p>`;
+			yield function* () {
+				yield html`<p>second</p>`;
+			};
 			yieldCount++;
-			yield () => html`<p>third</p>`;
+			yield function* () {
+				yield html`<p>third</p>`;
+			};
 		});
 
 		const element = track(await mount(tag, Component));
@@ -62,7 +66,9 @@ describe("SSR: server stops at first renderable yield", () => {
 		let postYieldRan = false;
 
 		const Component = component(function* () {
-			yield () => html`<p>only</p>`;
+			yield function* () {
+				yield html`<p>only</p>`;
+			};
 			postYieldRan = true;
 		});
 
@@ -71,8 +77,8 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(postYieldRan).toBe(false);
 	});
 
-	test("outer generator yielding a static template renders and stops", async () => {
-		//a static template installs through a different path than a render function, so the cancel is
+	test("outer generator yielding a static template paints and stops", async () => {
+		//a static template installs through a different path than an update generator, so the cancel is
 		//pinned separately here
 		const tag = uniqueTag();
 		let postYieldRan = false;
@@ -90,24 +96,24 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(postYieldRan).toBe(false);
 	});
 
-	test("render-function yield (non-generator function) is invoked exactly once", async () => {
+	test("an update generator yield runs exactly once", async () => {
 		const tag = uniqueTag();
-		let renderFnCalls = 0;
+		let runCount = 0;
 		let postYieldRan = false;
 
 		const Component = component(function* () {
-			yield () => {
-				renderFnCalls++;
-				return html`<p>render-fn ${renderFnCalls}</p>`;
+			yield function* () {
+				runCount++;
+				yield html`<p>run ${runCount}</p>`;
 			};
 			postYieldRan = true;
 		});
 
 		const element = track(await mount(tag, Component));
 
-		expect(renderFnCalls).toBe(1);
+		expect(runCount).toBe(1);
 		expect(postYieldRan).toBe(false);
-		expect(element.shadowRoot!.textContent).toContain("render-fn 1");
+		expect(element.shadowRoot!.textContent).toContain("run 1");
 	});
 
 	test("nested generator function: SSR descends into the inner and stops at its first yield", async () => {
@@ -117,9 +123,9 @@ describe("SSR: server stops at first renderable yield", () => {
 		const Component = component(function* () {
 			yield function* inner() {
 				innerYields++;
-				yield () => html`<p>inner-first</p>`;
+				yield html`<p>inner-first</p>`;
 				innerYields++;
-				yield () => html`<p>inner-second</p>`;
+				yield html`<p>inner-second</p>`;
 			};
 		});
 
@@ -131,14 +137,14 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 
 	test("an async inner still wins the markup over the parent's own later yield", async () => {
-		//the second enforcement point of "the first renderable wins": stopping at the first paint is
+		//the second enforcement point of "the first paint wins": stopping at the first paint is
 		//not enough, the parent must not be resumed past an install whose branch has not painted yet
 		const tag = uniqueTag();
 
 		const Component = component(function* () {
-			yield async function* inner() {
-				await Promise.resolve();
-				yield () => html`<p>inner-async</p>`;
+			yield function* inner() {
+				yield Promise.resolve();
+				yield html`<p>inner-async</p>`;
 			};
 			yield html`<p>parent-took-over</p>`;
 		});
@@ -150,14 +156,16 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(element.shadowRoot!.textContent).not.toContain("parent-took-over");
 	});
 
-	test("async work before the first yield resolves, then the first yield renders", async () => {
-		//the first template depends on the await — SSR can't skip it
+	test("async work before the first yield resolves, then the first yield paints", async () => {
+		//the first template depends on the await, so SSR can't skip it
 		const tag = uniqueTag();
 		let postYieldRan = false;
 
 		const Component = component(function* () {
 			const data = yield Promise.resolve("from-server");
-			yield () => html`<p>${data as string}</p>`;
+			yield function* () {
+				yield html`<p>${data}</p>`;
+			};
 			postYieldRan = true;
 		});
 
@@ -170,56 +178,58 @@ describe("SSR: server stops at first renderable yield", () => {
 
 	test("attribute changes do not trigger update() on the server (no MutationObserver allocated)", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 
 		const Component = component(function* ({ host }) {
-			renderCount++;
-			yield () =>
-				html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
+			runCount++;
+			yield function* () {
+				yield html`<span>${host.getAttribute("data-label") ?? "none"}</span>`;
+			};
 		});
 
 		const element = track(await mount(tag, Component));
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		element.setAttribute("data-label", "updated");
 		await flushMicrotasks();
 
-		//no observer on the server → setAttribute can't trigger update()
-		expect(renderCount).toBe(1);
+		//no observer on the server, so setAttribute can't trigger update()
+		expect(runCount).toBe(1);
 		expect(element.shadowRoot!.textContent).toContain("none");
 	});
 
 	test("calling update() manually after SSR has stopped is a no-op", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 
 		const Component = component(function* () {
-			renderCount++;
-			yield () => html`<p>${renderCount}</p>`;
+			runCount++;
+			yield function* () {
+				yield html`<p>${runCount}</p>`;
+			};
 		});
 
 		const element = track(await mount(tag, Component));
-		const initialCount = renderCount;
+		const initialCount = runCount;
 
 		await (element as unknown as { update: () => Promise<void> }).update();
 		await flushMicrotasks();
 
-		expect(renderCount).toBe(initialCount);
+		expect(runCount).toBe(initialCount);
 		expect(element.shadowRoot!.textContent).toContain(String(initialCount));
 	});
 
-	test("update() called from inside the first-yield render function does not re-invoke it (infinite-loop guard)", async () => {
-		//without the server guard in update() the cached render-function source re-runs, which
-		//schedules another update, forever
-		//render-function calls, since generator iterations are bounded by the cancel
+	test("update() called from inside the first update generator run does not re-run it (infinite-loop guard)", async () => {
+		//without the server guard in update() the update generator re-runs, which schedules another
+		//update, forever. Runs are counted, since generator iterations are bounded by the cancel
 		const tag = uniqueTag();
-		let renderFunctionCalls = 0;
+		let runCount = 0;
 
 		const Component = component(function* ({ host }) {
-			yield () => {
-				renderFunctionCalls++;
+			yield function* () {
+				runCount++;
 				queueMicrotask(() => host.update());
-				return html`<p>only</p>`;
+				yield html`<p>only</p>`;
 			};
 		});
 
@@ -229,23 +239,26 @@ describe("SSR: server stops at first renderable yield", () => {
 		await flushMicrotasks();
 		await flushMicrotasks();
 
-		expect(renderFunctionCalls).toBe(1);
+		expect(runCount).toBe(1);
 	});
 
-	test("setProp on the server applies the attribute but does not trigger a re-render", async () => {
+	test("setProp on the server applies the attribute but does not trigger an update", async () => {
 		//the two halves split across the boundary: the attribute binding still writes, which
 		//serialization needs, while update() is gated
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 
 		const Component = component(function* ({ host }) {
-			renderCount++;
-			yield () =>
-				html`<span>${host.getAttribute("data-value") ?? "missing"}</span>`;
+			runCount++;
+			yield function* () {
+				yield html`<span
+					>${host.getAttribute("data-value") ?? "missing"}</span
+				>`;
+			};
 		});
 
 		const element = track(await mount(tag, Component));
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		(
 			element as unknown as {
@@ -255,8 +268,8 @@ describe("SSR: server stops at first renderable yield", () => {
 		await flushMicrotasks();
 
 		expect(element.getAttribute("data-value")).toBe("after");
-		expect(renderCount).toBe(1);
-		//shadow still reflects the first-yield evaluation — update never re-ran
+		expect(runCount).toBe(1);
+		//shadow still reflects the first-yield evaluation: update never re-ran
 		expect(element.shadowRoot!.textContent).toContain("missing");
 	});
 
@@ -266,7 +279,9 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 
 		const Component = component(function* () {
-			yield () => html`<p>hi</p>`;
+			yield function* () {
+				yield html`<p>hi</p>`;
+			};
 		});
 
 		const element = await mount(tag, Component);
@@ -277,18 +292,18 @@ describe("SSR: server stops at first renderable yield", () => {
 		await flushMicrotasks();
 	});
 
-	test("rejecting Promise before the first renderable yield surfaces the error and stops the generator", async () => {
+	test("rejecting Promise before the first paint surfaces the error and stops the generator", async () => {
 		//the error routes to the shared fatal display, which writes into the shadow root
 		//the fatal display logs, so the console error is silenced here
 		const tag = uniqueTag();
 		let postYieldRan = false;
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const Component = component(function* () {
 			yield Promise.reject(new Error("boom"));
-			yield () => html`<p>never</p>`;
+			yield function* () {
+				yield html`<p>never</p>`;
+			};
 			postYieldRan = true;
 		});
 
@@ -311,10 +326,13 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		const Component = component(function* () {
 			try {
-				yield () => html`<p>guarded</p>`;
+				yield function* () {
+					yield html`<p>guarded</p>`;
+				};
 			} finally {
 				finallyRan = true;
 				//a dormant probe: capturing this on the server would land the side effect at teardown
+				//oxlint-disable-next-line no-unsafe-finally -- the case under test
 				return () => {
 					cleanupReturnInvoked = true;
 				};
@@ -324,8 +342,36 @@ describe("SSR: server stops at first renderable yield", () => {
 		track(await mount(tag, Component));
 
 		expect(finallyRan).toBe(true);
-		//cancelGenerator discards the .return() result — intentional on the server
+		//cancelGenerator discards the .return() result, on purpose on the server
 		expect(cleanupReturnInvoked).toBe(false);
+	});
+
+	test("the body's finally runs on the server when its update generator queued an update and threw", async () => {
+		//the catch drops the update generator, and the update it queued goes with it, so nothing defers
+		//the stop past the fallback's paint
+		const tag = uniqueTag();
+		let finallyRan = false;
+
+		const Component = component(function* ({ host }) {
+			try {
+				try {
+					yield function* () {
+						host.update();
+						throw new Error("update generator failed");
+					};
+				} catch {
+					yield html`<p>fallback</p>`;
+				}
+			} finally {
+				finallyRan = true;
+			}
+		});
+
+		const element = track(await mount(tag, Component));
+		await flushMicrotasks();
+
+		expect(element.shadowRoot!.textContent).toContain("fallback");
+		expect(finallyRan).toBe(true);
 	});
 
 	test("server-side try/catch recovers by yielding a fallback (silent, no warn)", async () => {
@@ -338,20 +384,20 @@ describe("SSR: server stops at first renderable yield", () => {
 		const Component = component(function* () {
 			try {
 				yield function* () {
-					yield () => {
+					{
 						throw new Error("inner-failed");
-					};
+					}
 				};
 			} catch {
-				yield () => html`<p>fallback</p>`;
+				yield function* () {
+					yield html`<p>fallback</p>`;
+				};
 			}
 		});
 
 		const element = track(await mount(tag, Component));
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"fallback",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("fallback");
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();
 	});
@@ -364,16 +410,24 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		const First = component(function* () {
 			firstYields++;
-			yield () => html`<p>first-a</p>`;
+			yield function* () {
+				yield html`<p>first-a</p>`;
+			};
 			firstYields++;
-			yield () => html`<p>first-b</p>`;
+			yield function* () {
+				yield html`<p>first-b</p>`;
+			};
 		});
 
 		const Second = component(function* () {
 			secondYields++;
-			yield () => html`<p>second-a</p>`;
+			yield function* () {
+				yield html`<p>second-a</p>`;
+			};
 			secondYields++;
-			yield () => html`<p>second-b</p>`;
+			yield function* () {
+				yield html`<p>second-b</p>`;
+			};
 		});
 
 		const firstElement = track(await mount(firstTag, First));
@@ -390,8 +444,12 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 
 		const Component = component(function* () {
-			yield () => html`<p>serialized-first</p>`;
-			yield () => html`<p>serialized-second</p>`;
+			yield function* () {
+				yield html`<p>serialized-first</p>`;
+			};
+			yield function* () {
+				yield html`<p>serialized-second</p>`;
+			};
 		});
 
 		track(await mount(tag, Component));
@@ -413,10 +471,11 @@ describe("SSR: server stops at first renderable yield", () => {
 		const tag = uniqueTag();
 
 		const Component = component(function* () {
-			yield () =>
-				html`<template class="${"server-class"}" data-x="${"server-x"}">
+			yield function* () {
+				yield html`<template class="${"server-class"}" data-x="${"server-x"}">
 					<p>body</p>
 				</template>`;
+			};
 		});
 
 		const element = track(await mount(tag, Component));
@@ -426,16 +485,16 @@ describe("SSR: server stops at first renderable yield", () => {
 
 	test("a host binding writing the component's own prop reaches the server markup it paints", async () => {
 		const tag = uniqueTag();
-		let renderFunctionCalls = 0;
+		let runCount = 0;
 
 		const Component = component(
 			function* () {
-				yield ({ theme }) => {
-					renderFunctionCalls++;
-					return html`<template theme=${"dark"}><p>${theme}</p></template>`;
+				yield function* ({ theme }) {
+					runCount++;
+					yield html`<template theme=${"dark"}><p>${theme}</p></template>`;
 				};
 			},
-			{ props: { theme: [String, "light"] } },
+			{ props: { theme: prop.attribute(String, "light") } },
 		);
 
 		const element = track(await mount(tag, Component));
@@ -443,37 +502,41 @@ describe("SSR: server stops at first renderable yield", () => {
 
 		expect(element.getAttribute("theme")).toBe("dark");
 		expect(element.shadowRoot!.querySelector("p")!.textContent).toBe("dark");
-		expect(renderFunctionCalls).toBe(2);
+		expect(runCount).toBe(2);
 	});
 
-	test("a synchronous update() inside the server render re-renders before the run ends", async () => {
+	test("a synchronous update() during the server render re-runs the update generator before it ends", async () => {
 		const tag = uniqueTag();
-		let renderFunctionCalls = 0;
+		let runCount = 0;
 
 		const Component = component(function* ({ host }) {
-			yield () => {
-				renderFunctionCalls++;
-				if (renderFunctionCalls === 1) host.update();
-				return html`<p>call ${renderFunctionCalls}</p>`;
+			yield function* () {
+				runCount++;
+				if (runCount === 1) host.update();
+				yield html`<p>call ${runCount}</p>`;
 			};
 		});
 
 		const element = track(await mount(tag, Component));
 		await flushMicrotasks();
 
-		expect(renderFunctionCalls).toBe(2);
+		expect(runCount).toBe(2);
 		expect(element.shadowRoot!.querySelector("p")!.textContent).toBe("call 2");
 	});
 
 	test("expressions in the first-yield template evaluate against the closure at yield time", async () => {
-		//rendering after closing the generator would re-bind the expression to the post-mutation value
+		//painting after closing the generator would re-bind the expression to the post-mutation value
 		const tag = uniqueTag();
 		let value = "before";
 
 		const Component = component(function* () {
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 			value = "after";
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 		});
 
 		const element = track(await mount(tag, Component));
@@ -481,16 +544,14 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(element.shadowRoot!.textContent).not.toContain("after");
 	});
 
-	test("an async render function resolves, renders once, and stops", async () => {
-		//the position classifies on both sides or on neither: `yield async () => …` is a wait
-		//through a different door than a yielded promise, and the server already awaits those
+	test("an update generator that waits on a promise before its paint resolves, paints once, and stops", async () => {
 		const tag = uniqueTag();
 		let postYieldRan = false;
 
 		const Component = component(function* () {
-			yield async () => {
-				await Promise.resolve();
-				return html`<p>awaited-server</p>`;
+			yield function* () {
+				yield Promise.resolve();
+				yield html`<p>awaited-server</p>`;
 			};
 			postYieldRan = true;
 		});
@@ -502,30 +563,14 @@ describe("SSR: server stops at first renderable yield", () => {
 		expect(postYieldRan).toBe(false);
 	});
 
-	test("a render function returning a generator function descends into it", async () => {
-		const tag = uniqueTag();
-		let innerRan = false;
-
-		const Component = component(function* () {
-			yield () =>
-				function* delegatedBody() {
-					innerRan = true;
-					yield html`<p>delegated-server</p>`;
-				};
-		});
-
-		const element = track(await mount(tag, Component));
-
-		expect(innerRan).toBe(true);
-		expect(element.shadowRoot!.textContent).toContain("delegated-server");
-	});
-
-	test("a render function returning an uncommittable value fails", async () => {
+	test("an update generator painting an uncommittable value fails", async () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const tag = uniqueTag();
 
 		const Component = component(function* () {
-			yield () => new Map();
+			yield function* () {
+				yield html`${new Map()}`;
+			};
 		});
 
 		const element = track(await mount(tag, Component));
@@ -535,31 +580,71 @@ describe("SSR: server stops at first renderable yield", () => {
 	});
 });
 
-describe("SSR: an attribute write after the server paint schedules nothing", () => {
-	test("attributeChangedCallback fires on the server and reaches no render", async () => {
-		//isServer() is `typeof window === "undefined"`, so there is a real DOM here and aCC does
-		//fire — what makes dropping the old `!wasMountedOnServer` observer guard safe is that
-		//#cancelBothTasks() runs immediately after the server's first paint
+describe("SSR: values stay inside their element", () => {
+	test("a <script> value with </script fails the server paint instead of reaching the markup", async () => {
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		const tag = uniqueTag();
-		let renderCount = 0;
+		const note = JSON.stringify({
+			note: "</script><img src=x onerror=alert(1)>",
+		});
+
+		const Component = component(function* () {
+			yield html`<script type="application/json">
+				${note}
+			</script>`;
+		});
+
+		const element = track(await mount(tag, Component));
+
+		expect(element.shadowRoot!.innerHTML).not.toContain("<img");
+		expect(element.shadowRoot!.textContent).toContain("</script");
+		errorSpy.mockRestore();
+	});
+});
+
+describe("SSR: a nested <template>", () => {
+	test("the server writes its content with the values escaped and no markers", async () => {
+		const tag = uniqueTag();
+		const Component = component(function* () {
+			yield function* view() {
+				yield html`<div>
+					<template><p title=${'x" onerror="y'}>${"<img src=x>"}</p></template>
+				</div>`;
+			};
+		});
+
+		const element = track(await mount(tag, Component));
+		const template = element.shadowRoot!.querySelector("template")!;
+
+		expect(template.innerHTML).toBe('<p title="x&quot; onerror=&quot;y">&lt;img src=x&gt;</p>');
+	});
+});
+
+describe("SSR: an attribute write after the server paint schedules nothing", () => {
+	test("attributeChangedCallback fires on the server and reaches no update", async () => {
+		//isServer() is `typeof window === "undefined"`, so there is a real DOM here and aCC does
+		//fire. What makes dropping the old `!wasMountedOnServer` observer guard safe is that
+		//stopRunner() runs immediately after the server's first paint
+		const tag = uniqueTag();
+		let runCount = 0;
 
 		const Component = component(
 			function* ({ host }) {
-				yield () => {
-					renderCount++;
-					return html`<p>${host.getAttribute("label") ?? "none"}</p>`;
+				yield function* () {
+					runCount++;
+					yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 				};
 			},
-			{ props: { label: String } },
+			{ props: { label: prop.optional(prop.attribute(String)) } },
 		);
 
 		const element = track(await mount(tag, Component));
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		element.setAttribute("label", "after");
 		await flushMicrotasks();
 
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 		expect(element.shadowRoot!.textContent).toContain("none");
 	});
 });

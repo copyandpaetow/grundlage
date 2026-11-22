@@ -3,18 +3,11 @@ import {
 	createAttributeLaneLiveBinding,
 	revertHostBinding,
 } from "./bindings/live-binding";
-import {
-	AttributeLaneLiveBinding,
-	Instance,
-	StyleSheetMoveState,
-} from "./bindings/types";
+import { AttributeLaneLiveBinding, Instance, TreeState } from "./bindings/types";
 import { getParsedTemplate } from "../parser/html";
-import {
-	AttributeStaticBinding,
-	DynamicAttributeStaticBinding,
-} from "../parser/types";
-import { flushHostPayload, warnOnUnclaimedSSRPayloads } from "../load";
-import { coerceToTemplate, TemplateValue } from "../template";
+import { AttributeStaticBinding, DynamicAttributeStaticBinding } from "../parser/types";
+import { releaseUnclaimedPayloads } from "../load";
+import { TemplateValue } from "../template";
 import { ComponentErrorEvent } from "../runtime/component-error-event";
 import {
 	HYDRATION_MISMATCH,
@@ -28,20 +21,17 @@ import {
 import { releaseDeferredChildren } from "./defer-hydration";
 import { warnOnRejectedServerRange } from "./markers";
 import { BaseComponent } from "../types";
-import { libraryMessage } from "../utils/diagnostics";
+import { assertDuringDevelopment, isDevelopmentBuild, libraryMessage } from "../utils/diagnostics";
 
 export interface ComponentRoot {
 	host: BaseComponent;
 	//held rather than read from the host: for mode "closed" host.shadowRoot is null
 	shadowRoot: ShadowRoot;
-	styleSheetMoveState: StyleSheetMoveState;
-	instance: Instance | typeof HYDRATION_PENDING | null;
+	treeState: TreeState;
+	//the root holds the server's markup, which the first paint hydrates instead of mounting
+	isHydrationPending: boolean;
+	instance: Instance | null;
 }
-
-const HYDRATION_PENDING: unique symbol = Symbol("hydration pending");
-
-export const renderedInstanceOf = (root: ComponentRoot): Instance | null =>
-	root.instance === HYDRATION_PENDING ? null : root.instance;
 
 export const createComponentRoot = (
 	host: BaseComponent,
@@ -50,16 +40,17 @@ export const createComponentRoot = (
 ): ComponentRoot => ({
 	host,
 	shadowRoot,
-	styleSheetMoveState: { needsStyleSheetRefreshOnMove: false },
-	instance: isHydrationPending ? HYDRATION_PENDING : null,
+	treeState: { isTemplateContent: false },
+	isHydrationPending,
+	instance: null,
 });
 
 const revertAllHostBindings = (root: ComponentRoot): void => {
-	const instance = renderedInstanceOf(root);
+	const instance = root.instance;
 	if (instance === null) return;
-	const liveBindings = instance.liveBindings;
-	for (let index = 0; index < instance.parsed.hostBindingCount; index++)
-		revertHostBinding(liveBindings[index] as AttributeLaneLiveBinding);
+	for (let index = 0; index < instance.parsed.hostBindingCount; index++) {
+		revertHostBinding(instance.liveBindings[index] as AttributeLaneLiveBinding);
+	}
 };
 
 //the revert reads root.instance, which is still the outgoing one here and null on a first paint
@@ -69,11 +60,10 @@ const mountHostBindings = (
 	values: Array<unknown>,
 ): void => {
 	revertAllHostBindings(root);
-	const { bindings, hostBindingCount } = instance.parsed;
-	for (let index = 0; index < hostBindingCount; index++) {
+	for (let index = 0; index < instance.parsed.hostBindingCount; index++) {
 		const live = createAttributeLaneLiveBinding(
 			//the parser places only attribute bindings before hostBindingCount
-			bindings[index] as AttributeStaticBinding | DynamicAttributeStaticBinding,
+			instance.parsed.bindings[index] as AttributeStaticBinding | DynamicAttributeStaticBinding,
 			root.host,
 		);
 		commitLiveBinding(instance, live, values);
@@ -93,38 +83,30 @@ const mountOrPatchRoot = (
 		return current;
 	}
 	const fragment = cloneTemplateFragment(parsed, root.shadowRoot);
-	const instance = mountInstance(
-		fragment,
-		value,
-		parsed,
-		root.styleSheetMoveState,
-	);
+	const instance = mountInstance(fragment, value.values, parsed, root.treeState);
 	mountHostBindings(root, instance, value.values);
 	root.shadowRoot.replaceChildren(fragment);
 	return instance;
 };
 
-export const paintComponentRoot = (
-	root: ComponentRoot,
-	value: unknown,
-	wasMountedOnServer: boolean,
-): void => {
-	const templateValue = coerceToTemplate(value);
-
-	const current = root.instance;
-	if (current === HYDRATION_PENDING) {
+export const paintComponentRoot = (root: ComponentRoot, templateValue: TemplateValue): void => {
+	if (root.isHydrationPending) {
+		assertDuringDevelopment(
+			root.instance === null,
+			"a root waiting for hydration has painted nothing yet",
+		);
 		//cleared before the attempt, not after: a throw an outer generator catches paints again, and
 		//a second pass through here would hydrate the recovery content against the server's tree
-		root.instance = null;
-		//before the attempt: a rejected range rebuilds the whole root, and that rebuild removes
-		//the very payload scripts this reads
-		warnOnUnclaimedSSRPayloads(root.shadowRoot);
+		root.isHydrationPending = false;
+		//before the attempt: a rejected range rebuilds the whole root, and that rebuild would remove
+		//the leftover payload scripts before they are counted
+		releaseUnclaimedPayloads(root.shadowRoot);
 		const hydrated = hydrateInstance(
 			document.createTreeWalker(root.shadowRoot, NodeFilter.SHOW_COMMENT),
 			templateValue,
 			getParsedTemplate(templateValue.__templateStrings),
 			null,
-			root.styleSheetMoveState,
+			root.treeState,
 		);
 		if (hydrated === HYDRATION_MISMATCH) {
 			warnOnRejectedServerRange();
@@ -134,27 +116,22 @@ export const paintComponentRoot = (
 			root.instance = hydrated;
 		}
 		releaseDeferredChildren(root.shadowRoot);
-	} else root.instance = mountOrPatchRoot(root, current, templateValue);
-	//latched by the driver rather than a fresh isServer(): the global is mutable and the paint must
-	//agree with the driver that scheduled it
-	if (wasMountedOnServer) flushHostPayload(root.host);
+	} else root.instance = mountOrPatchRoot(root, root.instance, templateValue);
 };
 
-export const displayFatalErrorInRoot = (
-	root: ComponentRoot,
-	error: unknown,
-): void => {
+export const displayFatalErrorInRoot = (root: ComponentRoot, error: unknown): void => {
 	revertAllHostBindings(root);
+	//the server's markup goes with the rest, so a re-insertion mounts fresh
+	root.isHydrationPending = false;
 	root.instance = null;
 	root.shadowRoot.replaceChildren();
-	const { host } = root;
-	const isHandledByApp = !host.dispatchEvent(
-		new ComponentErrorEvent(error, host.localName),
+	const isHandledByApp = !root.host.dispatchEvent(
+		new ComponentErrorEvent(error, root.host.localName),
 	);
 	if (isHandledByApp) return;
-	console.error(
-		libraryMessage(`<${host.localName}> stopped rendering.`),
-		error,
-	);
+	console.error(libraryMessage(`<${root.host.localName}> stopped running.`), error);
+	//an error's text can carry internals or data, so end users never see it
+	if (!isDevelopmentBuild) return;
+	//oxlint-disable-next-line typescript/restrict-template-expressions -- shown as the platform spells it
 	root.shadowRoot.textContent = `${error}`;
 };

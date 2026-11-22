@@ -20,5 +20,5 @@
 		"noUncheckedSideEffectImports": true,
 		"strictPropertyInitialization": false
 	},
-	"include": ["src", "pages"]
+	"include": ["src", "pages", "vite.config.ts"]
 }

@@ -1,4 +1,4 @@
-import { html, component } from "../../../lib/src";
+import { html, component, prop } from "../../../lib/src";
 
 customElements.define(
 	"tag-component",
@@ -14,12 +14,13 @@ customElements.define(
 				host.update();
 			};
 
-			yield () =>
-				html`
-                <!-- ${level} and ${previous}  -->
-                <h${level} onclick=${updateHeadingLevel}> headingLevel: ${level}</h${level}>
-            `;
+			yield function* view() {
+				yield html`
+	                <!-- ${level} and ${previous}  -->
+	                <h${level} onclick=${updateHeadingLevel}> headingLevel: ${level}</h${level}>
+	            `;
+			};
 		},
-		{ props: { headingLevel: [Number, 1] } },
+		{ props: { headingLevel: prop.attribute(Number, 1) } },
 	),
 );

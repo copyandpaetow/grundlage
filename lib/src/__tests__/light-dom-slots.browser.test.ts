@@ -1,30 +1,22 @@
 import { describe, expect, test, vi } from "vitest";
-import { component, html } from "../index";
+import { component, html, prop } from "../index";
 import * as grundlage from "../index";
-import {
-	BaseComponent,
-	ComponentOptions,
-	ComponentProps,
-	Schema,
-	PropEntry,
-	Template,
-} from "../types";
+import { DECLARED_PROP_NAMES } from "../rendering/constants";
+import { BaseComponent, ComponentOptions, ComponentProps, Schema, PropDefinition } from "../types";
 
-//The slot half of the light-DOM spec (light-dom/RULES.md R8—R22). Slots are a schema entry, so
+//The slot half of the light-DOM spec (light-dom/RULES.md R8 to R22). Slots are a schema entry, so
 //most of these rules hold in both modes; the mode only decides what happens to a child no entry
-//claims. Gated on the exports existing, so the suite turns itself on when §3 lands.
+//claims. Gated on the exports existing, so the suite turns itself on when section 3 lands.
 
 //neither export exists yet; typed as the schema entry each one will be, so these suites typecheck
 //against the target API instead of around it
 const { Slot, DefaultSlot } = grundlage as typeof grundlage & {
-	Slot: PropEntry;
-	DefaultSlot: PropEntry;
+	Slot: PropDefinition<unknown, "optional">;
+	DefaultSlot: PropDefinition<unknown, "optional">;
 };
-const slotsShip =
-	(Slot as unknown) !== undefined && (DefaultSlot as unknown) !== undefined;
+const slotsShip = (Slot as unknown) !== undefined && (DefaultSlot as unknown) !== undefined;
 
-const isRealBrowser =
-	typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
+const isRealBrowser = typeof (window as { happyDOM?: unknown }).happyDOM === "undefined";
 const ships = slotsShip && isRealBrowser;
 
 const light = <DeclaredSchema extends Schema>(
@@ -35,13 +27,9 @@ const light = <DeclaredSchema extends Schema>(
 let tagId = 0;
 const uniqueTag = () => `slot-el-${tagId++}-${Date.now()}`;
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
-const define = (
-	generator: Parameters<typeof component>[0],
-	options?: ComponentOptions,
-): string => {
+const define = (generator: Parameters<typeof component>[0], options?: ComponentOptions): string => {
 	const tag = uniqueTag();
 	customElements.define(tag, component(generator, options));
 	return tag;
@@ -59,11 +47,7 @@ const withChildren = (tag: string, children: string): BaseComponent => {
 const readSlot = (host: BaseComponent, propName: string): unknown =>
 	(host as unknown as Record<string, unknown>)[propName];
 
-const writeSlot = (
-	host: BaseComponent,
-	propName: string,
-	value: unknown,
-): void => {
+const writeSlot = (host: BaseComponent, propName: string, value: unknown): void => {
 	(host as unknown as Record<string, unknown>)[propName] = value;
 };
 
@@ -75,23 +59,25 @@ const silenced = <T>(run: () => T): [T, Array<unknown>] => {
 	return [result, calls];
 };
 
-describe("R8—R9 — a slot is a prop", () => {
+describe("R8 to R9: a slot is a prop", () => {
 	test.skipIf(!slotsShip)(
-		"a slot key is absent from observedAttributes and present in declaredPropNames",
+		"a slot key is absent from observedAttributes and present in the declared prop names",
 		() => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
 			const definition = customElements.get(tag) as CustomElementConstructor & {
 				observedAttributes: Array<string>;
-				declaredPropNames: ReadonlySet<string>;
+				[DECLARED_PROP_NAMES]: ReadonlySet<string>;
 			};
 
 			expect(definition.observedAttributes).not.toContain("heading");
-			expect(definition.declaredPropNames.has("heading")).toBe(true);
+			expect(definition[DECLARED_PROP_NAMES].has("heading")).toBe(true);
 		},
 	);
 
@@ -99,48 +85,53 @@ describe("R8—R9 — a slot is a prop", () => {
 		expect(() =>
 			define(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
-				light({ heading: Slot, hEading: String }),
+				light({
+					heading: Slot,
+					hEading: prop.optional(prop.attribute(String)),
+				}),
 			),
 		).toThrow();
 	});
 
-	test.skipIf(!slotsShip)(
-		"two default slots are refused at define time",
-		() => {
-			expect(() =>
-				define(
-					function* () {
-						yield () => html`<p>x</p>`;
-					},
-					light({ body: DefaultSlot, rest: DefaultSlot }),
-				),
-			).toThrow();
-		},
-	);
+	test.skipIf(!slotsShip)("two default slots are refused at define time", () => {
+		expect(() =>
+			define(
+				function* () {
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
+				},
+				light({ body: DefaultSlot, rest: DefaultSlot }),
+			),
+		).toThrow();
+	});
+
+	test.skipIf(!slotsShip)("a closed root cannot be claimed, and says so", () => {
+		const [, warnings] = silenced(() =>
+			define(
+				function* () {
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
+				},
+				{ mode: "closed", props: { heading: Slot } },
+			),
+		);
+		expect(warnings.length).toBe(1);
+	});
 
 	test.skipIf(!slotsShip)(
-		"a closed root cannot be claimed, and says so",
-		() => {
-			const [, warnings] = silenced(() =>
-				define(
-					function* () {
-						yield () => html`<p>x</p>`;
-					},
-					{ mode: "closed", props: { heading: Slot } } as ComponentOptions,
-				),
-			);
-			expect(warnings.length).toBe(1);
-		},
-	);
-
-	test.skipIf(!slotsShip)(
-		"R9 — a slot name is matched verbatim, and a mismatch leaves the child in place",
+		"R9: a slot name is matched verbatim, and a mismatch leaves the child in place",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.sideBar}</header>`;
+					yield function* () {
+						yield html`<header>${props.sideBar}</header>`;
+					};
 				},
 				light({ sideBar: Slot }),
 			);
@@ -155,37 +146,38 @@ describe("R8—R9 — a slot is a prop", () => {
 		},
 	);
 
-	test.skipIf(!slotsShip)(
-		"an attribute spelled like a slot is inert, and warns",
-		async () => {
-			const tag = define(
-				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
-				},
-				light({ heading: Slot }),
-			);
-			const [host, warnings] = silenced(() => {
-				const holder = document.createElement("div");
-				holder.innerHTML = `<${tag} heading="Ada"></${tag}>`;
-				document.body.append(holder);
-				return holder.firstElementChild as BaseComponent;
-			});
-			await sleep();
+	test.skipIf(!slotsShip)("an attribute spelled like a slot is inert, and warns", async () => {
+		const tag = define(
+			function* (props) {
+				yield function* () {
+					yield html`<header>${props.heading}</header>`;
+				};
+			},
+			light({ heading: Slot }),
+		);
+		const [host, warnings] = silenced(() => {
+			const holder = document.createElement("div");
+			holder.innerHTML = `<${tag} heading="Ada"></${tag}>`;
+			document.body.append(holder);
+			return holder.firstElementChild as BaseComponent;
+		});
+		await sleep();
 
-			expect(host.querySelector("header")?.textContent).toBe("");
-			expect(warnings.length).toBe(1);
-		},
-	);
+		expect(host.querySelector("header")?.textContent).toBe("");
+		expect(warnings.length).toBe(1);
+	});
 });
 
-describe("R13—R15 — adoption", () => {
+describe("R13 to R15: adoption", () => {
 	test.skipIf(!slotsShip)(
-		"R13 — declaring a slot drains the children before the body runs",
+		"R13: declaring a slot drains the children before the body runs",
 		async () => {
 			let childCountDuringBody = -1;
 			const tag = define(
 				function* (props) {
-					const host = yield () => html`<article>${props.body}</article>`;
+					const host = yield function* () {
+						yield html`<article>${props.body}</article>`;
+					};
 					childCountDuringBody = (host as Element).children.length;
 				},
 				light({ body: DefaultSlot }),
@@ -194,48 +186,44 @@ describe("R13—R15 — adoption", () => {
 			await sleep();
 
 			expect(childCountDuringBody).toBe(1);
-			expect(host.querySelector("article > p")?.textContent).toBe(
-				"from the page",
-			);
+			expect(host.querySelector("article > p")?.textContent).toBe("from the page");
 		},
 	);
 
-	test.skipIf(!slotsShip)(
-		"R15 — the node is the page's own, moved and not rewritten",
-		async () => {
-			const tag = define(
-				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
-				},
-				light({ heading: Slot }),
-			);
-			const holder = document.createElement("div");
-			holder.innerHTML = `<${tag}><h2 slot="heading">Ada</h2></${tag}>`;
-			document.body.append(holder);
-			const authored = holder.querySelector("h2")!;
-			await sleep();
+	test.skipIf(!slotsShip)("R15: the node is the page's own, moved and not rewritten", async () => {
+		const tag = define(
+			function* (props) {
+				yield function* () {
+					yield html`<header>${props.heading}</header>`;
+				};
+			},
+			light({ heading: Slot }),
+		);
+		const holder = document.createElement("div");
+		holder.innerHTML = `<${tag}><h2 slot="heading">Ada</h2></${tag}>`;
+		document.body.append(holder);
+		const authored = holder.querySelector("h2")!;
+		await sleep();
 
-			expect(holder.querySelector("header > h2")).toBe(authored);
-			expect(authored.getAttribute("slot")).toBe("heading");
-		},
-	);
+		expect(holder.querySelector("header > h2")).toBe(authored);
+		expect(authored.getAttribute("slot")).toBe("heading");
+	});
 
 	test.skipIf(!slotsShip)(
-		"R14 — light mode destroys an unmatched child and warns; shadow mode leaves it",
+		"R14: light mode destroys an unmatched child and warns; shadow mode leaves it",
 		async () => {
-			const renderTree = function* (props: ComponentProps) {
-				yield () => html`<header>${props.heading}</header>`;
+			const componentBody = function* (props: ComponentProps) {
+				yield function* () {
+					yield html`<header>${props.heading}</header>`;
+				};
 			};
-			const lightTag = define(renderTree, light({ heading: Slot }));
-			const shadowTag = define(renderTree, { props: { heading: Slot } });
+			const lightTag = define(componentBody, light({ heading: Slot }));
+			const shadowTag = define(componentBody, { props: { heading: Slot } });
 
 			const [lightHost, warnings] = silenced(() =>
 				withChildren(lightTag, `<span slot="badges">1843</span>`),
 			);
-			const shadowHost = withChildren(
-				shadowTag,
-				`<span slot="badges">1843</span>`,
-			);
+			const shadowHost = withChildren(shadowTag, `<span slot="badges">1843</span>`);
 			await sleep();
 
 			expect(lightHost.querySelector("[slot='badges']")).toBeNull();
@@ -249,7 +237,9 @@ describe("R13—R15 — adoption", () => {
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<footer>${props.footer}</footer>`;
+					yield function* () {
+						yield html`<footer>${props.footer}</footer>`;
+					};
 				},
 				light({ footer: [Slot, html`<i>—</i>`] as never }),
 			);
@@ -261,13 +251,15 @@ describe("R13—R15 — adoption", () => {
 	);
 });
 
-describe("R10—R12 — the value", () => {
+describe("R10 to R12: the value", () => {
 	test.skipIf(!slotsShip)(
-		"R10 — a bare node and a fragment both normalize to an array at assignment",
+		"R10: a bare node and a fragment both normalize to an array at assignment",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -288,20 +280,21 @@ describe("R10—R12 — the value", () => {
 	);
 
 	test.skipIf(!ships)(
-		"R11 — a Template is copied into both holes, a live node is moved into the first",
+		"R11: a Template is copied into both holes, a live node is moved into the first",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () =>
-						html`<header>${props.heading}</header>
+					yield function* () {
+						yield html`<header>${props.heading}</header>
 							<nav>${props.heading}</nav>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
 			const host = withChildren(tag, "");
 			await sleep();
 
-			writeSlot(host, "heading", html`<h2>Ada</h2>` as Template);
+			writeSlot(host, "heading", html`<h2>Ada</h2>`);
 			await host.update();
 			expect(host.querySelectorAll("h2").length).toBe(2);
 
@@ -316,11 +309,13 @@ describe("R10—R12 — the value", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R12 — the stored array is frozen, so a push throws instead of landing a render late",
+		"R12: the stored array is frozen, so a push throws instead of showing up one paint late",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -328,44 +323,43 @@ describe("R10—R12 — the value", () => {
 			await sleep();
 
 			expect(() =>
-				(readSlot(host, "heading") as Array<Node>).push(
-					document.createElement("b"),
-				),
+				(readSlot(host, "heading") as Array<Node>).push(document.createElement("b")),
 			).toThrow(TypeError);
 		},
 	);
 
-	test.skipIf(!slotsShip)(
-		"R12 — re-committing the same value is zero DOM writes",
-		async () => {
-			const tag = define(
-				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
-				},
-				light({ heading: Slot }),
-			);
-			const host = withChildren(tag, `<h2 slot="heading">Ada</h2>`);
-			await sleep();
+	test.skipIf(!slotsShip)("R12: re-committing the same value is zero DOM writes", async () => {
+		const tag = define(
+			function* (props) {
+				yield function* () {
+					yield html`<header>${props.heading}</header>`;
+				};
+			},
+			light({ heading: Slot }),
+		);
+		const host = withChildren(tag, `<h2 slot="heading">Ada</h2>`);
+		await sleep();
 
-			const observer = new MutationObserver(() => {});
-			observer.observe(host, { childList: true, subtree: true });
-			writeSlot(host, "heading", readSlot(host, "heading"));
-			await host.update();
-			const records = observer.takeRecords();
-			observer.disconnect();
+		const observer = new MutationObserver(() => {});
+		observer.observe(host, { childList: true, subtree: true });
+		writeSlot(host, "heading", readSlot(host, "heading"));
+		await host.update();
+		const records = observer.takeRecords();
+		observer.disconnect();
 
-			expect(records).toEqual([]);
-		},
-	);
+		expect(records).toEqual([]);
+	});
 });
 
-describe("R16—R20 — fallbacks and ownership", () => {
+describe("R16 to R20: fallbacks and ownership", () => {
 	test.skipIf(!slotsShip)(
-		"R16 — absence writes the fallback; an empty array is a value that renders nothing",
+		"R16: absence writes the fallback; an empty array is a value that paints nothing",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<footer>${props.footer}</footer>`;
+					yield function* () {
+						yield html`<footer>${props.footer}</footer>`;
+					};
 				},
 				light({ footer: [Slot, html`<i>—</i>`] as never }),
 			);
@@ -383,57 +377,57 @@ describe("R16—R20 — fallbacks and ownership", () => {
 		},
 	);
 
-	test.skipIf(!slotsShip)(
-		"R16 — an array-of-nodes fallback is refused at define time",
-		() => {
-			expect(() =>
-				define(
-					function* () {
-						yield () => html`<p>x</p>`;
-					},
-					light({ footer: [Slot, [document.createElement("i")]] as never }),
-				),
-			).toThrow();
-		},
-	);
+	test.skipIf(!slotsShip)("R16: an array-of-nodes fallback is refused at define time", () => {
+		expect(() =>
+			define(
+				function* () {
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
+				},
+				light({ footer: [Slot, [document.createElement("i")]] as never }),
+			),
+		).toThrow();
+	});
 
-	test.skipIf(!slotsShip)(
-		"R17 — a declared fallback means the store is never absent",
-		async () => {
-			const withFallback = define(
-				function* (props) {
-					yield () =>
-						html`<div>
+	test.skipIf(!slotsShip)("R17: a declared fallback means the store is never absent", async () => {
+		const withFallback = define(
+			function* (props) {
+				yield function* () {
+					yield html`<div>
 							${props.footer && html`<aside>${props.footer}</aside>`}
 						</div>`;
-				},
-				light({ footer: [Slot, html`<i>—</i>`] as never }),
-			);
-			const bare = define(
-				function* (props) {
-					yield () =>
-						html`<div>
+				};
+			},
+			light({ footer: [Slot, html`<i>—</i>`] as never }),
+		);
+		const bare = define(
+			function* (props) {
+				yield function* () {
+					yield html`<div>
 							${props.footer && html`<aside>${props.footer}</aside>`}
 						</div>`;
-				},
-				light({ footer: Slot }),
-			);
+				};
+			},
+			light({ footer: Slot }),
+		);
 
-			const fallbackHost = withChildren(withFallback, "");
-			const bareHost = withChildren(bare, "");
-			await sleep();
+		const fallbackHost = withChildren(withFallback, "");
+		const bareHost = withChildren(bare, "");
+		await sleep();
 
-			expect(fallbackHost.querySelector("aside")).not.toBeNull();
-			expect(bareHost.querySelector("aside")).toBeNull();
-		},
-	);
+		expect(fallbackHost.querySelector("aside")).not.toBeNull();
+		expect(bareHost.querySelector("aside")).toBeNull();
+	});
 
 	test.skipIf(!slotsShip)(
-		"R18 — a property assignment beats authored markup, and warns",
+		"R18: a property assignment beats authored markup, and warns",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -441,7 +435,7 @@ describe("R16—R20 — fallbacks and ownership", () => {
 			holder.innerHTML = `<${tag}><h2 slot="heading">Ada</h2></${tag}>`;
 			const host = holder.firstElementChild as BaseComponent;
 			const [, warnings] = silenced(() => {
-				writeSlot(host, "heading", html`<h2>Grace</h2>` as Template);
+				writeSlot(host, "heading", html`<h2>Grace</h2>`);
 				document.body.append(holder);
 			});
 			await sleep();
@@ -452,13 +446,14 @@ describe("R16—R20 — fallbacks and ownership", () => {
 	);
 
 	test.skipIf(!ships)(
-		"R19 — live nodes render in the first hole only, and the second warns rather than falling back",
+		"R19: live nodes are painted into the first hole only, and the second warns rather than falling back",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () =>
-						html`<header>${props.heading}</header>
+					yield function* () {
+						yield html`<header>${props.heading}</header>
 							<nav>${props.heading}</nav>`;
+					};
 				},
 				light({ heading: [Slot, html`<h2>Untitled</h2>`] as never }),
 			);
@@ -475,13 +470,15 @@ describe("R16—R20 — fallbacks and ownership", () => {
 	);
 
 	test.skipIf(!ships)(
-		"R20 — a value passed down stays the outer component's across an update",
+		"R20: a value passed down stays the outer component's across an update",
 		async () => {
 			customElements.define(
 				"slot-r20-child",
 				component(
 					function* (props) {
-						yield () => html`<b>${props.label}</b>`;
+						yield function* () {
+							yield html`<b>${props.label}</b>`;
+						};
 					},
 					light({ label: [Slot, html`<i>inner</i>`] as never }),
 				),
@@ -489,8 +486,11 @@ describe("R16—R20 — fallbacks and ownership", () => {
 			const parent = withChildren(
 				define(
 					function* (props) {
-						yield () =>
-							html`<slot-r20-child label=${props.heading}></slot-r20-child>`;
+						yield function* () {
+							yield html`<slot-r20-child
+								label=${props.heading}
+							></slot-r20-child>`;
+						};
 					},
 					light({ heading: Slot }),
 				),
@@ -498,29 +498,25 @@ describe("R16—R20 — fallbacks and ownership", () => {
 			);
 			await sleep();
 			const authored = parent.querySelector("h2")!;
-			expect(parent.querySelector("slot-r20-child b")?.firstElementChild).toBe(
-				authored,
-			);
+			expect(parent.querySelector("slot-r20-child b")?.firstElementChild).toBe(authored);
 
 			await parent.update();
 			await sleep();
-			expect(parent.querySelector("slot-r20-child b")?.firstElementChild).toBe(
-				authored,
-			);
+			expect(parent.querySelector("slot-r20-child b")?.firstElementChild).toBe(authored);
 		},
 	);
 });
 
-describe("R21—R22 — <slot> and late children", () => {
+describe("R21 to R22: <slot> and late children", () => {
 	test.skipIf(!slotsShip)(
-		"R21 — any <slot> in a light template is fatal, and names the declaration to write",
+		"R21: any <slot> in a light template is fatal, and names the declaration to write",
 		async () => {
-			const consoleError = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
+			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 			const host = withChildren(
 				define(function* () {
-					yield () => html`<slot name="heading"></slot>`;
+					yield function* () {
+						yield html`<slot name="heading"></slot>`;
+					};
 				}, light()),
 				"",
 			);
@@ -534,17 +530,17 @@ describe("R21—R22 — <slot> and late children", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R21 — a <slot> colliding with a declared name is fatal in shadow mode too",
+		"R21: a <slot> colliding with a declared name is fatal in shadow mode too",
 		async () => {
-			const consoleError = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
+			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 			const host = withChildren(
 				define(
 					function* () {
-						yield () => html`<slot name="heading"></slot>`;
+						yield function* () {
+							yield html`<slot name="heading"></slot>`;
+						};
 					},
-					{ props: { heading: Slot } } as ComponentOptions,
+					{ props: { heading: Slot } },
 				),
 				"",
 			);
@@ -556,14 +552,16 @@ describe("R21—R22 — <slot> and late children", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R21 — a <slot> for an undeclared name is the platform's, and renders",
+		"R21: a <slot> for an undeclared name is the platform's, and renders",
 		async () => {
 			const host = withChildren(
 				define(
 					function* () {
-						yield () => html`<slot name="badges"></slot>`;
+						yield function* () {
+							yield html`<slot name="badges"></slot>`;
+						};
 					},
-					{ props: { heading: Slot } } as ComponentOptions,
+					{ props: { heading: Slot } },
 				),
 				`<span slot="badges">1843</span>`,
 			);
@@ -575,11 +573,13 @@ describe("R21—R22 — <slot> and late children", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R22 — a child appended after mount is routed by its slot attribute, a frame late, and warns",
+		"R22: a child appended after mount is routed by its slot attribute, a frame late, and warns",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -597,11 +597,13 @@ describe("R21—R22 — <slot> and late children", () => {
 	);
 
 	test.skipIf(!slotsShip)(
-		"R22 — insertBefore against an adopted reference node is broken by adoption",
+		"R22: insertBefore against an adopted reference node is broken by adoption",
 		async () => {
 			const tag = define(
 				function* (props) {
-					yield () => html`<header>${props.heading}</header>`;
+					yield function* () {
+						yield html`<header>${props.heading}</header>`;
+					};
 				},
 				light({ heading: Slot }),
 			);
@@ -612,9 +614,7 @@ describe("R21—R22 — <slot> and late children", () => {
 			const adopted = holder.querySelector("h2")!;
 			await sleep();
 
-			expect(() =>
-				host.insertBefore(document.createElement("b"), adopted),
-			).toThrow();
+			expect(() => host.insertBefore(document.createElement("b"), adopted)).toThrow();
 		},
 	);
 });

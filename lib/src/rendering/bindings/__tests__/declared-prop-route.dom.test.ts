@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { component } from "../../../index";
+import { component, html, prop } from "../../../index";
+import { DECLARED_PROP_NAMES } from "../../constants";
 import {
 	applyAttributeValue,
 	isAwaitingDefinition,
@@ -12,9 +13,7 @@ const record = (element: Element): Record<string, unknown> =>
 
 describe("isDeclaredPropName", () => {
 	test("a tag without a dash declares nothing", () => {
-		expect(isDeclaredPropName(document.createElement("div"), "tags")).toBe(
-			false,
-		);
+		expect(isDeclaredPropName(document.createElement("div"), "tags")).toBe(false);
 	});
 
 	test("an unregistered dashed tag declares nothing yet", () => {
@@ -32,7 +31,7 @@ describe("isDeclaredPropName", () => {
 
 	test("a registered definition answers for its declared names", () => {
 		class DeclaringElement extends HTMLElement {
-			static declaredPropNames = new Set(["tags"]);
+			static [DECLARED_PROP_NAMES] = new Set(["tags"]);
 		}
 		customElements.define("declaring-el", DeclaringElement);
 		const element = document.createElement("declaring-el");
@@ -51,11 +50,18 @@ describe("a swap or hydration carries a declared prop holding a stringable value
 		"swap-carried-el",
 		component(
 			function* () {
-				yield () => null;
+				yield function* () {
+					yield html``;
+				};
 			},
 			//`once` guards the event sniff: a declared name starting with "on" must not be read
 			//as a listener
-			{ props: { variant: asVariant, once: asVariant } },
+			{
+				props: {
+					variant: prop.optional(prop.attribute(asVariant)),
+					once: prop.optional(prop.attribute(asVariant)),
+				},
+			},
 		),
 	);
 

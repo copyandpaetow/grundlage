@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("template switching", () => {
 	let tagId = 0;
@@ -23,8 +22,9 @@ describe("template switching", () => {
 		let showFirst = true;
 
 		const MyElement = component(function* () {
-			yield () =>
-				showFirst ? html` <div>first</div>` : html`<span>second</span>`;
+			yield function* () {
+				yield showFirst ? html` <div>first</div>` : html`<span>second</span>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -39,9 +39,7 @@ describe("template switching", () => {
 		await sleep();
 
 		expect(element.shadowRoot?.querySelector("div")).toBeNull();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"second",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("second");
 
 		cleanup(element);
 	});
@@ -51,38 +49,31 @@ describe("template switching", () => {
 		let mode: "a" | "b" = "a";
 
 		const MyElement = component(function* () {
-			yield () =>
-				mode === "a" ? html`<div>mode-a</div>` : html`<span>mode-b</span>`;
+			yield function* () {
+				yield mode === "a" ? html`<div>mode-a</div>` : html`<span>mode-b</span>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("div")?.textContent).toBe(
-			"mode-a",
-		);
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toBe("mode-a");
 
 		mode = "b";
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"mode-b",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("mode-b");
 
 		mode = "a";
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("div")?.textContent).toBe(
-			"mode-a",
-		);
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toBe("mode-a");
 
 		mode = "b";
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"mode-b",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("mode-b");
 
 		cleanup(element);
 	});
@@ -92,12 +83,13 @@ describe("template switching", () => {
 		let isOpen = true;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					<em>before</em>
 					${isOpen ? html`<p>open</p>` : html`<span>closed</span>`}
 					<em>after</em>
 				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -134,7 +126,9 @@ describe("template switching", () => {
 		let cls = "one";
 
 		const MyElement = component(function* () {
-			yield () => html`<p class="${cls}">${text}</p>`;
+			yield function* () {
+				yield html`<p class="${cls}">${text}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -163,17 +157,21 @@ describe("template switching", () => {
 		let view: "list" | "detail" | "empty" = "empty";
 
 		const MyElement = component(function* () {
-			yield () => {
-				if (view === "list")
-					return html`<ul>
+			yield function* () {
+				if (view === "list") {
+					yield html`<ul>
 						<li>item</li>
 					</ul>`;
-				if (view === "detail")
-					return html`<article>
+					return;
+				}
+				if (view === "detail") {
+					yield html`<article>
 						<h2>Title</h2>
 						<p>Body</p>
 					</article>`;
-				return html`<p>No content</p>`;
+					return;
+				}
+				yield html`<p>No content</p>`;
 			};
 		});
 
@@ -181,9 +179,7 @@ describe("template switching", () => {
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"No content",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("No content");
 
 		view = "list";
 		await element.update();
@@ -199,9 +195,7 @@ describe("template switching", () => {
 		view = "empty";
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"No content",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("No content");
 		expect(element.shadowRoot?.querySelector("article")).toBeNull();
 
 		cleanup(element);
@@ -212,38 +206,31 @@ describe("template switching", () => {
 		let dynamic = true;
 
 		const MyElement = component(function* () {
-			yield () =>
-				dynamic
+			yield function* () {
+				yield dynamic
 					? html`<header>head</header>
 							<main>content-a</main>
 							<footer>foot</footer>`
 					: html`<header>head</header>
 							<main>content-b</main>
 							<footer>foot</footer>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("main")?.textContent).toBe(
-			"content-a",
-		);
-		expect(element.shadowRoot?.querySelector("header")?.textContent).toBe(
-			"head",
-		);
+		expect(element.shadowRoot?.querySelector("main")?.textContent).toBe("content-a");
+		expect(element.shadowRoot?.querySelector("header")?.textContent).toBe("head");
 
 		dynamic = false;
 		await element.update();
 		await sleep();
 
 		//same template structure, so it should update in place
-		expect(element.shadowRoot?.querySelector("main")?.textContent).toBe(
-			"content-b",
-		);
-		expect(element.shadowRoot?.querySelector("footer")?.textContent).toBe(
-			"foot",
-		);
+		expect(element.shadowRoot?.querySelector("main")?.textContent).toBe("content-b");
+		expect(element.shadowRoot?.querySelector("footer")?.textContent).toBe("foot");
 
 		cleanup(element);
 	});

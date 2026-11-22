@@ -1,25 +1,26 @@
-import { BINDING } from "../../parser/constants";
+import * as BINDING from "../../parser/binding";
 import {
 	AttributeStaticBinding,
 	CommentStaticBinding,
-	CompiledStyleSheet,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
 	ParsedTemplate,
 	RawContentStaticBinding,
 	TagStaticBinding,
+	TemplateContentStaticBinding,
 } from "../../parser/types";
-import { CONTENT_KIND, STYLE_SHEET_LANE } from "../constants";
+import * as CONTENT_KIND from "../content-kind";
 
 export interface Instance {
 	parsed: ParsedTemplate;
-	//empty slots while the bind walk fills it; the one reader during the walk is the tag swap
+	//holes while the bind walk fills it; the one reader during the walk is the tag swap
 	liveBindings: Array<LiveBinding>;
-	moveState: StyleSheetMoveState;
+	treeState: TreeState;
 }
 
-export interface StyleSheetMoveState {
-	needsStyleSheetRefreshOnMove: boolean;
+/** Shared by every instance of one mounted tree: the root template's, each nested value's and each row's. */
+export interface TreeState {
+	readonly isTemplateContent: boolean;
 }
 
 export interface TagLiveBinding {
@@ -85,42 +86,27 @@ export interface ListContentState {
 	nextRowWithSameHash: Int32Array;
 	subsequenceStarts: Int32Array;
 	nextInSubsequence: Int32Array;
-	hashAtTableIndex: Int32Array;
+	hashAtTableIndex: Float64Array;
 	chainHeadAtTableIndex: Int32Array;
 	tableIndexShift: number;
-	//alternates with items: placeRows returns the array it was given
+	//alternates with items: a patch builds the new rows here, and the old array becomes the spare
 	spareRows: Array<ListItem | undefined>;
 }
-
-export interface BoundStyleSheet {
-	sheet: CSSStyleSheet;
-	ruleDeclarations: Array<CSSStyleDeclaration>;
-}
-
-export interface TextStyleSheetLane {
-	kind: typeof STYLE_SHEET_LANE.TEXT;
-}
-
-export interface CSSOMStyleSheetLane {
-	kind: typeof STYLE_SHEET_LANE.CSSOM;
-	compiledStyleSheet: CompiledStyleSheet;
-	styleElement: HTMLStyleElement;
-	declarationValueHashes: Array<number>;
-	//null until a commit finds the element's sheet parsed
-	boundSheet: BoundStyleSheet | null;
-}
-
-export type StyleSheetLane = TextStyleSheetLane | CSSOMStyleSheetLane;
 
 export interface RawContentLiveBinding {
 	staticBinding: RawContentStaticBinding;
 	openMarker: Comment;
 	lastValueHash: number;
-	styleSheetLane: StyleSheetLane;
 }
 
 export interface CommentLiveBinding {
 	staticBinding: CommentStaticBinding;
+	openMarker: Comment;
+	lastValueHash: number;
+}
+
+export interface TemplateContentLiveBinding {
+	staticBinding: TemplateContentStaticBinding;
 	openMarker: Comment;
 	lastValueHash: number;
 }
@@ -131,16 +117,14 @@ export type LiveBinding =
 	| DynamicAttributeLiveBinding
 	| ContentLiveBinding
 	| RawContentLiveBinding
-	| CommentLiveBinding;
+	| CommentLiveBinding
+	| TemplateContentLiveBinding;
 
-export type AttributeLaneLiveBinding =
-	AttributeLiveBinding | DynamicAttributeLiveBinding;
+export type AttributeLaneLiveBinding = AttributeLiveBinding | DynamicAttributeLiveBinding;
 
 //a switch on `staticBinding.type` narrows the static binding and leaves the live binding as the
 //whole union, so the kind test lives here once per kind instead of as a cast at every call site
-export const isAttributeBinding = (
-	liveBinding: LiveBinding,
-): liveBinding is AttributeLiveBinding =>
+export const isAttributeBinding = (liveBinding: LiveBinding): liveBinding is AttributeLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.ATTRIBUTE;
 
 export const isDynamicAttributeBinding = (
@@ -148,15 +132,10 @@ export const isDynamicAttributeBinding = (
 ): liveBinding is DynamicAttributeLiveBinding =>
 	liveBinding.staticBinding.type === BINDING.DYNAMIC_ATTRIBUTE;
 
-export const isContentBinding = (
+export const isTemplateContentBinding = (
 	liveBinding: LiveBinding,
-): liveBinding is ContentLiveBinding =>
-	liveBinding.staticBinding.type === BINDING.CONTENT;
-
-export const isRawContentBinding = (
-	liveBinding: LiveBinding,
-): liveBinding is RawContentLiveBinding =>
-	liveBinding.staticBinding.type === BINDING.RAW_CONTENT;
+): liveBinding is TemplateContentLiveBinding =>
+	liveBinding.staticBinding.type === BINDING.TEMPLATE_CONTENT;
 
 export interface ListItem {
 	tailMarker: Comment;

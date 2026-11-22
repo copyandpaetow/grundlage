@@ -1,28 +1,21 @@
-import { BINDING, STYLE_SHEET_NOT_COMPILED } from "../../parser/constants";
+//oxlint-disable import/no-cycle -- mutual recursion: a template holds templates
+import * as BINDING from "../../parser/binding";
 import {
 	AttributeStaticBinding,
 	ContentStaticBinding,
 	DynamicAttributeStaticBinding,
 	StaticBinding,
 } from "../../parser/types";
-import {
-	NO_ATTRIBUTE_WRITTEN,
-	STYLE_SHEET_LANE,
-	UNSET_HASH,
-} from "../constants";
+import { NO_ATTRIBUTE_WRITTEN, UNSET_HASH } from "../constants";
 import { elementAfterMarker } from "../markers";
 import { commitAttribute, removeWrittenAttribute } from "./attribute";
 import { commitDynamic } from "./attribute-dynamic";
 import { applyAttributeValue } from "./attribute-apply";
 import { commitComment } from "./comment";
 import { commitContent, UNRESOLVED_CONTENT } from "./content";
-import {
-	createCSSOMStyleSheetLane,
-	seedDeclarationValueHashes,
-	TEXT_STYLE_SHEET_LANE,
-} from "./style-sheet";
 import { commitRawContent } from "./content-raw";
 import { commitTag } from "./tag";
+import { commitTemplateContent, hydrateTemplateContent } from "./content-template";
 import {
 	AttributeLaneLiveBinding,
 	AttributeLiveBinding,
@@ -31,10 +24,11 @@ import {
 	DynamicAttributeLiveBinding,
 	Instance,
 	isAttributeBinding,
-	isRawContentBinding,
+	isTemplateContentBinding,
 	LiveBinding,
 	RawContentLiveBinding,
 	TagLiveBinding,
+	TemplateContentLiveBinding,
 } from "./types";
 import { assertDuringDevelopment } from "../../utils/diagnostics";
 
@@ -84,28 +78,13 @@ export const createMarkedLiveBinding = (
 			return { staticBinding, openMarker, lastValueHash: UNSET_HASH };
 		case BINDING.COMMENT:
 			return { staticBinding, openMarker, lastValueHash: UNSET_HASH };
+		case BINDING.TEMPLATE_CONTENT:
+			return { staticBinding, openMarker, lastValueHash: UNSET_HASH };
+		case BINDING.RAW_CONTENT:
+			return { staticBinding, openMarker, lastValueHash: UNSET_HASH };
 		case BINDING.ATTRIBUTE:
 		case BINDING.DYNAMIC_ATTRIBUTE:
-			return createAttributeLaneLiveBinding(
-				staticBinding,
-				elementAfterMarker(openMarker),
-			);
-		case BINDING.RAW_CONTENT: {
-			const { compiledStyleSheet } = staticBinding;
-			return {
-				staticBinding,
-				openMarker,
-				lastValueHash: UNSET_HASH,
-				styleSheetLane:
-					compiledStyleSheet === STYLE_SHEET_NOT_COMPILED
-						? TEXT_STYLE_SHEET_LANE
-						: createCSSOMStyleSheetLane(
-								compiledStyleSheet,
-								//the parser compiles a sheet only for a <style>
-								elementAfterMarker(openMarker) as HTMLStyleElement,
-							),
-			};
-		}
+			return createAttributeLaneLiveBinding(staticBinding, elementAfterMarker(openMarker));
 		default:
 			return staticBinding satisfies never;
 	}
@@ -121,23 +100,22 @@ export const commitLiveBinding = (
 			commitTag(liveBinding as TagLiveBinding, values, instance.liveBindings);
 			break;
 		case BINDING.ATTRIBUTE:
-			commitAttribute(liveBinding as AttributeLiveBinding, values);
+			commitAttribute(liveBinding as AttributeLiveBinding, values, instance.treeState);
 			break;
 		case BINDING.DYNAMIC_ATTRIBUTE:
-			commitDynamic(liveBinding as DynamicAttributeLiveBinding, values);
+			commitDynamic(liveBinding as DynamicAttributeLiveBinding, values, instance.treeState);
 			break;
 		case BINDING.CONTENT:
-			commitContent(
-				liveBinding as ContentLiveBinding,
-				values,
-				instance.moveState,
-			);
+			commitContent(liveBinding as ContentLiveBinding, values, instance.treeState);
 			break;
 		case BINDING.RAW_CONTENT:
 			commitRawContent(liveBinding as RawContentLiveBinding, values);
 			break;
 		case BINDING.COMMENT:
 			commitComment(liveBinding as CommentLiveBinding, values);
+			break;
+		case BINDING.TEMPLATE_CONTENT:
+			commitTemplateContent(liveBinding as TemplateContentLiveBinding, values);
 			break;
 		default:
 			return liveBinding.staticBinding satisfies never;
@@ -149,19 +127,14 @@ export const hydrateLiveBinding = (
 	liveBinding: LiveBinding,
 	values: Array<unknown>,
 ): void => {
-	//the server sheet text already carries these values, so seeding here is what makes the first
-	//CSSOM bind inside the commit below find every declaration unchanged
-	if (
-		isRawContentBinding(liveBinding) &&
-		liveBinding.styleSheetLane.kind === STYLE_SHEET_LANE.CSSOM
-	)
-		seedDeclarationValueHashes(liveBinding.styleSheetLane, values);
+	if (isTemplateContentBinding(liveBinding)) {
+		hydrateTemplateContent(liveBinding, values);
+		return;
+	}
 	commitLiveBinding(instance, liveBinding, values);
 };
 
-export const revertHostBinding = (
-	liveBinding: AttributeLaneLiveBinding,
-): void => {
+export const revertHostBinding = (liveBinding: AttributeLaneLiveBinding): void => {
 	if (isAttributeBinding(liveBinding)) {
 		assertDuringDevelopment(
 			liveBinding.lastComposedName !== NO_ATTRIBUTE_WRITTEN,
@@ -170,6 +143,7 @@ export const revertHostBinding = (
 		removeWrittenAttribute(liveBinding, liveBinding.lastComposedName);
 		return;
 	}
-	for (const [name, entry] of liveBinding.appliedAttributes)
-		applyAttributeValue(liveBinding.anchor, name, null, entry.value);
+	for (const [name, entry] of liveBinding.appliedAttributes) {
+		applyAttributeValue(liveBinding.anchor, name, undefined, entry.value);
+	}
 };

@@ -1,10 +1,10 @@
 import { html, component } from "../../../lib/src";
 import { type ComponentConstructor } from "../../../lib/src/types";
 
-// form-associated custom element. it submits through ElementInternals.setFormValue
-// and reacts to the form's lifecycle declaratively: the form-associated base re-broadcasts the
-// browser's formResetCallback / formDisabledCallback as on-form-reset /
-// on-form-disabled listeners on this host.
+//form-associated custom element. it submits through ElementInternals.setFormValue
+//and reacts to the form's lifecycle declaratively: the form-associated base re-broadcasts the
+//browser's formResetCallback / formDisabledCallback as on-form-reset /
+//on-form-disabled listeners on this host.
 const FormField = component(
 	function* ({ host }) {
 		let value = "";
@@ -18,8 +18,8 @@ const FormField = component(
 		};
 
 		const onReset = () => {
-			// the input is uncontrolled, so clear its dirty value directly; setting
-			// the value attribute wouldn't move an already-edited input
+			//the input is uncontrolled, so clear its dirty value directly; setting
+			//the value attribute wouldn't move an already-edited input
 			const input = host.shadowRoot?.querySelector("input");
 			if (input) input.value = "";
 			value = "";
@@ -32,19 +32,17 @@ const FormField = component(
 			host.update();
 		};
 
-		yield () => html`
-			<template on-form-reset="${onReset}" on-form-disabled="${onDisabled}">
-				<label>
-					nickname
-					<input
-						type="text"
-						oninput="${onInput}"
-						${disabled ? "disabled" : ""}
-					/>
-				</label>
-				<p>value seen by the form: <strong>${value || "(empty)"}</strong></p>
-			</template>
-		`;
+		yield function* view() {
+			yield html`
+				<template on-form-reset="${onReset}" on-form-disabled="${onDisabled}">
+					<label>
+						nickname
+						<input type="text" oninput="${onInput}" disabled=${disabled} />
+					</label>
+					<p>value seen by the form: <strong>${value || "(empty)"}</strong></p>
+				</template>
+			`;
+		};
 	},
 	{ mode: "open", formAssociated: true },
 ) as ComponentConstructor;

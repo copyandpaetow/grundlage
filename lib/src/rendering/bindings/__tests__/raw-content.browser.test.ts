@@ -1,11 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { html, component } from "../../../index";
 
-const normalizeWhitespace = (string: string) =>
-	string.replace(/\s+/g, " ").trim();
+const normalizeWhitespace = (string: string) => string.replace(/\s+/g, " ").trim();
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("raw content updates", () => {
 	let tagId = 0;
@@ -21,8 +19,7 @@ describe("raw content updates", () => {
 		element.remove();
 	};
 
-	//a value-hole style takes the css-plan path: mount bakes literal values into the
-	//text, later updates go through the element's own CSSStyleSheet — never the text
+	//the browser reparses the sheet from each new text, so read it after every update
 	const ruleDeclarationOf = (style: HTMLStyleElement): CSSStyleDeclaration =>
 		(style.sheet!.cssRules[0] as CSSStyleRule).style;
 
@@ -39,18 +36,19 @@ describe("raw content updates", () => {
 	};
 	const resolvesComputedColors = detectComputedColorResolution();
 
-	test("renders dynamic content inside a style element", async () => {
+	test("paints dynamic content inside a style element", async () => {
 		const tag = uniqueTag();
 		let color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						p {
 							color: ${color};
 						}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -59,59 +57,56 @@ describe("raw content updates", () => {
 
 		const styles = element.shadowRoot!.querySelectorAll("style");
 		expect(styles).toHaveLength(1);
-		expect(normalizeWhitespace(styles[0].textContent)).toBe(
-			"p { color: red; }",
-		);
+		expect(normalizeWhitespace(styles[0].textContent)).toBe("p { color: red; }");
 		expect(element.getAttribute("style")).toBeNull();
 
 		cleanup(element);
 	});
 
-	test.skipIf(!resolvesComputedColors)(
-		"a sheet update reaches the rendered pixels",
-		async () => {
-			const tag = uniqueTag();
-			let color = "red";
+	test.skipIf(!resolvesComputedColors)("a sheet update reaches the rendered pixels", async () => {
+		const tag = uniqueTag();
+		let color = "red";
 
-			const MyElement = component(function* () {
-				yield () =>
-					html`<style>
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<style>
 							p {
 								color: ${color};
 							}
 						</style>
 						<p>text</p>`;
-			});
+			};
+		});
 
-			customElements.define(tag, MyElement);
-			const element = mount(tag) as InstanceType<typeof MyElement>;
-			await sleep();
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
 
-			const paragraph = element.shadowRoot!.querySelector("p")!;
-			expect(getComputedStyle(paragraph).color).toBe("rgb(255, 0, 0)");
+		const paragraph = element.shadowRoot!.querySelector("p")!;
+		expect(getComputedStyle(paragraph).color).toBe("rgb(255, 0, 0)");
 
-			color = "blue";
-			await element.update();
-			await sleep();
+		color = "blue";
+		await element.update();
+		await sleep();
 
-			expect(getComputedStyle(paragraph).color).toBe("rgb(0, 0, 255)");
+		expect(getComputedStyle(paragraph).color).toBe("rgb(0, 0, 255)");
 
-			cleanup(element);
-		},
-	);
+		cleanup(element);
+	});
 
 	test("updates dynamic content inside a style element", async () => {
 		const tag = uniqueTag();
 		let color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						p {
 							color: ${color};
 						}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -119,30 +114,27 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style")!;
-		const sheetTextNode = style.firstChild!;
 		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 
 		color = "blue";
 		await element.update();
 		await sleep();
 
-		//the text keeps the mount values — the update lands on the sheet object
-		expect(style.firstChild).toBe(sheetTextNode);
-		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
-		expect(
-			ruleDeclarationOf(style as HTMLStyleElement).getPropertyValue("color"),
-		).toBe("blue");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: blue; }");
+		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 		expect(element.getAttribute("style")).toBeNull();
 
 		cleanup(element);
 	});
 
-	test("renders dynamic content inside a textarea element", async () => {
+	test("paints dynamic content inside a textarea element", async () => {
 		const tag = uniqueTag();
 		let content = "initial text";
 
 		const MyElement = component(function* () {
-			yield () => html`<textarea>${content}</textarea>`;
+			yield function* () {
+				yield html`<textarea>${content}</textarea>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -161,20 +153,74 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("renders multiple dynamic expressions in a style element", async () => {
+	test("paints dynamic content inside a title element", async () => {
+		const tag = uniqueTag();
+		let content = "Salt & <pepper>";
+
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<title>Shop: ${content}</title>`;
+			};
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const title = element.shadowRoot?.querySelector("title")!;
+		expect(title.textContent).toBe("Shop: Salt & <pepper>");
+
+		content = "Sugar";
+		await element.update();
+		await sleep();
+
+		expect(title.textContent).toBe("Shop: Sugar");
+
+		cleanup(element);
+	});
+
+	test("paints dynamic content inside an SVG title element", async () => {
+		const tag = uniqueTag();
+		let label = "Close";
+
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<svg role="img"><title>${label} &amp; save</title></svg>`;
+			};
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		const title = element.shadowRoot?.querySelector("svg > title")!;
+		expect(title.namespaceURI).toBe("http://www.w3.org/2000/svg");
+		expect(title.textContent).toBe("Close & save");
+
+		label = "Open";
+		await element.update();
+		await sleep();
+
+		expect(title.textContent).toBe("Open & save");
+
+		cleanup(element);
+	});
+
+	test("paints multiple dynamic expressions in a style element", async () => {
 		const tag = uniqueTag();
 		let color = "red";
 		let size = "16px";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						p {
 							color: ${color};
 							font-size: ${size};
 						}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -182,17 +228,16 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style")!;
-		const declaration = ruleDeclarationOf(style as HTMLStyleElement);
-		expect(declaration.getPropertyValue("color")).toBe("red");
-		expect(declaration.getPropertyValue("font-size")).toBe("16px");
+		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("red");
+		expect(ruleDeclarationOf(style).getPropertyValue("font-size")).toBe("16px");
 
 		color = "green";
 		size = "20px";
 		await element.update();
 		await sleep();
 
-		expect(declaration.getPropertyValue("color")).toBe("green");
-		expect(declaration.getPropertyValue("font-size")).toBe("20px");
+		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("green");
+		expect(ruleDeclarationOf(style).getPropertyValue("font-size")).toBe("20px");
 
 		cleanup(element);
 	});
@@ -202,10 +247,11 @@ describe("raw content updates", () => {
 		const injection = "<script>alert('xss')</script>";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 					${injection}
 				</style>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -213,9 +259,7 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot?.querySelector("style")!;
-		expect(normalizeWhitespace(style.textContent)).toBe(
-			"<script>alert('xss')</script>",
-		);
+		expect(normalizeWhitespace(style.textContent)).toBe("<script>alert('xss')</script>");
 		expect(element.shadowRoot?.querySelector("script")).toBeNull();
 
 		cleanup(element);
@@ -226,11 +270,12 @@ describe("raw content updates", () => {
 		const css = "p { color: red; }";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						${css}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -248,17 +293,18 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("handles numeric values in raw content", async () => {
+	test("a number in a <style> hole paints as its digits", async () => {
 		const tag = uniqueTag();
 		let size = 16;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 					p {
 						font-size: ${size}px;
 					}
 				</style>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -266,14 +312,13 @@ describe("raw content updates", () => {
 		await sleep();
 
 		const style = element.shadowRoot!.querySelector("style")!;
-		const declaration = ruleDeclarationOf(style as HTMLStyleElement);
-		expect(declaration.getPropertyValue("font-size")).toBe("16px");
+		expect(ruleDeclarationOf(style).getPropertyValue("font-size")).toBe("16px");
 
 		size = 24;
 		await element.update();
 		await sleep();
 
-		expect(declaration.getPropertyValue("font-size")).toBe("24px");
+		expect(ruleDeclarationOf(style).getPropertyValue("font-size")).toBe("24px");
 
 		cleanup(element);
 	});
@@ -281,12 +326,12 @@ describe("raw content updates", () => {
 	test("a nested-template style does not re-trigger the host attribute observer", async () => {
 		const tag = uniqueTag();
 		const color = "red";
-		let renderCount = 0;
+		let runCount = 0;
 
 		const MyElement = component(function* () {
-			yield () => {
-				renderCount++;
-				return html`<div>
+			yield function* () {
+				runCount++;
+				yield html`<div>
 					${html`<style>
 							p {
 								color: ${color};
@@ -299,11 +344,11 @@ describe("raw content updates", () => {
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
-		//the css path never writes the host, so nothing may re-fire the attribute
-		//observer and grow the render count without bound
+		//a style update never writes the host, so nothing may re-fire the attribute
+		//observer and grow the run count without bound
 		await sleep(50);
 
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 		expect(element.getAttribute("style")).toBeNull();
 		const style = element.shadowRoot!.querySelector("style")!;
 		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
@@ -311,7 +356,7 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("one styled helper rendered twice in a component keeps both colors", async () => {
+	test("one styled helper painted twice in a component keeps both colors", async () => {
 		const tag = uniqueTag();
 		const badge = (color: string) =>
 			html`<style>
@@ -322,9 +367,10 @@ describe("raw content updates", () => {
 				<span class="b">x</span>`;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>${badge("red")}</div>
+			yield function* () {
+				yield html`<div>${badge("red")}</div>
 					<div>${badge("blue")}</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -335,28 +381,20 @@ describe("raw content updates", () => {
 		//duplicates carry independent values by construction
 		const styles = element.shadowRoot!.querySelectorAll("style");
 		expect(styles).toHaveLength(2);
-		expect(
-			ruleDeclarationOf(styles[0] as HTMLStyleElement).getPropertyValue(
-				"color",
-			),
-		).toBe("red");
-		expect(
-			ruleDeclarationOf(styles[1] as HTMLStyleElement).getPropertyValue(
-				"color",
-			),
-		).toBe("blue");
+		expect(ruleDeclarationOf(styles[0]).getPropertyValue("color")).toBe("red");
+		expect(ruleDeclarationOf(styles[1]).getPropertyValue("color")).toBe("blue");
 		expect(element.getAttribute("style")).toBeNull();
 
 		cleanup(element);
 	});
 
-	test("a root host style binding leaves the css fast path enabled", async () => {
+	test("a root host style binding and a dynamic <style> leave each other alone", async () => {
 		const tag = uniqueTag();
 		let color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<template style="outline: none"
+			yield function* () {
+				yield html`<template style="outline: none"
 					><div>
 						${html`<style>
 								p {
@@ -366,14 +404,13 @@ describe("raw content updates", () => {
 							<p>text</p>`}
 					</div></template
 				>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		//values live on the instance's own sheet, so a host style attribute has
-		//nothing to wipe — it coexists with the fast path
 		const style = element.shadowRoot!.querySelector("style")!;
 		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 		expect(element.getAttribute("style")).toBe("outline: none");
@@ -382,10 +419,7 @@ describe("raw content updates", () => {
 		await element.update();
 		await sleep();
 
-		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
-		expect(
-			ruleDeclarationOf(style as HTMLStyleElement).getPropertyValue("color"),
-		).toBe("blue");
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: blue; }");
 		expect(element.getAttribute("style")).toBe("outline: none");
 
 		cleanup(element);
@@ -398,13 +432,14 @@ describe("raw content updates", () => {
 			const backgroundValue = "inherit";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							p {
 								background-color: ${backgroundValue};
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -415,9 +450,7 @@ describe("raw content updates", () => {
 			//the keyword is baked into the sheet as a literal declaration value, so the
 			//paragraph gets `background-color: inherit` and inherits the host's green
 			const paragraph = element.shadowRoot!.querySelector("p")!;
-			expect(getComputedStyle(paragraph).backgroundColor).toBe(
-				"rgb(0, 128, 0)",
-			);
+			expect(getComputedStyle(paragraph).backgroundColor).toBe("rgb(0, 128, 0)");
 
 			cleanup(element);
 		},
@@ -430,14 +463,15 @@ describe("raw content updates", () => {
 			let width = "45px";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`<style>
+				yield function* () {
+					yield html`<style>
 							p {
 								--width: ${width};
 								width: var(--width, 7px);
 							}
 						</style>
 						<p>text</p>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -446,7 +480,7 @@ describe("raw content updates", () => {
 			const paragraph = element.shadowRoot!.querySelector("p")!;
 			expect(getComputedStyle(paragraph).width).toBe("45px");
 
-			//the update goes through setProperty, which would read " initial" as a literal token
+			//the keyword lands in the text, where it takes its normal effect on the custom property
 			for (const keyword of ["initial", "inherit", "unset"]) {
 				width = "45px";
 				await element.update();
@@ -464,24 +498,22 @@ describe("raw content updates", () => {
 		let label = "first";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div>
+			yield function* () {
+				yield html`<div>
 					<template><p>${label}</p></template>
 				</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const template =
-			element.shadowRoot!.querySelector<HTMLTemplateElement>("template")!;
-		//markup must live in .content — the render/serialize surface — not in
+		const template = element.shadowRoot!.querySelector<HTMLTemplateElement>("template")!;
+		//markup must live in .content, which renders and serializes, not in
 		//light children, which never render and never serialize
 		expect(template.childNodes.length).toBe(0);
-		expect(
-			normalizeWhitespace(template.content.querySelector("p")!.textContent),
-		).toBe("first");
+		expect(normalizeWhitespace(template.content.querySelector("p")!.textContent)).toBe("first");
 
 		//the template serializes from .content, so a round-trip must survive
 		expect(template.outerHTML).toContain("<p>first</p>");
@@ -490,24 +522,22 @@ describe("raw content updates", () => {
 		await element.update();
 		await sleep();
 
-		expect(
-			normalizeWhitespace(template.content.querySelector("p")!.textContent),
-		).toBe("second");
+		expect(normalizeWhitespace(template.content.querySelector("p")!.textContent)).toBe("second");
 		expect(template.childNodes.length).toBe(0);
 
 		cleanup(element);
 	});
 
 	test("swapping away from a styled template leaves nothing behind", async () => {
-		//values live on the instance's own sheet, which leaves with the instance's
-		//nodes — a structural swap must strand nothing on the host
+		//values live in the instance's own <style>, which leaves with the instance's
+		//nodes: a structural swap must strand nothing on the host
 		const tag = uniqueTag();
 		let showStyled = true;
 		const color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				showStyled
+			yield function* () {
+				yield showStyled
 					? html`<style>
 								p {
 									color: ${color};
@@ -515,16 +545,15 @@ describe("raw content updates", () => {
 							</style>
 							<p>x</p>`
 					: html`<div>plain</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const style = element.shadowRoot!.querySelector(
-			"style",
-		) as HTMLStyleElement;
-		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: red; }");
+		const style = element.shadowRoot!.querySelector("style") as HTMLStyleElement;
+		expect(normalizeWhitespace(style.textContent)).toBe("p { color: red; }");
 
 		showStyled = false;
 		await element.update();
@@ -536,31 +565,28 @@ describe("raw content updates", () => {
 		cleanup(element);
 	});
 
-	test("a styled host keeps its live sheet value across a move", async () => {
-		//moving the host disconnects+reconnects it, re-firing connectedCallback; the
-		//<style> reparses from stale mount text, so the move refresh must restore the
-		//value written to the sheet since mount — the color update is in a prior pass
-		//so nothing re-sets it after the move
+	test("a styled host keeps its current value across a move", async () => {
+		//moving the host reparses its <style> from the text, which holds the value of the
+		//last update; nothing re-sets it after the move
 		const tag = uniqueTag();
 		let color = "red";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<style>
+			yield function* () {
+				yield html`<style>
 						p {
 							color: ${color};
 						}
 					</style>
 					<p>text</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		const style = element.shadowRoot!.querySelector(
-			"style",
-		) as HTMLStyleElement;
+		const style = element.shadowRoot!.querySelector("style") as HTMLStyleElement;
 
 		color = "blue";
 		await element.update();
@@ -568,22 +594,20 @@ describe("raw content updates", () => {
 		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 
 		//a synchronous remove + append into a new parent re-fires connectedCallback
-		//without a teardown; the sheet the browser mints is fresh from stale text
+		//without a teardown
 		const container = document.createElement("div");
 		document.body.appendChild(container);
 		container.appendChild(element);
 		await sleep();
 
-		expect(normalizeWhitespace(style.textContent!)).toBe("p { color: red; }");
 		expect(ruleDeclarationOf(style).getPropertyValue("color")).toBe("blue");
 
 		container.remove();
 	});
 
-	test("a styled list row keeps its live sheet value across a reorder", async () => {
-		//a row move reinserts its <style>, minting a fresh sheet from stale text; the
-		//reorder pass leaves the color unchanged, so no setProperty runs after the
-		//move — only refreshStyleSheetsAfterMove can carry the live value across
+	test("a styled list row keeps its current value across a reorder", async () => {
+		//a row move reinserts its <style>, which reparses from the text; the reorder pass
+		//leaves the color unchanged, so nothing rewrites it after the move
 		const tag = uniqueTag();
 		type Row = { id: string; color: string };
 		let items: Array<Row> = [
@@ -592,8 +616,8 @@ describe("raw content updates", () => {
 		];
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map(
 						(row) =>
 							html`<li key="${row.id}">
@@ -606,6 +630,7 @@ describe("raw content updates", () => {
 							</li>`,
 					)}
 				</ul>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -614,22 +639,18 @@ describe("raw content updates", () => {
 
 		const styleOf = (id: string) =>
 			Array.from(element.shadowRoot!.querySelectorAll("li"))
-				.find((li) => li.querySelector("p")!.textContent!.trim() === id)!
+				.find((li) => li.querySelector("p")!.textContent.trim() === id)!
 				.querySelector("style") as HTMLStyleElement;
 
-		//update colors via the live sheet (setProperty), not the text
 		items = [
 			{ id: "a", color: "blue" },
 			{ id: "b", color: "orange" },
 		];
 		await element.update();
 		await sleep();
-		expect(ruleDeclarationOf(styleOf("a")).getPropertyValue("color")).toBe(
-			"blue",
-		);
+		expect(ruleDeclarationOf(styleOf("a")).getPropertyValue("color")).toBe("blue");
 
-		//reorder only — colors unchanged, so the hash gate skips setProperty and the
-		//moved row's fresh sheet is healed purely by the move refresh
+		//reorder only: colors unchanged, so the hash gate skips every write
 		items = [
 			{ id: "b", color: "orange" },
 			{ id: "a", color: "blue" },
@@ -637,12 +658,8 @@ describe("raw content updates", () => {
 		await element.update();
 		await sleep();
 
-		expect(ruleDeclarationOf(styleOf("a")).getPropertyValue("color")).toBe(
-			"blue",
-		);
-		expect(ruleDeclarationOf(styleOf("b")).getPropertyValue("color")).toBe(
-			"orange",
-		);
+		expect(ruleDeclarationOf(styleOf("a")).getPropertyValue("color")).toBe("blue");
+		expect(ruleDeclarationOf(styleOf("b")).getPropertyValue("color")).toBe("orange");
 
 		cleanup(element);
 	});

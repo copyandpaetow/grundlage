@@ -1,8 +1,8 @@
 import { defineConfig } from "vite";
-import { prerenderWebcomponents } from "../../index";
+import { prerenderWebComponents } from "../../index";
 
 //`virtual:greeting` only resolves through this plugin, so a component importing it loads
-//exactly when the loader server ran this config — and not otherwise
+//exactly when the loader server ran this config, and not otherwise
 const greetingPlugin = () => ({
 	name: "fixture-virtual-greeting",
 	resolveId(id: string) {
@@ -17,5 +17,5 @@ const greetingPlugin = () => ({
 
 //the plugin appears in its own loader server's config: it has to stay inert there
 export default defineConfig({
-	plugins: [greetingPlugin(), prerenderWebcomponents()],
+	plugins: [greetingPlugin(), prerenderWebComponents()],
 });

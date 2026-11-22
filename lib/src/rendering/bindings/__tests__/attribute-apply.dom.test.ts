@@ -1,5 +1,17 @@
 import { describe, expect, test, vi } from "vitest";
+import { component } from "../../../index";
+import { BaseComponent } from "../../../types";
 import { applyAttributeValue, reapplyValueOnSwap } from "../attribute-apply";
+
+let componentTagCount = 0;
+const createComponentElement = (): BaseComponent => {
+	const tag = `apply-target-${componentTagCount++}`;
+	customElements.define(
+		tag,
+		component(function* () {}),
+	);
+	return document.createElement(tag) as BaseComponent;
+};
 
 describe("applyAttributeValue - event listeners", () => {
 	test("attaches an event listener for an on* key whose value is a function", () => {
@@ -79,8 +91,8 @@ describe("applyAttributeValue - event listeners", () => {
 
 describe("applyAttributeValue - exotic event names and CustomEvent payloads", () => {
 	//the `on*` fast path keys on `lowerKey in element`, so any event living on HTMLElement.prototype
-	//binds. These cover the less-common surfaces the library relies on — pointer, wheel, transition,
-	//animation, composition — and the CustomEvent detail reaching the listener untouched
+	//binds. These cover the less-common surfaces the library relies on (pointer, wheel, transition,
+	//animation, composition) and the CustomEvent detail reaching the listener untouched
 
 	test.each([
 		["onpointerdown", "pointerdown"],
@@ -91,27 +103,24 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		["oncompositionend", "compositionend"],
 		["onfocusin", "focusin"],
 		["oncontextmenu", "contextmenu"],
-	])(
-		"binds %s via addEventListener and fires on %s",
-		(attributeKey, eventName) => {
-			const element = document.createElement("div");
-			//guard: if a future runtime drops one of these from the prototype the
-			//fast path would silently fall through to setAttribute and the test
-			//would still pass the dispatch check via inline handler, so assert the
-			//lookup so a regression surfaces here, not somewhere downstream
-			expect(attributeKey in element).toBe(true);
+	])("binds %s via addEventListener and fires on %s", (attributeKey, eventName) => {
+		const element = document.createElement("div");
+		//guard: if a future runtime drops one of these from the prototype the
+		//fast path would silently fall through to setAttribute and the test
+		//would still pass the dispatch check via inline handler, so assert the
+		//lookup so a regression surfaces here, not somewhere downstream
+		expect(attributeKey in element).toBe(true);
 
-			const received: Array<Event> = [];
-			const handler = (event: Event) => received.push(event);
+		const received: Array<Event> = [];
+		const handler = (event: Event) => received.push(event);
 
-			applyAttributeValue(element, attributeKey, handler);
-			expect(element.hasAttribute(attributeKey)).toBe(false);
+		applyAttributeValue(element, attributeKey, handler);
+		expect(element.hasAttribute(attributeKey)).toBe(false);
 
-			const dispatched = new Event(eventName);
-			element.dispatchEvent(dispatched);
-			expect(received).toEqual([dispatched]);
-		},
-	);
+		const dispatched = new Event(eventName);
+		element.dispatchEvent(dispatched);
+		expect(received).toEqual([dispatched]);
+	});
 
 	test("CustomEvent detail reaches a listener bound to a standard event slot", () => {
 		//the event is not unwrapped: the listener gets whatever dispatchEvent hands over, so callers
@@ -179,9 +188,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
-		applyAttributeValue(element, "onPointerDown", (event: Event) =>
-			received.push(event.type),
-		);
+		applyAttributeValue(element, "onPointerDown", (event: Event) => received.push(event.type));
 
 		element.dispatchEvent(new Event("pointerdown"));
 		expect(received).toEqual(["pointerdown"]);
@@ -202,14 +209,12 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		applyAttributeValue(element, "onmycustomevent", handler);
 
 		expect(addSpy).not.toHaveBeenCalled();
-		expect(
-			(element as unknown as { onmycustomevent: unknown }).onmycustomevent,
-		).toBe(handler);
+		expect((element as unknown as { onmycustomevent: unknown }).onmycustomevent).toBe(handler);
 		expect(element.hasAttribute("onmycustomevent")).toBe(false);
 	});
 
 	test("removes the listener via null even when only oldValue is a function", () => {
-		//on the very first call, value is null but oldValue is a function, so
+		//on the first call, value is null but oldValue is a function, so
 		//the entry guard in applyAttributeValue still has to enter the on* branch
 		//so removeEventListener fires for the orphaned handler
 		const element = document.createElement("div");
@@ -223,7 +228,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		expect(received).toEqual([]);
 	});
 
-	test("function → non-function on an event key detaches the listener and writes nothing", () => {
+	test("replacing a function with a non-function on an event key detaches the listener and writes nothing", () => {
 		const element = document.createElement("button");
 		const events: Array<string> = [];
 		const handler = () => events.push("clicked");
@@ -237,7 +242,7 @@ describe("applyAttributeValue - exotic event names and CustomEvent payloads", ()
 		expect(events).toEqual([]);
 	});
 
-	test("non-function → function on an event key binds once, with no leftover attribute", () => {
+	test("replacing a non-function with a function on an event key binds once, with no leftover attribute", () => {
 		const element = document.createElement("button");
 		const events: Array<string> = [];
 		const handler = () => events.push("clicked");
@@ -265,16 +270,12 @@ describe("applyAttributeValue - on- explicit listeners", () => {
 		const received: Array<string> = [];
 		const addSpy = vi.spyOn(element, "addEventListener");
 
-		applyAttributeValue(element, "on-form-reset", (event: Event) =>
-			received.push(event.type),
-		);
+		applyAttributeValue(element, "on-form-reset", (event: Event) => received.push(event.type));
 
 		expect(addSpy).toHaveBeenCalledWith("form-reset", expect.any(Function));
 		//must not leak as an attribute or a JS property
 		expect(element.hasAttribute("on-form-reset")).toBe(false);
-		expect(
-			(element as unknown as Record<string, unknown>)["on-form-reset"],
-		).toBeUndefined();
+		expect((element as unknown as Record<string, unknown>)["on-form-reset"]).toBeUndefined();
 
 		element.dispatchEvent(new Event("form-reset"));
 		expect(received).toEqual(["form-reset"]);
@@ -324,9 +325,7 @@ describe("applyAttributeValue - on- explicit listeners", () => {
 		const element = document.createElement("div");
 		const received: Array<string> = [];
 
-		applyAttributeValue(element, "on-MyEvent", (event: Event) =>
-			received.push(event.type),
-		);
+		applyAttributeValue(element, "on-MyEvent", (event: Event) => received.push(event.type));
 
 		element.dispatchEvent(new Event("myevent"));
 		expect(received).toEqual(["myevent"]);
@@ -468,7 +467,7 @@ describe("applyAttributeValue - non-stringable values", () => {
 		expect((element as unknown as { items: unknown }).items).toBe(items);
 	});
 
-	test("removing a property-mode entry deletes the JS property (not just the attribute)", () => {
+	test("removing a property-mode entry deletes the JS property (not only the attribute)", () => {
 		const element = document.createElement("div");
 		const items = [1, 2, 3];
 
@@ -479,31 +478,39 @@ describe("applyAttributeValue - non-stringable values", () => {
 		expect((element as unknown as { items: unknown }).items).toBeUndefined();
 	});
 
-	test("calls update() when the receiver exposes one (custom-element handoff)", () => {
-		//a target with an update() method is triggered so a custom element reacts to the new property,
-		//which is the component-to-component data flow path
-		const element = document.createElement("div") as HTMLDivElement & {
-			update?: () => void;
-		};
-		const updateSpy = vi.fn();
-		element.update = updateSpy;
+	test("calls update() on a component receiving a property (component-to-component data flow)", () => {
+		const element = createComponentElement();
+		const update = vi.spyOn(element, "update").mockResolvedValue(undefined);
 
 		applyAttributeValue(element, "config", { nested: 1 });
-		expect(updateSpy).toHaveBeenCalledTimes(1);
+		expect(update).toHaveBeenCalledTimes(1);
+	});
+
+	test("does not call update() on another library's element", () => {
+		//its update() has that library's contract: Lit's is its render step, which throws before the
+		//element is connected
+		class ElementOfAnotherLibrary extends HTMLElement {
+			update = vi.fn();
+		}
+		customElements.define("element-of-another-library", ElementOfAnotherLibrary);
+		const element = document.createElement("element-of-another-library") as ElementOfAnotherLibrary;
+
+		applyAttributeValue(element, "config", { nested: 1 });
+		expect(element.update).not.toHaveBeenCalled();
+		expect((element as unknown as { config: unknown }).config).toEqual({
+			nested: 1,
+		});
 	});
 
 	test("does not call update() for stringable values", () => {
 		//the update() trigger lives only on the property-assignment branch.
 		//plain attribute writes must not fire it; otherwise every attribute
-		//flip on a child component would cause it to re-render twice
-		const element = document.createElement("div") as HTMLDivElement & {
-			update?: () => void;
-		};
-		const updateSpy = vi.fn();
-		element.update = updateSpy;
+		//flip on a child component would cause it to update twice
+		const element = createComponentElement();
+		const update = vi.spyOn(element, "update").mockResolvedValue(undefined);
 
 		applyAttributeValue(element, "title", "hello");
-		expect(updateSpy).not.toHaveBeenCalled();
+		expect(update).not.toHaveBeenCalled();
 	});
 });
 
@@ -519,7 +526,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 	});
 
 	test("the prior stringable attribute is removed by the transition", () => {
-		//both modes populated is a silent stale render: a child reading getAttribute("config")
+		//both modes populated is a silent stale value: a child reading getAttribute("config")
 		//after the switch would see the stringified previous value
 		const element = document.createElement("div");
 
@@ -530,7 +537,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 		expect(element.getAttribute("config")).toBe(null);
 	});
 
-	test("a full stringable → object → stringable cycle leaves exactly one mode populated", () => {
+	test("a stringable, then an object, then a stringable leaves exactly one mode populated", () => {
 		const element = document.createElement("div");
 
 		applyAttributeValue(element, "config", "first");
@@ -546,7 +553,7 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 		expect(Object.hasOwn(element, "config")).toBe(false);
 	});
 
-	test("the other mode is cleared without an oldValue — the two-argument setProp form", () => {
+	test("the other mode is cleared without an oldValue, as the two-argument setProp passes", () => {
 		//setProp(name, value) tracks nothing, so the element's own state has to be what decides
 		const element = document.createElement("div");
 
@@ -562,17 +569,14 @@ describe("applyAttributeValue - stringable to non-stringable transition", () => 
 	test("update() still fires on the property-assignment branch after the transition", () => {
 		//the update() trigger still runs for the non-stringable side even after a prior stringable
 		//value
-		const element = document.createElement("div") as HTMLDivElement & {
-			update?: () => void;
-		};
-		const updateSpy = vi.fn();
-		element.update = updateSpy;
+		const element = createComponentElement();
+		const update = vi.spyOn(element, "update").mockResolvedValue(undefined);
 
 		applyAttributeValue(element, "config", "before");
-		expect(updateSpy).not.toHaveBeenCalled();
+		expect(update).not.toHaveBeenCalled();
 
 		applyAttributeValue(element, "config", { x: 1 }, "before");
-		expect(updateSpy).toHaveBeenCalledTimes(1);
+		expect(update).toHaveBeenCalledTimes(1);
 	});
 });
 

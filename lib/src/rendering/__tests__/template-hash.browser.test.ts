@@ -1,13 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { component } from "../../index";
-import { html } from "../../template";
+import { component, html } from "../../index";
 import { hashValue } from "../value-hashing";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("template value hashing", () => {
-	test("a cycle that passes through a template ends at the depth limit", () => {
+	test("a cycle that passes through a template ends at its back-reference", () => {
 		const cycle: Array<unknown> = [];
 		cycle.push(html`<p>${cycle}</p>`);
 		expect(typeof hashValue(cycle)).toBe("number");
@@ -45,11 +43,7 @@ describe("template value hashing", () => {
 		const template1 = html`<div style="width:${50.1}%"></div>`;
 		const template2 = html`<div style="width:${50.10001}%"></div>`;
 		const template3 = html`<div style="width:${50.2}%"></div>`;
-		const hashes = new Set([
-			hashValue(template1),
-			hashValue(template2),
-			hashValue(template3),
-		]);
+		const hashes = new Set([hashValue(template1), hashValue(template2), hashValue(template3)]);
 		expect(hashes.size).toBe(3);
 	});
 });
@@ -71,7 +65,9 @@ describe("update() change propagation", () => {
 		const tag = uniqueTag();
 		let value = 1;
 		const MyElement = component(function* () {
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -90,28 +86,24 @@ describe("update() change propagation", () => {
 		const tag = uniqueTag();
 		let value = 50.1;
 		const MyElement = component(function* () {
-			yield () => html`<p>${value}</p>`;
+			yield function* () {
+				yield html`<p>${value}</p>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"50.1",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("50.1");
 
 		value = 50.1000001;
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"50.1000001",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("50.1000001");
 
 		value = 50.2;
 		await element.update();
 		await sleep();
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"50.2",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("50.2");
 
 		cleanup(element);
 	});
@@ -125,10 +117,11 @@ describe("update() change propagation", () => {
 		let hue = 120.5;
 		let opacity = 0.4;
 		const MyElement = component(function* () {
-			yield () =>
-				html`<div
+			yield function* () {
+				yield html`<div
 					style="width:${width}%;background:hsl(${hue},70%,50%);opacity:${opacity}"
 				></div>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -153,16 +146,17 @@ describe("update() change propagation", () => {
 
 	test("reuses nested-template DOM when content is equal across updates", async () => {
 		//exercises the `expressions[index] = previousEntry` swap path:
-		//on the second render the new HTMLTemplate has identical content
+		//on the second paint the new HTMLTemplate has identical content
 		//to the previous, so the engine should reuse the old DOM subtree
 		const tag = uniqueTag();
 		let outer = 1;
 		const MyElement = component(function* () {
-			yield () =>
-				html`<section>
+			yield function* () {
+				yield html`<section>
 					<h1>${outer}</h1>
 					${html`<span class="${"static"}">inner</span>`}
 				</section>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -183,37 +177,30 @@ describe("update() change propagation", () => {
 	});
 
 	test("list diffing reuses item DOM when hashes match across reorders", async () => {
-		//renderList keys on .hash, a lazy getter: a row whose content is unchanged has to keep
+		//commitList keys on .hash, a lazy getter: a row whose content is unchanged has to keep
 		//matching by content across the reorder
 		const tag = uniqueTag();
 		let items = ["one", "two", "three"];
 		const MyElement = component(function* () {
-			yield () =>
-				html`<ul>
+			yield function* () {
+				yield html`<ul>
 					${items.map((item) => html`<li>${item}</li>`)}
 				</ul>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
 		const original = Array.from(element.shadowRoot!.querySelectorAll("li"));
-		expect(original.map((node) => node.textContent?.trim())).toEqual([
-			"one",
-			"two",
-			"three",
-		]);
+		expect(original.map((node) => node.textContent?.trim())).toEqual(["one", "two", "three"]);
 
 		items = ["three", "one", "two"];
 		await element.update();
 		await sleep();
 
 		const reordered = Array.from(element.shadowRoot!.querySelectorAll("li"));
-		expect(reordered.map((node) => node.textContent?.trim())).toEqual([
-			"three",
-			"one",
-			"two",
-		]);
+		expect(reordered.map((node) => node.textContent?.trim())).toEqual(["three", "one", "two"]);
 
 		//each reordered <li> should be one of the originals, not a fresh node
 		for (const li of reordered) {
@@ -224,12 +211,14 @@ describe("update() change propagation", () => {
 	});
 
 	test("null-to-undefined transition keeps the binding empty", async () => {
-		//null and undefined both hash to 0, so the binding stays clean; dirty or not, the rendered
+		//null and undefined both hash to 0, so the binding stays clean; dirty or not, the painted
 		//DOM is empty either way
 		const tag = uniqueTag();
 		let value: unknown = null;
 		const MyElement = component(function* () {
-			yield () => html`<p>before${value}after</p>`;
+			yield function* () {
+				yield html`<p>before${value}after</p>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -246,18 +235,19 @@ describe("update() change propagation", () => {
 		cleanup(element);
 	});
 
-	test("preserves nested-template DOM across repeated stable renders", async () => {
+	test("preserves nested-template DOM across repeated stable paints", async () => {
 		//confirms the reference-preservation contract via a nested template
 		//whose expressions are stable. After many updates the nested <span>
 		//node identity must not change
 		const tag = uniqueTag();
 		let outer = 0;
 		const MyElement = component(function* () {
-			yield () =>
-				html`<section>
+			yield function* () {
+				yield html`<section>
 					<h1>${outer}</h1>
 					${html`<span>stable</span>`}
 				</section>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;

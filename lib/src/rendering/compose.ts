@@ -2,10 +2,7 @@ import { Part } from "../parser/types";
 import { combineOrderedHash, PARTS_HASH_SEED } from "../utils/hashing";
 import { hashValue } from "./value-hashing";
 
-export const composeParts = (
-	parts: ReadonlyArray<Part>,
-	values: Array<unknown>,
-): string => {
+export const composeParts = (parts: ReadonlyArray<Part>, values: Array<unknown>): string => {
 	let result = "";
 	for (let index = 0; index < parts.length; index++) {
 		const part = parts[index];
@@ -16,15 +13,13 @@ export const composeParts = (
 		const value = values[part];
 		//booleans read as absent, as in a content hole, so `cond && "active"` by static text drops out
 		const readsAsAbsent = value == null || typeof value === "boolean";
+		//oxlint-disable-next-line typescript/no-base-to-string -- an object composes as String(value)
 		if (!readsAsAbsent) result += String(value);
 	}
 	return result;
 };
 
-export const combinedPartsHash = (
-	parts: ReadonlyArray<Part>,
-	values: Array<unknown>,
-): number => {
+export const combinedPartsHash = (parts: ReadonlyArray<Part>, values: Array<unknown>): number => {
 	let hash = PARTS_HASH_SEED;
 	for (let index = 0; index < parts.length; index++) {
 		const part = parts[index];

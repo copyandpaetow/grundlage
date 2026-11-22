@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { component, html } from "../../index";
-import {
-	assertDuringDevelopment,
-	InvariantError,
-} from "../../utils/diagnostics";
+import { component, html, prop } from "../../index";
+import { assertDuringDevelopment, InvariantError } from "../../utils/diagnostics";
 
 //a library bug has to reach whoever develops the library: no user catch may hide it, and no cleanup
 //may run on the state it broke. happy-dom throws a connectedCallback error out of appendChild, where
@@ -29,7 +26,7 @@ describe("assertDuringDevelopment", () => {
 	});
 });
 
-describe("an invariant error thrown inside a render", () => {
+describe("an invariant error thrown inside a run", () => {
 	const mountBrokenComponent = () => {
 		let caughtByTheGenerator = false;
 		const fatalErrorEvents = vi.fn();
@@ -39,9 +36,9 @@ describe("an invariant error thrown inside a render", () => {
 			component(function* () {
 				try {
 					yield function* () {
-						yield () => {
+						{
 							throw new InvariantError("library bug");
-						};
+						}
 					};
 				} catch {
 					caughtByTheGenerator = true;
@@ -86,11 +83,12 @@ describe("an invariant error thrown inside a prop claim", () => {
 				},
 				{
 					props: {
-						level: (incoming: unknown) => {
-							if (incoming === "broken")
-								throw new InvariantError("library bug");
-							return incoming;
-						},
+						level: prop.optional(
+							prop.attribute((incoming: unknown) => {
+								if (incoming === "broken") throw new InvariantError("library bug");
+								return incoming;
+							}),
+						),
 					},
 				},
 			),
@@ -125,11 +123,12 @@ describe("an invariant error thrown while recovering pre-upgrade assignments", (
 				},
 				{
 					props: {
-						level: (incoming: unknown) => {
-							if (incoming === "broken")
-								throw new InvariantError("library bug");
-							return incoming;
-						},
+						level: prop.optional(
+							prop.attribute((incoming: unknown) => {
+								if (incoming === "broken") throw new InvariantError("library bug");
+								return incoming;
+							}),
+						),
 					},
 				},
 			),

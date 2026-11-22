@@ -15,11 +15,6 @@ import {
     js-framework-benchmark operation suite (create, replace, partial update,
     select, swap, remove, append, clear) against the renderer.
 
-    All measurement (paint-gated timing, DOM-mutation count, baseline/delta)
-    comes from the shared ../measure harness — the executable form of the
-    "Measuring" contract in lib/CONVENTIONS.md. This component only defines the
-    operations and renders the results.
-
     "Run suite" executes every op a configurable number of times (with one
     warmup) and records the median. Results can be frozen as a baseline in
     localStorage; subsequent runs render a delta % column against it so
@@ -88,10 +83,23 @@ const NOUNS = [
 const pickRandom = <T>(items: ReadonlyArray<T>): T =>
 	items[Math.floor(Math.random() * items.length)];
 
+const timeClassOf = (current: number, previous: number): string => {
+	if (current > previous * 1.02) return "regress";
+	if (current < previous * 0.98) return "improve";
+	return "";
+};
+
+const writesClassOf = (current: number, previous: number): string => {
+	if (current > previous) return "regress";
+	if (current < previous) return "improve";
+	return "";
+};
+
 const BASELINE_STORAGE_KEY = "grundlage:krausest:baseline:v2";
 
 customElements.define(
 	"krausest-bench",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		let rows: Array<Row> = [];
 		let selectedIdentifier: number | null = null;
@@ -104,8 +112,7 @@ customElements.define(
 		let baseline: Baseline<OperationResult[]> | null =
 			loadBaseline<OperationResult[]>(BASELINE_STORAGE_KEY);
 
-		const buildLabel = () =>
-			`${pickRandom(ADJECTIVES)} ${pickRandom(COLORS)} ${pickRandom(NOUNS)}`;
+		const buildLabel = () => `${pickRandom(ADJECTIVES)} ${pickRandom(COLORS)} ${pickRandom(NOUNS)}`;
 
 		const buildRows = (count: number): Array<Row> => {
 			const next = new Array<Row>(count);
@@ -115,9 +122,9 @@ customElements.define(
 			return next;
 		};
 
-		// Each op returns a function that mutates `rows` (and possibly selection)
-		// to its target state. Preconditions (e.g. "partial update needs 1000
-		// rows") are handled per-op so the suite can run them in any order.
+		//Each op returns a function that mutates `rows` (and possibly selection)
+		//to its target state. Preconditions (e.g. "partial update needs 1000
+		//rows") are handled per-op so the suite can run them in any order.
 		const operations: Array<{
 			label: string;
 			prepare: () => void;
@@ -209,8 +216,7 @@ customElements.define(
 				},
 				apply: () => {
 					const more = buildRows(1000);
-					for (let index = 0; index < more.length; index++)
-						rows.push(more[index]);
+					for (let index = 0; index < more.length; index++) rows.push(more[index]);
 				},
 			},
 			{
@@ -225,16 +231,14 @@ customElements.define(
 			},
 		];
 
-		// Observe only the list, not the harness chrome, so mutation counts
-		// reflect the op under test. The list container is structurally stable
-		// across renders; fall back to the shadow root before the first paint.
+		//Observe only the list, not the harness chrome, so mutation counts
+		//reflect the op under test. The list container is structurally stable
+		//across renders; fall back to the shadow root before the first paint.
 		const listRoot = (): Node =>
-			element.shadowRoot?.querySelector(".list-shell") ??
-			element.shadowRoot ??
-			element;
+			element.shadowRoot?.querySelector(".list-shell") ?? element.shadowRoot ?? element;
 
-		// Wrap a domain op as a measurable one: apply mutates state AND triggers
-		// the render (the harness times to paint), and records the painted count.
+		//Wrap a domain op as a measurable one: apply mutates state AND triggers
+		//the render (the harness times to paint), and records the painted count.
 		const measurableOf = (op: (typeof operations)[number]): Operation => ({
 			label: op.label,
 			prepare: () => {
@@ -271,7 +275,7 @@ customElements.define(
 			for (let index = 0; index < operations.length; index++) {
 				await runOperation(operations[index]);
 			}
-			// eslint-disable-next-line no-console
+			//eslint-disable-next-line no-console
 			console.log(
 				"[krausest] suite results",
 				JSON.stringify(
@@ -287,10 +291,7 @@ customElements.define(
 
 		const promoteToBaseline = () => {
 			if (measurements.size === 0) return;
-			baseline = saveBaseline(
-				BASELINE_STORAGE_KEY,
-				Array.from(measurements.values()),
-			);
+			baseline = saveBaseline(BASELINE_STORAGE_KEY, Array.from(measurements.values()));
 			element.update();
 		};
 
@@ -305,237 +306,233 @@ customElements.define(
 		const baselineFor = (label: string): OperationResult | undefined =>
 			baseline?.value.find((entry) => entry.label === label);
 
-		yield () => html`
-			<style>
-				:host {
-					display: block;
-					font: 13px monospace;
-				}
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
+		yield function* view() {
+			yield html`
+				<style>
+					:host {
+						display: block;
+						font: 13px monospace;
+					}
 
-				.controls {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 8px;
-					align-items: center;
-				}
+					.controls {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 8px;
+						align-items: center;
+					}
 
-				.controls + .controls {
-					margin-top: 6px;
-				}
+					.controls + .controls {
+						margin-top: 6px;
+					}
 
-				button {
-					padding: 6px 12px;
-					font: inherit;
-					cursor: pointer;
-				}
+					button {
+						padding: 6px 12px;
+						font: inherit;
+						cursor: pointer;
+					}
 
-				button[disabled] {
-					opacity: 0.5;
-					cursor: progress;
-				}
+					button[disabled] {
+						opacity: 0.5;
+						cursor: progress;
+					}
 
-				.status {
-					margin-top: 8px;
-					color: #555;
-					min-height: 1.2em;
-				}
+					.status {
+						margin-top: 8px;
+						color: #555;
+						min-height: 1.2em;
+					}
 
-				.results {
-					margin-top: 12px;
-					display: grid;
-					grid-template-columns: max-content repeat(6, max-content);
-					gap: 4px 24px;
-				}
+					.results {
+						margin-top: 12px;
+						display: grid;
+						grid-template-columns: max-content repeat(6, max-content);
+						gap: 4px 24px;
+					}
 
-				.results > div {
-					padding: 2px 0;
-					text-align: right;
-					border-bottom: 1px solid #eee;
-				}
+					.results > div {
+						padding: 2px 0;
+						text-align: right;
+						border-bottom: 1px solid #eee;
+					}
 
-				.results > div.label {
-					text-align: left;
-				}
+					.results > div.label {
+						text-align: left;
+					}
 
-				.results > div.head {
-					font-weight: bold;
-					border-bottom-color: #333;
-				}
+					.results > div.head {
+						font-weight: bold;
+						border-bottom-color: #333;
+					}
 
-				.delta {
-					display: flex;
-					flex-direction: column;
-					align-items: flex-end;
-					gap: 2px;
-				}
+					.delta {
+						display: flex;
+						flex-direction: column;
+						align-items: flex-end;
+						gap: 2px;
+					}
 
-				.regress {
-					color: #b00020;
-				}
+					.regress {
+						color: #b00020;
+					}
 
-				.improve {
-					color: #006a2b;
-				}
+					.improve {
+						color: #006a2b;
+					}
 
-				table {
-					margin-top: 16px;
-					border-collapse: collapse;
-					width: 100%;
-					max-width: 480px;
-				}
+					table {
+						margin-top: 16px;
+						border-collapse: collapse;
+						width: 100%;
+						max-width: 480px;
+					}
 
-				td {
-					padding: 2px 6px;
-					font-size: 11px;
-					line-height: 14px;
-					border-bottom: 1px solid #eee;
-				}
+					td {
+						padding: 2px 6px;
+						font-size: 11px;
+						line-height: 14px;
+						border-bottom: 1px solid #eee;
+					}
 
-				tr.selected td {
-					background: #fffbcc;
-				}
+					tr.selected td {
+						background: #fffbcc;
+					}
 
-				.list-shell {
-					max-height: 320px;
-					overflow: auto;
-					border: 1px solid #ddd;
-					contain: strict;
-					height: 320px;
-				}
-			</style>
+					.list-shell {
+						max-height: 320px;
+						overflow: auto;
+						border: 1px solid #ddd;
+						contain: strict;
+						height: 320px;
+					}
+				</style>
 
-			<div class="controls">
-				<button onclick="${runSuite}" disabled="${isRunning}">run suite</button>
-				${operations.map(
-					(op) => html`
-						<button onclick="${() => runOperation(op)}" disabled="${isRunning}">
-							${op.label}
-						</button>
-					`,
-				)}
-			</div>
+				<div class="controls">
+					<button onclick="${runSuite}" disabled="${isRunning}">
+						run suite
+					</button>
+					${operations.map(
+						(op) => html`
+							<button
+								onclick="${() => runOperation(op)}"
+								disabled="${isRunning}"
+							>
+								${op.label}
+							</button>
+						`,
+					)}
+				</div>
 
-			<div class="controls">
-				samples per op:
-				<input
-					type="number"
-					min="1"
-					max="50"
-					value="${sampleCount}"
-					oninput="${(event: Event) => {
-						const next = Number((event.target as HTMLInputElement).value);
-						if (Number.isFinite(next) && next > 0) {
-							sampleCount = next;
-						}
-					}}"
-				/>
-				<button
-					onclick="${promoteToBaseline}"
-					disabled="${measurements.size === 0 || isRunning}"
-				>
-					save as baseline
-				</button>
-				<button onclick="${dropBaseline}" disabled="${!baseline || isRunning}">
-					clear baseline
-				</button>
+				<div class="controls">
+					samples per op:
+					<input
+						type="number"
+						min="1"
+						max="50"
+						value="${sampleCount}"
+						oninput="${(event: Event) => {
+							const next = Number((event.target as HTMLInputElement).value);
+							if (Number.isFinite(next) && next > 0) {
+								sampleCount = next;
+							}
+						}}"
+					/>
+					<button
+						onclick="${promoteToBaseline}"
+						disabled="${measurements.size === 0 || isRunning}"
+					>
+						save as baseline
+					</button>
+					<button
+						onclick="${dropBaseline}"
+						disabled="${!baseline || isRunning}"
+					>
+						clear baseline
+					</button>
+					${
+						baseline
+							? html`<span>baseline captured ${baseline.capturedAt}</span>`
+							: html`<span>no baseline saved</span>`
+					}
+				</div>
+
+				<div class="status">
+					${isRunning ? html`running: ${activeOperation ?? "suite"}...` : html`idle`}
+				</div>
+
 				${
-					baseline
-						? html`<span>baseline captured ${baseline.capturedAt}</span>`
-						: html`<span>no baseline saved</span>`
+					measurements.size > 0
+						? html`
+								<div class="results">
+									<div class="label head">operation</div>
+									<div class="head">items</div>
+									<div class="head">min applied (ms)</div>
+									<div class="head">median applied</div>
+									<div class="head">frames to paint</div>
+									<div class="head">DOM writes</div>
+									<div class="head">vs baseline</div>
+									${Array.from(measurements.values()).map((measurement) => {
+										const previous = baselineFor(measurement.label);
+										//the delta rides on min applied ms, the one timing here that resolves
+										//a change smaller than a frame. DOM writes are deterministic, so
+										//compare them exactly: any drift is a real false-write signal.
+										const msClass = previous
+											? timeClassOf(measurement.minAppliedMs, previous.minAppliedMs)
+											: "";
+										const writesClass = previous
+											? writesClassOf(measurement.medianMutations, previous.medianMutations)
+											: "";
+										return html`
+											<div class="label">${measurement.label}</div>
+											<div>${itemCounts.get(measurement.label) ?? "—"}</div>
+											<div>${formatMs(measurement.minAppliedMs)}</div>
+											<div>${formatMs(measurement.medianAppliedMs)}</div>
+											<div>${measurement.medianPaintedFrames}</div>
+											<div>${measurement.medianMutations}</div>
+											<div class="delta">
+												${
+													previous
+														? html`
+																<span class="${msClass}"
+																	>${formatDelta(measurement.minAppliedMs, previous.minAppliedMs)}
+																	ms</span
+																>
+																<span class="${writesClass}"
+																	>${formatDelta(
+																		measurement.medianMutations,
+																		previous.medianMutations,
+																	)}
+																	writes</span
+																>
+															`
+														: "—"
+												}
+											</div>
+										`;
+									})}
+								</div>
+							`
+						: html``
 				}
-			</div>
 
-			<div class="status">
-				${
-					isRunning ? html`running: ${activeOperation ?? "suite"}…` : html`idle`
-				}
-			</div>
-
-			${
-				measurements.size > 0
-					? html`
-							<div class="results">
-								<div class="label head">operation</div>
-								<div class="head">items</div>
-								<div class="head">min applied (ms)</div>
-								<div class="head">median applied</div>
-								<div class="head">frames to paint</div>
-								<div class="head">DOM writes</div>
-								<div class="head">vs baseline</div>
-								${Array.from(measurements.values()).map((measurement) => {
-									const previous = baselineFor(measurement.label);
-									// the delta rides on min applied ms — the one timing here that resolves
-									// a change smaller than a frame. DOM writes are deterministic, so
-									// compare them exactly — any drift is a real false-write signal.
-									const msClass = !previous
-										? ""
-										: measurement.minAppliedMs > previous.minAppliedMs * 1.02
-											? "regress"
-											: measurement.minAppliedMs < previous.minAppliedMs * 0.98
-												? "improve"
-												: "";
-									const writesClass = !previous
-										? ""
-										: measurement.medianMutations > previous.medianMutations
-											? "regress"
-											: measurement.medianMutations < previous.medianMutations
-												? "improve"
-												: "";
-									return html`
-										<div class="label">${measurement.label}</div>
-										<div>${itemCounts.get(measurement.label) ?? "—"}</div>
-										<div>${formatMs(measurement.minAppliedMs)}</div>
-										<div>${formatMs(measurement.medianAppliedMs)}</div>
-										<div>${measurement.medianPaintedFrames}</div>
-										<div>${measurement.medianMutations}</div>
-										<div class="delta">
-											${
-												previous
-													? html`
-															<span class="${msClass}"
-																>${formatDelta(
-																	measurement.minAppliedMs,
-																	previous.minAppliedMs,
-																)}
-																ms</span
-															>
-															<span class="${writesClass}"
-																>${formatDelta(
-																	measurement.medianMutations,
-																	previous.medianMutations,
-																)}
-																writes</span
-															>
-														`
-													: "—"
-											}
-										</div>
-									`;
-								})}
-							</div>
-						`
-					: html``
-			}
-
-			<div class="list-shell">
-				<table>
-					<tbody>
-						${rows.map(
-							(row) => html`
-								<!--${row.identifier}-->
-								<tr
-									class="${
-										row.identifier === selectedIdentifier ? "selected" : ""
-									}"
-								>
-									<td>${row.identifier}</td>
-									<td>${row.label}</td>
-								</tr>
-							`,
-						)}
-					</tbody>
-				</table>
-			</div>
-		`;
+				<div class="list-shell">
+					<table>
+						<tbody>
+							${rows.map(
+								(row) => html`
+									<!--${row.identifier}-->
+									<tr
+										class="${row.identifier === selectedIdentifier ? "selected" : ""}"
+									>
+										<td>${row.identifier}</td>
+										<td>${row.label}</td>
+									</tr>
+								`,
+							)}
+						</tbody>
+					</table>
+				</div>
+			`;
+		};
 	}),
 );

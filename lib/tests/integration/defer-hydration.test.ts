@@ -1,14 +1,13 @@
-//must come first — parser/html.ts runs `document.createElement` at module load
+//must come first: parser/html.ts runs `document.createElement` at module load
 import "./ssr-setup";
 
 import { afterEach, describe, expect, test } from "vitest";
-import { component, html, type YieldableValue } from "../../src/index";
+import { component, html, type YieldableValue, prop } from "../../src/index";
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 let nextTagId = 0;
-const uniqueTag = (role: string) =>
-	`defer-${role}-${nextTagId++}-${Date.now()}`;
+const uniqueTag = (role: string) => `defer-${role}-${nextTagId++}-${Date.now()}`;
 
 const trackedElements: Array<HTMLElement> = [];
 afterEach(() => {
@@ -19,19 +18,23 @@ class Quote {
 	constructor(public text: string) {}
 }
 
-const childTagRenderingItsQuote = (): string => {
+const childTagPaintingItsQuote = (): string => {
 	const tag = uniqueTag("child");
 	customElements.define(
 		tag,
 		component(
 			function* (componentProps) {
-				yield () =>
-					html`<blockquote>${componentProps.quote?.text}</blockquote>`;
+				yield function* () {
+					yield html`<blockquote>${componentProps.quote?.text}</blockquote>`;
+				};
 			},
 			{
 				props: {
-					quote: (incoming: unknown) =>
-						incoming instanceof Quote ? incoming : new Quote("…"),
+					quote: prop.optional(
+						prop.attribute((incoming: unknown) =>
+							incoming instanceof Quote ? incoming : new Quote("..."),
+						),
+					),
 				},
 			},
 		),
@@ -57,54 +60,52 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 	});
 
 	test("a declared prop the attribute cannot carry marks the child", async () => {
-		const childTag = childTagRenderingItsQuote();
+		const childTag = childTagPaintingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
 			const quote = new Quote("said out loud");
-			yield () => html`<${childTag} quote=${quote}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} quote=${quote}></${childTag}>`;
+			};
 		});
 
-		expect(
-			shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration"),
-		).toBe(true);
+		expect(shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration")).toBe(true);
 	});
 
 	test("a declared prop with a string spelling rides its attribute and is not marked", async () => {
-		const childTag = childTagRenderingItsQuote();
+		const childTag = childTagPaintingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
-			yield () => html`<${childTag} quote=${"plain text"}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} quote=${"plain text"}></${childTag}>`;
+			};
 		});
 
-		expect(
-			shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration"),
-		).toBe(false);
+		expect(shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration")).toBe(false);
 	});
 
 	test("an undeclared name taking the property mode marks the child", async () => {
-		const childTag = childTagRenderingItsQuote();
+		const childTag = childTagPaintingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
-			yield () => html`<${childTag} rows=${[1, 2, 3]}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} rows=${[1, 2, 3]}></${childTag}>`;
+			};
 		});
 
-		expect(
-			shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration"),
-		).toBe(true);
+		expect(shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration")).toBe(true);
 	});
 
 	test("a spread carrying an object marks the child, a spread of strings does not", async () => {
-		const childTag = childTagRenderingItsQuote();
+		const childTag = childTagPaintingItsQuote();
 		const shadowRoot = await renderOnServer(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
 				<${childTag} id="carried" ${{ rows: [1] }}></${childTag}>
 				<${childTag} id="spelled" ${{ title: "text" }}></${childTag}>
 			`;
+			};
 		});
 
-		expect(
-			shadowRoot.querySelector("#carried")!.hasAttribute("defer-hydration"),
-		).toBe(true);
-		expect(
-			shadowRoot.querySelector("#spelled")!.hasAttribute("defer-hydration"),
-		).toBe(false);
+		expect(shadowRoot.querySelector("#carried")!.hasAttribute("defer-hydration")).toBe(true);
+		expect(shadowRoot.querySelector("#spelled")!.hasAttribute("defer-hydration")).toBe(false);
 	});
 
 	//the mark is written into the parent's detached fragment, so it is already on the child when
@@ -119,12 +120,17 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 				function* (componentProps) {
 					childBodyRuns++;
 					quoteSeenByChild = componentProps.quote!.text;
-					yield () => html`<blockquote>${quoteSeenByChild}</blockquote>`;
+					yield function* () {
+						yield html`<blockquote>${quoteSeenByChild}</blockquote>`;
+					};
 				},
 				{
 					props: {
-						quote: (incoming: unknown) =>
-							incoming instanceof Quote ? incoming : new Quote("…"),
+						quote: prop.optional(
+							prop.attribute((incoming: unknown) =>
+								incoming instanceof Quote ? incoming : new Quote("..."),
+							),
+						),
 					},
 				},
 			),
@@ -132,12 +138,12 @@ describe("defer-hydration: the server marks the children it owes a value", () =>
 
 		const shadowRoot = await renderOnServer(function* () {
 			const quote = new Quote("said out loud");
-			yield () => html`<${childTag} quote=${quote}></${childTag}>`;
+			yield function* () {
+				yield html`<${childTag} quote=${quote}></${childTag}>`;
+			};
 		});
 
-		expect(
-			shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration"),
-		).toBe(true);
+		expect(shadowRoot.querySelector(childTag)!.hasAttribute("defer-hydration")).toBe(true);
 		expect(childBodyRuns).toBe(1);
 		expect(quoteSeenByChild).toBe("said out loud");
 	});

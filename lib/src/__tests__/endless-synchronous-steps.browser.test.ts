@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { component } from "../index";
+import { component, html } from "../index";
 
 let tagId = 0;
 const uniqueTag = () => `endless-steps-${tagId++}-${Date.now()}`;
@@ -15,7 +15,7 @@ describe("a generator that never waits", () => {
 		customElements.define(
 			tag,
 			component(function* () {
-				while (true) yield 1;
+				while (true) yield html`<p>again</p>`;
 			}),
 		);
 		const host = document.createElement(tag);

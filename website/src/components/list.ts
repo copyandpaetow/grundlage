@@ -1,14 +1,14 @@
 import { component, html } from "../../../lib/src";
 
-// const list = css`
+//const list = css`
 // 	border: 1px solid black;
 
 // 	li {
 // 		list-style: none;
 // 	}
-// `;
+//`;
 
-// const style = css`
+//const style = css`
 // 	* {
 // 		margin: 0;
 // 	}
@@ -19,7 +19,7 @@ import { component, html } from "../../../lib/src";
 // 		display: grid;
 // 		gap: 1rem;
 // 	}
-// `;
+//`;
 
 customElements.define(
 	"list-component",
@@ -63,18 +63,20 @@ customElements.define(
 			element.update();
 		};
 
-		yield () => html`
-			<menu>
-				<button onclick="${addEntry}">add</button>
-				<button onclick="${deleteEntry}">delete</button>
-				<button onclick="${shuffleEntries}">shuffle</button>
-				<button onclick="${replaceEntry}">replace</button>
-				<button onclick="${swap}">swap 2</button>
-			</menu>
+		yield function* () {
+			yield html`
+				<menu>
+					<button onclick="${addEntry}">add</button>
+					<button onclick="${deleteEntry}">delete</button>
+					<button onclick="${shuffleEntries}">shuffle</button>
+					<button onclick="${replaceEntry}">replace</button>
+					<button onclick="${swap}">swap 2</button>
+				</menu>
 
-			<ul>
-				${entries.map((data) => html`<li data-key=${data}>${data}</li>`)}
-			</ul>
-		`;
+				<ul>
+					${entries.map((data) => html`<li data-key=${data}>${data}</li>`)}
+				</ul>
+			`;
+		};
 	}),
 );

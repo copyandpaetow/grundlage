@@ -16,11 +16,7 @@ import {
 	warmUpCommitShapes,
 	type ShapeResult,
 } from "../render-measure";
-import {
-	COMMIT_SHAPES,
-	defineProbeElements,
-	PLAIN_CUSTOM_ELEMENT_NAME,
-} from "../render-shapes";
+import { COMMIT_SHAPES, defineProbeElements, PLAIN_CUSTOM_ELEMENT_NAME } from "../render-shapes";
 
 /*
     Runs every binding lane through patchInstance and reports ns per commit.
@@ -29,8 +25,8 @@ import {
     hole-free nameParts walk costs, and that is staticNameAttribute minus
     content on the unchanged rows: the gate hash is the only thing separating
     them. B4 asks what customElements.get costs, and no pair of lanes can answer
-    that — Blink runs its own slower attribute path once the anchor has a dash
-    in its name, and no cache here removes that — so the call is timed alone.
+    that: Blink runs its own slower attribute path once the anchor has a dash
+    in its name, and no cache here removes that, so the call is timed alone.
 
     A gap smaller than the noise of the rows it came from is not a small
     finding, it is no finding.
@@ -49,6 +45,7 @@ const REGISTRY_LOOKUPS = 2_000_000;
 
 customElements.define(
 	"render-bench",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		const passes = Number(element.getAttribute("passes") ?? 24);
 		let isRunning = false;
@@ -61,8 +58,7 @@ customElements.define(
 
 		defineProbeElements();
 
-		const mountTarget = (): Element =>
-			element.shadowRoot?.querySelector(".target") ?? element;
+		const mountTarget = (): Element => element.shadowRoot?.querySelector(".target") ?? element;
 
 		const runAllShapes = async () => {
 			if (isRunning) return;
@@ -79,32 +75,24 @@ customElements.define(
 				activeShape = COMMIT_SHAPES[index].name;
 				element.update();
 				await waitForPaint();
-				const result = await runCommitShape(
-					COMMIT_SHAPES[index],
-					mountTarget(),
-					{ passes, measureHeapGrowth: true },
-				);
+				const result = await runCommitShape(COMMIT_SHAPES[index], mountTarget(), {
+					passes,
+					measureHeapGrowth: true,
+				});
 				results.push(result);
 				console.log(
 					`shape ${index + 1}/${COMMIT_SHAPES.length} ${result.name} ${result.nanosecondsPerCommit.toFixed(1)} ns/commit${
-						result.voidReasons.length === 0
-							? ""
-							: ` — VOID: ${result.voidReasons.join(", ")}`
+						result.voidReasons.length === 0 ? "" : ` (void: ${result.voidReasons.join(", ")})`
 					}`,
 				);
 			}
 
 			gaps = deriveLaneGaps(results, RESOLUTION_PERCENT);
-			registryLookup = measureRegistryLookup(
-				PLAIN_CUSTOM_ELEMENT_NAME,
-				REGISTRY_LOOKUPS,
-			);
+			registryLookup = measureRegistryLookup(PLAIN_CUSTOM_ELEMENT_NAME, REGISTRY_LOOKUPS);
 			activeShape = null;
 			isRunning = false;
 			element.update();
-			console.log(
-				JSON.stringify({ passes, results, gaps, registryLookup }, null, 2),
-			);
+			console.log(JSON.stringify({ passes, results, gaps, registryLookup }, null, 2));
 		};
 
 		const promoteToBaseline = () => {
@@ -124,9 +112,9 @@ customElements.define(
 
 		const churnsInOrder = (): Array<string> => {
 			const seen: Array<string> = [];
-			for (let index = 0; index < results.length; index++)
-				if (!seen.includes(results[index].churn))
-					seen.push(results[index].churn);
+			for (let index = 0; index < results.length; index++) {
+				if (!seen.includes(results[index].churn)) seen.push(results[index].churn);
+			}
 			return seen;
 		};
 
@@ -134,263 +122,266 @@ customElements.define(
 			results.filter((result) => result.voidReasons.length > 0).length;
 
 		const isBeyondResolution = (current: number, previous: number): boolean =>
-			previous !== 0 &&
-			Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
+			previous !== 0 && Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
 
-		yield () => html`
-			<style>
-				:host {
-					display: block;
-					font: 13px monospace;
-				}
+		const resolutionClassOf = (current: number, previous: number | undefined): string => {
+			if (previous === undefined) return "";
+			return isBeyondResolution(current, previous) ? "beyond-resolution" : "within-resolution";
+		};
 
-				button {
-					padding: 6px 12px;
-					font: inherit;
-					cursor: pointer;
-				}
+		const statusOf = () => {
+			if (isRunning) return html`running: ${activeShape ?? "..."}`;
+			if (baseline) return html`baseline captured ${baseline.capturedAt}`;
+			return html`no baseline saved`;
+		};
 
-				.controls {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 8px;
-					align-items: center;
-					margin-bottom: 12px;
-				}
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
+		yield function* view() {
+			yield html`
+				<style>
+					:host {
+						display: block;
+						font: 13px monospace;
+					}
 
-				.status {
-					margin: 8px 0;
-					opacity: 0.75;
-				}
+					button {
+						padding: 6px 12px;
+						font: inherit;
+						cursor: pointer;
+					}
 
-				.gaps {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 24px;
-					margin: 12px 0;
-					padding: 10px 12px;
-					border: 1px solid currentColor;
-				}
+					.controls {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 8px;
+						align-items: center;
+						margin-bottom: 12px;
+					}
 
-				.gap-value {
-					font-size: 18px;
-				}
+					.status {
+						margin: 8px 0;
+						opacity: 0.75;
+					}
 
-				.gap-label {
-					opacity: 0.7;
-				}
+					.gaps {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 24px;
+						margin: 12px 0;
+						padding: 10px 12px;
+						border: 1px solid currentColor;
+					}
 
-				.below-resolution .gap-value {
-					opacity: 0.45;
-				}
+					.gap-value {
+						font-size: 18px;
+					}
 
-				table {
-					border-collapse: collapse;
-					width: 100%;
-				}
+					.gap-label {
+						opacity: 0.7;
+					}
 
-				th,
-				td {
-					padding: 3px 10px 3px 0;
-					text-align: right;
-					white-space: nowrap;
-				}
+					.below-resolution .gap-value {
+						opacity: 0.45;
+					}
 
-				th:first-child,
-				td:first-child {
-					text-align: left;
-				}
+					table {
+						border-collapse: collapse;
+						width: 100%;
+					}
 
-				thead th {
-					border-bottom: 1px solid currentColor;
-				}
+					th,
+					td {
+						padding: 3px 10px 3px 0;
+						text-align: right;
+						white-space: nowrap;
+					}
 
-				tr.churn-header td {
-					padding-top: 14px;
-					text-align: left;
-					opacity: 0.7;
-				}
+					th:first-child,
+					td:first-child {
+						text-align: left;
+					}
 
-				.beyond-resolution {
-					font-weight: 700;
-				}
+					thead th {
+						border-bottom: 1px solid currentColor;
+					}
 
-				.within-resolution {
-					opacity: 0.45;
-				}
+					tr.churn-header td {
+						padding-top: 14px;
+						text-align: left;
+						opacity: 0.7;
+					}
 
-				.void-warning {
-					font-weight: 700;
-				}
+					.beyond-resolution {
+						font-weight: 700;
+					}
 
-				/*
-				  The measured tree lives in the document so attribute writes
-				  invalidate a real subtree; it is clipped rather than hidden
-				  because display:none would skip that invalidation entirely.
-				*/
-				.target {
-					height: 4px;
-					overflow: hidden;
-					contain: strict;
-					opacity: 0.35;
-				}
-			</style>
+					.within-resolution {
+						opacity: 0.45;
+					}
 
-			<div class="controls">
-				<button onclick="${runAllShapes}" disabled="${isRunning}">
-					run ${COMMIT_SHAPES.length} shapes
-				</button>
-				<button
-					onclick="${promoteToBaseline}"
-					disabled="${isRunning || results.length === 0}"
-				>
-					save as baseline
-				</button>
-				<button onclick="${dropBaseline}" disabled="${isRunning || !baseline}">
-					clear baseline
-				</button>
-				<span
-					>${passes} passes, best-of · ±${RESOLUTION_PERCENT}% resolution ·
-					${voidCount()} void</span
-				>
-			</div>
+					.void-warning {
+						font-weight: 700;
+					}
 
-			<div class="status">
+					/*
+					  The measured tree lives in the document so attribute writes
+					  invalidate a real subtree; it is clipped rather than hidden
+					  because display:none would skip that invalidation entirely.
+					*/
+					.target {
+						height: 4px;
+						overflow: hidden;
+						contain: strict;
+						opacity: 0.35;
+					}
+				</style>
+
+				<div class="controls">
+					<button onclick="${runAllShapes}" disabled="${isRunning}">
+						run ${COMMIT_SHAPES.length} shapes
+					</button>
+					<button
+						onclick="${promoteToBaseline}"
+						disabled="${isRunning || results.length === 0}"
+					>
+						save as baseline
+					</button>
+					<button
+						onclick="${dropBaseline}"
+						disabled="${isRunning || !baseline}"
+					>
+						clear baseline
+					</button>
+					<span
+						>${passes} passes, best-of · ±${RESOLUTION_PERCENT}% resolution ·
+						${voidCount()} void</span
+					>
+				</div>
+
+				<div class="status">
+					${statusOf()}
+				</div>
+
 				${
-					isRunning
-						? html`running: ${activeShape ?? "…"}`
-						: baseline
-							? html`baseline captured ${baseline.capturedAt}`
-							: html`no baseline saved`
-				}
-			</div>
-
-			${
-				gaps.length === 0 && !registryLookup
-					? html``
-					: html`
-							<div class="gaps">
-								${
-									registryLookup
-										? html`
-												<div>
-													<div class="gap-value">
-														${registryLookup.nanosecondsPerLookup.toFixed(1)}
-														ns/lookup
+					gaps.length === 0 && !registryLookup
+						? html``
+						: html`
+								<div class="gaps">
+									${
+										registryLookup
+											? html`
+													<div>
+														<div class="gap-value">
+															${registryLookup.nanosecondsPerLookup.toFixed(1)}
+															ns/lookup
+														</div>
+														<div class="gap-label">
+															customElements.get: B4's ceiling, timed alone
+														</div>
 													</div>
-													<div class="gap-label">
-														customElements.get — B4's ceiling, timed alone
-													</div>
+												`
+											: html``
+									}
+									${gaps.map(
+										(gap) => html`
+											<div
+												class="${gap.isBelowResolution ? "below-resolution" : ""}"
+											>
+												<div class="gap-value">
+													${gap.nanosecondsPerCommit.toFixed(1)}
+													ns/commit${gap.isBelowResolution ? " · under resolution" : ""}
 												</div>
-											`
-										: html``
-								}
-								${gaps.map(
-									(gap) => html`
-										<div
-											class="${gap.isBelowResolution ? "below-resolution" : ""}"
-										>
-											<div class="gap-value">
-												${gap.nanosecondsPerCommit.toFixed(1)}
-												ns/commit${
-													gap.isBelowResolution ? " · under resolution" : ""
-												}
+												<div class="gap-label">
+													${gap.name}: ${gap.question}
+												</div>
 											</div>
-											<div class="gap-label">${gap.name} — ${gap.question}</div>
-										</div>
-									`,
-								)}
-							</div>
-						`
-			}
-			${
-				results.length === 0
-					? html``
-					: html`
-							<table>
-								<thead>
-									<tr>
-										<th>lane</th>
-										<th>bindings</th>
-										<th>updates/pass</th>
-										<th>best pass ms</th>
-										<th>ns/commit</th>
-										<th>B/commit</th>
-										<th>vs baseline</th>
-									</tr>
-								</thead>
-								<tbody>
-									${churnsInOrder().map(
-										(churn) => html`
-											<tr class="churn-header">
-												<td colspan="7">
-													${churn} ·
-													${
-														churn === "unchanged"
-															? "the gate closes: hash only"
-															: "the gate opens: hash, compose, write"
-													}
-												</td>
-											</tr>
-											${results
-												.filter((result) => result.churn === churn)
-												.map((result) => {
-													const previous = baselineFor(result.name);
-													return html`
-														<tr title="${result.hypothesis}">
-															<td>
-																${result.lane}${
-																	result.voidReasons.length === 0
-																		? html``
-																		: html`<span class="void-warning">
-																				· VOID:
-																				${result.voidReasons.join(", ")}</span
-																			>`
-																}
-															</td>
-															<td>${result.bindingsPerTemplate}</td>
-															<td>${result.updatesPerPass}</td>
-															<td>${result.bestPassMs.toFixed(2)}</td>
-															<td>${result.nanosecondsPerCommit.toFixed(1)}</td>
-															<td>
-																${
-																	result.heapGrowthBytesPerCommit === null
-																		? "—"
-																		: result.heapGrowthBytesPerCommit.toFixed(1)
-																}
-															</td>
-															<td
-																class="${
-																	previous
-																		? isBeyondResolution(
-																				result.nanosecondsPerCommit,
-																				previous.nanosecondsPerCommit,
-																			)
-																			? "beyond-resolution"
-																			: "within-resolution"
-																		: ""
-																}"
-															>
-																${
-																	previous
-																		? formatDelta(
-																				result.nanosecondsPerCommit,
-																				previous.nanosecondsPerCommit,
-																			)
-																		: "—"
-																}
-															</td>
-														</tr>
-													`;
-												})}
 										`,
 									)}
-								</tbody>
-							</table>
-						`
-			}
+								</div>
+							`
+				}
+				${
+					results.length === 0
+						? html``
+						: html`
+								<table>
+									<thead>
+										<tr>
+											<th>lane</th>
+											<th>bindings</th>
+											<th>updates/pass</th>
+											<th>best pass ms</th>
+											<th>ns/commit</th>
+											<th>B/commit</th>
+											<th>vs baseline</th>
+										</tr>
+									</thead>
+									<tbody>
+										${churnsInOrder().map(
+											(churn) => html`
+												<tr class="churn-header">
+													<td colspan="7">
+														${churn} ·
+														${
+															churn === "unchanged"
+																? "the gate closes: hash only"
+																: "the gate opens: hash, compose, write"
+														}
+													</td>
+												</tr>
+												${results
+													.filter((result) => result.churn === churn)
+													.map((result) => {
+														const previous = baselineFor(result.name);
+														return html`
+															<tr title="${result.hypothesis}">
+																<td>
+																	${result.lane}${
+																		result.voidReasons.length === 0
+																			? html``
+																			: html`<span class="void-warning">
+																					· VOID:
+																					${result.voidReasons.join(", ")}</span
+																				>`
+																	}
+																</td>
+																<td>${result.bindingsPerTemplate}</td>
+																<td>${result.updatesPerPass}</td>
+																<td>${result.bestPassMs.toFixed(2)}</td>
+																<td>
+																	${result.nanosecondsPerCommit.toFixed(1)}
+																</td>
+																<td>
+																	${
+																		result.heapGrowthBytesPerCommit === null
+																			? "—"
+																			: result.heapGrowthBytesPerCommit.toFixed(1)
+																	}
+																</td>
+																<td
+																	class="${resolutionClassOf(result.nanosecondsPerCommit, previous?.nanosecondsPerCommit)}"
+																>
+																	${
+																		previous
+																			? formatDelta(
+																					result.nanosecondsPerCommit,
+																					previous.nanosecondsPerCommit,
+																				)
+																			: "—"
+																	}
+																</td>
+															</tr>
+														`;
+													})}
+											`,
+										)}
+									</tbody>
+								</table>
+							`
+				}
 
-			<div class="target" aria-hidden="true"></div>
-		`;
+				<div class="target" aria-hidden="true"></div>
+			`;
+		};
 	}),
 );

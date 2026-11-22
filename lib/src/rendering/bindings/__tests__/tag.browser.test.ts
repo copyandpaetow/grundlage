@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { html, component } from "../../../index";
+import { html, component, prop } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("tag updates", () => {
 	let tagId = 0;
@@ -18,13 +17,15 @@ describe("tag updates", () => {
 		element.remove();
 	};
 
-	test("renders a dynamic tag name", async () => {
+	test("paints a dynamic tag name", async () => {
 		const tag = uniqueTag();
 		let tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>hello</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -43,8 +44,10 @@ describe("tag updates", () => {
 		let tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>content</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -70,8 +73,10 @@ describe("tag updates", () => {
 		let tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName} class="box" id="main">text</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -99,9 +104,10 @@ describe("tag updates", () => {
 		let tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`
+			yield function* () {
+				yield html`
                     <${tagName}><span>child1</span><span>child2</span></${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -130,9 +136,10 @@ describe("tag updates", () => {
 		const handler = () => clicks.push("clicked");
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`
+			yield function* () {
+				yield html`
                     <${tagName} onclick="${handler}">click me</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -161,9 +168,10 @@ describe("tag updates", () => {
 			let tagName = "div";
 
 			const MyElement = component(function* () {
-				yield () =>
-					html`
+				yield function* () {
+					yield html`
                     <${tagName}><input type="text"/></${tagName}>`;
+				};
 			});
 
 			customElements.define(tag, MyElement);
@@ -191,8 +199,10 @@ describe("tag updates", () => {
 		const tagName = "div";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>stable</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -218,17 +228,17 @@ describe("tag updates", () => {
 		let label = "first";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName} data-label="${label}">content</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("data-label"),
-		).toBe("first");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("data-label")).toBe("first");
 
 		tagName = "section";
 		label = "second";
@@ -246,23 +256,23 @@ describe("tag updates", () => {
 	test("a multi-part attribute keeps writing to the new element after a tag swap", async () => {
 		//the multi-part lane is the one the swap does not rewrite, because copying the attributes
 		//across already carries its whole value. It still has to be re-pointed, or every later
-		//render writes into the element the swap detached
+		//paint writes into the element the swap detached
 		const tag = uniqueTag();
 		let tagName = "div";
 		let modifier = "small";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName} class="box ${modifier}">content</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("box small");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("box small");
 
 		tagName = "section";
 		modifier = "large";
@@ -291,8 +301,10 @@ describe("tag updates", () => {
 		const attributes = { title: "kept", payload };
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName} ${attributes}>content</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -310,9 +322,35 @@ describe("tag updates", () => {
 		const section = element.shadowRoot?.querySelector("section")!;
 		expect(section.getAttribute("title")).toBe("kept");
 		expect(section.hasAttribute("payload")).toBe(false);
-		expect((section as unknown as Record<string, unknown>).payload).toBe(
-			payload,
-		);
+		expect((section as unknown as Record<string, unknown>).payload).toBe(payload);
+
+		cleanup(element);
+	});
+
+	test("a spread changed after a tag swap writes to the swapped-in element", async () => {
+		const tag = uniqueTag();
+		let tagName = "div";
+		let attributes = { title: "before" };
+
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`
+                <${tagName} ${attributes}>content</${tagName}>`;
+			};
+		});
+
+		customElements.define(tag, MyElement);
+		const element = mount(tag) as InstanceType<typeof MyElement>;
+		await sleep();
+
+		tagName = "section";
+		await element.update();
+		attributes = { title: "after" };
+		await element.update();
+		await sleep();
+
+		const section = element.shadowRoot?.querySelector("section")!;
+		expect(section.getAttribute("title")).toBe("after");
 
 		cleanup(element);
 	});
@@ -325,17 +363,17 @@ describe("tag updates", () => {
 		let text = "before";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>${text}</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain(
-			"before",
-		);
+		expect(element.shadowRoot?.querySelector("div")?.textContent).toContain("before");
 
 		tagName = "article";
 		text = "after";
@@ -359,9 +397,10 @@ describe("tag updates", () => {
 		let handler = () => clicks.push("first");
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`
+			yield function* () {
+				yield html`
                     <${tagName} onclick="${handler}">click me</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -391,7 +430,9 @@ describe("tag updates", () => {
 		const handler = () => clicks.push("hit"); //same reference before and after the swap
 
 		const MyElement = component(function* () {
-			yield () => html`<${tagName} onclick="${handler}">click me</${tagName}>`;
+			yield function* () {
+				yield html`<${tagName} onclick="${handler}">click me</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -418,7 +459,9 @@ describe("tag updates", () => {
 		const handler = () => {};
 
 		const MyElement = component(function* () {
-			yield () => html`<button onclick="${handler}">click me</button>`;
+			yield function* () {
+				yield html`<button onclick="${handler}">click me</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -432,11 +475,11 @@ describe("tag updates", () => {
 		const realRemove = button.removeEventListener.bind(button);
 		button.addEventListener = ((...args: Parameters<typeof realAdd>) => {
 			adds++;
-			return realAdd(...args);
+			realAdd(...args);
 		}) as typeof button.addEventListener;
 		button.removeEventListener = ((...args: Parameters<typeof realRemove>) => {
 			removes++;
-			return realRemove(...args);
+			realRemove(...args);
 		}) as typeof button.removeEventListener;
 
 		await element.update();
@@ -453,8 +496,10 @@ describe("tag updates", () => {
 		let tagName = "h1";
 
 		const MyElement = component(function* () {
-			yield () => html`
+			yield function* () {
+				yield html`
                 <${tagName}>heading</${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -474,9 +519,7 @@ describe("tag updates", () => {
 		await sleep();
 		expect(element.shadowRoot?.querySelector("h3")).not.toBeNull();
 		expect(element.shadowRoot?.querySelector("h2")).toBeNull();
-		expect(element.shadowRoot?.querySelector("h3")?.textContent).toBe(
-			"heading",
-		);
+		expect(element.shadowRoot?.querySelector("h3")?.textContent).toBe("heading");
 
 		cleanup(element);
 	});
@@ -487,11 +530,13 @@ describe("tag updates", () => {
 			childTag,
 			component(
 				function* ({ items }) {
-					yield () => html`<span>${items.length}</span>`;
+					yield function* () {
+						yield html`<span>${items.length}</span>`;
+					};
 				},
 				{
 					props: {
-						items: [(incoming: unknown) => incoming as Array<unknown>, []],
+						items: prop.attribute((incoming: unknown) => incoming as Array<unknown>, []),
 					},
 				},
 			),
@@ -502,7 +547,9 @@ describe("tag updates", () => {
 		const rows = ["a", "b"];
 
 		const MyElement = component(function* () {
-			yield () => html`<${tagName} items=${rows}></${tagName}>`;
+			yield function* () {
+				yield html`<${tagName} items=${rows}></${tagName}>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);

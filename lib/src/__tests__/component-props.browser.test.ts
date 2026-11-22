@@ -1,9 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { component, html } from "../index";
-import { BaseComponent, ComponentProps } from "../types";
+import { component, html, prop } from "../index";
+import { BaseComponent, ComponentProps, PropDefinition } from "../types";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `props-object-${tagId++}-${Date.now()}`;
@@ -18,16 +17,18 @@ describe("the object a component receives", () => {
 	test("carries host plus the declared props, and nothing else", async () => {
 		const tag = uniqueTag();
 		let received: ComponentProps<{
-			label: [StringConstructor, string];
+			label: PropDefinition<string, "fallback">;
 		}> | null = null;
 		customElements.define(
 			tag,
 			component(
 				function* (componentProps) {
 					received = componentProps;
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
-				{ props: { label: [String, "anon"] } },
+				{ props: { label: prop.attribute(String, "anon") } },
 			),
 		);
 		const element = mount(tag);
@@ -41,16 +42,19 @@ describe("the object a component receives", () => {
 
 	test("a read sees what the store holds at the moment of access", async () => {
 		const tag = uniqueTag();
-		let componentProps: ComponentProps<{ userid: StringConstructor }> | null =
-			null;
+		let componentProps: ComponentProps<{
+			userid: PropDefinition<string, "optional">;
+		}> | null = null;
 		customElements.define(
 			tag,
 			component(
 				function* (received) {
 					componentProps = received;
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
-				{ props: { userid: String } },
+				{ props: { userid: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = document.createElement(tag);
@@ -67,48 +71,51 @@ describe("the object a component receives", () => {
 	test("the write spelling is host, and it parses, reflects and schedules", async () => {
 		const tag = uniqueTag();
 		let componentProps: ComponentProps<{
-			userid: StringConstructor;
+			userid: PropDefinition<string, "optional">;
 		}> | null = null;
-		let renderCount = 0;
+		let runCount = 0;
 		customElements.define(
 			tag,
 			component(
 				function* (received) {
 					componentProps = received;
-					yield () => {
-						renderCount++;
-						return html`<p>x</p>`;
+					yield function* () {
+						runCount++;
+						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { userid: String } },
+				{ props: { userid: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = document.createElement(tag) as BaseComponent;
 		element.setAttribute("userid", "7");
 		document.body.appendChild(element);
 		await sleep();
-		renderCount = 0;
+		runCount = 0;
 
 		componentProps!.host.userid = "9";
 		expect(componentProps!.userid).toBe("9");
 		expect(element.getAttribute("userid")).toBe("9");
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 		element.remove();
 	});
 
 	test("spreading takes a snapshot; holding the object keeps the live view", async () => {
 		const tag = uniqueTag();
-		let componentProps: ComponentProps<{ userid: StringConstructor }> | null =
-			null;
+		let componentProps: ComponentProps<{
+			userid: PropDefinition<string, "optional">;
+		}> | null = null;
 		customElements.define(
 			tag,
 			component(
 				function* (received) {
 					componentProps = received;
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
-				{ props: { userid: String } },
+				{ props: { userid: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = document.createElement(tag);
@@ -133,7 +140,9 @@ describe("the object a component receives", () => {
 			tag,
 			component(function* (componentProps) {
 				received.push(componentProps);
-				yield () => html`<p>x</p>`;
+				yield function* () {
+					yield html`<p>x</p>`;
+				};
 			}),
 		);
 		const first = mount(tag);
@@ -154,9 +163,16 @@ describe("reflection", () => {
 			tag,
 			component(
 				function* () {
-					yield () => html`<p>x</p>`;
+					yield function* () {
+						yield html`<p>x</p>`;
+					};
 				},
-				{ props: { open: Boolean, label: String } },
+				{
+					props: {
+						open: prop.attribute(Boolean),
+						label: prop.optional(prop.attribute(String)),
+					},
+				},
 			),
 		);
 		const element = document.createElement(tag) as BaseComponent & {
@@ -190,12 +206,12 @@ describe("one calling convention", () => {
 			component(
 				function* (componentProps) {
 					outer = componentProps;
-					yield function* (received: ComponentProps) {
+					yield function* (received) {
 						inner = received;
-						yield () => html`<p>inner</p>`;
+						yield html`<p>inner</p>`;
 					};
 				},
-				{ props: { label: [String, "x"] } },
+				{ props: { label: prop.attribute(String, "x") } },
 			),
 		);
 		const element = mount(tag);
@@ -214,7 +230,7 @@ describe("one calling convention", () => {
 			host: BaseComponent;
 			userId: string | undefined;
 		}) {
-			yield () => html`<p>${userId} on ${host.localName}</p>`;
+			yield html`<p>${userId} on ${host.localName}</p>`;
 		};
 
 		customElements.define(
@@ -226,7 +242,7 @@ describe("one calling convention", () => {
 						userId: componentProps.activeUserId,
 					});
 				},
-				{ props: { activeUserId: String } },
+				{ props: { activeUserId: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = document.createElement(tag);

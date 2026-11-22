@@ -2,13 +2,14 @@ import { describe, expect, test } from "vitest";
 import { getParsedTemplate } from "../html";
 import { html } from "../../template";
 import { buildFragment } from "../../rendering/dom";
-import { BINDING, DYNAMIC_TAG_PLACEHOLDER } from "../constants";
+import { DYNAMIC_TAG_PLACEHOLDER } from "../constants";
+import * as BINDING from "../binding";
 import { AttributeStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 	getParsedTemplate(strings);
 
-describe("html parser — static templates", () => {
+describe("html parser: static templates", () => {
 	test("produces no bindings", () => {
 		const parsed = parse` <div>hello</div>`;
 		expect(parsed.bindings).toHaveLength(0);
@@ -22,7 +23,7 @@ describe("html parser — static templates", () => {
 		expect(div.getAttribute("id")).toBe("main");
 	});
 
-	test("handles self-closing tags", () => {
+	test("self-closing void elements without holes add no binding", () => {
 		const parsed = parse` <div>
 			<br />
 			<hr />
@@ -38,7 +39,7 @@ describe("html parser — static templates", () => {
 	});
 });
 
-describe("html parser — expression to binding mapping", () => {
+describe("html parser: expression to binding mapping", () => {
 	test("single content expression is a single content binding", () => {
 		const parsed = parse` <div>${"text"}</div>`;
 		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.CONTENT]);
@@ -51,22 +52,16 @@ describe("html parser — expression to binding mapping", () => {
 
 	test("expressions in different attributes map to different bindings", () => {
 		const parsed = parse` <div class="${"a"}" id="${"b"}"></div>`;
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.ATTRIBUTE,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.ATTRIBUTE]);
 	});
 
 	test("mixed content and attribute expressions", () => {
 		const parsed = parse` <div class="${"a"}">${"text"}</div>`;
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.CONTENT,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.CONTENT]);
 	});
 });
 
-describe("html parser — template caching", () => {
+describe("html parser: template caching", () => {
 	test("structurally identical templates parse to equal results with independent values", () => {
 		const a = parse`<span>${"one"}</span>`;
 		const b = parse`<span>${"two"}</span>`;
@@ -84,15 +79,15 @@ describe("html parser — template caching", () => {
 	});
 
 	test("cache returns the identical parsed reference for the same tagged literal", () => {
-		const render = (value: string) => parse`<div>${value}</div>`;
-		const first = render("a");
-		const second = render("b");
+		const parseWithValue = (value: string) => parse`<div>${value}</div>`;
+		const first = parseWithValue("a");
+		const second = parseWithValue("b");
 		expect(first).toBe(second);
 	});
 });
 
-describe("html parser — whitespace handling", () => {
-	test("template with newlines between elements", () => {
+describe("html parser: whitespace handling", () => {
+	test("newlines between elements leave one content binding", () => {
 		const val = "hello";
 		const parsed = parse`
 			<div>
@@ -115,7 +110,7 @@ describe("html parser — whitespace handling", () => {
 		expect(b1.nameParts).toEqual(["id"]);
 	});
 
-	test("tabs as attribute separator", () => {
+	test("a tab between attributes separates them like a space", () => {
 		const cls = "red";
 		const id = "main";
 		const parsed = parse`<div class="${cls}" id="${id}"></div>`;
@@ -126,16 +121,14 @@ describe("html parser — whitespace handling", () => {
 		expect(second.nameParts).toEqual(["id"]);
 	});
 
-	test("whitespace before self-closing slash", () => {
+	test("a space before the self-closing slash still closes a void element", () => {
 		const parsed = parse`<br />`;
 		expect(parsed.bindings).toHaveLength(0);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("br"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("br")).not.toBeNull();
 	});
 });
 
-describe("html parser — void and self-closing elements", () => {
+describe("html parser: void and self-closing elements", () => {
 	test("void elements produce no end tag issues", () => {
 		const val = "hello";
 		const parsed = parse`<br />
@@ -145,18 +138,15 @@ describe("html parser — void and self-closing elements", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("multiple void elements with dynamic attributes", () => {
+	test("two void elements each bind their own attribute hole", () => {
 		const type1 = "text";
 		const type2 = "email";
 		const parsed = parse`<input type="${type1}" /><input type="${type2}" />`;
 
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.ATTRIBUTE,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.ATTRIBUTE]);
 	});
 
-	test("img with dynamic src", () => {
+	test("an <img> binds a quoted src hole", () => {
 		const src = "image.png";
 		const parsed = parse`<img src="${src}" />`;
 
@@ -165,7 +155,7 @@ describe("html parser — void and self-closing elements", () => {
 		expect(binding.nameParts).toEqual(["src"]);
 	});
 
-	test("void element between elements with content bindings", () => {
+	test("a void element between two bound elements adds no binding", () => {
 		const a = "before";
 		const b = "after";
 		const parsed = parse`<p>${a}</p>
@@ -189,6 +179,17 @@ describe("html parser — void and self-closing elements", () => {
 		expect(br.children).toHaveLength(0);
 	});
 
+	//`</br>` reads as a second <br>
+	test("a self-closed void element gets no end tag", () => {
+		const parsed = parse`<br /><img/>`;
+		expect(parsed.htmlWithMarkers).toBe("<br><img>");
+	});
+
+	test("a void element without a slash closes inside a dynamic tag", () => {
+		const tag = "section";
+		expect(() => parse`<${tag}><img><hr></${tag}>`).not.toThrow();
+	});
+
 	test("static comment inside a template is preserved alongside a dynamic binding", () => {
 		const parsed = parse`<div><!-- author note -->${"payload"}</div>`;
 		const div = buildFragment(parsed.htmlWithMarkers).querySelector("div")!;
@@ -204,7 +205,27 @@ describe("html parser — void and self-closing elements", () => {
 	});
 });
 
-describe("html parser — fragment structure", () => {
+describe("html parser: a `<` that opens no markup", () => {
+	test("a `<` before a space is text", () => {
+		const parsed = parse`<p>${1} < ${2}</p>`;
+		expect(parsed.bindings.map((binding) => binding.type)).toEqual([
+			BINDING.CONTENT,
+			BINDING.CONTENT,
+		]);
+		expect(parsed.htmlWithMarkers).toContain(" < ");
+	});
+
+	test("a `<` before a digit or `=` is text", () => {
+		const parsed = parse`<p>1<2 and a<=b</p>`;
+		expect(parsed.htmlWithMarkers).toBe("<p>1<2 and a<=b</p>");
+	});
+
+	test("a `<!` that opens no comment names the fix", () => {
+		expect(() => parse`<!DOCTYPE html><p>${1}</p>`).toThrow(/Write a comment as <!-- ... -->/);
+	});
+});
+
+describe("html parser: fragment structure", () => {
 	test("static template produces correct DOM structure", () => {
 		const parsed = parse` <div><span>hello</span></div>`;
 		const div = buildFragment(parsed.htmlWithMarkers).querySelector("div");
@@ -214,7 +235,7 @@ describe("html parser — fragment structure", () => {
 		expect(span?.textContent).toBe("hello");
 	});
 
-	test("multiple root elements in fragment", () => {
+	test("three root paragraphs stay three elements in the fragment", () => {
 		const parsed = parse`<p>one</p>
 			<p>two</p>
 			<p>three</p>`;
@@ -272,7 +293,7 @@ describe("html parser — fragment structure", () => {
 	});
 });
 
-describe("html parser — complex templates", () => {
+describe("html parser: complex templates", () => {
 	test("mixed binding types in one template", () => {
 		const tag = "div";
 		const cls = "red";
@@ -303,7 +324,7 @@ describe("html parser — complex templates", () => {
 		]);
 	});
 
-	test("sibling elements with dynamic content", () => {
+	test("three bound sibling paragraphs make three bindings", () => {
 		const a = "first";
 		const b = "second";
 		const c = "third";
@@ -314,7 +335,7 @@ describe("html parser — complex templates", () => {
 		expect(parsed.bindings).toHaveLength(3);
 	});
 
-	test("expression as only child", () => {
+	test("a lone hole is one content binding", () => {
 		const val = "alone";
 		const parsed = parse`${val}`;
 
@@ -322,7 +343,7 @@ describe("html parser — complex templates", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("multiple expressions with no static content between them", () => {
+	test("two holes with nothing between them keep their values apart", () => {
 		const a = "x";
 		const b = "y";
 		const parsed = parse`${a}${b}`;
@@ -332,8 +353,8 @@ describe("html parser — complex templates", () => {
 	});
 });
 
-describe("html parser — mixed scenarios", () => {
-	test("content then attribute then content", () => {
+describe("html parser: mixed scenarios", () => {
+	test("content, attribute and content holes bind in source order", () => {
 		const text1 = "before";
 		const cls = "mid";
 		const text2 = "after";
@@ -348,7 +369,7 @@ describe("html parser — mixed scenarios", () => {
 		]);
 	});
 
-	test("dynamic tag with content binding inside", () => {
+	test("a dynamic tag with a hole inside makes a tag and a content binding", () => {
 		const tag = "div";
 		const text = "hello";
 		const parsed = parse`
@@ -359,7 +380,7 @@ describe("html parser — mixed scenarios", () => {
 		expect(types).toContain(BINDING.CONTENT);
 	});
 
-	test("attribute binding then raw content binding", () => {
+	test("an attribute hole and a <style> hole bind in source order", () => {
 		const cls = "highlight";
 		const css = "color: red";
 		const parsed = parse` <div class="${cls}"></div>
@@ -369,10 +390,7 @@ describe("html parser — mixed scenarios", () => {
 				            }
 			</style>`;
 
-		expect(parsed.bindings.map((b) => b.type)).toEqual([
-			BINDING.ATTRIBUTE,
-			BINDING.RAW_CONTENT,
-		]);
+		expect(parsed.bindings.map((b) => b.type)).toEqual([BINDING.ATTRIBUTE, BINDING.RAW_CONTENT]);
 	});
 
 	test("deeply nested template with all binding types", () => {
@@ -392,7 +410,7 @@ describe("html parser — mixed scenarios", () => {
 		expect(types).toContain(BINDING.RAW_CONTENT);
 	});
 
-	test("sibling elements each with different binding types", () => {
+	test("a dynamic tag, an attribute and a <style> hole each bind", () => {
 		const tag = "h1";
 		const text = "title";
 		const cls = "body";
@@ -405,7 +423,7 @@ describe("html parser — mixed scenarios", () => {
 		expect(parsed.bindings.length).toBeGreaterThanOrEqual(4);
 	});
 
-	test("list rendering pattern", () => {
+	test("a hole holding a mapped list is one content binding", () => {
 		const items = ["a", "b", "c"];
 		const parsed = parse` <ul>
 			${items.map((i) => html` <li>${i}</li>`)}
@@ -415,7 +433,7 @@ describe("html parser — mixed scenarios", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("conditional rendering pattern", () => {
+	test("a hole holding a conditional template is one content binding", () => {
 		const show = true;
 		const parsed = parse` <div>${show ? html`<span>yes</span>` : null}</div>`;
 
@@ -428,9 +446,7 @@ describe("html parser — mixed scenarios", () => {
 		const parsed = parse`<br />${value}`;
 		expect(parsed.bindings).toHaveLength(1);
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
-		expect(
-			buildFragment(parsed.htmlWithMarkers).querySelector("br"),
-		).not.toBeNull();
+		expect(buildFragment(parsed.htmlWithMarkers).querySelector("br")).not.toBeNull();
 	});
 
 	test("void element without trailing slash nested in a parent", () => {
@@ -440,7 +456,7 @@ describe("html parser — mixed scenarios", () => {
 		expect(div.querySelector("br")).not.toBeNull();
 	});
 
-	test("real-world component pattern with style, attributes, and content", () => {
+	test("a component's style, attribute, listener and content holes make four bindings", () => {
 		const color = "blue";
 		const cls = "active";
 		const label = "Click me";

@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { getParsedTemplate } from "../html";
 import { html } from "../../template";
-import { BINDING } from "../constants";
+import * as BINDING from "../binding";
 import { ContentStaticBinding } from "../types";
 
 const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
@@ -10,7 +10,7 @@ const parse = (strings: TemplateStringsArray, ..._values: Array<unknown>) =>
 const valueIndices = (parsed: { bindings: ReadonlyArray<{ type: number }> }) =>
 	parsed.bindings.map((b) => (b as ContentStaticBinding).valueIndex);
 
-describe("html parser — content bindings", () => {
+describe("html parser: content bindings", () => {
 	test("text expression creates a content binding", () => {
 		const name = "world";
 		const parsed = parse` <div>${name}</div>`;
@@ -42,7 +42,7 @@ describe("html parser — content bindings", () => {
 		expect(valueIndices(parsed)).toEqual([0, 1]);
 	});
 
-	test("expression between static text", () => {
+	test("a hole between words in a <div> is one content binding", () => {
 		const name = "world";
 		const parsed = parse` <div>hello ${name} goodbye</div>`;
 
@@ -58,7 +58,7 @@ describe("html parser — content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("array expression", () => {
+	test("a hole holding an array is one content binding", () => {
 		const items = [1, 2, 3];
 		const parsed = parse` <ul>
 			${items}
@@ -68,7 +68,7 @@ describe("html parser — content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("expression between two static text nodes in same element", () => {
+	test("a hole between words in a <p> is one content binding", () => {
 		const mid = "middle";
 		const parsed = parse`<p>start ${mid} end</p>`;
 
@@ -76,7 +76,7 @@ describe("html parser — content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("adjacent expressions with static text between them", () => {
+	test("two holes with text between them are two content bindings in order", () => {
 		const a = "hello";
 		const b = "world";
 		const parsed = parse` <div>${a} and ${b}</div>`;
@@ -85,7 +85,7 @@ describe("html parser — content bindings", () => {
 		expect(valueIndices(parsed)).toEqual([0, 1]);
 	});
 
-	test("expression as the only content (no wrapper element)", () => {
+	test("a hole as the whole template is one content binding", () => {
 		const val = "bare";
 		const parsed = parse`${val}`;
 
@@ -93,7 +93,7 @@ describe("html parser — content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("three adjacent expressions", () => {
+	test("three adjacent holes are three content bindings in order", () => {
 		const a = "x";
 		const b = "y";
 		const c = "z";
@@ -103,7 +103,7 @@ describe("html parser — content bindings", () => {
 		expect(valueIndices(parsed)).toEqual([0, 1, 2]);
 	});
 
-	test("expression after self-closing element", () => {
+	test("a hole after a self-closing element is a content binding", () => {
 		const val = "text";
 		const parsed = parse`<br />${val}`;
 
@@ -111,7 +111,7 @@ describe("html parser — content bindings", () => {
 		expect(parsed.bindings[0].type).toBe(BINDING.CONTENT);
 	});
 
-	test("expression before and after an element", () => {
+	test("holes before and after an element are two content bindings", () => {
 		const before = "pre";
 		const after = "post";
 		const parsed = parse`${before}

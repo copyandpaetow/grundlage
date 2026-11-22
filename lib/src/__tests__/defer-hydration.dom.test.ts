@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { component, html } from "../index";
+import { component, html, prop } from "../index";
 import { DEFER_HYDRATION_ATTRIBUTE } from "../rendering/constants";
 import { releaseDeferredChildren } from "../rendering/defer-hydration";
 
@@ -28,9 +28,11 @@ const defineCountingComponent = (): {
 		component(
 			function* (componentProps) {
 				bodyRuns++;
-				yield () => html`<p>${componentProps.label ?? "nothing yet"}</p>`;
+				yield function* () {
+					yield html`<p>${componentProps.label ?? "nothing yet"}</p>`;
+				};
 			},
-			{ props: { label: String } },
+			{ props: { label: prop.optional(prop.attribute(String)) } },
 		),
 	);
 	return { tag, bodyRunsOf: () => bodyRuns };
@@ -78,7 +80,7 @@ describe("defer-hydration: a marked child waits for its parent", () => {
 		expect(element.shadowRoot!.textContent).toBe("nothing yet");
 	});
 
-	//a prop write while parked funnels into update(), which already returns early with no task
+	//a prop write while parked funnels into update(), which already returns early with no body run
 	test("a prop assigned while parked schedules nothing and mounts once on release", async () => {
 		const { tag, bodyRunsOf } = defineCountingComponent();
 		const element = connectMarked(tag);
@@ -110,7 +112,7 @@ describe("defer-hydration: a marked child waits for its parent", () => {
 		expect(bodyRunsOf()).toBe(1);
 	});
 
-	//the parked state is the absent task plus the attribute, and the attribute travels with the
+	//the parked state is the absent body run plus the attribute, and the attribute travels with the
 	//element, so a reconnect re-parks without a field to restore
 	test("a reconnect while still marked stays parked", async () => {
 		const { tag, bodyRunsOf } = defineCountingComponent();
@@ -129,19 +131,23 @@ describe("defer-hydration: a marked child waits for its parent", () => {
 		expect(bodyRunsOf()).toBe(1);
 	});
 
-	test("a client render never marks its children", async () => {
+	test("a client paint never marks its children", async () => {
 		const childTag = uniqueTag();
 		customElements.define(
 			childTag,
 			component(function* () {
-				yield () => html`<span>child</span>`;
+				yield function* () {
+					yield html`<span>child</span>`;
+				};
 			}),
 		);
 		const parentTag = uniqueTag();
 		customElements.define(
 			parentTag,
 			component(function* () {
-				yield () => html`<${childTag} rows=${[1, 2]}></${childTag}>`;
+				yield function* () {
+					yield html`<${childTag} rows=${[1, 2]}></${childTag}>`;
+				};
 			}),
 		);
 
@@ -151,15 +157,15 @@ describe("defer-hydration: a marked child waits for its parent", () => {
 		await flushMicrotasks();
 
 		expect(
-			parent
-				.shadowRoot!.querySelector(childTag)!
-				.hasAttribute(DEFER_HYDRATION_ATTRIBUTE),
+			parent.shadowRoot!.querySelector(childTag)!.hasAttribute(DEFER_HYDRATION_ATTRIBUTE),
 		).toBe(false);
 	});
 
 	test("defer-hydration is refused as a prop name", () => {
 		expect(() =>
-			component(function* () {}, { props: { "defer-hydration": String } }),
+			component(function* () {}, {
+				props: { "defer-hydration": prop.optional(prop.attribute(String)) },
+			}),
 		).toThrow(/reserved/);
 	});
 });

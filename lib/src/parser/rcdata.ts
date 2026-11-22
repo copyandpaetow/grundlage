@@ -1,4 +1,4 @@
-import { CHARACTER_CODE } from "./characters";
+import * as CHARACTER_CODE from "./character-code";
 import { Part } from "./types";
 import { assertDuringDevelopment, libraryMessage } from "../utils/diagnostics";
 
@@ -55,61 +55,62 @@ const WINDOWS_1252_REMAP: ReadonlyMap<number, number> = new Map([
 
 const decodeNumericReference = (codePoint: number): string => {
 	const isSurrogate = codePoint >= 0xd800 && codePoint <= 0xdfff;
-	if (codePoint === 0 || codePoint > LAST_CODE_POINT || isSurrogate)
-		return REPLACEMENT_CHARACTER;
+	if (codePoint === 0 || codePoint > LAST_CODE_POINT || isSurrogate) return REPLACEMENT_CHARACTER;
 	return String.fromCodePoint(WINDOWS_1252_REMAP.get(codePoint) ?? codePoint);
 };
 
-const decodeCharacterReference = (
-	reference: string,
-	hexadecimalDigits: string | undefined,
-	decimalDigits: string | undefined,
-	name: string | undefined,
-	semicolon: string,
-): string => {
-	if (hexadecimalDigits !== undefined)
-		return decodeNumericReference(parseInt(hexadecimalDigits, 16));
-	if (decimalDigits !== undefined)
-		return decodeNumericReference(parseInt(decimalDigits, 10));
-	assertDuringDevelopment(
-		name !== undefined,
-		"a character reference without digits matched the name alternative",
-	);
-	const decoded = NAMED_REFERENCES.get(name);
-	//`&apos` has no legacy form, and the pattern already consumed every letter and digit after a name
-	const isLegacyFormWithoutSemicolon = semicolon === "" && name !== "apos";
-	if (
-		decoded !== undefined &&
-		(semicolon === ";" || isLegacyFormWithoutSemicolon)
-	)
-		return decoded;
-	throw new Error(
-		libraryMessage(
-			`"${reference}" in a <textarea> that has a \${…} is not decoded. Write the character itself, or "&amp;" for a literal "&".`,
-		),
-	);
-};
+const characterReferenceDecoderFor =
+	(tagName: string) =>
+	(
+		reference: string,
+		hexadecimalDigits: string | undefined,
+		decimalDigits: string | undefined,
+		name: string | undefined,
+		semicolon: string,
+	): string => {
+		if (hexadecimalDigits !== undefined) {
+			return decodeNumericReference(parseInt(hexadecimalDigits, 16));
+		}
+		if (decimalDigits !== undefined) return decodeNumericReference(parseInt(decimalDigits, 10));
+		assertDuringDevelopment(
+			name !== undefined,
+			"a character reference without digits matched the name alternative",
+		);
+		const decoded = NAMED_REFERENCES.get(name);
+		//`&apos` has no legacy form, and the pattern already consumed every letter and digit after a name
+		const isLegacyFormWithoutSemicolon = semicolon === "" && name !== "apos";
+		if (decoded !== undefined && (semicolon === ";" || isLegacyFormWithoutSemicolon)) {
+			return decoded;
+		}
+		throw new Error(
+			libraryMessage(
+				`"${reference}" in a <${tagName}> that has a \${...} is not decoded. Write the character itself, or "&amp;" for a literal "&".`,
+			),
+		);
+	};
 
-const decodeRCDATAText = (text: string): string => {
+const decodeRCDATAText = (text: string, tagName: string): string => {
 	if (!NEEDS_DECODING_PATTERN.test(text)) return text;
 	return text
 		.replaceAll("\r\n", "\n")
 		.replaceAll("\r", "\n")
 		.replaceAll("\0", REPLACEMENT_CHARACTER)
-		.replace(CHARACTER_REFERENCE_PATTERN, decodeCharacterReference);
+		.replace(CHARACTER_REFERENCE_PATTERN, characterReferenceDecoderFor(tagName));
 };
 
 //static parts beside a hole are written as text, so the decoding the browser parser does for
-//textarea content happens here, once per template
-export const decodeTextareaParts = (parts: Array<Part>): void => {
+//<textarea> and <title> content happens here, once per template
+export const decodeRCDATAParts = (parts: Array<Part>, tagName: string): void => {
 	for (let index = 0; index < parts.length; index++) {
 		const part = parts[index];
-		if (typeof part === "string") parts[index] = decodeRCDATAText(part);
+		if (typeof part === "string") parts[index] = decodeRCDATAText(part, tagName);
 	}
+};
+
+//the HTML parser drops a <textarea>'s first line feed, also one written as a reference
+export const dropLeadingLineFeed = (parts: Array<Part>): void => {
 	const firstPart = parts[0];
-	if (
-		typeof firstPart === "string" &&
-		firstPart.charCodeAt(0) === CHARACTER_CODE.LINE_FEED
-	)
+	if (typeof firstPart === "string" && firstPart.charCodeAt(0) === CHARACTER_CODE.LINE_FEED) {
 		parts[0] = firstPart.slice(1);
+	}
 };

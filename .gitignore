@@ -12,8 +12,10 @@ dist
 dist-ssr
 coverage
 __screenshots__
-bench
+spikes
 
 .*
 .*/**
+!.oxfmtrc.json
+!.oxlintrc.json
 

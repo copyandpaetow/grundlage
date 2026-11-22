@@ -9,7 +9,9 @@ customElements.define(
 			element.update();
 		}, 1000);
 
-		yield () => html`<p>${seconds} seconds</p>`;
+		yield function* view() {
+			yield html`<p>${seconds} seconds</p>`;
+		};
 
 		return () => {
 			clearInterval(interval);

@@ -1,8 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, component } from "../../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("attribute updates", () => {
 	let tagId = 0;
@@ -23,24 +22,22 @@ describe("attribute updates", () => {
 		let cls = "red";
 
 		const MyElement = component(function* () {
-			yield () => html` <div class="${cls}"></div>`;
+			yield function* () {
+				yield html` <div class="${cls}"></div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("red");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("red");
 
 		cls = "blue";
 		await element.update();
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("blue");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("blue");
 
 		cleanup(element);
 	});
@@ -51,24 +48,22 @@ describe("attribute updates", () => {
 		let second = "world";
 
 		const MyElement = component(function* () {
-			yield () => html` <div class="${first} ${second}"></div>`;
+			yield function* () {
+				yield html` <div class="${first} ${second}"></div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("hello world");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("hello world");
 
 		first = "foo";
 		await element.update();
 		await sleep();
 
-		expect(
-			element.shadowRoot?.querySelector("div")?.getAttribute("class"),
-		).toBe("foo world");
+		expect(element.shadowRoot?.querySelector("div")?.getAttribute("class")).toBe("foo world");
 
 		cleanup(element);
 	});
@@ -78,7 +73,9 @@ describe("attribute updates", () => {
 		let second: string | null | undefined = null;
 
 		const MyElement = component(function* () {
-			yield () => html` <div class="a ${second}"></div>`;
+			yield function* () {
+				yield html` <div class="a ${second}"></div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -106,7 +103,9 @@ describe("attribute updates", () => {
 		let disabled = true;
 
 		const MyElement = component(function* () {
-			yield () => html` <button disabled="${disabled}">click</button>`;
+			yield function* () {
+				yield html` <button disabled="${disabled}">click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -131,7 +130,9 @@ describe("attribute updates", () => {
 		let handler = () => clicks.push("first");
 
 		const MyElement = component(function* () {
-			yield () => html` <button onclick="${handler}">click</button>`;
+			yield function* () {
+				yield html` <button onclick="${handler}">click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -158,7 +159,9 @@ describe("attribute updates", () => {
 		const handler = () => clicks.push("hit");
 
 		const MyElement = component(function* () {
-			yield () => html`<button onClick="${handler}">click</button>`;
+			yield function* () {
+				yield html`<button onClick="${handler}">click</button>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -175,7 +178,9 @@ describe("attribute updates", () => {
 		let argument = 1;
 
 		const MyElement = component(function* () {
-			yield () => html`<button onclick="report(${argument})">click</button>`;
+			yield function* () {
+				yield html`<button onclick="report(${argument})">click</button>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -197,7 +202,9 @@ describe("attribute updates", () => {
 		const handler = () => {};
 
 		const MyElement = component(function* () {
-			yield () => html`<button once="${handler}">x</button>`;
+			yield function* () {
+				yield html`<button once="${handler}">x</button>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -218,7 +225,9 @@ describe("attribute updates", () => {
 		let attrs = ["disabled", "hidden"];
 
 		const MyElement = component(function* () {
-			yield () => html` <button ${attrs}>click</button>`;
+			yield function* () {
+				yield html` <button ${attrs}>click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -244,7 +253,9 @@ describe("attribute updates", () => {
 		let enabled = true;
 
 		const MyElement = component(function* () {
-			yield () => html`<button ${enabled ? "" : "disabled"}>click</button>`;
+			yield function* () {
+				yield html`<button ${enabled ? "" : "disabled"}>click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -274,7 +285,9 @@ describe("attribute updates", () => {
 		let attrs: Record<string, string> = { class: "red", id: "main" };
 
 		const MyElement = component(function* () {
-			yield () => html` <div ${attrs}>content</div>`;
+			yield function* () {
+				yield html` <div ${attrs}>content</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -301,7 +314,9 @@ describe("attribute updates", () => {
 		let value: unknown = 9007199254740993n;
 
 		const MyElement = component(function* () {
-			yield () => html`<div data-total=${value}>text</div>`;
+			yield function* () {
+				yield html`<div data-total=${value}>text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -325,7 +340,9 @@ describe("attribute updates", () => {
 		let value: string | null = "visible";
 
 		const MyElement = component(function* () {
-			yield () => html`<div title="${value}">text</div>`;
+			yield function* () {
+				yield html`<div title="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -349,7 +366,9 @@ describe("attribute updates", () => {
 		let value: string | undefined = "visible";
 
 		const MyElement = component(function* () {
-			yield () => html`<div title="${value}">text</div>`;
+			yield function* () {
+				yield html`<div title="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -373,7 +392,9 @@ describe("attribute updates", () => {
 		let value: string | false = "yes";
 
 		const MyElement = component(function* () {
-			yield () => html`<div aria-hidden="${value}">text</div>`;
+			yield function* () {
+				yield html`<div aria-hidden="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -397,7 +418,9 @@ describe("attribute updates", () => {
 		let value = 5;
 
 		const MyElement = component(function* () {
-			yield () => html`<input tabindex="${value}" />`;
+			yield function* () {
+				yield html`<input tabindex="${value}" />`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -422,7 +445,9 @@ describe("attribute updates", () => {
 		let handler: (() => void) | null = () => clicks.push("clicked");
 
 		const MyElement = component(function* () {
-			yield () => html`<button onclick="${handler}">click</button>`;
+			yield function* () {
+				yield html`<button onclick="${handler}">click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -438,13 +463,13 @@ describe("attribute updates", () => {
 		await sleep();
 
 		btn.click();
-		//should still be just one click since listener was removed
+		//still one click, since the listener was removed
 		expect(clicks).toEqual(["clicked"]);
 
 		cleanup(element);
 	});
 
-	test("handles multiple event listeners on same element", async () => {
+	test("two listener holes on one element each fire", async () => {
 		const tag = uniqueTag();
 		const events: string[] = [];
 
@@ -458,10 +483,11 @@ describe("attribute updates", () => {
 				if (!event.isTrusted) events.push("enter");
 			};
 
-			yield () =>
-				html`<button onclick="${onClick}" onmouseenter="${onMouseEnter}">
+			yield function* () {
+				yield html`<button onclick="${onClick}" onmouseenter="${onMouseEnter}">
 					btn
 				</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -482,7 +508,9 @@ describe("attribute updates", () => {
 		const data = { nested: { value: 42 } };
 
 		const MyElement = component(function* () {
-			yield () => html`<div data="${data}">text</div>`;
+			yield function* () {
+				yield html`<div data="${data}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -500,7 +528,9 @@ describe("attribute updates", () => {
 		let data: Record<string, unknown> = { nested: { value: 42 } };
 
 		const MyElement = component(function* () {
-			yield () => html`<div data="${data}">text</div>`;
+			yield function* () {
+				yield html`<div data="${data}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -524,7 +554,9 @@ describe("attribute updates", () => {
 		let value: string | Record<string, unknown> = "simple";
 
 		const MyElement = component(function* () {
-			yield () => html`<div data="${value}">text</div>`;
+			yield function* () {
+				yield html`<div data="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -548,7 +580,9 @@ describe("attribute updates", () => {
 		let value: string | Record<string, unknown> = { nested: true };
 
 		const MyElement = component(function* () {
-			yield () => html`<div data="${value}">text</div>`;
+			yield function* () {
+				yield html`<div data="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -572,7 +606,9 @@ describe("attribute updates", () => {
 		let items = [1, 2, 3];
 
 		const MyElement = component(function* () {
-			yield () => html`<div items="${items}">text</div>`;
+			yield function* () {
+				yield html`<div items="${items}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -596,7 +632,9 @@ describe("attribute updates", () => {
 		let data: Record<string, unknown> | null = { key: "value" };
 
 		const MyElement = component(function* () {
-			yield () => html`<div data="${data}">text</div>`;
+			yield function* () {
+				yield html`<div data="${data}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -620,7 +658,9 @@ describe("attribute updates", () => {
 		let value: string | null = "visible";
 
 		const MyElement = component(function* () {
-			yield () => html`<div title="${value}">text</div>`;
+			yield function* () {
+				yield html`<div title="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -645,12 +685,14 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles empty string as attribute value", async () => {
+	test("an empty string sets the attribute to empty", async () => {
 		const tag = uniqueTag();
 		let value = "";
 
 		const MyElement = component(function* () {
-			yield () => html`<div title="${value}">text</div>`;
+			yield function* () {
+				yield html`<div title="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -674,7 +716,9 @@ describe("attribute updates", () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield () => html`<button disabled="${true}">click</button>`;
+			yield function* () {
+				yield html`<button disabled="${true}">click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -693,7 +737,9 @@ describe("attribute updates", () => {
 		let attrName = "title";
 
 		const MyElement = component(function* () {
-			yield () => html`<div ${attrName}="hello">text</div>`;
+			yield function* () {
+				yield html`<div ${attrName}="hello">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -711,7 +757,9 @@ describe("attribute updates", () => {
 		let attrName = "title";
 
 		const MyElement = component(function* () {
-			yield () => html`<div ${attrName}="hello">text</div>`;
+			yield function* () {
+				yield html`<div ${attrName}="hello">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -731,7 +779,7 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles expandable object with event listeners", async () => {
+	test("a spread object binds its listeners and attributes", async () => {
 		const tag = uniqueTag();
 		const clicks: string[] = [];
 		let attrs: Record<string, unknown> = {
@@ -740,7 +788,9 @@ describe("attribute updates", () => {
 		};
 
 		const MyElement = component(function* () {
-			yield () => html`<button ${attrs}>click</button>`;
+			yield function* () {
+				yield html`<button ${attrs}>click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -767,16 +817,18 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("keeps an unchanged spread listener attached without re-binding it across renders", async () => {
+	test("keeps an unchanged spread listener attached without re-binding it across paints", async () => {
 		//the spread diff skips entries whose value reference is unchanged, so a
-		//stable handler is neither detached nor reattached on update — only the
+		//stable handler is neither detached nor reattached on update; only the
 		//changed sibling attribute is touched
 		const tag = uniqueTag();
 		const handler = () => {};
 		let attrs: Record<string, unknown> = { class: "a", onclick: handler };
 
 		const MyElement = component(function* () {
-			yield () => html`<button ${attrs}>x</button>`;
+			yield function* () {
+				yield html`<button ${attrs}>x</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -798,13 +850,15 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles multiple dynamic attributes on same element", async () => {
+	test("two attribute holes on one element each write", async () => {
 		const tag = uniqueTag();
 		let cls = "red";
 		let title = "hello";
 
 		const MyElement = component(function* () {
-			yield () => html`<div class="${cls}" title="${title}">text</div>`;
+			yield function* () {
+				yield html`<div class="${cls}" title="${title}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -832,12 +886,14 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles partially dynamic attribute key", async () => {
+	test("a hole inside an attribute name composes the name", async () => {
 		const tag = uniqueTag();
 		let suffix = "color";
 
 		const MyElement = component(function* () {
-			yield () => html`<div data-${suffix}="red">text</div>`;
+			yield function* () {
+				yield html`<div data-${suffix}="red">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -855,7 +911,9 @@ describe("attribute updates", () => {
 		let suffix = "color";
 
 		const MyElement = component(function* () {
-			yield () => html`<div data-${suffix}="red">text</div>`;
+			yield function* () {
+				yield html`<div data-${suffix}="red">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -875,13 +933,15 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles partially dynamic key with dynamic value", async () => {
+	test("a hole in the name and a hole in the value both compose", async () => {
 		const tag = uniqueTag();
 		let suffix = "color";
 		let value = "red";
 
 		const MyElement = component(function* () {
-			yield () => html`<div data-${suffix}="${value}">text</div>`;
+			yield function* () {
+				yield html`<div data-${suffix}="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -908,13 +968,15 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles fully dynamic key and fully dynamic value", async () => {
+	test("a hole as the whole name and the whole value writes that attribute", async () => {
 		const tag = uniqueTag();
 		let key = "title";
 		let value: string | null = "hello";
 
 		const MyElement = component(function* () {
-			yield () => html`<div ${key}="${value}">text</div>`;
+			yield function* () {
+				yield html`<div ${key}="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -935,13 +997,15 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles multi-part dynamic key", async () => {
+	test("two holes in a name compose one attribute name", async () => {
 		const tag = uniqueTag();
 		let prefix = "data";
 		let suffix = "value";
 
 		const MyElement = component(function* () {
-			yield () => html`<div ${prefix}-${suffix}="test">text</div>`;
+			yield function* () {
+				yield html`<div ${prefix}-${suffix}="test">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -962,14 +1026,16 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles dynamic key with multi-part dynamic value", async () => {
+	test("a hole as the name with a composed value writes the composed text", async () => {
 		const tag = uniqueTag();
 		let key = "class";
 		let a = "foo";
 		let b = "bar";
 
 		const MyElement = component(function* () {
-			yield () => html`<div ${key}="${a}-${b}">text</div>`;
+			yield function* () {
+				yield html`<div ${key}="${a}-${b}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1002,7 +1068,9 @@ describe("attribute updates", () => {
 		let value: string | null = "hello";
 
 		const MyElement = component(function* () {
-			yield () => html`<div ${key}="${value}">text</div>`;
+			yield function* () {
+				yield html`<div ${key}="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1034,7 +1102,9 @@ describe("attribute updates", () => {
 		let handler = () => events.push("click");
 
 		const MyElement = component(function* () {
-			yield () => html`<button ${eventName}="${handler}">btn</button>`;
+			yield function* () {
+				yield html`<button ${eventName}="${handler}">btn</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1069,8 +1139,11 @@ describe("attribute updates", () => {
 		let handler: () => number = shared;
 
 		const MyElement = component(function* () {
-			yield () =>
-				html`<button onclick=${shared} ${eventName}=${handler}>btn</button>`;
+			yield function* () {
+				yield html`<button onclick=${shared} ${eventName}=${handler}>
+					btn
+				</button>`;
+			};
 		});
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
@@ -1088,13 +1161,15 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("handles partially dynamic key with boolean removal", async () => {
+	test("a composed name whose single-hole value turns false removes the attribute", async () => {
 		const tag = uniqueTag();
 		let suffix = "hidden";
 		let value: string | false = "true";
 
 		const MyElement = component(function* () {
-			yield () => html`<div aria-${suffix}="${value}">text</div>`;
+			yield function* () {
+				yield html`<div aria-${suffix}="${value}">text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1113,12 +1188,14 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("switches from array to object expandable attributes", async () => {
+	test("a spread that switches from an array to an object removes the array's names", async () => {
 		const tag = uniqueTag();
 		let attrs: string[] | Record<string, string> = ["disabled"];
 
 		const MyElement = component(function* () {
-			yield () => html` <button ${attrs}>click</button>`;
+			yield function* () {
+				yield html` <button ${attrs}>click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1138,16 +1215,15 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("expandable expression resolves a primitive string to a boolean attribute", async () => {
-		//the expandable path has three shapes: array, plain object, and a single
-		//primitive string. The string case is the fallback in updateExpandable /
-		//removeExpandable. `<button ${name}>` where `name` is just `"disabled"` should
-		//land as a boolean attribute, and renaming should remove the old one
+	test("a spread of one string sets that boolean attribute, and a rename removes the old one", async () => {
+		//a spread takes an array, a plain object or one string; the string is the fallback shape
 		const tag = uniqueTag();
 		let attribute: string = "disabled";
 
 		const MyElement = component(function* () {
-			yield () => html`<button ${attribute}>click</button>`;
+			yield function* () {
+				yield html`<button ${attribute}>click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1168,14 +1244,14 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("expandable switches from primitive string to array and back", async () => {
-		//the expandable dispatcher's string fallback hands off to the array branch and back without
-		//leaving the previous attributes behind
+	test("a spread switches from a string to an array and back without leaving names behind", async () => {
 		const tag = uniqueTag();
 		let attributes: string | Array<string> = "disabled";
 
 		const MyElement = component(function* () {
-			yield () => html`<button ${attributes}>click</button>`;
+			yield function* () {
+				yield html`<button ${attributes}>click</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1204,16 +1280,14 @@ describe("attribute updates", () => {
 		cleanup(element);
 	});
 
-	test("boolean attribute with multi-part dynamic key", async () => {
-		//updateAttribute's DYNAMIC_NAME_BOOLEAN shape (updateDynamicNameBoolean):
-		//the binding has multiple key fragments and no
-		//value half. `<div data-${suffix}>` with no `="..."`. The old key must
-		//be removed when the suffix flips
+	test("a composed name without a value moves to the new name", async () => {
 		const tag = uniqueTag();
 		let suffix = "ready";
 
 		const MyElement = component(function* () {
-			yield () => html`<div data-${suffix}>text</div>`;
+			yield function* () {
+				yield html`<div data-${suffix}>text</div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1241,7 +1315,9 @@ describe("attribute updates", () => {
 		const handler = () => events.push(eventName);
 
 		const MyElement = component(function* () {
-			yield () => html`<button on${eventName}=${handler}>btn</button>`;
+			yield function* () {
+				yield html`<button on${eventName}=${handler}>btn</button>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -1271,7 +1347,9 @@ describe("attribute updates", () => {
 		const handler = (event: Event) => received.push(event.type);
 
 		const MyElement = component(function* () {
-			yield () => html`<span on-${eventSuffix}=${handler}>x</span>`;
+			yield function* () {
+				yield html`<span on-${eventSuffix}=${handler}>x</span>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);

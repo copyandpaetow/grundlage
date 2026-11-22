@@ -1,9 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
-import { component, html } from "../index";
+import { component, html, prop } from "../index";
 import { BaseComponent } from "../types";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `trigger-el-${tagId++}-${Date.now()}`;
@@ -15,49 +14,49 @@ const mount = (tag: string): BaseComponent => {
 };
 
 describe("what an attribute write reaches", () => {
-	test("a declared attribute re-renders; an undeclared one does not", async () => {
+	test("a declared attribute triggers an update; an undeclared one does not", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 		customElements.define(
 			tag,
 			component(
 				function* ({ host }) {
-					yield () => {
-						renderCount++;
-						return html`<p>${host.getAttribute("label") ?? "none"}</p>`;
+					yield function* () {
+						runCount++;
+						yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		element.setAttribute("class", "card");
 		element.setAttribute("data-state", "open");
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		element.setAttribute("label", "ada");
 		await sleep();
-		expect(renderCount).toBe(2);
+		expect(runCount).toBe(2);
 		element.remove();
 	});
 
 	test("re-setting the same string is not a change", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 		customElements.define(
 			tag,
 			component(
 				function* () {
-					yield () => {
-						renderCount++;
-						return html`<p>x</p>`;
+					yield function* () {
+						runCount++;
+						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -65,24 +64,27 @@ describe("what an attribute write reaches", () => {
 
 		element.setAttribute("label", "ada");
 		await sleep();
-		expect(renderCount).toBe(2);
+		expect(runCount).toBe(2);
 
 		element.setAttribute("label", "ada");
 		await sleep();
-		expect(renderCount).toBe(2);
+		expect(runCount).toBe(2);
 		element.remove();
 	});
 
-	test("removing a declared attribute re-renders into its fallback", async () => {
+	test("removing a declared attribute paints its fallback", async () => {
 		const tag = uniqueTag();
 		customElements.define(
 			tag,
 			component(
 				function* ({ host }) {
-					yield () =>
-						html`<p>${(host as unknown as Record<string, unknown>).label}</p>`;
+					yield function* () {
+						yield html`<p>
+							${(host as unknown as Record<string, unknown>).label}
+						</p>`;
+					};
 				},
-				{ props: { label: [String, "anon"] } },
+				{ props: { label: prop.attribute(String, "anon") } },
 			),
 		);
 		const element = mount(tag);
@@ -96,19 +98,24 @@ describe("what an attribute write reaches", () => {
 		element.remove();
 	});
 
-	test("N writes in one task coalesce into one render", async () => {
+	test("N writes in one task coalesce into one update", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 		customElements.define(
 			tag,
 			component(
 				function* () {
-					yield () => {
-						renderCount++;
-						return html`<p>x</p>`;
+					yield function* () {
+						runCount++;
+						yield html`<p>x</p>`;
 					};
 				},
-				{ props: { label: String, other: String } },
+				{
+					props: {
+						label: prop.optional(prop.attribute(String)),
+						other: prop.optional(prop.attribute(String)),
+					},
+				},
 			),
 		);
 		const element = mount(tag);
@@ -118,7 +125,7 @@ describe("what an attribute write reaches", () => {
 		element.setAttribute("other", "b");
 		element.setAttribute("label", "c");
 		await sleep();
-		expect(renderCount).toBe(2);
+		expect(runCount).toBe(2);
 		element.remove();
 	});
 
@@ -128,9 +135,11 @@ describe("what an attribute write reaches", () => {
 			tag,
 			component(
 				function* ({ host }) {
-					yield () => html`<p>${host.getAttribute("label") ?? "none"}</p>`;
+					yield function* () {
+						yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
+					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -144,10 +153,10 @@ describe("what an attribute write reaches", () => {
 	});
 });
 
-describe("the update window before the first renderable", () => {
+describe("the update window before the first paint", () => {
 	test("an attribute changed during a pre-yield await lands in the first paint", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 		let releaseAwait: (() => void) | null = null;
 		const gate = new Promise<void>((resolve) => {
 			releaseAwait = resolve;
@@ -156,14 +165,14 @@ describe("the update window before the first renderable", () => {
 		customElements.define(
 			tag,
 			component(
-				async function* ({ host }) {
+				function* ({ host }) {
 					yield gate;
-					yield () => {
-						renderCount++;
-						return html`<p>${host.getAttribute("label") ?? "none"}</p>`;
+					yield function* () {
+						runCount++;
+						yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
@@ -174,45 +183,45 @@ describe("the update window before the first renderable", () => {
 		releaseAwait!();
 		await sleep();
 
-		//the rendered text, not the resolved prop: a paint that computes the new value and writes
+		//the painted text, not the resolved prop: a paint that computes the new value and writes
 		//nothing would pass the weaker assertion
 		expect(element.shadowRoot?.textContent).toContain("after");
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 		element.remove();
 	});
 
-	test("an attribute changed while a first async render is pending renders once", async () => {
+	test("an attribute changed while the first run waits paints once", async () => {
 		const tag = uniqueTag();
-		let renderCalls = 0;
-		let releaseRender: (() => void) | null = null;
+		let runCount = 0;
+		let releaseFirstRun: (() => void) | null = null;
 		const gate = new Promise<void>((resolve) => {
-			releaseRender = resolve;
+			releaseFirstRun = resolve;
 		});
 
 		customElements.define(
 			tag,
 			component(
 				function* ({ host }) {
-					yield async () => {
-						renderCalls++;
+					yield function* () {
+						runCount++;
 						const label = host.getAttribute("label") ?? "none";
-						if (renderCalls === 1) await gate;
-						return html`<p>${label}</p>`;
+						if (runCount === 1) yield gate;
+						yield html`<p>${label}</p>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
 		await sleep();
-		expect(renderCalls).toBe(1);
+		expect(runCount).toBe(1);
 
 		element.setAttribute("label", "second");
 		await sleep();
-		expect(renderCalls).toBe(2);
+		expect(runCount).toBe(2);
 		expect(element.shadowRoot?.textContent).toContain("second");
 
-		releaseRender!();
+		releaseFirstRun!();
 		await sleep();
 
 		//the superseded first call's result is discarded when it settles, however late
@@ -224,68 +233,66 @@ describe("the update window before the first renderable", () => {
 describe("a component writing its own host attributes", () => {
 	test("a self-referential host binding ends in a visible error rather than hanging", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 		customElements.define(
 			tag,
 			component(
 				function* ({ host }) {
-					yield () => {
-						renderCount++;
+					yield function* () {
+						runCount++;
 						const label = host.getAttribute("label") ?? "";
-						return html`<template label="${label}!"><p>${label}</p></template>`;
+						yield html`<template label="${label}!"><p>${label}</p></template>`;
 					};
 				},
-				{ props: { label: [String, ""] } },
+				{ props: { label: prop.attribute(String, "") } },
 			),
 		);
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		const element = mount(tag);
 		await sleep(50);
 		consoleError.mockRestore();
 
-		expect(renderCount).toBeLessThan(200);
+		expect(runCount).toBeLessThan(200);
 		expect(element.shadowRoot?.querySelector("p")).toBeNull();
 		expect(element.shadowRoot?.textContent).toContain("grundlage");
 		element.remove();
 	});
 
-	test("a user write after the host bindings settle still re-renders", async () => {
+	test("a user write after the host bindings settle still triggers an update", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 		customElements.define(
 			tag,
 			component(
 				function* ({ host }) {
-					yield () => {
-						renderCount++;
-						return html`<template class="card"
+					yield function* () {
+						runCount++;
+						yield html`<template class="card"
 							><p>${host.getAttribute("label") ?? "none"}</p></template
 						>`;
 					};
 				},
-				{ props: { label: String } },
+				{ props: { label: prop.optional(prop.attribute(String)) } },
 			),
 		);
 		const element = mount(tag);
 		await sleep();
-		expect(renderCount).toBe(1);
+		expect(runCount).toBe(1);
 
 		element.setAttribute("label", "user-write");
 		await sleep();
-		expect(renderCount).toBe(2);
+		expect(runCount).toBe(2);
 		expect(element.getAttribute("class")).toBe("card");
 		element.remove();
 	});
 });
 
-//under the flag there is a real DOM, so attributeChangedCallback fires on the server too — what
+//under the flag there is a real DOM, so attributeChangedCallback fires on the server too. What
 //makes that safe is the cancel that follows the single server paint
 describe("a server run", () => {
 	test("schedules nothing from an attribute write after its one paint", async () => {
 		const tag = uniqueTag();
-		let renderCount = 0;
+		let runCount = 0;
 		const ssrGlobal = globalThis as { __grundlage_ssr__?: boolean };
 		ssrGlobal.__grundlage_ssr__ = true;
 		try {
@@ -293,21 +300,21 @@ describe("a server run", () => {
 				tag,
 				component(
 					function* ({ host }) {
-						yield () => {
-							renderCount++;
-							return html`<p>${host.getAttribute("label") ?? "none"}</p>`;
+						yield function* () {
+							runCount++;
+							yield html`<p>${host.getAttribute("label") ?? "none"}</p>`;
 						};
 					},
-					{ props: { label: String } },
+					{ props: { label: prop.optional(prop.attribute(String)) } },
 				),
 			);
 			const element = mount(tag);
 			await sleep();
-			expect(renderCount).toBe(1);
+			expect(runCount).toBe(1);
 
 			element.setAttribute("label", "after-the-paint");
 			await sleep();
-			expect(renderCount).toBe(1);
+			expect(runCount).toBe(1);
 			element.remove();
 		} finally {
 			ssrGlobal.__grundlage_ssr__ = false;
@@ -323,9 +330,9 @@ describe("a server run", () => {
 			customElements.define(
 				tag,
 				component(function* ({ host }) {
-					yield () => {
+					yield function* () {
 						host.update().then(() => (hasSettled = true));
-						return html`<p>painted</p>`;
+						yield html`<p>painted</p>`;
 					};
 				}),
 			);

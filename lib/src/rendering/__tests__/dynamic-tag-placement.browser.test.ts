@@ -1,25 +1,26 @@
 import { describe, expect, test } from "vitest";
-import { html, component, ComponentErrorEvent } from "../../index";
+import { html, component, type Template } from "../../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("dynamic tag placement", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-tag-placement-${tagId++}-${Date.now()}`;
 
-	const mountWithErrorCapture = async (renderTemplate: () => unknown) => {
+	const mountWithErrorCapture = async (buildTemplate: () => Template) => {
 		const tag = uniqueTag();
 		customElements.define(
 			tag,
 			component(function* () {
-				yield renderTemplate;
+				yield function* () {
+					yield buildTemplate();
+				};
 			}),
 		);
 		const element = document.createElement(tag);
 		const errors: Array<unknown> = [];
 		element.addEventListener("grundlage-error", (event) => {
-			errors.push((event as ComponentErrorEvent).error);
+			errors.push(event.error);
 			event.preventDefault();
 		});
 		document.body.appendChild(element);
@@ -47,21 +48,17 @@ describe("dynamic tag placement", () => {
 		);
 
 		expect(errors).toHaveLength(1);
-		expect(String(errors[0])).toMatch(
-			/inside <tbody> was moved by the HTML parser/,
-		);
+		expect(String(errors[0])).toMatch(/inside <tbody> was moved by the HTML parser/);
 		expect(shadowMarkup).not.toContain("<table>");
 	});
 
-	test("a dynamic tag in a position the parser accepts renders", async () => {
+	test("a dynamic tag in a position the parser accepts paints", async () => {
 		const tag = "li";
 		const { shadowMarkup, errors } = await mountWithErrorCapture(
 			() => html`<ul><${tag}>a</${tag}></ul>`,
 		);
 
 		expect(errors).toEqual([]);
-		expect(shadowMarkup.replace(/<!--[\s\S]*?-->/g, "")).toBe(
-			"<ul><li>a</li></ul>",
-		);
+		expect(shadowMarkup.replace(/<!--[\s\S]*?-->/g, "")).toBe("<ul><li>a</li></ul>");
 	});
 });

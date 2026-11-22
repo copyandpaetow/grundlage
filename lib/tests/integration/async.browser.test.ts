@@ -1,10 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
-import { html, component } from "../../src/index";
+import { awaited, html, component } from "../../src/index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
-describe("async generator components", () => {
+describe("components that yield promises", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-async-${tagId++}-${Date.now()}`;
 
@@ -18,11 +17,13 @@ describe("async generator components", () => {
 		element.remove();
 	};
 
-	test("mounts and renders from an async generator", async () => {
+	test("mounts and paints", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = component(async function* () {
-			yield () => html`<p>async hello</p>`;
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<p>async hello</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -36,12 +37,14 @@ describe("async generator components", () => {
 		cleanup(element);
 	});
 
-	test("update() re-renders with new state", async () => {
+	test("update() paints the new state", async () => {
 		const tag = uniqueTag();
 		let count = 0;
 
-		const Counter = component(async function* () {
-			yield () => html`<span>${count}</span>`;
+		const Counter = component(function* () {
+			yield function* () {
+				yield html`<span>${count}</span>`;
+			};
 		});
 
 		customElements.define(tag, Counter);
@@ -59,18 +62,20 @@ describe("async generator components", () => {
 		cleanup(element);
 	});
 
-	test("yields a promise to await async work before rendering", async () => {
+	test("yields a promise to await async work before painting", async () => {
 		const tag = uniqueTag();
 		let data = "loading";
 
-		const MyElement = component(async function* () {
+		const MyElement = component(function* () {
 			yield new Promise<void>((resolve) => {
 				setTimeout(() => {
 					data = "loaded";
 					resolve();
 				}, 10);
 			});
-			yield () => html`<p>${data}</p>`;
+			yield function* () {
+				yield html`<p>${data}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -89,8 +94,10 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		let cleaned = false;
 
-		const MyElement = component(async function* () {
-			yield () => html`<p>temp</p>`;
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<p>temp</p>`;
+			};
 			return () => {
 				cleaned = true;
 			};
@@ -106,12 +113,16 @@ describe("async generator components", () => {
 		expect(cleaned).toBe(true);
 	});
 
-	test("replaces multiple render functions in sequence", async () => {
+	test("replaces multiple update generators in sequence", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = component(async function* () {
-			yield () => html`<p>first</p>`;
-			yield () => html`<p>second</p>`;
+		const MyElement = component(function* () {
+			yield function* () {
+				yield html`<p>first</p>`;
+			};
+			yield function* () {
+				yield html`<p>second</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -127,7 +138,7 @@ describe("async generator components", () => {
 		const tag = uniqueTag();
 		const order: string[] = [];
 
-		const MyElement = component(async function* () {
+		const MyElement = component(function* () {
 			yield new Promise<void>((resolve) => {
 				setTimeout(() => {
 					order.push("first");
@@ -140,7 +151,9 @@ describe("async generator components", () => {
 					resolve();
 				}, 10);
 			});
-			yield () => html`<p>${order.join(",")}</p>`;
+			yield function* () {
+				yield html`<p>${order.join(",")}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -148,17 +161,15 @@ describe("async generator components", () => {
 		await sleep(100);
 
 		expect(order).toEqual(["first", "second"]);
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"first,second",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("first,second");
 
 		cleanup(element);
 	});
 
-	test("yields a static HTMLTemplate from async generator", async () => {
+	test("yields a static template", async () => {
 		const tag = uniqueTag();
 
-		const MyElement = component(async function* () {
+		const MyElement = component(function* () {
 			yield html`<p>async static</p>`;
 		});
 
@@ -166,53 +177,51 @@ describe("async generator components", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"async static",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe("async static");
 
 		cleanup(element);
 	});
 
-	test("yields promise then render function", async () => {
+	test("yields a promise then an update generator", async () => {
 		const tag = uniqueTag();
 		let data = "loading";
 
-		const MyElement = component(async function* () {
+		const MyElement = component(function* () {
 			yield new Promise<void>((resolve) => {
 				setTimeout(() => {
 					data = "ready";
 					resolve();
 				}, 10);
 			});
-			yield () => html`<p>${data}</p>`;
+			yield function* () {
+				yield html`<p>${data}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep(50);
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"ready",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("ready");
 
 		data = "updated";
 		await element.update();
 		await sleep();
 
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain(
-			"updated",
-		);
+		expect(element.shadowRoot?.querySelector("p")?.textContent).toContain("updated");
 
 		cleanup(element);
 	});
 
-	test("async generator receives element as argument", async () => {
+	test("the body receives the host", async () => {
 		const tag = uniqueTag();
 		let receivedElement: HTMLElement | null = null;
 
-		const MyElement = component(async function* ({ host: el }) {
+		const MyElement = component(function* ({ host: el }) {
 			receivedElement = el;
-			yield () => html`<p>check</p>`;
+			yield function* () {
+				yield html`<p>check</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -224,13 +233,15 @@ describe("async generator components", () => {
 		cleanup(element);
 	});
 
-	test("async cleanup runs on disconnect", async () => {
+	test("the cleanup after a yielded promise runs on disconnect", async () => {
 		const tag = uniqueTag();
 		const cleanupOrder: string[] = [];
 
-		const MyElement = component(async function* () {
+		const MyElement = component(function* () {
 			yield new Promise<void>((resolve) => setTimeout(resolve, 10));
-			yield () => html`<p>content</p>`;
+			yield function* () {
+				yield html`<p>content</p>`;
+			};
 			return () => {
 				cleanupOrder.push("cleaned");
 			};
@@ -263,20 +274,19 @@ describe("error handling", () => {
 		element.remove();
 	};
 
-	//a rejected step bypasses the generator entirely and routes straight to the fatal display, so
-	//unlike a resolved one it is not neutralized by the cancelled generator's return()
-	test("an async step rejecting after disconnect paints nothing and stays silent", async () => {
+	test("a yielded promise rejecting after disconnect paints nothing and stays silent", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		customElements.define(
 			tag,
-			component(async function* () {
-				yield () => html`<p>first</p>`;
-				await sleep(40);
-				throw new Error("async-step-rejected");
+			component(function* () {
+				yield function* () {
+					yield html`<p>first</p>`;
+				};
+				yield sleep(40).then(() => {
+					throw new Error("yielded-promise-rejected");
+				});
 			}),
 		);
 		const element = mount(tag);
@@ -291,15 +301,13 @@ describe("error handling", () => {
 		consoleError.mockRestore();
 	});
 
-	test("sync generator: render function error is shown in shadow DOM", async () => {
+	test("sync generator: update generator error is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
-			yield () => {
-				throw new Error("sync render error");
+			yield function* () {
+				throw new Error("sync update generator error");
 			};
 		});
 
@@ -307,63 +315,20 @@ describe("error handling", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.textContent).toContain("sync render error");
+		expect(element.shadowRoot?.textContent).toContain("sync update generator error");
 		consoleError.mockRestore();
 		cleanup(element);
 	});
 
-	test("async generator: render function error is shown in shadow DOM", async () => {
+	test("sync generator: error in second yield is shown after the first paint", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
-
-		const MyElement = component(async function* () {
-			yield () => {
-				throw new Error("async render error");
-			};
-		});
-
-		customElements.define(tag, MyElement);
-		const element = mount(tag);
-		await sleep();
-
-		expect(element.shadowRoot?.textContent).toContain("async render error");
-		consoleError.mockRestore();
-		cleanup(element);
-	});
-
-	test("sync generator: error in second yield is shown after first renders", async () => {
-		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
-			yield () => html`<p>works</p>`;
-			yield () => {
-				throw new Error("second yield error");
+			yield function* () {
+				yield html`<p>works</p>`;
 			};
-		});
-
-		customElements.define(tag, MyElement);
-		const element = mount(tag);
-		await sleep();
-
-		expect(element.shadowRoot?.textContent).toContain("second yield error");
-		consoleError.mockRestore();
-		cleanup(element);
-	});
-
-	test("async generator: error in second yield is shown after first renders", async () => {
-		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
-
-		const MyElement = component(async function* () {
-			yield () => html`<p>works</p>`;
-			yield () => {
+			yield function* () {
 				throw new Error("second yield error");
 			};
 		});
@@ -379,15 +344,13 @@ describe("error handling", () => {
 
 	test("error in update() is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let shouldThrow = false;
 
 		const MyElement = component(function* () {
-			yield () => {
+			yield function* () {
 				if (shouldThrow) throw new Error("update error");
-				return html`<p>ok</p>`;
+				yield html`<p>ok</p>`;
 			};
 		});
 
@@ -408,9 +371,7 @@ describe("error handling", () => {
 
 	test("rejected yielded promise is shown in shadow DOM", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
 			yield Promise.reject(new Error("promise rejection"));
@@ -437,7 +398,9 @@ describe("error handling", () => {
 			} catch {
 				caught = true;
 			}
-			yield () => html`<p>recovered</p>`;
+			yield function* () {
+				yield html`<p>recovered</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -453,12 +416,10 @@ describe("error handling", () => {
 
 	test("error stops further updates", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
-			yield () => {
+			yield function* () {
 				throw new Error("fatal");
 			};
 		});
@@ -469,7 +430,7 @@ describe("error handling", () => {
 
 		expect(element.shadowRoot?.textContent).toContain("fatal");
 
-		//further updates should be no-ops since #render was nulled
+		//further updates should be no-ops since the fatal error stopped the runner
 		await element.update();
 		await sleep();
 
@@ -478,13 +439,13 @@ describe("error handling", () => {
 		cleanup(element);
 	});
 
-	test("an async render function renders after its microtask", async () => {
+	test("an update generator that yields a promise paints once it settles", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield async () => {
-				await sleep();
-				return html`<p>awaited</p>`;
+			yield function* () {
+				yield sleep();
+				yield html`<p>awaited</p>`;
 			};
 		});
 
@@ -496,15 +457,15 @@ describe("error handling", () => {
 		cleanup(element);
 	});
 
-	test("an async render function re-fires on update() instead of painting its promise", async () => {
+	test("an update generator waiting on a promise re-runs on update()", async () => {
 		const tag = uniqueTag();
-		let renders = 0;
+		let runs = 0;
 
 		const MyElement = component(function* () {
-			yield async () => {
-				renders++;
-				await sleep();
-				return html`<p>pass ${renders}</p>`;
+			yield function* () {
+				runs++;
+				yield sleep();
+				yield html`<p>pass ${runs}</p>`;
 			};
 		});
 
@@ -516,21 +477,20 @@ describe("error handling", () => {
 		await element.update();
 		await sleep();
 
-		expect(renders).toBe(2);
+		expect(runs).toBe(2);
 		expect(element.shadowRoot?.textContent).toContain("pass 2");
 		cleanup(element);
 	});
 
-	test("a rejected render promise is fatal and logs one console error", async () => {
+	test("a promise rejected in an update generator the body cannot catch is fatal and logs one console error", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const MyElement = component(function* () {
-			yield async () => {
-				await sleep();
-				throw new Error("render-rejected");
+			yield function* () {
+				yield sleep().then(() => {
+					throw new Error("run-rejected");
+				});
 			};
 		});
 
@@ -538,41 +498,19 @@ describe("error handling", () => {
 		const element = mount(tag);
 		await sleep();
 
-		expect(element.shadowRoot?.textContent).toContain("render-rejected");
+		expect(element.shadowRoot?.textContent).toContain("run-rejected");
 		expect(consoleError).toHaveBeenCalledTimes(1);
 		consoleError.mockRestore();
 		cleanup(element);
 	});
 
-	test("an async render function returning a generator function installs it", async () => {
+	test("disconnecting before an update generator's promise settles paints nothing", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield async () => {
-				await sleep();
-				return function* body() {
-					yield html`<p>installed-late</p>`;
-				};
-			};
-		});
-
-		customElements.define(tag, MyElement);
-		const element = mount(tag);
-		await sleep();
-
-		expect(element.shadowRoot?.querySelector("p")?.textContent).toBe(
-			"installed-late",
-		);
-		cleanup(element);
-	});
-
-	test("disconnecting before the render promise settles paints nothing", async () => {
-		const tag = uniqueTag();
-
-		const MyElement = component(function* () {
-			yield async () => {
-				await sleep(20);
-				return html`<p>too-late</p>`;
+			yield function* () {
+				yield sleep(20);
+				yield html`<p>too-late</p>`;
 			};
 		});
 
@@ -583,30 +521,9 @@ describe("error handling", () => {
 
 		expect(element.shadowRoot?.textContent).not.toContain("too-late");
 	});
-
-	test("a render function with a block body and no return warns about the missing return", async () => {
-		const tag = uniqueTag();
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-		const MyElement = component(function* () {
-			yield () => {
-				html`<p>forgotten</p>`;
-			};
-		});
-
-		customElements.define(tag, MyElement);
-		const element = mount(tag);
-		await sleep();
-
-		expect(warnSpy).toHaveBeenCalledTimes(1);
-		expect(String(warnSpy.mock.calls[0][0])).toContain("undefined");
-		expect(element.shadowRoot?.querySelector("p")).toBeNull();
-		warnSpy.mockRestore();
-		cleanup(element);
-	});
 });
 
-describe("a superseded render promise", () => {
+describe("a superseded update generator run", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-superseded-${tagId++}-${Date.now()}`;
 
@@ -625,10 +542,10 @@ describe("a superseded render promise", () => {
 		let calls = 0;
 
 		const MyElement = component(function* () {
-			yield async () => {
+			yield function* () {
 				const mine = ++calls;
-				await sleep(mine === 1 ? 40 : 0);
-				return html`<p>call ${mine}</p>`;
+				yield sleep(mine === 1 ? 40 : 0);
+				yield html`<p>call ${mine}</p>`;
 			};
 		});
 
@@ -649,19 +566,18 @@ describe("a superseded render promise", () => {
 
 	test("does not fail the component when it rejects after a newer call", async () => {
 		const tag = uniqueTag();
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => {});
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 		let calls = 0;
 
 		const MyElement = component(function* () {
-			yield async () => {
+			yield function* () {
 				const mine = ++calls;
 				if (mine === 1) {
-					await sleep(40);
-					throw new Error("superseded-rejection");
+					yield sleep(40).then(() => {
+						throw new Error("superseded-rejection");
+					});
 				}
-				return html`<p>call ${mine}</p>`;
+				yield html`<p>call ${mine}</p>`;
 			};
 		});
 
@@ -673,27 +589,23 @@ describe("a superseded render promise", () => {
 		expect(element.shadowRoot?.textContent).toContain("call 2");
 
 		await sleep(60);
-		//the stale rejection reaches a superseded render position: not fatal, not displayed
+		//the stale rejection reaches a superseded run: not fatal, not displayed
 		expect(element.shadowRoot?.textContent).toContain("call 2");
-		expect(element.shadowRoot?.textContent).not.toContain(
-			"superseded-rejection",
-		);
+		expect(element.shadowRoot?.textContent).not.toContain("superseded-rejection");
 		expect(consoleError).not.toHaveBeenCalled();
 		consoleError.mockRestore();
 		cleanup(element);
 	});
 
 	test("await update() still resolves when dropping it leaves nothing else to", async () => {
-		//the paint that used to resolve this promise was the stale one. with it dropped, the
-		//outer's own COMPLETED has to resolve — it painted while DRIVING, so PAINT's guard did not
 		const tag = uniqueTag();
 		let calls = 0;
 
 		const MyElement = component(function* () {
-			yield async () => {
+			yield function* () {
 				const mine = ++calls;
-				await sleep(mine === 1 ? 40 : 0);
-				return html`<p>call ${mine}</p>`;
+				yield sleep(mine === 1 ? 40 : 0);
+				yield html`<p>call ${mine}</p>`;
 			};
 		});
 
@@ -714,23 +626,27 @@ describe("a superseded render promise", () => {
 		const gate = new Promise<string>((resolve) => {
 			release = resolve;
 		});
-		let renders = 0;
+		let runs = 0;
 		let resumed = false;
 
 		const MyElement = component(function* () {
-			yield () => html`<p>render ${++renders}</p>`;
+			yield function* () {
+				yield html`<p>run ${++runs}</p>`;
+			};
 			const label = yield gate;
 			resumed = true;
-			yield () => html`<p>${label}</p>`;
+			yield function* () {
+				yield html`<p>${label}</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
 		const element = mount(tag) as InstanceType<typeof MyElement>;
 		await sleep();
-		expect(renders).toBe(1);
+		expect(runs).toBe(1);
 
-		await element.update(); //bumps renderCallGeneration past the pending yielded promise
-		expect(renders).toBe(2);
+		await element.update(); //re-runs the update generator while the body stays parked at its yielded promise
+		expect(runs).toBe(2);
 		expect(resumed).toBe(false);
 
 		release("resumed");
@@ -738,5 +654,63 @@ describe("a superseded render promise", () => {
 		expect(resumed).toBe(true);
 		expect(element.shadowRoot?.textContent).toContain("resumed");
 		cleanup(element);
+	});
+});
+
+describe("yield* awaited(promise)", () => {
+	let tagId = 0;
+	const mountComponent = (generator: Parameters<typeof component>[0]) => {
+		const tag = `test-awaited-${tagId++}-${Date.now()}`;
+		customElements.define(tag, component(generator));
+		const element = document.createElement(tag);
+		document.body.appendChild(element);
+		return element;
+	};
+
+	test("evaluates to the resolved value, in the body and in an update generator", async () => {
+		const element = mountComponent(function* () {
+			const greeting = yield* awaited(Promise.resolve("hello"));
+			yield function* view() {
+				const name = yield* awaited(sleep().then(() => "world"));
+				yield html`<p>${greeting} ${name}</p>`;
+			};
+		});
+		await sleep(10);
+		expect(element.shadowRoot?.textContent).toBe("hello world");
+		element.remove();
+	});
+
+	test("a rejection throws at the yield*, where a try/catch takes it", async () => {
+		const element = mountComponent(function* () {
+			try {
+				yield* awaited(Promise.reject(new Error("offline")));
+			} catch (error) {
+				yield html`<p>${(error as Error).message}</p>`;
+			}
+		});
+		await sleep(10);
+		expect(element.shadowRoot?.textContent).toBe("offline");
+		element.remove();
+	});
+
+	test("an update while it waits starts over, so the superseded value never lands", async () => {
+		const pending: Array<PromiseWithResolvers<string>> = [];
+		const element = mountComponent(function* () {
+			yield function* view() {
+				const waited = Promise.withResolvers<string>();
+				pending.push(waited);
+				const value = yield* awaited(waited.promise);
+				yield html`<p>${value}</p>`;
+			};
+		}) as HTMLElement & { update(): Promise<void> };
+		await sleep();
+		const updated = element.update();
+		await sleep();
+		pending[0].resolve("superseded");
+		pending[1].resolve("newest");
+		await updated;
+		await sleep();
+		expect(element.shadowRoot?.textContent).toBe("newest");
+		element.remove();
 	});
 });

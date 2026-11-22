@@ -7,7 +7,7 @@
     What this can resolve, from an A/A run of the equivalent playwright rig
     against identical code: best-of-N work to about 8%, retained heap to about
     23%. Cold and compile cost are not resolvable in a warm page at all and are
-    deliberately absent — they are read from the parser's gzip size instead.
+    absent on purpose: they are read from the parser's gzip size instead.
 */
 
 import { getParsedTemplate } from "../../lib/src/parser/html";
@@ -67,22 +67,19 @@ export interface RunOptions {
 const median = (samples: ReadonlyArray<number>): number => {
 	const sorted = samples.slice().sort((left, right) => left - right);
 	const middle = sorted.length >> 1;
-	return sorted.length % 2 === 0
-		? (sorted[middle - 1] + sorted[middle]) / 2
-		: sorted[middle];
+	return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 };
 
 const collectGarbage = (): void => {
 	const collect = (globalThis as { gc?: () => void }).gc;
 	if (!collect) return;
-	// V8 lags on recent garbage; one call is routinely not enough.
+	//V8 lags on recent garbage; one call is routinely not enough.
 	collect();
 	collect();
 	collect();
 };
 
-const yieldToBrowser = (): Promise<void> =>
-	new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToBrowser = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 /*
     The whole measurement is void if the parse cache ever hits, so this proves
@@ -94,15 +91,23 @@ const verifyCacheStaysCold = (corpus: GeneratedCorpus): boolean => {
 	return getParsedTemplate(first) !== getParsedTemplate(second);
 };
 
-const findVoidReasons = (
-	cacheStayedCold: boolean,
-	bestPassMs: number,
-	medianPassMs: number,
-): Array<VoidReason> => {
+//best and median are both milliseconds and easy to swap, so they go by name
+interface Readings {
+	cacheStayedCold: boolean;
+	bestPassMs: number;
+	medianPassMs: number;
+}
+
+const findVoidReasons = ({
+	cacheStayedCold,
+	bestPassMs,
+	medianPassMs,
+}: Readings): Array<VoidReason> => {
 	const reasons: Array<VoidReason> = [];
 	if (!cacheStayedCold) reasons.push("cache hit");
-	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO)
+	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO) {
 		reasons.push("unstable timing");
+	}
 	return reasons;
 };
 
@@ -111,11 +116,9 @@ const findVoidReasons = (
     answered out of the same coarse bucket twice, which is what a run without
     --enable-precise-memory-info looks like; negative means a collection landed
     between the two readings. Either way there is no reading, and that is a lost
-    column rather than a lost row — the pass times are untouched by it.
+    column rather than a lost row: the pass times are untouched by it.
 */
-const rejectImpossibleReading = (
-	retainedBytesPerTemplate: number | null,
-): number | null =>
+const rejectImpossibleReading = (retainedBytesPerTemplate: number | null): number | null =>
 	retainedBytesPerTemplate !== null && retainedBytesPerTemplate > 0
 		? retainedBytesPerTemplate
 		: null;
@@ -128,9 +131,7 @@ const parseAll = (arrays: ReadonlyArray<TemplateStringsArray>): void => {
 	}
 };
 
-const measureRetainedBytesPerTemplate = (
-	corpus: GeneratedCorpus,
-): number | null => {
+const measureRetainedBytesPerTemplate = (corpus: GeneratedCorpus): number | null => {
 	collectGarbage();
 	const before = readHeapMb();
 	if (before === null) return null;
@@ -143,7 +144,7 @@ const measureRetainedBytesPerTemplate = (
 
 	collectGarbage();
 	const after = readHeapMb();
-	// `held` has to outlive the reading or the thing being measured is gone.
+	//`held` has to outlive the reading or the thing being measured is gone.
 	const heldCount = held.length;
 	held.length = 0;
 	if (after === null || heldCount === 0) return null;
@@ -187,24 +188,21 @@ export const runShape = async (
 		group: shape.group,
 		holeKind: shape.holeKind,
 		templateCount: corpus.templates.length,
-		charactersPerTemplate: Math.round(
-			corpus.totalCharacters / corpus.templates.length,
-		),
+		charactersPerTemplate: Math.round(corpus.totalCharacters / corpus.templates.length),
 		totalCharacters: corpus.totalCharacters,
 		totalHoles: corpus.totalHoles,
 		repeatsPerPass,
 		bestPassMs,
 		medianPassMs,
 		nanosecondsPerCharacter: (bestPassMs * 1_000_000) / charactersPerPass,
-		nanosecondsPerHole:
-			holesPerPass === 0 ? null : (bestPassMs * 1_000_000) / holesPerPass,
+		nanosecondsPerHole: holesPerPass === 0 ? null : (bestPassMs * 1_000_000) / holesPerPass,
 		microsecondsPerTemplate: (bestPassMs * 1000) / templatesPerPass,
 		retainedBytesPerTemplate: rejectImpossibleReading(retainedBytesPerTemplate),
-		voidReasons: findVoidReasons(cacheStayedCold, bestPassMs, medianPassMs),
+		voidReasons: findVoidReasons({ cacheStayedCold, bestPassMs, medianPassMs }),
 	};
 };
 
-// --- derived: the two numbers the hole-density series exists to produce ---
+//--- derived: the two numbers the hole-density series exists to produce ---
 
 export interface HoleCostFit {
 	series: string;
@@ -226,22 +224,14 @@ export const fitHoleCost = (
 	series: string,
 	seriesResults: ReadonlyArray<ShapeResult>,
 ): HoleCostFit | null => {
-	const results = seriesResults.filter(
-		(result) => result.voidReasons.length === 0,
-	);
+	const results = seriesResults.filter((result) => result.voidReasons.length === 0);
 	if (results.length < 2) return null;
 
-	const holeCounts = results.map(
-		(result) => result.totalHoles / result.templateCount,
-	);
-	const nanosecondsPerTemplate = results.map(
-		(result) => result.microsecondsPerTemplate * 1000,
-	);
-	const meanHoles =
-		holeCounts.reduce((sum, value) => sum + value, 0) / holeCounts.length;
+	const holeCounts = results.map((result) => result.totalHoles / result.templateCount);
+	const nanosecondsPerTemplate = results.map((result) => result.microsecondsPerTemplate * 1000);
+	const meanHoles = holeCounts.reduce((sum, value) => sum + value, 0) / holeCounts.length;
 	const meanNanoseconds =
-		nanosecondsPerTemplate.reduce((sum, value) => sum + value, 0) /
-		nanosecondsPerTemplate.length;
+		nanosecondsPerTemplate.reduce((sum, value) => sum + value, 0) / nanosecondsPerTemplate.length;
 
 	let covariance = 0;
 	let variance = 0;

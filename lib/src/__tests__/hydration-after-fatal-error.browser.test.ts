@@ -2,8 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { html, component } from "../index";
 
 const canRun =
-	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe ===
-	"function";
+	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe === "function";
 
 let tagId = 0;
 const uniqueTag = () => `fatal-then-hydrate-${tagId++}-${Date.now()}`;
@@ -30,26 +29,26 @@ describe("a fatal error before the first paint ends the pending hydration", () =
 			const tag = uniqueTag();
 			const host = prerenderOpen(tag, `<p>hi</p>`);
 
-			let renderCallCount = 0;
+			let runCount = 0;
 			customElements.define(
 				tag,
 				component(function* () {
-					renderCallCount++;
-					if (renderCallCount === 1) throw new Error("first render fails");
-					yield () => html`<p>${"recovered"}</p>`;
+					runCount++;
+					if (runCount === 1) throw new Error("first run fails");
+					yield function* () {
+						yield html`<p>${"recovered"}</p>`;
+					};
 				}),
 			);
 			customElements.upgrade(host);
-			expect(host.shadowRoot!.textContent).toContain("first render fails");
+			expect(host.shadowRoot!.textContent).toContain("first run fails");
 
 			//removal and re-insertion in one task is the way back from a fatal error
 			const parent = host.parentElement!;
 			host.remove();
 			parent.appendChild(host);
 
-			expect(host.shadowRoot!.querySelector("p")?.textContent).toBe(
-				"recovered",
-			);
+			expect(host.shadowRoot!.querySelector("p")?.textContent).toBe("recovered");
 			const hydrationWarnings = warn.mock.calls.filter(([message]) =>
 				String(message).includes("hydration mismatch"),
 			);

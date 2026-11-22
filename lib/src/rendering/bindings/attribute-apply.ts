@@ -1,16 +1,34 @@
-import { MARKUP } from "../../parser/characters";
-import { warnDuringDevelopment } from "../../utils/diagnostics";
+import { PROPERTY_PROP_NAMES } from "../constants";
+import * as MARKUP from "../../parser/markup";
+import { libraryMessage, warnDuringDevelopment } from "../../utils/diagnostics";
 import { isStringable } from "../../utils/guards";
 import { ValueOf } from "../../utils/types";
-import { ATTRIBUTE_MODE } from "../constants";
+import { DECLARED_PROP_NAMES } from "../constants";
+import * as ATTRIBUTE_MODE from "../attribute-mode";
 import { markDeferredHydration } from "../defer-hydration";
 import { triggerComponentUpdate } from "../dom";
 
 const attributeModeOf = (value: unknown): ValueOf<typeof ATTRIBUTE_MODE> => {
-	if (value === null || value === undefined || value === false)
-		return ATTRIBUTE_MODE.ABSENT;
+	if (value === null || value === undefined || value === false) return ATTRIBUTE_MODE.ABSENT;
 	if (isStringable(value)) return ATTRIBUTE_MODE.ATTRIBUTE;
 	return ATTRIBUTE_MODE.PROPERTY;
+};
+
+//the platform decides which names are valid, and its error does not say which binding composed one
+export const namedBindingErrorOf = (error: unknown, message: string): unknown =>
+	error instanceof DOMException && error.name === "InvalidCharacterError"
+		? new Error(libraryMessage(message), { cause: error })
+		: error;
+
+export const applyAttributeText = (element: Element, name: string, text: string): void => {
+	try {
+		element.setAttribute(name, text);
+	} catch (error) {
+		throw namedBindingErrorOf(
+			error,
+			`a binding composed the attribute name "${name}", which the browser refuses. Bind a name without whitespace, quotes or any of < > / =.`,
+		);
+	}
 };
 
 const NO_DECLARED_PROP_NAMES: ReadonlySet<string> = new Set();
@@ -20,23 +38,24 @@ const NO_DECLARED_PROP_NAMES: ReadonlySet<string> = new Set();
 const declaredPropNamesByLocalName = new Map<string, ReadonlySet<string>>();
 
 export const isDeclaredPropName = (element: Element, name: string): boolean => {
-	const localName = element.localName;
-	if (!localName.includes("-")) return false;
-	const cached = declaredPropNamesByLocalName.get(localName);
+	if (!element.localName.includes("-")) return false;
+	const cached = declaredPropNamesByLocalName.get(element.localName);
 	if (cached !== undefined) return cached.has(name);
-	const definition = customElements.get(localName) as
-		| (CustomElementConstructor & { declaredPropNames?: ReadonlySet<string> })
+	//the registry types a definition as a bare constructor; a component class adds the static
+	//oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- the cast adds the static read below
+	const definition = customElements.get(element.localName) as
+		| (CustomElementConstructor & {
+				[DECLARED_PROP_NAMES]?: ReadonlySet<string>;
+		  })
 		| undefined;
 	if (definition === undefined) return false;
-	const declaredPropNames =
-		definition.declaredPropNames ?? NO_DECLARED_PROP_NAMES;
-	declaredPropNamesByLocalName.set(localName, declaredPropNames);
+	const declaredPropNames = definition[DECLARED_PROP_NAMES] ?? NO_DECLARED_PROP_NAMES;
+	declaredPropNamesByLocalName.set(element.localName, declaredPropNames);
 	return declaredPropNames.has(name);
 };
 
 export const isAwaitingDefinition = (element: Element): boolean =>
-	element.localName.includes("-") &&
-	customElements.get(element.localName) === undefined;
+	element.localName.includes("-") && customElements.get(element.localName) === undefined;
 
 const NO_EVENT_NAME: unique symbol = Symbol("not an event");
 
@@ -48,30 +67,25 @@ const eventNameOf = (
 	value: unknown,
 ): string | typeof NO_EVENT_NAME => {
 	if (!key.startsWith(MARKUP.EVENT_PREFIX)) return NO_EVENT_NAME;
-	if (key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX))
+	if (key.startsWith(MARKUP.CUSTOM_EVENT_PREFIX)) {
 		return key.slice(MARKUP.CUSTOM_EVENT_PREFIX.length).toLowerCase();
+	}
 	const lowercaseKey = key.toLowerCase();
-	if (lowercaseKey in element)
-		return lowercaseKey.slice(MARKUP.EVENT_PREFIX.length);
-	if (typeof value === "function")
+	if (lowercaseKey in element) return lowercaseKey.slice(MARKUP.EVENT_PREFIX.length);
+	if (typeof value === "function") {
 		warnDuringDevelopment(
-			`"${key}" looks like an event handler but "${lowercaseKey}" is not a property of <${element.localName}> — the function was assigned as a dead property and will never fire. Check the spelling, or use "on-${key.slice(MARKUP.EVENT_PREFIX.length).toLowerCase()}" to bind it as a custom event.`,
+			`"${key}" looks like an event handler, but <${element.localName}> has no "${lowercaseKey}" property, so the function was assigned as a property that never fires. Check the spelling, or use "on-${key.slice(MARKUP.EVENT_PREFIX.length).toLowerCase()}" to bind it as a custom event.`,
 		);
+	}
 	return NO_EVENT_NAME;
 };
 
 //once the user has interacted, the attribute is only the default (`defaultValue`, `defaultChecked`,
 //`defaultSelected`) and the property is what is shown; elsewhere these names reflect, and attributes do
-export const isLiveStatePropertyOf = (
-	element: Element,
-	key: string,
-): boolean => {
+export const isLiveStatePropertyOf = (element: Element, key: string): boolean => {
 	switch (key) {
 		case "value":
-			return (
-				element instanceof HTMLInputElement ||
-				element instanceof HTMLTextAreaElement
-			);
+			return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
 		case "checked":
 		case "indeterminate":
 			return element instanceof HTMLInputElement;
@@ -84,35 +98,14 @@ export const isLiveStatePropertyOf = (
 
 //absence empties what is shown and leaves the default alone, the way removing the attribute does
 //before the user interacts
-const emptyLiveStateOf = (key: string): string | boolean =>
-	key === "value" ? "" : false;
+const emptyLiveStateOf = (key: string): string | boolean => (key === "value" ? "" : false);
 
-export const applyLiveState = (
-	element: Element,
-	key: string,
-	value: unknown,
-): void => {
+export const applyLiveState = (element: Element, key: string, value: unknown): void => {
 	const isAbsent = value === null || value === undefined || value === false;
 	const shown = isAbsent ? emptyLiveStateOf(key) : value;
 	//Element has no index signature; the live state is read and written by its IDL name
 	const record = element as unknown as Record<string, unknown>;
 	if (record[key] !== shown) record[key] = shown;
-};
-
-//a textarea's default is its text, not an attribute: the markup a server sends carries it there too
-export const applyLiveStateDefault = (
-	element: Element,
-	key: string,
-	value: unknown,
-): void => {
-	if (!(element instanceof HTMLTextAreaElement)) {
-		applyAttributeValue(element, key, value);
-		return;
-	}
-	const isAbsent = value === null || value === undefined || value === false;
-	if (isAbsent) return;
-	const text = String(value);
-	if (element.defaultValue !== text) element.defaultValue = text;
 };
 
 //Element has no index signature; props are read and written by their runtime name
@@ -135,16 +128,21 @@ export const applyAttributeValue = (
 	//add a listener for "ce" instead of being assigned
 	if (isDeclaredPropName(element, key)) {
 		(element as unknown as Record<string, unknown>)[key] = value;
-		markDeferredHydration(element, attributeMode);
+		//a property prop never reaches the server's markup, whatever its value
+		const definition = customElements.get(element.localName) as
+			| { [PROPERTY_PROP_NAMES]?: ReadonlySet<string> }
+			| undefined;
+		const isPropertyProp = definition?.[PROPERTY_PROP_NAMES]?.has(key) === true;
+		markDeferredHydration(element, isPropertyProp ? ATTRIBUTE_MODE.PROPERTY : attributeMode);
 		return;
 	}
 
 	const listenerName = eventNameOf(key, element, value);
 	if (listenerName !== NO_EVENT_NAME) {
-		if (typeof oldValue === "function")
+		if (typeof oldValue === "function") {
 			element.removeEventListener(listenerName, oldValue as EventListener);
-		if (typeof value === "function")
-			element.addEventListener(listenerName, value as EventListener);
+		}
+		if (typeof value === "function") element.addEventListener(listenerName, value as EventListener);
 		return;
 	}
 
@@ -152,18 +150,22 @@ export const applyAttributeValue = (
 		case ATTRIBUTE_MODE.ABSENT:
 			clearPropertyValue(element, key);
 			element.removeAttribute(key);
-			//until the element is defined, a missing attribute reads as absence, which `[Boolean, true]`
-			//resolves to true; the own property carries the false across the upgrade
-			const mustCarryFalseAcrossUpgrade =
-				value === false && isAwaitingDefinition(element);
-			if (mustCarryFalseAcrossUpgrade)
-				(element as unknown as Record<string, unknown>)[key] = false;
+			//until definition, a missing attribute reads as absence, which is true for
+			//`prop.attribute(Boolean, true)`; the own property carries the false across the upgrade
+			const mustCarryFalseAcrossUpgrade = value === false && isAwaitingDefinition(element);
+			if (mustCarryFalseAcrossUpgrade) (element as unknown as Record<string, unknown>)[key] = false;
 			break;
 		case ATTRIBUTE_MODE.ATTRIBUTE: {
 			clearPropertyValue(element, key);
+			//before definition nothing knows whether the prop observes an attribute, so the value also
+			//rides an own property, which upgrade claims either way; CSS still sees the attribute
+			if (isAwaitingDefinition(element)) {
+				(element as unknown as Record<string, unknown>)[key] = value;
+			}
 			const attributeValue = String(value);
-			if (element.getAttribute(key) !== attributeValue)
-				element.setAttribute(key, attributeValue);
+			if (element.getAttribute(key) !== attributeValue) {
+				applyAttributeText(element, key, attributeValue);
+			}
 			break;
 		}
 		case ATTRIBUTE_MODE.PROPERTY:
@@ -177,18 +179,61 @@ export const applyAttributeValue = (
 	}
 };
 
+//a textarea's default is its text, not an attribute: the markup a server sends carries it there too
+export const applyLiveStateDefault = (element: Element, key: string, value: unknown): void => {
+	if (!(element instanceof HTMLTextAreaElement)) {
+		applyAttributeValue(element, key, value);
+		return;
+	}
+	const isAbsent = value === null || value === undefined || value === false;
+	if (isAbsent) return;
+	//oxlint-disable-next-line typescript/no-base-to-string -- spelled like setAttribute would spell it
+	const text = String(value);
+	if (element.defaultValue !== text) element.defaultValue = text;
+};
+
+const copiedContentError = (
+	element: Element,
+	{ key, writeKind, fix }: { key: string; writeKind: string; fix: string },
+): Error =>
+	new Error(
+		libraryMessage(
+			`a <template>'s content expects attributes and text, which every copy of it keeps, not the ${writeKind} "${key}" on <${element.localName}>. ${fix}`,
+		),
+	);
+
+//checked in applyAttributeValue's order, so the message names the write it would make
+export const ensureKeptByCopies = (element: Element, key: string, value: unknown): void => {
+	if (isDeclaredPropName(element, key)) {
+		throw copiedContentError(element, {
+			key,
+			writeKind: "prop",
+			fix: "Set the prop on each copy.",
+		});
+	}
+	if (eventNameOf(key, element, value) !== NO_EVENT_NAME) {
+		throw copiedContentError(element, {
+			key,
+			writeKind: "listener",
+			fix: "Listen on the element the copies go into.",
+		});
+	}
+	if (attributeModeOf(value) === ATTRIBUTE_MODE.PROPERTY) {
+		throw copiedContentError(element, {
+			key,
+			writeKind: "property",
+			fix: "Bind text, or set the property on each copy.",
+		});
+	}
+};
+
 //a tag swap's clone keeps every attribute, so only what never was one is written again: a
 //property, a listener, a declared prop, which reflection spells out rather than preserves, or live state
-export const reapplyValueOnSwap = (
-	element: Element,
-	key: string,
-	value: unknown,
-): void => {
+export const reapplyValueOnSwap = (element: Element, key: string, value: unknown): void => {
 	if (isLiveStatePropertyOf(element, key)) {
 		applyLiveState(element, key, value);
 		return;
 	}
-	const isCarriedByClonedMarkup =
-		isStringable(value) && !isDeclaredPropName(element, key);
+	const isCarriedByClonedMarkup = isStringable(value) && !isDeclaredPropName(element, key);
 	if (!isCarriedByClonedMarkup) applyAttributeValue(element, key, value);
 };

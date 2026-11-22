@@ -1,0 +1,17 @@
+export const NULL = 1;
+export const BOOLEAN = 2;
+export const SMALL_INTEGER = 3;
+export const INTEGER = 4;
+export const FLOAT = 5;
+export const STRING = 6;
+export const BIGINT = 7;
+export const ARRAY = 8;
+export const OBJECT = 9;
+export const OBJECT_END = 10;
+export const MAP = 11;
+export const SET = 12;
+export const TEMPLATE = 13;
+export const REFERENCE = 14;
+export const ANCESTOR = 15;
+export const TRUNCATED = 16;
+export const UNDEFINED = 17;

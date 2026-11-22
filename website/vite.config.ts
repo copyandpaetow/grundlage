@@ -2,7 +2,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 //the source, not the package entry: the site's dev loop must not need the plugin built first
-import { prerenderWebcomponents } from "../prerender-plugin/index.ts";
+import { prerenderWebComponents } from "../prerender-plugin/index.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,10 +28,11 @@ export default defineConfig({
 				krausest: resolve(__dirname, "pages/krausest/index.html"),
 				ssrVsCsr: resolve(__dirname, "pages/ssr-vs-csr/index.html"),
 				cubes: resolve(__dirname, "pages/cubes/index.html"),
+				lightDom: resolve(__dirname, "pages/light-dom/index.html"),
 				parserBench: resolve(__dirname, "pages/parser-bench/index.html"),
 				renderBench: resolve(__dirname, "pages/render-bench/index.html"),
 			},
 		},
 	},
-	plugins: [prerenderWebcomponents({ include: ["src/components/**/*.ts"] })],
+	plugins: [prerenderWebComponents({ include: [] })],
 });

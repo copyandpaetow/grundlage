@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { html, component } from "../../src/index";
+import { html, component, prop } from "../../src/index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 describe("BaseComponent.setProp", () => {
 	let tagId = 0;
@@ -14,12 +13,15 @@ describe("BaseComponent.setProp", () => {
 		return element;
 	};
 
-	test("applies a string value as an attribute and triggers a re-render", async () => {
+	test("applies a string value as an attribute and triggers an update", async () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* ({ host: element }) {
-			yield () =>
-				html`<span>${element.getAttribute("data-label") ?? "none"}</span>`;
+			yield function* () {
+				yield html`<span
+					>${element.getAttribute("data-label") ?? "none"}</span
+				>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -32,9 +34,7 @@ describe("BaseComponent.setProp", () => {
 		await sleep(50);
 
 		expect(element.getAttribute("data-label")).toBe("hello");
-		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe(
-			"hello",
-		);
+		expect(element.shadowRoot?.querySelector("span")?.textContent).toBe("hello");
 
 		element.remove();
 	});
@@ -43,7 +43,9 @@ describe("BaseComponent.setProp", () => {
 		const tag = uniqueTag();
 
 		const MyElement = component(function* () {
-			yield () => html`<p>data</p>`;
+			yield function* () {
+				yield html`<p>data</p>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
@@ -63,7 +65,7 @@ describe("BaseComponent.setProp", () => {
 });
 
 describe("dynamic comment bindings", () => {
-	//multi-expression comments go through the renderComment path — a branch otherwise
+	//multi-expression comments go through the commitComment path, a branch otherwise
 	//only exercised via internal calls
 	let tagId = 0;
 	const uniqueTag = () => `test-comment-${tagId++}-${Date.now()}`;
@@ -77,26 +79,22 @@ describe("dynamic comment bindings", () => {
 		//the first dynamic comment is the list key and is stripped, so the comment
 		//under test has to sit after it
 		const MyElement = component(function* () {
-			yield () =>
-				html`<!--${key}-->
+			yield function* () {
+				yield html`<!--${key}-->
 					<div><!-- ${left} and ${right} --></div>`;
+			};
 		});
 
 		customElements.define(tag, MyElement);
-		const element = document.createElement(tag) as InstanceType<
-			typeof MyElement
-		>;
+		const element = document.createElement(tag) as InstanceType<typeof MyElement>;
 		document.body.appendChild(element);
 		await sleep();
 
 		const findDynamicComment = () => {
-			const walker = document.createTreeWalker(
-				element.shadowRoot!,
-				NodeFilter.SHOW_COMMENT,
-			);
+			const walker = document.createTreeWalker(element.shadowRoot!, NodeFilter.SHOW_COMMENT);
 			let node: Node | null;
 			while ((node = walker.nextNode())) {
-				//markers start with the "^.^" identifier — ignore them
+				//markers start with the "^.^" identifier, so they are skipped
 				if (!(node as Comment).data.startsWith("^.^")) {
 					return node as Comment;
 				}
@@ -119,23 +117,20 @@ describe("dynamic comment bindings", () => {
 
 describe("component() input validation", () => {
 	test("a plain function throws a naming error at definition time", () => {
-		expect(() => component((() => html`<p>x</p>`) as never)).toThrow(
-			/generator function/,
-		);
+		expect(() => component((() => html`<p>x</p>`) as never)).toThrow(/generator function/);
 	});
 
 	test("an async non-generator function throws at definition time", () => {
-		expect(() => component((async () => {}) as never)).toThrow(
-			/generator function/,
-		);
+		expect(() => component((async () => {}) as never)).toThrow(/generator function/);
 	});
 
 	test("a sync generator function is accepted", () => {
 		expect(() => component(function* () {})).not.toThrow();
 	});
 
-	test("an async generator function is accepted", () => {
-		expect(() => component(async function* () {})).not.toThrow();
+	test("an async generator function throws with the remedy", () => {
+		//the type layer rejects it, which is what the runtime check is for
+		expect(() => component(async function* () {} as never)).toThrow("yield each promise");
 	});
 });
 
@@ -143,47 +138,46 @@ describe("BaseComponent.setProp on a declared prop", () => {
 	let tagId = 0;
 	const uniqueTag = () => `test-set-prop-declared-${tagId++}-${Date.now()}`;
 
-	const mountWithRenderCounter = async (
+	const mountWithRunCounter = async (
 		tag: string,
-	): Promise<{ element: HTMLElement; renderCount: () => number }> => {
-		let renders = 0;
+	): Promise<{ element: HTMLElement; runCount: () => number }> => {
+		let runs = 0;
 		customElements.define(
 			tag,
 			component(
 				function* () {
-					yield () => {
-						renders++;
-						return html`<span>rendered</span>`;
+					yield function* () {
+						runs++;
+						yield html`<span>painted</span>`;
 					};
 				},
-				{ props: { label: [String, "start"] as const } },
+				{ props: { label: prop.attribute(String, "start") } },
 			),
 		);
 		const element = document.createElement(tag);
 		document.body.appendChild(element);
 		await sleep();
-		return { element, renderCount: () => renders };
+		return { element, runCount: () => runs };
 	};
 
-	test("a refused value does not re-render", async () => {
+	test("a refused value does not trigger an update", async () => {
 		const tag = uniqueTag();
-		let renders = 0;
+		let runs = 0;
 		customElements.define(
 			tag,
 			component(
 				function* () {
-					yield () => {
-						renders++;
-						return html`<span>rendered</span>`;
+					yield function* () {
+						runs++;
+						yield html`<span>painted</span>`;
 					};
 				},
 				{
 					props: {
-						evenOnly: [
-							(incoming: unknown) =>
-								Number(incoming) % 2 === 0 ? Number(incoming) : undefined,
+						evenOnly: prop.attribute(
+							(incoming: unknown) => (Number(incoming) % 2 === 0 ? Number(incoming) : undefined),
 							0,
-						] as const,
+						),
 					},
 				},
 			),
@@ -193,18 +187,18 @@ describe("BaseComponent.setProp on a declared prop", () => {
 		};
 		document.body.appendChild(element);
 		await sleep();
-		const rendersAfterMount = renders;
+		const runsAfterMount = runs;
 
 		element.setProp("evenOnly", 3);
 		await sleep(50);
 
-		expect(renders).toBe(rendersAfterMount);
+		expect(runs).toBe(runsAfterMount);
 		element.remove();
 	});
 
-	test("re-writing the same primitive does not re-render", async () => {
+	test("re-writing the same primitive does not trigger an update", async () => {
 		const tag = uniqueTag();
-		const { element, renderCount } = await mountWithRenderCounter(tag);
+		const { element, runCount } = await mountWithRunCounter(tag);
 		const setProp = (
 			element as HTMLElement & {
 				setProp: (name: string, value: unknown) => void;
@@ -213,12 +207,12 @@ describe("BaseComponent.setProp on a declared prop", () => {
 
 		setProp("label", "next");
 		await sleep(50);
-		const rendersAfterFirstWrite = renderCount();
+		const runsAfterFirstWrite = runCount();
 
 		setProp("label", "next");
 		await sleep(50);
 
-		expect(renderCount()).toBe(rendersAfterFirstWrite);
+		expect(runCount()).toBe(runsAfterFirstWrite);
 		element.remove();
 	});
 });

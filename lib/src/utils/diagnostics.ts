@@ -3,15 +3,11 @@
 declare const GRUNDLAGE_IS_DEVELOPMENT_BUILD: boolean | undefined;
 
 export const isDevelopmentBuild =
-	typeof GRUNDLAGE_IS_DEVELOPMENT_BUILD === "undefined" ||
-	GRUNDLAGE_IS_DEVELOPMENT_BUILD;
+	typeof GRUNDLAGE_IS_DEVELOPMENT_BUILD === "undefined" || GRUNDLAGE_IS_DEVELOPMENT_BUILD;
 
 export const libraryMessage = (text: string): string => `grundlage: ${text}`;
 
-export const warnDuringDevelopment = (
-	message: string,
-	detail?: unknown,
-): void => {
+export const warnDuringDevelopment = (message: string, detail?: unknown): void => {
 	if (!isDevelopmentBuild) return;
 	if (detail === undefined) console.warn(libraryMessage(message));
 	else console.warn(libraryMessage(message), detail);
@@ -29,8 +25,7 @@ export const assertDuringDevelopment: (
 	invariant: string,
 ) => asserts condition = (condition, invariant) => {
 	if (!isDevelopmentBuild) return;
-	if (!condition)
-		throw new InvariantError(libraryMessage(`invariant broken: ${invariant}`));
+	if (!condition) throw new InvariantError(libraryMessage(`invariant broken: ${invariant}`));
 };
 
 //an exception from user code that the library swallowed so teardown could continue; reportError

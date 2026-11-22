@@ -1,8 +1,8 @@
-import { html, component } from "../../../../lib/src";
+import { html, component, type Template } from "../../../../lib/src";
 import {
+	blockTransformFromAttributes,
 	formatNumber,
 	POSITION_SPECIFIC,
-	resolveBlockTransform,
 	ROTATION_SPECIFIC,
 	SIZE_SPECIFIC,
 } from "../scene-shared";
@@ -11,87 +11,62 @@ import "../wrappers/scene-ghost";
 import "../wrappers/scene-select";
 import "./scene-palette";
 import type {
+	CameraMode,
 	InspectorField,
 	InspectorState,
-	PaletteHandlers,
-	ScenePaletteElement,
+	PaletteCommand,
+	PaletteCommandEvent,
 } from "./scene-palette";
 import { type EditorState, primaryBlock } from "./context";
 import { createSelection } from "./selection";
 import { createPlacement } from "./placement";
 import { createGrouping } from "./grouping";
-import { exportScene } from "./serialization"; // scene-editor — the authoring spine, the outermost wrapper. It wraps the navigable
+import { exportScene } from "./serialization";
 
-// scene-editor — the authoring spine, the outermost wrapper. It wraps the navigable
-// scene (`<scene-editor><scene-camera><scene-world>…</scene-world></scene-camera>`) and
-// reaches DOWN to the world it wraps to author it. The editor never becomes the source
-// of truth: selection is DOM-native, and manipulation lives in the <scene-gizmo> that
-// wraps the selected block, writing the block's own attributes. The editor only does
-// selection (wrap/unwrap), placement, grouping, the palette, and serialization — and it
-// toggles the camera's mode through the camera's `mode` attribute. It is transparent:
-// the only thing it renders is the <scene-palette> chrome, anchored over the slotted
-// viewport.
-//
-// The behaviour is split across cohesive modules — selection, placement, grouping,
-// serialization, plus the shared transforms and the EditorState every subsystem acts
-// on. This file is the coordinator: it resolves the wrapped scene, builds that state,
-// wires the subsystems together, owns the palette/inspector glue, and routes the raw
-// pointer/keyboard input into them.
+//The editor is never the source of truth: selection is DOM-native and the gizmo writes
+//the block's own attributes, so the world's markup is the whole scene
 
-// Geometry that has a size of its own — everything except the group carrier, which
-// would distort its children if scaled. Used to disable the inspector's size row.
+//A scaled group would distort its children
 const SIZED_TAGS = new Set(["scene-cube", "scene-wall", "scene-ramp"]);
 
-// The inspector edits one authored triple at a time; this maps the field name to
-// its per-axis specific attributes (so editing `position` clears a stale `x`).
-const FIELD_SPECIFIC: Record<
-	InspectorField,
-	readonly [string, string, string]
-> = {
+//Editing a shorthand clears the per-axis override it would otherwise lose to.
+const FIELD_SPECIFIC: Record<InspectorField, readonly [string, string, string]> = {
 	position: POSITION_SPECIFIC,
 	rotation: ROTATION_SPECIFIC,
 	size: SIZE_SPECIFIC,
 };
 
+//One literal for both paints, so adding the palette patches the shell, not the slot
+const editorShell = (palette: Template | null) => html`
+	<style>
+		:host {
+			display: block;
+			position: relative;
+		}
+		slot {
+			display: contents;
+		}
+	</style>
+	<slot></slot>
+	${palette}
+`;
+
+//A press on the chrome is never a click into the scene behind it.
+const keepPointerOutOfScene = (event: Event): void => event.stopPropagation();
+
 customElements.define(
 	"scene-editor",
-	component(function* ({ host: element }) {
-		// The editor is transparent: it renders the palette chrome over the slotted
-		// scene. `:host` is a positioned block so the absolutely-placed palette anchors
-		// to the viewport; the slot keeps the wrapped camera/world in flow with
-		// display:contents (no extra box around the 3D scene).
-		yield html`
-			<style>
-				:host {
-					display: block;
-					position: relative;
-				}
-				slot {
-					display: contents;
-				}
-			</style>
-			<slot></slot>
-		`;
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
+	component(function* ({ host }) {
+		yield editorShell(null);
 
-		// Everything below runs only on the client — the lib stops the generator at the
-		// yield on the server, so a server render emits just the slotted scene with no
-		// editor chrome. Resolve the wrapped scene: `host` is the <scene-world> whose
-		// geometry we author; `cameraElement` is the optional navigation wrapper whose
-		// `mode` the camera button toggles (absent when editing a fixed-camera scene).
-		const world = element.querySelector("scene-world");
+		//Client only, so a server render emits the scene without editor chrome
+		const world = host.querySelector<HTMLElement>("scene-world");
 		if (world === null) return;
-		const host = world as HTMLElement;
-		const cameraElement = element.querySelector("scene-camera");
+		const cameraElement = host.querySelector("scene-camera");
 
-		// The chrome we mount in our OWN shadow, alongside the slot.
-		const palette = document.createElement(
-			"scene-palette",
-		) as ScenePaletteElement;
-
-		// The one mutable state every subsystem shares by reference (see context.ts).
 		const state: EditorState = {
-			host,
-			palette,
+			world,
 			gizmo: null,
 			sceneSelect: null,
 			selection: new Set(),
@@ -99,39 +74,30 @@ customElements.define(
 			placement: null,
 		};
 
-		// Reflect the primary's transform into the inspector. We hand the palette a plain
-		// snapshot and let it render; we never reach into its inputs. The panel shows for a
-		// single selection (block or group); `sized` is false for a group, which has no size
-		// of its own and greys out the size row.
+		//Undefined while zero or many blocks are selected, which hides the panel.
+		let inspector: InspectorState | undefined;
+
 		const updateInspector = (): void => {
 			const block = primaryBlock(state);
 			if (block === null) {
-				palette.setProp("inspector", {
-					visible: false,
-					position: [0, 0, 0],
-					rotation: [0, 0, 0],
-					size: [1, 1, 1],
-					sized: false,
-				} satisfies InspectorState);
-				return;
+				inspector = undefined;
+			} else {
+				const { position, rotation, size } = blockTransformFromAttributes(block);
+				inspector = {
+					position,
+					rotation,
+					size,
+					sized: SIZED_TAGS.has(block.tagName.toLowerCase()),
+				};
 			}
-			const { position, rotation, size } = resolveBlockTransform(block);
-			palette.setProp("inspector", {
-				visible: true,
-				position,
-				rotation,
-				size,
-				sized: SIZED_TAGS.has(block.tagName.toLowerCase()),
-			} satisfies InspectorState);
+			void host.update();
 		};
 
-		// Wire the subsystems, injecting the cross-cutting glue (updateInspector, and each
-		// other's entry points) so no two modules import one another.
+		//Injected, so no two subsystems import each other
 		const selection = createSelection(state, { updateInspector });
 		const placement = createPlacement(state, {
 			select: selection.select,
 			deselectAll: selection.deselectAll,
-			repaintSelection: selection.repaintSelection,
 		});
 		const grouping = createGrouping(state, {
 			select: selection.select,
@@ -140,61 +106,64 @@ customElements.define(
 			updateInspector,
 		});
 
-		// The palette talks to the editor through this fixed handler bag; the inspector
-		// snapshot we push separately through setProp as the selection changes.
-		const handlers: PaletteHandlers = {
-			onAdd: placement.enterPlacement,
-			onExport: () => exportScene(host),
-			onDelete: selection.deleteSelection,
-			onGroup: grouping.groupSelection,
-			onUngroup: grouping.ungroupSelection,
-			// onToggleCamera stays undefined when there is no <scene-camera> to drive, so
-			// the palette hides the button. We fill it in below once the wrapper resolves.
-			onField: (field, axis, value) => {
-				const block = primaryBlock(state);
-				if (block === null) return;
-				if (field === "size" && !SIZED_TAGS.has(block.tagName.toLowerCase())) {
-					return;
-				}
-				const specific = FIELD_SPECIFIC[field];
-				const triple = resolveBlockTransform(block)[field];
-				triple[axis] = value;
-				block.setAttribute(field, triple.map(formatNumber).join(" "));
-				// Clear the per-axis override so the edited shorthand wins.
-				block.removeAttribute(specific[axis]);
-				// Reflect the normalized value back into the inputs, and once the block has
-				// re-rendered, have the gizmo re-pin its handles and cage to the new transform.
-				updateInspector();
-				void selection.signalGizmoResync(block);
-			},
+		const editField = (field: InspectorField, axis: number, value: number): void => {
+			const block = primaryBlock(state);
+			if (block === null) return;
+			if (field === "size" && !SIZED_TAGS.has(block.tagName.toLowerCase())) return;
+
+			const triple = blockTransformFromAttributes(block)[field];
+			triple[axis] = value;
+			block.setAttribute(field, triple.map(formatNumber).join(" "));
+			block.removeAttribute(FIELD_SPECIFIC[field][axis]);
+			updateInspector();
+			void selection.signalGizmoResync(block);
 		};
 
-		// Toggle the camera through its `mode` attribute — declarative, one-directional,
-		// no method bolted onto the element. Wired only when there is a camera to drive,
-		// which is what makes the palette show or hide the button.
-		if (cameraElement !== null) {
-			const cameraToToggle = cameraElement;
-			handlers.onToggleCamera = (): string => {
-				const next =
-					cameraToToggle.getAttribute("mode") === "orbit" ? "free" : "orbit";
-				cameraToToggle.setAttribute("mode", next);
-				return next === "orbit" ? "Orbit" : "Free";
-			};
-		}
+		//Read off the camera's own attribute rather than mirrored, so it cannot drift.
+		const cameraMode = (): CameraMode | null => {
+			if (cameraElement === null) return null;
+			return cameraElement.getAttribute("mode") === "orbit" ? "orbit" : "free";
+		};
 
-		// Handlers never change, so we hand them over as a plain property before mounting;
-		// the inspector snapshot we push through setProp as the selection changes.
-		palette.handlers = handlers;
-		element.shadowRoot?.appendChild(palette);
+		const toggleCamera = (): void => {
+			if (cameraElement === null) return;
+			cameraElement.setAttribute("mode", cameraMode() === "orbit" ? "free" : "orbit");
+			void host.update();
+		};
 
-		// --- Pointer / key wiring ------------------------------------------------
+		const runPaletteCommand = (event: Event): void => {
+			const command: PaletteCommand = (event as PaletteCommandEvent).detail;
+			switch (command.kind) {
+				case "add":
+					placement.enterPlacement(command.tag);
+					return;
+				case "export":
+					exportScene(world);
+					return;
+				case "delete":
+					selection.deleteSelection();
+					return;
+				case "wrap":
+					grouping.wrapSelection(command.wrapperTagName);
+					return;
+				case "unwrap":
+					grouping.unwrapSelection();
+					return;
+				case "toggle-camera":
+					toggleCamera();
+					return;
+				case "edit-field":
+					editField(command.field, command.axis, command.value);
+					return;
+				default:
+					return command satisfies never;
+			}
+		};
 
 		const onPointerDown = (event: PointerEvent): void => {
 			if (event.button !== 0) return;
-			// Alt + drag is the camera's look gesture — <scene-camera> owns it, so we
-			// let it pass and never treat it as a selection click.
+			//Alt + drag is the camera's look gesture, so it is never a selection click.
 			if (event.altKey) return;
-			if (event.composedPath().includes(palette)) return;
 			if (state.placement !== null) {
 				event.preventDefault();
 				placement.dropPlacement();
@@ -202,50 +171,54 @@ customElements.define(
 			}
 
 			const block = selection.pickBlock(event);
-			if (block !== null) {
-				if (event.metaKey || event.ctrlKey) selection.toggleSelect(block);
-				else selection.select(block);
-			} else {
+			if (block === null) {
 				selection.deselectAll();
+				return;
 			}
+			if (event.metaKey || event.ctrlKey) selection.toggleSelect(block);
+			else selection.select(block);
 		};
 
 		const onKeyDown = (event: KeyboardEvent): void => {
-			// Inputs live in shadow DOM; at window scope the real target is composedPath[0].
+			//At window scope the target is retargeted to the input's shadow host
 			if (event.composedPath()[0] instanceof HTMLInputElement) return;
 			if (event.key === "Escape") {
 				placement.cancelPlacement();
 				selection.deselectAll();
 				return;
 			}
-			if (event.key === "Delete" || event.key === "Backspace")
-				selection.deleteSelection();
-			if (event.key.toLowerCase() === "g") grouping.groupSelection();
-			if (event.key.toLowerCase() === "u") grouping.ungroupSelection();
+			if (event.key === "Delete" || event.key === "Backspace") selection.deleteSelection();
+			if (event.key.toLowerCase() === "g") grouping.wrapSelection("scene-group");
+			if (event.key.toLowerCase() === "u") grouping.unwrapSelection();
 		};
 
-		// The gizmo bubbles "scene-commit" after a drag; flatten the cage's rigid move
-		// down into the leaf blocks and refresh the inspector against the new transform.
 		const onGizmoCommit = (): void => {
 			grouping.flattenSelection();
 			updateInspector();
 		};
 
-		// The placement ground bubbles a floor point up through the world while placing.
-		element.addEventListener("scene-floor-point", placement.onFloorPoint);
-		element.addEventListener("pointerdown", onPointerDown);
-		element.addEventListener("scene-commit", onGizmoCommit);
+		host.addEventListener("scene-floor-point", placement.onFloorPoint);
+		host.addEventListener("pointerdown", onPointerDown);
+		host.addEventListener("scene-commit", onGizmoCommit);
 		window.addEventListener("keydown", onKeyDown);
-		updateInspector();
 
-		// Generator return = teardown, fired by the lib on disconnect (client-only).
+		yield function* view() {
+			yield editorShell(html`
+				<scene-palette
+					inspector=${inspector}
+					cameraMode=${cameraMode()}
+					on-palette-command=${runPaletteCommand}
+					onPointerDown=${keepPointerOutOfScene}
+				></scene-palette>
+			`);
+		};
+
 		return () => {
-			element.removeEventListener("scene-floor-point", placement.onFloorPoint);
-			element.removeEventListener("pointerdown", onPointerDown);
-			element.removeEventListener("scene-commit", onGizmoCommit);
+			host.removeEventListener("scene-floor-point", placement.onFloorPoint);
+			host.removeEventListener("pointerdown", onPointerDown);
+			host.removeEventListener("scene-commit", onGizmoCommit);
 			window.removeEventListener("keydown", onKeyDown);
 			placement.cancelPlacement();
-			palette.remove();
 			for (const anchor of state.anchors.values()) anchor.remove();
 		};
 	}),

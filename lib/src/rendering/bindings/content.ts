@@ -1,8 +1,10 @@
+//oxlint-disable import/no-cycle -- mutual recursion: a template holds templates
 import { isTemplate, TemplateValue } from "../../template";
 import { stringifyPrimitive } from "../../utils/guards";
 import { hashValue } from "../value-hashing";
 import { ValueOf } from "../../utils/types";
-import { CONTENT_KIND, UNSET_HASH } from "../constants";
+import { UNSET_HASH } from "../constants";
+import * as CONTENT_KIND from "../content-kind";
 import {
 	HYDRATION_MISMATCH,
 	parseNestedTemplate,
@@ -15,6 +17,7 @@ import {
 import { clearRange, warnOnRejectedServerRange } from "../markers";
 import {
 	aggregateHashOfItems,
+	EMPTY_HASH_SCRATCH,
 	EMPTY_LIST_SCRATCH,
 	hydrateListItems,
 	commitList,
@@ -22,7 +25,7 @@ import {
 import {
 	ContentLiveBinding,
 	ContentState,
-	StyleSheetMoveState,
+	TreeState,
 	TextContentState,
 	UnresolvedContentState,
 } from "./types";
@@ -32,10 +35,7 @@ export const UNRESOLVED_CONTENT: Readonly<UnresolvedContentState> = {
 	kind: CONTENT_KIND.UNRESOLVED,
 };
 
-type ResolvedContentKind = Exclude<
-	ValueOf<typeof CONTENT_KIND>,
-	typeof CONTENT_KIND.UNRESOLVED
->;
+type ResolvedContentKind = Exclude<ValueOf<typeof CONTENT_KIND>, typeof CONTENT_KIND.UNRESOLVED>;
 
 type ResolvedContentState = Exclude<ContentState, UnresolvedContentState>;
 
@@ -45,9 +45,7 @@ const contentKindOf = (value: unknown): ResolvedContentKind => {
 	return CONTENT_KIND.TEXT;
 };
 
-const createContentState = (
-	contentKind: ResolvedContentKind,
-): ResolvedContentState => {
+const createContentState = (contentKind: ResolvedContentKind): ResolvedContentState => {
 	switch (contentKind) {
 		case CONTENT_KIND.TEXT:
 			return { kind: CONTENT_KIND.TEXT, lastValueHash: UNSET_HASH };
@@ -62,7 +60,7 @@ const createContentState = (
 				nextRowWithSameHash: EMPTY_LIST_SCRATCH,
 				subsequenceStarts: EMPTY_LIST_SCRATCH,
 				nextInSubsequence: EMPTY_LIST_SCRATCH,
-				hashAtTableIndex: EMPTY_LIST_SCRATCH,
+				hashAtTableIndex: EMPTY_HASH_SCRATCH,
 				chainHeadAtTableIndex: EMPTY_LIST_SCRATCH,
 				tableIndexShift: 0,
 				spareRows: [],
@@ -72,9 +70,18 @@ const createContentState = (
 	}
 };
 
+//an iterator is used up by reading it, so it is read once into the values; a hydration that falls
+//back to a commit reads the hole a second time
+const readContentValue = (liveBinding: ContentLiveBinding, values: Array<unknown>): unknown => {
+	const value = values[liveBinding.staticBinding.valueIndex];
+	if (!(value instanceof Iterator)) return value;
+	const items = Array.from(value);
+	values[liveBinding.staticBinding.valueIndex] = items;
+	return items;
+};
+
 const coerceToText = (value: unknown): string => {
-	const isAbsentContent =
-		value === null || value === undefined || typeof value === "boolean";
+	const isAbsentContent = value === null || value === undefined || typeof value === "boolean";
 	return isAbsentContent ? "" : stringifyPrimitive(value);
 };
 
@@ -102,9 +109,9 @@ const commitText = (
 export const commitContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 ): void => {
-	const value = values[liveBinding.staticBinding.valueIndex];
+	const value = readContentValue(liveBinding, values);
 	const contentKind = contentKindOf(value);
 	let content = liveBinding.content;
 	if (content.kind !== contentKind) {
@@ -123,18 +130,15 @@ export const commitContent = (
 				patchInstance(content.instance, template.values);
 				break;
 			}
-			const fragment = cloneTemplateFragment(
-				parsed,
-				liveBinding.openMarker.parentNode,
-			);
-			const instance = mountInstance(fragment, template, parsed, moveState);
+			const fragment = cloneTemplateFragment(parsed, liveBinding.openMarker.parentNode);
+			const instance = mountInstance(fragment, template.values, parsed, treeState);
 			clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
 			liveBinding.openMarker.after(fragment);
 			content.instance = instance;
 			break;
 		}
 		case CONTENT_KIND.LIST:
-			commitList(liveBinding, content, value as Array<unknown>, moveState);
+			commitList(liveBinding, content, value as Array<unknown>, treeState);
 			break;
 		default:
 			return content satisfies never;
@@ -143,10 +147,7 @@ export const commitContent = (
 
 //one text write destroys nothing, so an adoptable text range is repaired by commitText rather than
 //rejected; anything else in the range means the server rendered a different kind and it is not ours
-const isAdoptableTextRange = ({
-	openMarker,
-	closeMarker,
-}: ContentLiveBinding): boolean => {
+const isAdoptableTextRange = ({ openMarker, closeMarker }: ContentLiveBinding): boolean => {
 	const serverNode = openMarker.nextSibling;
 	return (
 		serverNode === closeMarker ||
@@ -157,10 +158,10 @@ const isAdoptableTextRange = ({
 export const hydrateContent = (
 	liveBinding: ContentLiveBinding,
 	values: Array<unknown>,
-	moveState: StyleSheetMoveState,
+	treeState: TreeState,
 	walker: TreeWalker,
 ): void => {
-	const value = values[liveBinding.staticBinding.valueIndex];
+	const value = readContentValue(liveBinding, values);
 	const kind = contentKindOf(value);
 	const content = createContentState(kind);
 	liveBinding.content = content;
@@ -179,7 +180,7 @@ export const hydrateContent = (
 				template,
 				parseNestedTemplate(template),
 				liveBinding.closeMarker,
-				moveState,
+				treeState,
 			);
 			if (hydrated === HYDRATION_MISMATCH) break;
 			content.instance = hydrated;
@@ -189,7 +190,7 @@ export const hydrateContent = (
 			const hydratedItems = hydrateListItems(
 				liveBinding,
 				value as Array<unknown>,
-				moveState,
+				treeState,
 				walker,
 			);
 			if (hydratedItems === HYDRATION_MISMATCH) break;
@@ -203,5 +204,5 @@ export const hydrateContent = (
 
 	warnOnRejectedServerRange();
 	clearRange(liveBinding.openMarker.nextSibling, liveBinding.closeMarker);
-	commitContent(liveBinding, values, moveState);
+	commitContent(liveBinding, values, treeState);
 };

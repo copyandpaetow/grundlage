@@ -5,21 +5,20 @@
     _findings/parsing-and-bindings.md lives. End-to-end frame cost belongs to
     pages/perf, the same split the parser bench draws.
 
-    What a pass does NOT include: style recalc and layout. A pass never yields,
+    What a pass does not include: style recalc and layout. A pass never yields,
     so the browser marks the tree dirty and recalculates after the pass has been
-    timed. That is deliberate — a commit-path change moves JS work, and mixing
+    timed. That is on purpose: a commit-path change moves JS work, and mixing
     recalc in would bury it under a cost the change cannot touch. It also means
     these numbers are not frame budget; they are the JS half of it.
 */
 
 import { getParsedTemplate } from "../../lib/src/parser/html";
+import { type Instance } from "../../lib/src/rendering/bindings/types";
 import {
-	type Instance,
+	cloneTemplateFragment,
 	mountInstance,
 	patchInstance,
 } from "../../lib/src/rendering/instance";
-//the internal html, not the branded public one: this file is already below that surface
-import { html } from "../../lib/src/template";
 import { readHeapMb } from "./measure";
 import {
 	type CommitShape,
@@ -74,22 +73,19 @@ export interface RunOptions {
 const median = (samples: ReadonlyArray<number>): number => {
 	const sorted = samples.slice().sort((left, right) => left - right);
 	const middle = sorted.length >> 1;
-	return sorted.length % 2 === 0
-		? (sorted[middle - 1] + sorted[middle]) / 2
-		: sorted[middle];
+	return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 };
 
 const collectGarbage = (): void => {
 	const collect = (globalThis as { gc?: () => void }).gc;
 	if (!collect) return;
-	// V8 lags on recent garbage; one call is routinely not enough.
+	//V8 lags on recent garbage; one call is routinely not enough.
 	collect();
 	collect();
 	collect();
 };
 
-const yieldToBrowser = (): Promise<void> =>
-	new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToBrowser = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 interface MountedShape {
 	generated: GeneratedShape;
@@ -97,16 +93,13 @@ interface MountedShape {
 	container: Element;
 }
 
-const mountShape = (
-	generated: GeneratedShape,
-	container: Element,
-): MountedShape => {
+const mountShape = (generated: GeneratedShape, container: Element): MountedShape => {
 	const { templateStrings, valuesByParity } = generated;
-	const { instance, fragment } = mountInstance(
-		html(templateStrings, ...valuesByParity[0]),
-		getParsedTemplate(templateStrings),
-		{ needsStyleSheetRefreshOnMove: false },
-	);
+	const parsed = getParsedTemplate(templateStrings);
+	const fragment = cloneTemplateFragment(parsed, container);
+	const instance = mountInstance(fragment, valuesByParity[0], parsed, {
+		isTemplateContent: false,
+	});
 	container.replaceChildren(fragment);
 	return { generated, instance, container };
 };
@@ -115,8 +108,9 @@ const runPass = (mounted: MountedShape, updates: number): number => {
 	const [first, second] = mounted.generated.valuesByParity;
 	const { instance } = mounted;
 	const start = performance.now();
-	for (let update = 0; update < updates; update++)
+	for (let update = 0; update < updates; update++) {
 		patchInstance(instance, (update & 1) === 0 ? first : second);
+	}
 	return performance.now() - start;
 };
 
@@ -125,8 +119,9 @@ const CALIBRATION_TRIES = 3;
 
 const bestPassOf = (mounted: MountedShape, updates: number): number => {
 	let best = Infinity;
-	for (let attempt = 0; attempt < CALIBRATION_TRIES; attempt++)
+	for (let attempt = 0; attempt < CALIBRATION_TRIES; attempt++) {
 		best = Math.min(best, runPass(mounted, updates));
+	}
 	return best;
 };
 
@@ -146,26 +141,39 @@ const calibrateUpdatesPerPass = (mounted: MountedShape): number => {
 			updates *= 4;
 			continue;
 		}
-		if (best >= TARGET_PASS_MS * 0.75 && best <= TARGET_PASS_MS * 2)
-			return updates;
+		if (best >= TARGET_PASS_MS * 0.75 && best <= TARGET_PASS_MS * 2) return updates;
 		updates = Math.max(1, Math.round(updates * (TARGET_PASS_MS / best)));
 	}
 	return updates;
 };
 
+const readPropertyOfEveryChild = (mounted: MountedShape, propertyName: string): string =>
+	Array.from(mounted.container.children, (child) =>
+		String((child as unknown as Record<string, unknown>)[propertyName]),
+	).join(",");
+
 /*
-    A declared prop is assigned to the element rather than written to markup, so
-    a MutationObserver sees a closed gate and an open one as the same nothing.
-    Reading the property back is the only proof for that lane.
+    A declared prop, and a live-state property past its first commit, is
+    assigned to the element rather than written to markup, so a
+    MutationObserver sees a closed gate and an open one as the same nothing.
+    Reading the property back is the only proof for those lanes.
 */
-const readObservableState = (mounted: MountedShape): string =>
-	mounted.generated.shape.lane === "declaredPropAttribute"
-		? Array.from(mounted.container.children, (child) =>
-				String(
-					(child as unknown as Record<string, unknown>)[DECLARED_PROP_NAME],
-				),
-			).join(",")
-		: mounted.container.innerHTML;
+const readObservableState = (mounted: MountedShape): string => {
+	switch (mounted.generated.shape.lane) {
+		case "declaredPropAttribute":
+			return readPropertyOfEveryChild(mounted, DECLARED_PROP_NAME);
+		case "liveStateProperty":
+			return readPropertyOfEveryChild(mounted, "value");
+		case "staticNameAttribute":
+		case "composedNameAttribute":
+		case "customElementAttribute":
+		case "attributeSpread":
+		case "content":
+			return mounted.container.innerHTML;
+		default:
+			return mounted.generated.shape.lane satisfies never;
+	}
+};
 
 /*
     Proves the churn axis is real before anything is timed. "unchanged" that
@@ -178,19 +186,26 @@ const observableStateMovesOnSecondParity = (mounted: MountedShape): boolean => {
 	return readObservableState(mounted) !== before;
 };
 
-const findVoidReasons = (
-	shape: CommitShape,
-	stateMoved: boolean,
-	bestPassMs: number,
-	medianPassMs: number,
-): Array<VoidReason> => {
+//best and median are both milliseconds and easy to swap, so they go by name
+interface Readings {
+	shape: CommitShape;
+	stateMoved: boolean;
+	bestPassMs: number;
+	medianPassMs: number;
+}
+
+const findVoidReasons = ({
+	shape,
+	stateMoved,
+	bestPassMs,
+	medianPassMs,
+}: Readings): Array<VoidReason> => {
 	const reasons: Array<VoidReason> = [];
-	if (shape.churn === "changing" && !stateMoved)
-		reasons.push("gate did not open");
-	if (shape.churn === "unchanged" && stateMoved)
-		reasons.push("gate did not close");
-	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO)
+	if (shape.churn === "changing" && !stateMoved) reasons.push("gate did not open");
+	if (shape.churn === "unchanged" && stateMoved) reasons.push("gate did not close");
+	if (medianPassMs > bestPassMs * LARGEST_TRUSTED_MEDIAN_TO_BEST_RATIO) {
 		reasons.push("unstable timing");
+	}
 	//calibration can size a pass off a cold reading and land far under target;
 	//the pass itself is the honest check, not a cleverer calibrator
 	if (bestPassMs < TARGET_PASS_MS / 2) reasons.push("pass too short");
@@ -199,7 +214,7 @@ const findVoidReasons = (
 
 /*
     The first shape of a fresh page runs in a cold tier and reads 50% high, and
-    the shapes after it read progressively less high — a gradient across the
+    the shapes after it read progressively less high, a gradient across the
     table that looks like a result. One cheap pass over every lane puts the
     whole commit path in the same tier before anything is timed.
 */
@@ -209,11 +224,9 @@ export const warmUpCommitShapes = (
 	shapes: ReadonlyArray<CommitShape>,
 	container: Element,
 ): void => {
-	for (let index = 0; index < shapes.length; index++)
-		runPass(
-			mountShape(generateShape(shapes[index]), container),
-			WARM_UP_UPDATES,
-		);
+	for (let index = 0; index < shapes.length; index++) {
+		runPass(mountShape(generateShape(shapes[index]), container), WARM_UP_UPDATES);
+	}
 	container.replaceChildren();
 };
 
@@ -221,13 +234,10 @@ export const warmUpCommitShapes = (
     Heap growth over a pass, not retained size: none of what a commit allocates
     survives it. A minor collection landing inside the pass hides some of it, so
     this reads as a lower bound and a negative reading is no reading at all.
-    The comparison it exists for is staticName against composedName — equal
+    The comparison it exists for is staticName against composedName: equal
     growth there means composing a hole-free name allocates nothing.
 */
-const measureHeapGrowthBytesPerCommit = (
-	mounted: MountedShape,
-	updates: number,
-): number | null => {
+const measureHeapGrowthBytesPerCommit = (mounted: MountedShape, updates: number): number | null => {
 	collectGarbage();
 	const before = readHeapMb();
 	if (before === null) return null;
@@ -276,11 +286,11 @@ export const runCommitShape = async (
 		medianPassMs,
 		nanosecondsPerCommit: (bestPassMs * 1_000_000) / commitsPerPass,
 		heapGrowthBytesPerCommit,
-		voidReasons: findVoidReasons(shape, stateMoved, bestPassMs, medianPassMs),
+		voidReasons: findVoidReasons({ shape, stateMoved, bestPassMs, medianPassMs }),
 	};
 };
 
-// --- derived: the gaps the shapes exist to produce ------------------------
+//--- derived: the gaps the shapes exist to produce ------------------------
 
 export interface LaneGap {
 	name: string;
@@ -309,8 +319,9 @@ export const measureRegistryLookup = (
 	lookups: number,
 ): RegistryLookupReading => {
 	const start = performance.now();
-	for (let index = 0; index < lookups; index++)
+	for (let index = 0; index < lookups; index++) {
 		if (customElements.get(elementName) !== undefined) registryLookupChecksum++;
+	}
 	const elapsed = performance.now() - start;
 	return {
 		nanosecondsPerLookup: (elapsed * 1_000_000) / lookups,
@@ -338,15 +349,13 @@ const gapBetween = (
 	const above = usable(higher);
 	const below = usable(lower);
 	if (!above || !below) return null;
-	const nanosecondsPerCommit =
-		above.nanosecondsPerCommit - below.nanosecondsPerCommit;
+	const nanosecondsPerCommit = above.nanosecondsPerCommit - below.nanosecondsPerCommit;
 	return {
 		name,
 		question,
 		nanosecondsPerCommit,
 		isBelowResolution:
-			Math.abs(nanosecondsPerCommit) <
-			(above.nanosecondsPerCommit * resolutionPercent) / 100,
+			Math.abs(nanosecondsPerCommit) < (above.nanosecondsPerCommit * resolutionPercent) / 100,
 	};
 };
 

@@ -12,14 +12,8 @@ import {
 	CORPUS_SHAPES,
 	generateCorpus,
 	RECORDED_CORPUS_SHAPE,
-	type RecordedTemplate,
 } from "../parser-corpus";
-import {
-	fitHoleCost,
-	type HoleCostFit,
-	runShape,
-	type ShapeResult,
-} from "../parser-measure";
+import { fitHoleCost, type HoleCostFit, runShape, type ShapeResult } from "../parser-measure";
 import recordedTemplates from "../../pages/parser-bench/recorded-corpus.json";
 
 /*
@@ -42,6 +36,7 @@ const RESOLUTION_PERCENT = 8;
 
 customElements.define(
 	"parser-bench",
+	//oxlint-disable-next-line max-lines-per-function -- long, not complex: one component's state, handlers and view
 	component(function* ({ host: element }) {
 		const passes = Number(element.getAttribute("passes") ?? 40);
 		let isRunning = false;
@@ -53,10 +48,7 @@ customElements.define(
 
 		const buildCorpora = () => [
 			...CORPUS_SHAPES.map(generateCorpus),
-			corpusFromRecordedTemplates(
-				RECORDED_CORPUS_SHAPE,
-				recordedTemplates as Array<RecordedTemplate>,
-			),
+			corpusFromRecordedTemplates(RECORDED_CORPUS_SHAPE, recordedTemplates),
 		];
 
 		const runAllShapes = async () => {
@@ -79,9 +71,7 @@ customElements.define(
 				results.push(result);
 				console.log(
 					`shape ${index + 1}/${corpora.length} ${result.name} ${result.nanosecondsPerCharacter.toFixed(2)} ns/char${
-						result.voidReasons.length === 0
-							? ""
-							: ` — VOID: ${result.voidReasons.join(", ")}`
+						result.voidReasons.length === 0 ? "" : ` (void: ${result.voidReasons.join(", ")})`
 					}`,
 				);
 			}
@@ -90,16 +80,13 @@ customElements.define(
 				fitHoleCost(
 					"adjacent holes",
 					results.filter(
-						(result) =>
-							result.group === "hole density" &&
-							result.holeKind === "adjacentContent",
+						(result) => result.group === "hole density" && result.holeKind === "adjacentContent",
 					),
 				),
 				fitHoleCost(
 					"one element per hole",
 					results.filter(
-						(result) =>
-							result.group === "hole density" && result.holeKind === "content",
+						(result) => result.group === "hole density" && result.holeKind === "content",
 					),
 				),
 			].filter((fit): fit is HoleCostFit => fit !== null);
@@ -137,239 +124,239 @@ customElements.define(
 			results.filter((result) => result.voidReasons.length > 0).length;
 
 		const isBeyondResolution = (current: number, previous: number): boolean =>
-			previous !== 0 &&
-			Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
+			previous !== 0 && Math.abs(((current - previous) / previous) * 100) > RESOLUTION_PERCENT;
 
-		yield () => html`
-			<style>
-				:host {
-					display: block;
-					font: 13px monospace;
-				}
+		const resolutionClassOf = (current: number, previous: number | undefined): string => {
+			if (previous === undefined) return "";
+			return isBeyondResolution(current, previous) ? "beyond-resolution" : "within-resolution";
+		};
 
-				button {
-					padding: 6px 12px;
-					font: inherit;
-					cursor: pointer;
-				}
+		const statusOf = () => {
+			if (isRunning) return html`running: ${activeShape ?? "..."}`;
+			if (baseline) return html`baseline captured ${baseline.capturedAt}`;
+			return html`no baseline saved`;
+		};
 
-				.controls {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 8px;
-					align-items: center;
-					margin-bottom: 12px;
-				}
+		//oxlint-disable-next-line max-lines-per-function -- long, not complex: one template
+		yield function* view() {
+			yield html`
+				<style>
+					:host {
+						display: block;
+						font: 13px monospace;
+					}
 
-				.status {
-					margin: 8px 0;
-					opacity: 0.75;
-				}
+					button {
+						padding: 6px 12px;
+						font: inherit;
+						cursor: pointer;
+					}
 
-				.fits {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 24px;
-					margin: 12px 0;
-					padding: 10px 12px;
-					border: 1px solid currentColor;
-				}
+					.controls {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 8px;
+						align-items: center;
+						margin-bottom: 12px;
+					}
 
-				.fit-value {
-					font-size: 18px;
-				}
+					.status {
+						margin: 8px 0;
+						opacity: 0.75;
+					}
 
-				.fit-label {
-					opacity: 0.7;
-				}
+					.fits {
+						display: flex;
+						flex-wrap: wrap;
+						gap: 24px;
+						margin: 12px 0;
+						padding: 10px 12px;
+						border: 1px solid currentColor;
+					}
 
-				table {
-					border-collapse: collapse;
-					width: 100%;
-				}
+					.fit-value {
+						font-size: 18px;
+					}
 
-				th,
-				td {
-					padding: 3px 10px 3px 0;
-					text-align: right;
-					white-space: nowrap;
-				}
+					.fit-label {
+						opacity: 0.7;
+					}
 
-				th:first-child,
-				td:first-child {
-					text-align: left;
-				}
+					table {
+						border-collapse: collapse;
+						width: 100%;
+					}
 
-				thead th {
-					border-bottom: 1px solid currentColor;
-				}
+					th,
+					td {
+						padding: 3px 10px 3px 0;
+						text-align: right;
+						white-space: nowrap;
+					}
 
-				tr.group-header td {
-					padding-top: 14px;
-					text-align: left;
-					opacity: 0.7;
-				}
+					th:first-child,
+					td:first-child {
+						text-align: left;
+					}
 
-				.beyond-resolution {
-					font-weight: 700;
-				}
+					thead th {
+						border-bottom: 1px solid currentColor;
+					}
 
-				.within-resolution {
-					opacity: 0.45;
-				}
+					tr.group-header td {
+						padding-top: 14px;
+						text-align: left;
+						opacity: 0.7;
+					}
 
-				.void-warning {
-					font-weight: 700;
-				}
-			</style>
+					.beyond-resolution {
+						font-weight: 700;
+					}
 
-			<div class="controls">
-				<button onclick="${runAllShapes}" disabled="${isRunning}">
-					run ${CORPUS_SHAPES.length + 1} shapes
-				</button>
-				<button
-					onclick="${promoteToBaseline}"
-					disabled="${isRunning || results.length === 0}"
-				>
-					save as baseline
-				</button>
-				<button onclick="${dropBaseline}" disabled="${isRunning || !baseline}">
-					clear baseline
-				</button>
-				<span
-					>${passes} passes, best-of · ±${RESOLUTION_PERCENT}% resolution ·
-					${voidCount()} void</span
-				>
-			</div>
+					.within-resolution {
+						opacity: 0.45;
+					}
 
-			<div class="status">
+					.void-warning {
+						font-weight: 700;
+					}
+				</style>
+
+				<div class="controls">
+					<button onclick="${runAllShapes}" disabled="${isRunning}">
+						run ${CORPUS_SHAPES.length + 1} shapes
+					</button>
+					<button
+						onclick="${promoteToBaseline}"
+						disabled="${isRunning || results.length === 0}"
+					>
+						save as baseline
+					</button>
+					<button
+						onclick="${dropBaseline}"
+						disabled="${isRunning || !baseline}"
+					>
+						clear baseline
+					</button>
+					<span
+						>${passes} passes, best-of · ±${RESOLUTION_PERCENT}% resolution ·
+						${voidCount()} void</span
+					>
+				</div>
+
+				<div class="status">
+					${statusOf()}
+				</div>
+
 				${
-					isRunning
-						? html`running: ${activeShape ?? "…"}`
-						: baseline
-							? html`baseline captured ${baseline.capturedAt}`
-							: html`no baseline saved`
-				}
-			</div>
-
-			${
-				fits.length > 0
-					? html`
-							<div class="fits">
-								${fits.map(
-									(fit) => html`
-										<div>
-											<div class="fit-value">
-												${fit.nanosecondsPerHole.toFixed(0)} ns/hole
+					fits.length > 0
+						? html`
+								<div class="fits">
+									${fits.map(
+										(fit) => html`
+											<div>
+												<div class="fit-value">
+													${fit.nanosecondsPerHole.toFixed(0)} ns/hole
+												</div>
+												<div class="fit-label">
+													${fit.series} ·
+													${fit.scannerNanosecondsPerCharacter.toFixed(2)}
+													ns/char scanner · ${fit.pointCount} points
+												</div>
 											</div>
-											<div class="fit-label">
-												${fit.series} ·
-												${fit.scannerNanosecondsPerCharacter.toFixed(2)} ns/char
-												scanner · ${fit.pointCount} points
-											</div>
-										</div>
-									`,
-								)}
-							</div>
-						`
-					: html``
-			}
-
-			${
-				results.length === 0
-					? html``
-					: html`
-							<table>
-								<thead>
-									<tr>
-										<th>shape</th>
-										<th>tmpl</th>
-										<th>chars</th>
-										<th>holes</th>
-										<th>ns/char</th>
-										<th>ns/hole</th>
-										<th>µs/tmpl</th>
-										<th>B/tmpl</th>
-										<th>vs baseline</th>
-									</tr>
-								</thead>
-								<tbody>
-									${groupsInOrder().map(
-										(group) => html`
-											<tr class="group-header">
-												<td colspan="9">${group}</td>
-											</tr>
-											${results
-												.filter((result) => result.group === group)
-												.map((result) => {
-													const previous = baselineFor(result.name);
-													return html`
-														<tr>
-															<td>
-																${result.name}${
-																	result.voidReasons.length === 0
-																		? html``
-																		: html`<span class="void-warning">
-																				· VOID:
-																				${result.voidReasons.join(", ")}</span
-																			>`
-																}
-															</td>
-															<td>${result.templateCount}</td>
-															<td>${result.charactersPerTemplate}</td>
-															<td>
-																${(result.totalHoles / result.templateCount).toFixed(0)}
-															</td>
-															<td>
-																${result.nanosecondsPerCharacter.toFixed(2)}
-															</td>
-															<td>
-																${
-																	result.nanosecondsPerHole === null
-																		? "—"
-																		: result.nanosecondsPerHole.toFixed(0)
-																}
-															</td>
-															<td>
-																${result.microsecondsPerTemplate.toFixed(2)}
-															</td>
-															<td>
-																${
-																	result.retainedBytesPerTemplate === null
-																		? "—"
-																		: result.retainedBytesPerTemplate.toFixed(0)
-																}
-															</td>
-															<td
-																class="${
-																	previous
-																		? isBeyondResolution(
-																				result.nanosecondsPerCharacter,
-																				previous.nanosecondsPerCharacter,
-																			)
-																			? "beyond-resolution"
-																			: "within-resolution"
-																		: ""
-																}"
-															>
-																${
-																	previous
-																		? formatDelta(
-																				result.nanosecondsPerCharacter,
-																				previous.nanosecondsPerCharacter,
-																			)
-																		: "—"
-																}
-															</td>
-														</tr>
-													`;
-												})}
 										`,
 									)}
-								</tbody>
-							</table>
-						`
-			}
-		`;
+								</div>
+							`
+						: html``
+				}
+				${
+					results.length === 0
+						? html``
+						: html`
+								<table>
+									<thead>
+										<tr>
+											<th>shape</th>
+											<th>tmpl</th>
+											<th>chars</th>
+											<th>holes</th>
+											<th>ns/char</th>
+											<th>ns/hole</th>
+											<th>µs/tmpl</th>
+											<th>B/tmpl</th>
+											<th>vs baseline</th>
+										</tr>
+									</thead>
+									<tbody>
+										${groupsInOrder().map(
+											(group) => html`
+												<tr class="group-header">
+													<td colspan="9">${group}</td>
+												</tr>
+												${results
+													.filter((result) => result.group === group)
+													.map((result) => {
+														const previous = baselineFor(result.name);
+														return html`
+															<tr>
+																<td>
+																	${result.name}${
+																		result.voidReasons.length === 0
+																			? html``
+																			: html`<span class="void-warning">
+																					· VOID:
+																					${result.voidReasons.join(", ")}</span
+																				>`
+																	}
+																</td>
+																<td>${result.templateCount}</td>
+																<td>${result.charactersPerTemplate}</td>
+																<td>
+																	${(result.totalHoles / result.templateCount).toFixed(0)}
+																</td>
+																<td>
+																	${result.nanosecondsPerCharacter.toFixed(2)}
+																</td>
+																<td>
+																	${
+																		result.nanosecondsPerHole === null
+																			? "—"
+																			: result.nanosecondsPerHole.toFixed(0)
+																	}
+																</td>
+																<td>
+																	${result.microsecondsPerTemplate.toFixed(2)}
+																</td>
+																<td>
+																	${
+																		result.retainedBytesPerTemplate === null
+																			? "—"
+																			: result.retainedBytesPerTemplate.toFixed(0)
+																	}
+																</td>
+																<td
+																	class="${resolutionClassOf(result.nanosecondsPerCharacter, previous?.nanosecondsPerCharacter)}"
+																>
+																	${
+																		previous
+																			? formatDelta(
+																					result.nanosecondsPerCharacter,
+																					previous.nanosecondsPerCharacter,
+																				)
+																			: "—"
+																	}
+																</td>
+															</tr>
+														`;
+													})}
+											`,
+										)}
+									</tbody>
+								</table>
+							`
+				}
+			`;
+		};
 	}),
 );

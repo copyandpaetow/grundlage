@@ -1,17 +1,15 @@
 import { describe, expect, test, vi } from "vitest";
 import { html, load, component } from "../index";
-import { FORM_EVENTS } from "../forms";
+import * as FORM_EVENTS from "../form-events";
 
 //the closed-mode round-trip needs a real browser: happy-dom has neither attachInternals nor
 //declarative-shadow parsing. What it settles along the way is the platform fact the whole path
 //rests on, that attachInternals().shadowRoot reaches a declaratively-created closed root
 const canRun =
 	typeof HTMLElement.prototype.attachInternals === "function" &&
-	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe ===
-		"function";
+	typeof (Element.prototype as { setHTMLUnsafe?: unknown }).setHTMLUnsafe === "function";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = () => `closed-el-${tagId++}-${Date.now()}`;
@@ -29,19 +27,20 @@ const prerenderClosed = (tag: string, shadowInner: string): HTMLElement => {
 };
 
 const closedRootOf = (host: HTMLElement): ShadowRoot =>
-	(host as unknown as { internals: ElementInternals }).internals
-		.shadowRoot as ShadowRoot;
+	(host as unknown as { internals: ElementInternals }).internals.shadowRoot as ShadowRoot;
 
-describe("closed shadow root — hydration + load replay", () => {
+describe("closed shadow root: hydration and load replay", () => {
 	test.skipIf(!canRun)(
-		"cold closed component renders into a fresh closed root, absent from host.shadowRoot",
+		"cold closed component paints into a fresh closed root, absent from host.shadowRoot",
 		async () => {
 			const tag = uniqueTag();
 			customElements.define(
 				tag,
 				component(
 					function* () {
-						yield () => html`<p>${"fresh"}</p>`;
+						yield function* () {
+							yield html`<p>${"fresh"}</p>`;
+						};
 					},
 					{ mode: "closed" },
 				),
@@ -59,7 +58,7 @@ describe("closed shadow root — hydration + load replay", () => {
 	);
 
 	test.skipIf(!canRun)(
-		"prerendered closed component hydrates the server DOM instead of re-rendering it",
+		"prerendered closed component hydrates the server DOM instead of painting it again",
 		async () => {
 			//the server node carries a static marker the client template never emits;
 			//it survives iff hydration reused the node rather than rebuilding from scratch.
@@ -72,7 +71,9 @@ describe("closed shadow root — hydration + load replay", () => {
 				tag,
 				component(
 					function* () {
-						yield () => html`<p>hi</p>`;
+						yield function* () {
+							yield html`<p>hi</p>`;
+						};
 					},
 					{ mode: "closed" },
 				),
@@ -102,12 +103,14 @@ describe("closed shadow root — hydration + load replay", () => {
 			customElements.define(
 				tag,
 				component(
-					function* ({ host }) {
-						got = yield load(host, async () => {
+					function* () {
+						got = yield* load(async () => {
 							fetched = true;
 							return "client-value";
 						});
-						yield () => html`<p>hi</p>`;
+						yield function* () {
+							yield html`<p>hi</p>`;
+						};
 					},
 					{ mode: "closed" },
 				),
@@ -139,7 +142,9 @@ describe("closed shadow root — hydration + load replay", () => {
 					function* ({ host }) {
 						firstRead = host.internals;
 						secondRead = host.internals;
-						yield () => html`<template><input /></template>`;
+						yield function* () {
+							yield html`<template><input /></template>`;
+						};
 					},
 					{ mode: "closed", formAssociated: true },
 				),

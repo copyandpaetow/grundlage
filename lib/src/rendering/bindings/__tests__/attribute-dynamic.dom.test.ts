@@ -1,11 +1,17 @@
 import { describe, expect, test } from "vitest";
-import { BINDING } from "../../../parser/constants";
+import * as BINDING from "../../../parser/binding";
 import { UNSET_HASH } from "../../constants";
 import { commitDynamic } from "../attribute-dynamic";
-import { DynamicAttributeLiveBinding } from "../types";
+import { DynamicAttributeLiveBinding, TreeState } from "../types";
+
+const treeState: TreeState = { isTemplateContent: false };
 
 const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
-	staticBinding: { type: BINDING.DYNAMIC_ATTRIBUTE, valueIndex: 0 },
+	staticBinding: {
+		type: BINDING.DYNAMIC_ATTRIBUTE,
+		elementName: "div",
+		valueIndex: 0,
+	},
 	anchor: document.createElement("div"),
 	appliedAttributes: new Map(),
 	lastValueHash: UNSET_HASH,
@@ -13,8 +19,7 @@ const createSpreadBinding = (): DynamicAttributeLiveBinding => ({
 
 const attributesAfterCommitting = (...spreadValues: Array<unknown>) => {
 	const liveBinding = createSpreadBinding();
-	for (const spreadValue of spreadValues)
-		commitDynamic(liveBinding, [spreadValue]);
+	for (const spreadValue of spreadValues) commitDynamic(liveBinding, [spreadValue], treeState);
 	return liveBinding.anchor
 		.getAttributeNames()
 		.map((name) => [name, liveBinding.anchor.getAttribute(name)]);
@@ -25,7 +30,7 @@ describe("spread binding - value shapes", () => {
 		expect(attributesAfterCommitting("disabled")).toEqual([["disabled", ""]]);
 	});
 
-	test("an empty string yields no attribute — the conditional-boolean idiom", () => {
+	test("an empty string yields no attribute, for the conditional boolean", () => {
 		//`${cond ? "" : "disabled"}` must produce no attribute in the empty branch,
 		//never setAttribute("", "") which throws InvalidCharacterError
 		expect(attributesAfterCommitting("")).toEqual([]);
@@ -51,26 +56,38 @@ describe("spread binding - value shapes", () => {
 			["tabindex", "0"],
 		]);
 	});
+
+	test("data with its own constructor key maps names to their values", () => {
+		expect(attributesAfterCommitting(JSON.parse('{"constructor":"x","id":"y"}'))).toEqual([
+			["constructor", "x"],
+			["id", "y"],
+		]);
+	});
+
+	test("an object without a prototype maps names to their values", () => {
+		const attributes = Object.assign(Object.create(null) as object, { id: "x" });
+		expect(attributesAfterCommitting(attributes)).toEqual([["id", "x"]]);
+	});
+
+	test("a class instance throws instead of spreading its fields", () => {
+		expect(() => attributesAfterCommitting(new Date(0))).toThrow(/expects a string/);
+	});
 });
 
 describe("spread binding - across commits", () => {
 	test("a name the next value drops comes off the element, the names it keeps stay", () => {
-		expect(
-			attributesAfterCommitting({ id: "x", title: "t" }, { id: "y" }),
-		).toEqual([["id", "y"]]);
+		expect(attributesAfterCommitting({ id: "x", title: "t" }, { id: "y" })).toEqual([["id", "y"]]);
 	});
 
 	test("a name dropped, then brought back, is written again", () => {
-		expect(attributesAfterCommitting({ id: "x" }, {}, { id: "x" })).toEqual([
-			["id", "x"],
-		]);
+		expect(attributesAfterCommitting({ id: "x" }, {}, { id: "x" })).toEqual([["id", "x"]]);
 	});
 
 	test("a name whose value is unchanged is not written again when another name changes", () => {
 		//an object goes to the property mode, which has no read-before-write of its own
 		const settings = { theme: "dark" };
 		const liveBinding = createSpreadBinding();
-		commitDynamic(liveBinding, [{ id: "x", settings }]);
+		commitDynamic(liveBinding, [{ id: "x", settings }], treeState);
 		const { anchor } = liveBinding;
 		const writtenNames: Array<string> = [];
 		const setAttribute = anchor.setAttribute.bind(anchor);
@@ -83,13 +100,11 @@ describe("spread binding - across commits", () => {
 			writtenNames.push(name);
 			removeAttribute(name);
 		};
-		commitDynamic(liveBinding, [{ id: "y", settings }]);
+		commitDynamic(liveBinding, [{ id: "y", settings }], treeState);
 		expect(writtenNames).toEqual(["id"]);
 	});
 
 	test("a value switching shape removes the names of the old shape", () => {
-		expect(attributesAfterCommitting(["disabled", "hidden"], "hidden")).toEqual(
-			[["hidden", ""]],
-		);
+		expect(attributesAfterCommitting(["disabled", "hidden"], "hidden")).toEqual([["hidden", ""]]);
 	});
 });

@@ -39,7 +39,7 @@ describe("stringifyPrimitive", () => {
 
 	test("throws on non-stringable values", () => {
 		expect(() => stringifyPrimitive({})).toThrow(
-			/expected a string, number, bigint or boolean/,
+			/expects a string, number, bigint or boolean, not object/,
 		);
 		expect(() => stringifyPrimitive(null)).toThrow();
 		expect(() => stringifyPrimitive(undefined)).toThrow();

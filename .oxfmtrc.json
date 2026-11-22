@@ -1,0 +1,9 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"useTabs": true,
+	"tabWidth": 2,
+	"printWidth": 100,
+	"sortPackageJson": false,
+	"embeddedLanguageFormatting": "off",
+	"ignorePatterns": ["node_modules", "dist", "package-lock.json", "light-dom"]
+}

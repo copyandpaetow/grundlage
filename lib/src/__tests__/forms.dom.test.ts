@@ -1,13 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
-import {
-	FORM_EVENTS,
-	type FormAssociatedBase,
-	getFormAssociatedBaseClass,
-} from "../forms";
+import { type FormAssociatedBase, getFormAssociatedBaseClass } from "../forms";
+import * as FORM_EVENTS from "../form-events";
 import { html, component, type BaseComponent } from "../index";
 
-const sleep = (duration = 0) =>
-	new Promise((resolve) => setTimeout(resolve, duration));
+const sleep = (duration = 0) => new Promise((resolve) => setTimeout(resolve, duration));
 
 let tagId = 0;
 const uniqueTag = (prefix: string) => `${prefix}-${tagId++}-${Date.now()}`;
@@ -50,9 +46,7 @@ describe("FormAssociatedBase - static surface", () => {
 			component(function* () {}, { mode: "open", formAssociated: true }),
 		);
 		const el = document.createElement(tag) as BaseComponent;
-		expect(el.internals === null || typeof el.internals === "object").toBe(
-			true,
-		);
+		expect(el.internals === null || typeof el.internals === "object").toBe(true);
 	});
 });
 
@@ -92,7 +86,7 @@ describe("FormAssociatedBase - lifecycle callbacks re-broadcast as events", () =
 		field.formResetCallback();
 
 		expect(received).toBeInstanceOf(Event);
-		//the reset event deliberately skips CustomEvent to avoid the detail allocation
+		//the reset event skips CustomEvent on purpose to avoid the detail allocation
 		expect(received).not.toBeInstanceOf(CustomEvent);
 	});
 
@@ -131,31 +125,27 @@ describe("component(..., { formAssociated }) parent selection", () => {
 	test("opting in inherits FormAssociatedBase and its static flag", () => {
 		const tag = uniqueTag("opt-in");
 		const Element = component(function* () {
-			yield () => html`<p>field</p>`;
+			yield function* () {
+				yield html`<p>field</p>`;
+			};
 		}, formOptions);
 		customElements.define(tag, Element);
 
-		expect(
-			(Element as unknown as { formAssociated?: boolean }).formAssociated,
-		).toBe(true);
-		expect(document.createElement(tag)).toBeInstanceOf(
-			getFormAssociatedBaseClass(),
-		);
+		expect((Element as unknown as { formAssociated?: boolean }).formAssociated).toBe(true);
+		expect(document.createElement(tag)).toBeInstanceOf(getFormAssociatedBaseClass());
 	});
 
 	test("the default component is a plain element, never form-associated", () => {
 		const tag = uniqueTag("plain");
 		const Element = component(function* () {
-			yield () => html`<p>field</p>`;
+			yield function* () {
+				yield html`<p>field</p>`;
+			};
 		});
 		customElements.define(tag, Element);
 
-		expect(
-			(Element as unknown as { formAssociated?: boolean }).formAssociated,
-		).toBeUndefined();
-		expect(document.createElement(tag)).not.toBeInstanceOf(
-			getFormAssociatedBaseClass(),
-		);
+		expect((Element as unknown as { formAssociated?: boolean }).formAssociated).toBeUndefined();
+		expect(document.createElement(tag)).not.toBeInstanceOf(getFormAssociatedBaseClass());
 	});
 
 	test("a declared on-form-reset listener runs when the host resets", async () => {
@@ -164,9 +154,9 @@ describe("component(..., { formAssociated }) parent selection", () => {
 		const tag = uniqueTag("form-field");
 		const onReset = vi.fn();
 		const Element = component(function* () {
-			yield () => html`
-				<template on-form-reset="${onReset}"><input /></template>
-			`;
+			yield function* () {
+				yield html` <template on-form-reset="${onReset}"><input /></template> `;
+			};
 		}, formOptions);
 		customElements.define(tag, Element);
 

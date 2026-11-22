@@ -11,9 +11,7 @@ describe("composeParts", () => {
 	});
 
 	test("booleans, null and undefined compose as empty, like a content hole", () => {
-		expect(
-			composeParts(["card ", 0, 1, 2, 3], [false, true, null, undefined]),
-		).toBe("card ");
+		expect(composeParts(["card ", 0, 1, 2, 3], [false, true, null, undefined])).toBe("card ");
 	});
 
 	test("a parts array of only strings ignores values", () => {
@@ -22,7 +20,7 @@ describe("composeParts", () => {
 });
 
 describe("combinedPartsHash", () => {
-	test("only numeric parts contribute — static-only parts hash constant", () => {
+	test("only numeric parts contribute, so static-only parts hash the same", () => {
 		const a = combinedPartsHash(["x", "y"], ["ignored"]);
 		const b = combinedPartsHash(["x", "y"], ["different"]);
 		expect(a).toBe(b);
